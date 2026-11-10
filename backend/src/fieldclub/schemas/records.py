@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from fieldclub.schemas.common import ApiModel, feature, to_geojson
+from fieldclub.schemas.common import ApiModel, GeoJSONFeature, GeoJSONGeometry, to_geojson
 
 if TYPE_CHECKING:
     from fieldclub.models import Source
@@ -224,7 +224,7 @@ def record_out(result: RecordResult) -> RecordOut:
     )
 
 
-def record_feature(result: RecordResult) -> dict[str, Any]:
+def record_feature(result: RecordResult) -> GeoJSONFeature:
     """A record as a GeoJSON Feature for export. The licence travels with every feature (Decision 0004)."""
     record, source = result.record, result.source
     properties = {
@@ -243,4 +243,9 @@ def record_feature(result: RecordResult) -> dict[str, Any]:
     }
     if result.distance_m is not None:
         properties["distance_m"] = round(result.distance_m, 1)
-    return feature(record.geom, properties, record.id)
+    geometry = to_geojson(record.geom)
+    return GeoJSONFeature(
+        id=record.id,
+        geometry=None if geometry is None else GeoJSONGeometry.model_validate(geometry),
+        properties=properties,
+    )

@@ -9,11 +9,11 @@ from __future__ import annotations
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Path, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import Response
 
 from fieldclub.api.deps import Db, OptionalUser
 from fieldclub.schemas import records as schema
-from fieldclub.schemas.common import feature_collection
+from fieldclub.schemas.common import GeoJSONFeatureCollection
 from fieldclub.services import records
 from fieldclub.services.records import InvalidSearchError
 
@@ -46,10 +46,9 @@ def parse_bbox(value: str | None) -> tuple[float, float, float, float] | None:
     return records.check_bbox((west, south, east, north))
 
 
-def _geojson(results: list[records.RecordResult]) -> JSONResponse:
-    return JSONResponse(
-        feature_collection([schema.record_feature(result) for result in results]), media_type=GEOJSON
-    )
+def _geojson(results: list[records.RecordResult]) -> Response:
+    collection = GeoJSONFeatureCollection(features=[schema.record_feature(result) for result in results])
+    return Response(collection.model_dump_json(), media_type=GEOJSON)
 
 
 @router.get("/records/search", response_model=schema.RecordPage)
@@ -62,7 +61,7 @@ def search_records(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     cursor: Annotated[str | None, Query(max_length=512)] = None,
     format: Format = "json",
-) -> schema.RecordPage | JSONResponse:
+) -> schema.RecordPage | Response:
     """Records by text, source, category and area, best match first."""
     found, next_cursor = records.search(
         db,
@@ -90,7 +89,7 @@ def nearby_records(
     category: ListParam = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     format: Format = "json",
-) -> schema.RecordHits | JSONResponse:
+) -> schema.RecordHits | Response:
     """Records near a point, nearest first, with the distance to each in metres."""
     found = records.nearby(
         db,
