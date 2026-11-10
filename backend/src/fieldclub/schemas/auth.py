@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import EmailStr, Field
 
 from fieldclub.auth import onboarding
 from fieldclub.auth.handles import HANDLE_MAX_LENGTH, HANDLE_MIN_LENGTH, MAX_DISPLAY_NAME
@@ -92,3 +92,24 @@ class DevLogin(RequestModel):
     # and an existing one keeps the role they have.
     role: Role | None = None
     display_name: str | None = Field(default=None, min_length=1, max_length=MAX_DISPLAY_NAME)
+
+
+class EmailStart(RequestModel):
+    """Ask for a sign-in link. The answer is the same whether or not the address has an account."""
+
+    email: EmailStr = Field(max_length=320)
+    # Where the link should land after sign-in. Anything but a relative path here becomes "/".
+    next: str | None = Field(default=None, max_length=2000)
+
+
+class EmailStarted(ApiModel):
+    """Always this, for any well-formed address."""
+
+    status: Literal["sent"] = "sent"
+    message: str = "Check your email for a link to sign in. It works once, for fifteen minutes."
+
+
+class EmailVerify(RequestModel):
+    """The token from the emailed link's fragment."""
+
+    token: str = Field(min_length=1, max_length=128)

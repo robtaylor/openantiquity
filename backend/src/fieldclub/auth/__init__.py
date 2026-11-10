@@ -1,4 +1,4 @@
-"""Signing in: accounts, sessions, and the hooks for provider and email-link sign-in.
+"""Signing in: accounts, sessions, provider sign-in and the emailed link.
 
 Every write needs a session, and every session belongs to a real account.
 There are no guest accounts (Decision 0002).
@@ -19,33 +19,21 @@ How the pieces fit:
 - `csrf` is the middleware that requires `X-FieldClub-Client: web` on every
   request that changes data.
 - `providers` lists the sign-in methods that are switched on, for `/meta`.
+- `flow` carries one provider sign-in's state, nonce and PKCE verifier in a
+  signed, short-lived cookie bound to the browser that started it.
+- `oidc` is the one OpenID Connect client: discovery, cached and rotating
+  key sets, and identity-token checks.
+- `oauth` holds the provider adapters (Google, Microsoft, Apple,
+  OpenStreetMap, Facebook) and their quirks.
+- `signin` finds, links or creates the account behind a sign-in and starts
+  its session. Every way of signing in ends there.
+- `email_link` and `mailer` are the emailed one-time link.
+- `redirects` keeps `next` to a relative path on this site.
+- `failures` names the short codes a failed sign-in reports.
 
-Adding a provider or the emailed link
--------------------------------------
-Neither is built yet. `GET /auth/oauth/{provider}/start`, `GET` and `POST
-/auth/oauth/{provider}/callback`, `POST /auth/email/start` and `POST
-/auth/email/verify` belong in `fieldclub.api.auth`. Both ways of signing in end the
-same way: find or create the `User`, then start a session.
-
-1. Register the provider in `providers` so `/meta` advertises it once its
-   settings are present: `register_provider(SignInProvider.GOOGLE, lambda
-   settings: ...)`.
-2. Verify the person. Providers run as a server-side authorisation-code flow
-   with `state` and PKCE, and store an `auth_identities` row keyed on
-   `(provider, subject)` with the email the provider asserted. Email links use
-   the `magic_links` table with `tokens.new_token()` and `tokens.hash_token()`.
-3. Find the user by identity. Failing that, link to the user who has the same
-   email address, but only when the provider says the address is verified.
-   An unverified address never links accounts. Failing that too, call
-   `accounts.create_user(db, display_name=..., email=..., ...)`.
-4. Refuse a user whose `deleted_at` is set. `sessions.create_session` asserts it.
-5. Call `sessions.create_session(db, user, ...)`, commit, hand the token to
-   `cookies.set_session_cookie(response, token)`, and redirect to the `next`
-   path, which must be a relative path on this site.
-
-A callback that a provider reaches with a cross-site POST can't carry the
-client header. Pass its path to `ClientHeaderMiddleware(exempt=...)` in
-`fieldclub.main` and rely on `state` there.
-
-Rate-limit `POST /auth/email/start` per address with `fieldclub.ratelimit`.
+The routes are in `fieldclub.api.auth`. Provider callbacks always answer
+with a redirect to the app, carrying `?signin_error=<code>` on failure.
+Apple's callback arrives as a cross-site POST without the client header, so
+`fieldclub.main` exempts exactly that path, for POST only, and the flow's
+`state` protects it instead.
 """

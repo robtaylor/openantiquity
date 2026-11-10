@@ -1,8 +1,11 @@
-"""The current session and the signed-in person's own account.
+"""Signing in, the current session, and the signed-in person's own account.
 
-Sign-in by provider (`/auth/oauth/*`) and by emailed link (`/auth/email/*`)
-belong in this module too and are not built yet. `fieldclub.auth` describes how
-to add them.
+Provider sign-in is a pair of browser navigations: `/auth/oauth/{provider}/start`
+redirects to the provider, and the provider returns to `/callback`, by GET or,
+for Apple, by a cross-site POST. Both always answer with a redirect to the
+app, carrying `?signin_error=<code>` when something went wrong. The emailed
+link is two JSON calls, `/auth/email/start` and `/auth/email/verify`. The
+logic is in `fieldclub.auth.oauth`, `signin` and `email_link`.
 
 `dev_router` holds `POST /auth/dev-login`. `create_app()` mounts it only when
 `FIELDCLUB_DEV_LOGIN` is on and the environment is dev or test.
@@ -10,21 +13,44 @@ to add them.
 
 from __future__ import annotations
 
-from typing import Any
+import logging
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, Form, Query, Request, Response, status
+from fastapi.responses import RedirectResponse
 
 from fieldclub import ratelimit
 from fieldclub.api.deps import AppSettings, CurrentUser, Db, rate_limit
-from fieldclub.auth import accounts, cookies, onboarding, profile, sessions
+from fieldclub.auth import accounts, cookies, email_link, oauth, onboarding, profile, sessions, signin
 from fieldclub.auth.deps import client_ip
-from fieldclub.config import SESSION_COOKIE
-from fieldclub.errors import NotFoundError
+from fieldclub.auth.failures import FlowStateError, ProviderUnavailableError, SignInFailedError
+from fieldclub.auth.flow import FLOW_COOKIE, new_flow, seal, state_matches, unseal
+from fieldclub.auth.mailer import get_mailer
+from fieldclub.auth.redirects import DEFAULT_NEXT, app_url, safe_next
+from fieldclub.auth.tokens import hash_token
+from fieldclub.config import SESSION_COOKIE, Settings
+from fieldclub.errors import AppError, NotFoundError
 from fieldclub.models import User
-from fieldclub.schemas.auth import DevLogin, HandleSuggestion, Me, MeUpdate, Welcome
+from fieldclub.schemas.auth import (
+    DevLogin,
+    EmailStart,
+    EmailStarted,
+    EmailVerify,
+    HandleSuggestion,
+    Me,
+    MeUpdate,
+    Welcome,
+)
+from fieldclub.vocab import SignInProvider
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 dev_router = APIRouter(prefix="/auth", tags=["auth"])
+
+# Each emailed link goes to an inbox someone else may own, so an address has a
+# budget of its own as well as the caller's.
+_LINKS_PER_ADDRESS = ratelimit.get_limiter("auth_email_address", 5, per_seconds=3600)
 
 # Settings are saved as people use the map, so the limit on the route is
 # generous. Changing handle is rare, and each change frees a name for someone
@@ -127,6 +153,173 @@ def logout(request: Request, response: Response, db: Db) -> None:
 def handle_suggestion(db: Db) -> HandleSuggestion:
     """A generated handle that nobody has, for the welcome sheet to offer."""
     return HandleSuggestion(handle=accounts.suggest_handle(db))
+
+
+# --------------------------------------------------------------------------
+# Sign-in by provider
+# --------------------------------------------------------------------------
+
+
+def _begin_session(db: Db, user: User, request: Request) -> str:
+    """A new session for whoever just signed in, ending the one this browser presented."""
+    return signin.begin_session(
+        db,
+        user,
+        previous_token=request.cookies.get(SESSION_COOKIE),
+        user_agent=request.headers.get("user-agent"),
+        ip=client_ip(request),
+    )
+
+
+def _failure(settings: Settings, target: str, code: str) -> RedirectResponse:
+    """Back to the app with a short error code, and nothing else about what went wrong."""
+    return RedirectResponse(app_url(settings, target, signin_error=code), status.HTTP_303_SEE_OTHER)
+
+
+def _flow_cookie_path(provider: SignInProvider) -> str:
+    return oauth.CALLBACK_PATH.format(provider=provider.value)
+
+
+@router.get(
+    "/oauth/{provider}/start",
+    response_class=RedirectResponse,
+    status_code=status.HTTP_302_FOUND,
+    dependencies=[Depends(rate_limit("auth_oauth_start", 30, per_seconds=600))],
+)
+def oauth_start(
+    provider: str, settings: AppSettings, next_path: Annotated[str | None, Query(alias="next")] = None
+) -> RedirectResponse:
+    """Send the browser to the provider. `next` is where to land afterwards: a path on this site."""
+    target = safe_next(next_path)
+    try:
+        chosen = oauth.get_provider(provider, settings)
+        flow = new_flow(chosen.id.value, target)
+        url = chosen.authorization_url(settings, flow)
+    except AppError as exc:
+        logger.info("Sign-in with %.40r couldn't start: %s", provider, exc.code)
+        return _failure(settings, target, exc.code)
+    response = RedirectResponse(url, status.HTTP_302_FOUND)
+    cookies.set_flow_cookie(
+        response, seal(flow), path=_flow_cookie_path(chosen.id), cross_site_post=chosen.form_post
+    )
+    return response
+
+
+def _finish_oauth(
+    provider: str, callback: oauth.Callback, request: Request, db: Db, settings: Settings
+) -> RedirectResponse:
+    """Check the state, verify the person, sign them in and send them on. Every outcome is a redirect."""
+    flow = unseal(request.cookies.get(FLOW_COOKIE))
+    target = flow.next if flow is not None and flow.provider == provider else DEFAULT_NEXT
+    chosen: oauth.OAuthProvider | None = None
+    try:
+        chosen = oauth.get_provider(provider, settings)
+        if flow is None or flow.provider != chosen.id.value or not state_matches(flow, callback.state):
+            raise FlowStateError()
+        identity = chosen.complete(settings, flow, callback)
+        token = _begin_session(db, signin.user_for_identity(db, identity), request)
+        db.commit()
+    except AppError as exc:
+        db.rollback()
+        logger.info("Sign-in with %.40r failed: %s", provider, exc.code)
+        response = _failure(settings, target, exc.code)
+    except Exception:
+        db.rollback()
+        logger.exception("Sign-in with %.40r failed unexpectedly", provider)
+        response = _failure(settings, target, SignInFailedError.code)
+    else:
+        response = RedirectResponse(app_url(settings, target), status.HTTP_303_SEE_OTHER)
+        cookies.set_session_cookie(response, token)
+    if chosen is not None:
+        # One flow, one callback, whatever the outcome.
+        path = _flow_cookie_path(chosen.id)
+        cookies.clear_flow_cookie(response, path=path, cross_site_post=chosen.form_post)
+    return response
+
+
+_CALLBACK_LIMIT = Depends(rate_limit("auth_oauth_callback", 30, per_seconds=600))
+
+
+@router.get(
+    "/oauth/{provider}/callback",
+    response_class=RedirectResponse,
+    status_code=status.HTTP_303_SEE_OTHER,
+    dependencies=[_CALLBACK_LIMIT],
+)
+def oauth_callback(
+    provider: str,
+    request: Request,
+    db: Db,
+    settings: AppSettings,
+    code: Annotated[str | None, Query(max_length=4096)] = None,
+    state: Annotated[str | None, Query(max_length=512)] = None,
+    error: Annotated[str | None, Query(max_length=512)] = None,
+) -> RedirectResponse:
+    """Where the provider sends the browser back, by GET."""
+    return _finish_oauth(provider, oauth.Callback(code=code, state=state, error=error), request, db, settings)
+
+
+@router.post(
+    "/oauth/{provider}/callback",
+    response_class=RedirectResponse,
+    status_code=status.HTTP_303_SEE_OTHER,
+    dependencies=[_CALLBACK_LIMIT],
+)
+def oauth_callback_post(
+    provider: str,
+    request: Request,
+    db: Db,
+    settings: AppSettings,
+    code: Annotated[str | None, Form(max_length=4096)] = None,
+    state: Annotated[str | None, Form(max_length=512)] = None,
+    error: Annotated[str | None, Form(max_length=512)] = None,
+    user: Annotated[str | None, Form(max_length=oauth.MAX_APPLE_USER_FIELD)] = None,
+) -> RedirectResponse:
+    """Where Apple posts back from another site. It can't send the client header, so `state` guards it."""
+    callback = oauth.Callback(code=code, state=state, error=error, user=user)
+    return _finish_oauth(provider, callback, request, db, settings)
+
+
+# --------------------------------------------------------------------------
+# Sign-in by emailed link
+# --------------------------------------------------------------------------
+
+
+@router.post(
+    "/email/start",
+    response_model=EmailStarted,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(rate_limit("auth_email_start", 10, per_seconds=3600))],
+)
+def email_start(body: EmailStart, db: Db, settings: AppSettings) -> EmailStarted:
+    """Email a one-time sign-in link. The answer is the same whether or not the address has an account."""
+    mailer = get_mailer(settings)
+    if mailer is None:
+        raise ProviderUnavailableError()
+    if settings.ratelimit_enabled:
+        _LINKS_PER_ADDRESS.hit(f"email:{hash_token(body.email.casefold())}")
+    token = email_link.create_link(db, body.email)
+    db.commit()
+    mailer.send(email_link.link_message(settings, body.email, token, safe_next(body.next)))
+    return EmailStarted()
+
+
+@router.post(
+    "/email/verify",
+    response_model=Me,
+    dependencies=[Depends(rate_limit("auth_email_verify", 30, per_seconds=3600))],
+)
+def email_verify(
+    body: EmailVerify, request: Request, response: Response, db: Db, settings: AppSettings
+) -> Me:
+    """Spend an emailed link and sign in. Unknown, used and expired links all fail with `link_invalid`."""
+    if settings.mail_backend is None:
+        raise ProviderUnavailableError()
+    user = email_link.redeem(db, body.token)
+    token = _begin_session(db, user, request)
+    db.commit()
+    cookies.set_session_cookie(response, token)
+    return Me.from_user(user)
 
 
 @dev_router.post("/dev-login", response_model=Me)

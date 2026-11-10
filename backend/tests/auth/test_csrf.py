@@ -104,3 +104,11 @@ def test_only_a_whole_path_match_is_exempt(csrf_app: FastAPI) -> None:
 
 def test_nothing_is_exempt_by_default() -> None:
     assert ClientHeaderMiddleware(FastAPI()).exempt == ()
+
+
+@pytest.mark.parametrize("method", ["PUT", "PATCH", "DELETE"])
+def test_an_exempt_path_is_exempt_for_post_only(csrf_app: FastAPI, method: str) -> None:
+    # A provider only ever posts back. Nothing else may use the exemption.
+    bare = TestClient(csrf_app, base_url=BASE_URL)
+    assert bare.request(method, "/callback/apple").status_code == 403
+    assert bare.post("/callback/apple").status_code == 200

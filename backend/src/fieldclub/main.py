@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import pkgutil
+import re
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -23,6 +24,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 import fieldclub.api
 from fieldclub import APP_NAME, __version__, http
 from fieldclub.auth.csrf import ClientHeaderMiddleware
+from fieldclub.auth.oauth import FORM_POST_CALLBACK_PATHS
 from fieldclub.config import Settings, get_settings
 from fieldclub.db import create_schema
 from fieldclub.errors import install_error_handlers
@@ -36,10 +38,11 @@ API_PREFIX = "/api/v1"
 RESERVED_ROOTS = frozenset({"api", "tiles", "healthz", "assets"})
 
 
-# Paths that take a data-changing request without the client header. Empty
-# today. An OAuth callback that a provider reaches with a cross-site POST goes
-# here, as a regular expression for the whole path. See fieldclub.auth.csrf.
-CLIENT_HEADER_EXEMPT: tuple[str, ...] = ()
+# Paths that take a POST without the client header, as regular expressions
+# for the whole path: exactly the OAuth callbacks a provider reaches with a
+# cross-site POST (Apple's), which `state` protects instead. See
+# fieldclub.auth.csrf and fieldclub.auth.flow.
+CLIENT_HEADER_EXEMPT: tuple[str, ...] = tuple(re.escape(path) for path in FORM_POST_CALLBACK_PATHS)
 
 
 @dataclass(frozen=True)

@@ -604,9 +604,13 @@ def test_auth_routes_are_in_the_openapi_schema(client: TestClient) -> None:
     auth = {path: sorted(methods) for path, methods in paths.items() if path.startswith("/api/v1/auth/")}
     assert auth == {
         "/api/v1/auth/dev-login": ["post"],
+        "/api/v1/auth/email/start": ["post"],
+        "/api/v1/auth/email/verify": ["post"],
         "/api/v1/auth/handle-suggestion": ["get"],
         "/api/v1/auth/logout": ["post"],
         "/api/v1/auth/me": ["delete", "get", "patch"],
+        "/api/v1/auth/oauth/{provider}/callback": ["get", "post"],
+        "/api/v1/auth/oauth/{provider}/start": ["get"],
         "/api/v1/auth/welcome": ["post"],
     }
     assert paths["/api/v1/auth/welcome"]["post"]["operationId"] == "auth_welcome"

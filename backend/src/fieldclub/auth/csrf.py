@@ -32,7 +32,8 @@ class ClientHeaderMiddleware:
     another site, and so have to defend themselves some other way. The one
     expected case is an OAuth callback that a provider posts back to (Apple's
     `form_post` response mode), which is protected by its `state` value. A
-    path is exempt only when a pattern matches all of it.
+    path is exempt only when a pattern matches all of it, and only for POST:
+    a provider never sends PUT, PATCH or DELETE.
     """
 
     def __init__(self, app: ASGIApp, exempt: Iterable[str] = ()) -> None:
@@ -41,8 +42,9 @@ class ClientHeaderMiddleware:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http" and scope["method"].upper() in MUTATING_METHODS:
+            method = scope["method"].upper()
             sent = Headers(scope=scope).get(CLIENT_HEADER)
-            if sent != CLIENT_HEADER_VALUE and not self._is_exempt(scope["path"]):
+            if sent != CLIENT_HEADER_VALUE and not (method == "POST" and self._is_exempt(scope["path"])):
                 # Outside the app's exception handlers, so answer directly.
                 error = ClientHeaderRequiredError()
                 response = JSONResponse(error.to_body(), status_code=error.status_code)
