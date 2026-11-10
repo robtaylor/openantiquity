@@ -10,6 +10,11 @@ the lock, so the second assessment always sees the first answer.
 
 Anyone who contributes to a finding follows it, so they hear when it moves.
 
+Who may contribute: answers, evidence and votes come only from someone who
+sees the finding's exact position (`require_exact`), because nobody can check
+a feature, or judge someone else's evidence for it, from a 1 km square.
+Comments stay open to everyone signed in.
+
 Positions: nothing here returns a position. Responses get one from
 `schemas.findings.location_out`, which goes through `services.sensitivity`.
 List queries choose the column by viewer in `visible_position_clause`, so a
@@ -117,6 +122,11 @@ class NotFinderError(ForbiddenError):
     message = "Only the person who marked this finding can do that."
 
 
+class LocationHiddenError(ForbiddenError):
+    code = "location_hidden"
+    message = "You can only answer, add evidence or vote on a finding whose exact position you can see."
+
+
 class FindingClosedError(ConflictError):
     code = "finding_withdrawn"
     message = "This finding has been withdrawn, so it takes no more answers or evidence."
@@ -145,7 +155,8 @@ class VoteNotAllowedError(ForbiddenError):
 class VerifyNotAllowedError(ForbiddenError):
     code = "verify_not_allowed"
     message = (
-        "Only an archaeologist or a moderator can verify official evidence, and not on their own finding."
+        "Only an archaeologist or a moderator can verify official evidence, and not on their own finding "
+        "or evidence they added."
     )
 
 
@@ -284,6 +295,12 @@ def check_open(finding: Finding) -> None:
         raise FindingClosedError()
 
 
+def require_exact(finding: Finding, user: User) -> None:
+    """Refuse a contribution from someone who sees the finding only as a 1 km square."""
+    if not sensitivity.sees_exact(finding, user):
+        raise LocationHiddenError()
+
+
 def follow(db: Session, user: User, finding: Finding) -> None:
     """Follow a finding. Following it twice is harmless."""
     db.execute(
@@ -366,7 +383,7 @@ def gather_inputs(db: Session, finding: Finding, state: FindingState | None = No
         for obs, role in db.execute(
             select(Observation, User.role)
             .join(User, User.id == Observation.user_id)
-            .where(Observation.finding_id == finding.id)
+            .where(Observation.finding_id == finding.id, Observation.withdrawn_at.is_(None))
         ).all()
     )
     verifier = aliased(User)
@@ -436,8 +453,12 @@ def reassess(
     """Recompute and store a finding's assessment. Call it holding `lock(db, finding)`.
 
     When the tier or state changes it records activity, which notifies
-    followers. Reputation awards are written every time: `reputation.awards`
-    works out what is new and `record_awards` never pays twice.
+    followers, with `actor` as its actor. Pass None when the change came from
+    a second look: a tier change credited to the person who just answered
+    would tell every follower how they answered (Decision 0008).
+
+    Reputation awards are written every time: `reputation.awards` works out
+    what is new and `record_awards` never pays twice.
     """
     old = load_assessment(finding.assessment)
     tier_before, state_before = Tier(finding.tier), FindingState(finding.state)
@@ -899,6 +920,7 @@ def add_evidence(
 ) -> tuple[Evidence, Reassessment]:
     """Add evidence to a finding and reassess it. Hold the lock."""
     check_open(finding)
+    require_exact(finding, user)
     check_evidence_fields(db, user, fields, today=datetime.now(UTC).date())
     data: dict[str, Any] = {}
     if fields.view is not None:
@@ -970,6 +992,7 @@ def vote(db: Session, evidence_id: int, user: User, value: int) -> Reassessment:
     assert value in (-1, 0, 1), "a vote is -1, 0 or 1"
     evidence, finding = _locked_evidence(db, evidence_id, user)
     check_open(finding)
+    require_exact(finding, user)
     if user.has_id(evidence.user_id) or user.has_id(finding.author_id):
         raise VoteNotAllowedError()
     if value == 0:
@@ -989,11 +1012,20 @@ def vote(db: Session, evidence_id: int, user: User, value: int) -> Reassessment:
 
 
 def verify(db: Session, evidence_id: int, user: User) -> Reassessment:
-    """An archaeologist or moderator verifies an official item, which can put a finding on record."""
+    """An archaeologist or moderator verifies an official item, which can put a finding on record.
+
+    Verifying is a second person's check, so neither the finder nor the
+    person who added the item can do it.
+    """
     evidence, finding = _locked_evidence(db, evidence_id, user)
     check_open(finding)
-    if Role(user.role) not in VERIFIER_ROLES or user.has_id(finding.author_id):
+    if (
+        Role(user.role) not in VERIFIER_ROLES
+        or user.has_id(finding.author_id)
+        or user.has_id(evidence.user_id)
+    ):
         raise VerifyNotAllowedError()
+    require_exact(finding, user)
     if EvidenceKind(evidence.kind) not in OFFICIAL_KINDS:
         raise InvalidEvidenceError(
             "Only an HER entry, a designation or a publication is verified.", code="not_official"

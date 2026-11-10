@@ -197,6 +197,9 @@ class Observation(Base):
     not_artefact: Mapped[bool | None] = mapped_column(Boolean)
     note: Mapped[str | None] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(TimestampTz, server_default=func.now(), onupdate=func.now())
+    # Set when the person takes their answer back. The row stays, so an answer
+    # given after the reveal can't replace it (Decision 0008).
+    withdrawn_at: Mapped[datetime | None] = mapped_column(TimestampTz)
 
 
 class Evidence(Base):

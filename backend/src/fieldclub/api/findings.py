@@ -57,22 +57,24 @@ def parse_bbox(text: str | None) -> tuple[float, float, float, float] | None:
     return values
 
 
+# A repeated filter can name each value at most once, so no list is longer than its vocabulary.
 def list_filters(
     bbox: Annotated[str | None, Query(max_length=200, description="west,south,east,north")] = None,
-    tier: Annotated[list[Tier] | None, Query()] = None,
+    tier: Annotated[list[Tier] | None, Query(max_length=len(Tier))] = None,
     state: Annotated[
-        list[FindingState] | None, Query(description="Withdrawn findings only when asked for")
+        list[FindingState] | None,
+        Query(max_length=len(FindingState), description="Withdrawn findings only when asked for"),
     ] = None,
-    feature_class: Annotated[list[FeatureClass] | None, Query()] = None,
+    feature_class: Annotated[list[FeatureClass] | None, Query(max_length=len(FeatureClass))] = None,
     author: Annotated[str | None, Query(max_length=64, description="A handle")] = None,
     q: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
     sort: FindingSort = FindingSort.NEWEST,
 ) -> FindingFilters:
     return FindingFilters(
         bbox=parse_bbox(bbox),
-        tier=tuple(tier or ()),
-        state=tuple(state or ()),
-        feature_class=tuple(feature_class or ()),
+        tier=tuple(dict.fromkeys(tier or ())),
+        state=tuple(dict.fromkeys(state or ())),
+        feature_class=tuple(dict.fromkeys(feature_class or ())),
         author=author,
         q=q,
         sort=sort,

@@ -88,7 +88,7 @@ Columns marked with `*` are required. Every table has `id BIGINT` and `created_a
 | Table | Columns |
 |-------|---------|
 | `findings` | `public_id*` unique, `author_id*`, `title*`, `description`, `feature_class*`, `community_class`, `period*`, `location*` Point, `location_public*` Point, `outline` Geometry, `sensitivity*` (open, protected, restricted), `view_state*` jsonb, `nation`, `grid_ref`, `tier*`, `state*`, `state_reason`, `confidence*` smallint, `assessment*` jsonb, `observation_count*`, `evidence_count*`, `comment_count*`, `mention_count*`, `updated_at*`, `tier_changed_at`, `hidden_at`, `open_steps*` text[] (the next steps' codes, for the help-wanted queue), `answers_to_next` (second looks that would move it up, for the review queue) |
-| `observations` | `finding_id*`, `user_id*`, `visible*` (yes, unsure, no), `feature_class`, `period`, `explanation` (modern, natural, artefact), `not_modern` bool, `not_natural` bool, `not_artefact` bool, `note`, `updated_at*`. Unique on finding and user |
+| `observations` | `finding_id*`, `user_id*`, `visible*` (yes, unsure, no), `feature_class`, `period`, `explanation` (modern, natural, artefact), `not_modern` bool, `not_natural` bool, `not_artefact` bool, `note`, `updated_at*`, `withdrawn_at` (taken back: it stops counting, and the row stays so it can't be replaced). Unique on finding and user |
 | `evidence` | `finding_id*`, `user_id*`, `kind*`, `stance*` (supports, neutral, contradicts), `title`, `note`, `url`, `record_id`, `relation` (same_as, part_of, related), `media_id`, `occurred_on` date, `organisation`, `reference`, `outcome` (supports, inconclusive, contradicts), `data` jsonb, `verified_by`, `verified_at`, `deleted_at` |
 | `evidence_votes` | `evidence_id*`, `user_id*`, `value*` (+1 or -1). Primary key on both |
 | `comments` | `finding_id*`, `user_id*`, `body*`, `parent_id`, `edited_at`, `deleted_at` |
@@ -146,21 +146,21 @@ A person's weight is set by role: member 1.0, trusted 1.5, expert 3.0. Moderator
 
 - `seen` is the summed weight of other people who answered "yes, I can see it". `unseen` is the same for "no". `observers` is the number of distinct people who answered yes.
 - `seen_ratio = seen / (seen + unseen)` when the denominator is positive.
-- Class support sums weight per feature class over the finder's class and every observation that names one. `unknown` is ignored. `class_agreement` is the top class's share. When agreement is at least 2/3 and total support is at least 2.0, the top class becomes `community_class`.
+- Class support sums weight per feature class over the finder's class and every observation that counts towards `seen` and names one. `unknown` is ignored. `class_agreement` is the top class's share. When agreement is at least 2/3 and total support is at least 2.0, the top class becomes `community_class`.
 - An evidence item stands when its weighted vote total is not negative and it isn't deleted. It's independent when someone other than the finder added it, or someone other than its contributor endorsed it with weight of at least 1.0.
-- Strands group evidence kinds: `lidar_view` is lidar, `aerial` is aerial, `historic_map` is historic map, `record_link` (relation related or part_of) is records, `document` is literature, `photo` and `field_visit` are ground, `geophysics` and `excavation` are survey, `her_record`, `designation` and `publication` are official. The desk strands are lidar, aerial, historic map, records and literature. A strand is supporting when it has at least one standing, independent item with stance `supports`.
-- Each check (`not_modern`, `not_natural`, `not_artefact`) is cleared when the weight asserting it is at least 2.0 and more than twice the weight of observations giving the matching explanation.
+- Strands group evidence kinds: `lidar_view` is lidar, `aerial` is aerial, `historic_map` is historic map, `record_link` (relation related or part_of) is records, `document` is literature, `photo` and `field_visit` are ground, `geophysics` and `excavation` are survey, `her_record`, `designation` and `publication` are official. The desk strands are lidar, aerial, historic map, records and literature. A strand is supporting when it has at least one standing, independent item with stance `supports`. Ground and survey items count towards the disputed and ruled-out rules below only when they are standing and independent too.
+- Each check (`not_modern`, `not_natural`, `not_artefact`) is cleared when the weight of observations that count towards `seen` and assert it is at least 2.0 and more than twice the weight of observations giving the matching explanation.
 
 ### Tiers
 
 | Tier | Label | Requires |
 |------|-------|----------|
 | `spotted` | Spotted | Nothing. Every finding starts here |
-| `seen` | Seen by others | `seen >= 2.0`, `observers >= 2`, `seen_ratio >= 0.67` |
-| `corroborated` | Corroborated | Seen, plus two supporting desk strands, plus `class_agreement >= 0.67` from at least two people |
+| `seen` | Seen by others | `seen >= 2.0`, `observers >= 2`, `seen_ratio >= 2/3` |
+| `corroborated` | Corroborated | Seen, plus two supporting desk strands, plus `class_agreement >= 2/3` from at least two people |
 | `probable` | Probable | Corroborated, plus all three checks cleared, plus a yes from a trusted or expert reviewer or `seen >= 7.0` |
 | `ground_checked` | Checked on the ground | A standing ground or survey item with outcome `supports`, endorsed with weight 1.0 by someone else or added by a trusted or expert user. Doesn't require the earlier tiers |
-| `confirmed` | On record | A standing official item verified by an expert or moderator. Doesn't require the earlier tiers |
+| `confirmed` | On record | A standing official item verified by an expert or moderator who is neither the finder nor the item's contributor. Doesn't require the earlier tiers |
 
 ### States
 
@@ -170,7 +170,7 @@ A finding's state is separate from its tier.
 |-------|------|
 | `open` | Default |
 | `known` | A standing `record_link` with relation `same_as` whose contributor weight plus endorsements reaches 2.0. The finding matches an existing record |
-| `disputed` | `seen >= 2.0` and `unseen >= 2.0` with ratio between 0.33 and 0.67, or contradicting strands at least equal supporting strands, or ground items disagree |
+| `disputed` | `seen >= 2.0` and `unseen >= 2.0` with ratio strictly between 0.33 and 2/3, or contradicting strands at least equal supporting strands, or ground items disagree |
 | `ruled_out` | `unseen >= 3.0` with ratio at most 0.33 (reason `not_visible`), or one explanation's weight is at least 3.0 and exceeds `seen` (reason is that explanation), or a standing ground item with outcome `contradicts` and none supporting (reason `ground_check`). Never applied at `ground_checked` or above |
 | `withdrawn` | The finder withdrew it |
 
@@ -182,7 +182,7 @@ A finding's state is separate from its tier.
 
 ### Reputation
 
-Points are written to `reputation_events`, so a person can see where each one came from. A finding reaching seen earns its finder 2, corroborated 5, probable 10, ground checked 20, confirmed 30. An observation that matches the outcome when a finding reaches corroborated or ruled out earns 1. An evidence item endorsed by two other people earns 1. A finding that turns out to match a known record earns 1. There are no penalties. A member is promoted to trusted at 50 points.
+Points are written to `reputation_events`, so a person can see where each one came from. A finding reaching seen earns its finder 2, corroborated 5, probable 10, ground checked 20, confirmed 30. An observation that matches the outcome when a finding reaches corroborated or ruled out earns 1. An evidence item endorsed by two other people earns 1. A finding that turns out to match a known record earns 1. There are no penalties. A member who reaches 50 points becomes eligible for trusted, and a moderator makes the promotion. It isn't automatic: trusted users see restricted positions (Decision 0005), and three colluding accounts can take a finding to Checked on the ground, worth 27 points to its finder.
 
 ## API
 
@@ -308,9 +308,22 @@ One function in `services/sensitivity.py` decides what a viewer sees, and every 
 
 Findings reach the map through `GET /findings?bbox=&format=geojson`, not through cacheable tiles, because the answer depends on the viewer. The `bbox` matches the position the viewer is allowed to see, so an obscured finding matches by the centre of its square. The frontend widens the box it asks for by 500 m on each side so that a square covering the view is returned even when its centre is off screen.
 
+### Second looks
+
+Decision 0008 makes second looks blind. These rules keep each answer independent after it's given:
+
+- An answer is final. Answering reveals the finding and everyone's answers, so `PUT /findings/{public_id}/observation` refuses a different answer with `answer_final`, and only the note can change. `DELETE` marks the answer withdrawn, which stops it counting. The same answer given again restores it, and a different one is refused.
+- Answers, evidence and votes come only from someone who sees the finding's exact position. Anyone else gets `location_hidden`. Comments stay open to every contributor.
+- `observation_added`, and a tier or state change that an answer or its withdrawal causes, are recorded with no actor, so followers can't tell how anyone answered.
+- A viewer who may not see the answers gets the next steps that second looks meet without `people`, `weight_needed` or a number in the prompt.
+
+Known limits, accepted for now. A review card carries the finding's `public_id`, because the answer is sent to it, so a reviewer who opens the finding's page first sees the claim there, as Decision 0008 allows. The queue's order follows how many answers a finding needs, which depends on other people's answers. The review queue and the help-wanted lists page by an offset held in the cursor, because their order changes as people answer, so a card can move between pages or appear twice.
+
 ## Events
 
 `services/activity.py` has `record(db, kind, actor, finding=None, investigation=None, data=None)`. It inserts an `activity` row, creates notifications for the finding's followers, and after commit sends a small payload through PostgreSQL `NOTIFY fieldclub_events`. One listener per process fans payloads out to connected event-stream clients. Because the bus is PostgreSQL, it works across Cloud Run instances.
+
+An event caused by a second look has no actor (see Second looks above).
 
 Activity kinds: `finding_created`, `tier_changed`, `state_changed`, `observation_added`, `evidence_added`, `comment_added`, `mention_added`, `followup_logged`, `investigation_published`.
 

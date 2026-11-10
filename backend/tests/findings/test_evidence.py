@@ -327,3 +327,40 @@ def test_an_unapproved_photo_is_not_shown_to_others(
     media.approved_at = datetime.now(UTC)
     db.commit()
     assert client_as(make_user()).get(path).json()["evidence"][0]["media_id"] == media.id
+
+
+def test_evidence_and_votes_need_the_exact_position(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    finder, trusted, member = make_user(), make_user("trusted"), make_user()
+    finding = create(db, finder, requested_sensitivity="restricted")
+    assert client_as(member).get(f"{API}/findings/{finding.public_id}").json()["location"]["obscured"]
+    evidence, _ = add_desk_evidence(db, finding, trusted)
+    path = f"{API}/findings/{finding.public_id}/evidence"
+    for outcome in ("supports", "contradicts"):
+        visit = {"kind": "field_visit", "outcome": outcome, "occurred_on": VISIT.isoformat()}
+        refused = client_as(member).post(path, json=visit)
+        assert (refused.status_code, error_code(refused)) == (403, "location_hidden")
+    voted = client_as(member).put(f"{API}/evidence/{evidence.id}/vote", json={"value": -1})
+    assert (voted.status_code, error_code(voted)) == (403, "location_hidden")
+    db.expire_all()
+    assert (finding.state, finding.evidence_count) == ("open", 1)
+    assert (
+        client_as(make_user("trusted"))
+        .put(f"{API}/evidence/{evidence.id}/vote", json={"value": 1})
+        .status_code
+        == 200
+    )
+
+
+def test_an_archaeologist_cannot_verify_evidence_they_added(db: Session, make_user: MakeUser) -> None:
+    expert = make_user("expert")
+    finding = create(db, make_user())
+    entry, _ = findings.add_evidence(
+        db, findings.lock(db, finding), expert, EvidenceFields(kind=EvidenceKind.HER_RECORD, reference="MWI9")
+    )
+    db.commit()
+    with pytest.raises(findings.VerifyNotAllowedError):
+        findings.verify(db, entry.id, expert)
+    db.rollback()
+    assert findings.verify(db, entry.id, make_user("moderator")).tier_after.value == "confirmed"

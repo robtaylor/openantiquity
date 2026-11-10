@@ -284,8 +284,13 @@ def test_writes_answer_with_what_the_writer_may_see(world: World, viewer: str, l
         f"{API}/findings/{finding.public_id}/evidence",
         json={"kind": "document", "title": "Parish history, page 12"},
     )
-    assert evidence.status_code == 201
-    check(evidence.text, allowed, allowed, where=f"POST evidence ({level})")
+    if level in SEES[viewer]:
+        assert evidence.status_code == 201
+        check(evidence.text, allowed, allowed, where=f"POST evidence ({level})")
+    else:
+        assert evidence.status_code == 403
+        assert evidence.json()["error"]["code"] == "location_hidden"
+        check(evidence.text, set(), where="refused evidence")
 
     looked = client.put(f"{API}/findings/{finding.public_id}/observation", json={"visible": "yes"})
     if level in SEES[viewer]:

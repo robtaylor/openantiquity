@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fieldclub.models import Comment, Finding, Follow, Notification
+from fieldclub.schemas.findings import URL_MAX
 from fieldclub.services import exports, findings
 from fieldclub.vocab import EvidenceKind, FeatureClass, Visible
 from tests.findings.support import API, LAT, LON, add_desk_evidence, answer, create, point
@@ -267,3 +268,22 @@ def test_writes_are_rate_limited(client_as: ClientAs, make_user: MakeUser) -> No
     statuses = [client.post(f"{API}/findings", json=body).status_code for _ in range(61)]
     assert statuses[:60] == [201] * 60
     assert statuses[60] == 429
+
+
+def test_repeated_filters_and_long_links_are_capped(
+    db: Session, client, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    many = client.get(f"{API}/findings", params=[("tier", "seen")] * 500)
+    assert (many.status_code, error_code(many)) == (422, "validation_error")
+    assert client.get(f"{API}/findings", params=[("tier", "seen")] * 2).status_code == 200
+
+    finding = create(db, make_user())
+    path = f"{API}/findings/{finding.public_id}/evidence"
+    helper = client_as(make_user())
+    base = "https://example.org/"
+    too_long = helper.post(path, json={"kind": "aerial", "url": base + "a" * (URL_MAX - len(base) + 1)})
+    assert error_code(too_long) == "validation_error"
+    assert (
+        helper.post(path, json={"kind": "aerial", "url": base + "a" * (URL_MAX - len(base))}).status_code
+        == 201
+    )

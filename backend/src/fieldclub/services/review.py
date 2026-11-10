@@ -15,28 +15,53 @@ Blindness:
 - Help-wanted tasks that are answered by a second look are as blind as a
   card. Tasks for evidence show the finding, because finding an old map for
   it needs to know what it is.
+- An answer is final. Giving it reveals the finding and everyone's answers,
+  so an answer changed afterwards would no longer be independent. Once
+  given, only its note can change. Taking it back marks it withdrawn and it
+  stops counting, but the row stays, so a new answer can't replace it. The
+  same answer given again restores it.
+- Activity doesn't say who answered. `observation_added`, and any tier or
+  state change an answer causes, are recorded with no actor, so a follower
+  can't read someone's answer from the event that follows it.
+- On a finding's page, a viewer who hasn't answered sees the next steps
+  without the numbers that would let them work out the tallies
+  (`blind_step`).
+
+Known limits, accepted:
+
+- A card carries the finding's public id, which the answer is sent to.
+  Someone who opens `/findings/{id}` first sees the claim there, as Decision
+  0008 allows for a page opened directly.
+- The queue's order reflects how many answers a finding needs, which follows
+  from other people's answers.
+- The queue and the help-wanted lists page by offset, because their order
+  changes as people answer. A card can shift between pages or appear twice.
 
 Services flush and never commit.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 from geoalchemy2 import Geography
 from sqlalchemy import ColumnElement, Select, cast, exists, func, not_, select
 from sqlalchemy.orm import Session
 
-from fieldclub.errors import ForbiddenError, NotFoundError
+from fieldclub.errors import ConflictError, ForbiddenError, NotFoundError
 from fieldclub.models import Finding, Observation, User
 from fieldclub.models.common import SRID
 from fieldclub.schemas.common import encode_cursor, paginate
-from fieldclub.services import activity, findings, sensitivity
-from fieldclub.services.confidence import NextStep
+from fieldclub.services import activity, findings
+from fieldclub.services.confidence import CHECK_PHRASES, NextStep
 from fieldclub.services.findings import ANSWER_CODES, Reassessment
 from fieldclub.vocab import (
+    CHECK_EXPLANATIONS,
     ActivityKind,
+    Check,
     Explanation,
     FeatureClass,
     FindingState,
@@ -51,14 +76,17 @@ class OwnFindingError(ForbiddenError):
     message = "You can't take a second look at your own finding."
 
 
-class LocationHiddenError(ForbiddenError):
-    code = "location_hidden"
-    message = "You can only take a second look at a finding whose exact position you can see."
-
-
 class AnswerFirstError(ForbiddenError):
     code = "answer_first"
     message = "Give your own answer first. Other people's answers are shown once you have."
+
+
+class AnswerFinalError(ConflictError):
+    code = "answer_final"
+    message = (
+        "You've already answered, and seen the other answers, so your answer can't change. "
+        "You can still change its note."
+    )
 
 
 class ObservationNotFoundError(NotFoundError):
@@ -71,6 +99,30 @@ class ObservationNotFoundError(NotFoundError):
 # --------------------------------------------------------------------------
 
 
+# Everything in an answer but its note: the part that can't change once given.
+_FINAL_COLUMNS = (
+    "visible",
+    "feature_class",
+    "period",
+    "explanation",
+    "not_modern",
+    "not_natural",
+    "not_artefact",
+)
+
+
+def contradicted_check(answer: Any) -> Check | None:
+    """A check asserted alongside its matching explanation, such as `not_modern` with `modern`."""
+    return next(
+        (
+            check
+            for check, explanation in CHECK_EXPLANATIONS.items()
+            if getattr(answer, check.value) and answer.explanation is explanation
+        ),
+        None,
+    )
+
+
 @dataclass(frozen=True)
 class Answer:
     visible: Visible
@@ -81,6 +133,21 @@ class Answer:
     not_natural: bool | None = None
     not_artefact: bool | None = None
     note: str | None = None
+
+    def __post_init__(self) -> None:
+        assert contradicted_check(self) is None, "an answer can't assert a check and its explanation"
+
+    def columns(self) -> dict[str, Any]:
+        """The answer as `Observation` columns, without the note."""
+        return {name: _column(getattr(self, name)) for name in _FINAL_COLUMNS}
+
+
+def _column(value: StrEnum | bool | None) -> str | bool | None:
+    return value.value if isinstance(value, StrEnum) else value
+
+
+def _stored(observation: Observation) -> dict[str, Any]:
+    return {name: getattr(observation, name) for name in _FINAL_COLUMNS}
 
 
 @dataclass(frozen=True)
@@ -101,32 +168,34 @@ class AnswerResult:
 
 
 def put_observation(db: Session, finding: Finding, user: User, answer: Answer) -> AnswerResult:
-    """Give or change your second look, and reassess the finding under its lock."""
+    """Give your second look, or change its note, and reassess the finding under its lock.
+
+    The answer itself is final once given (see the module docstring):
+    anything but the note that differs from the stored answer is refused
+    with `AnswerFinalError`, and so is the same answer given again after
+    it was taken back, unless it matches.
+    """
     findings.lock(db, finding)
     findings.check_open(finding)
     if user.has_id(finding.author_id):
         raise OwnFindingError()
-    if not sensitivity.sees_exact(finding, user):
-        raise LocationHiddenError()
+    findings.require_exact(finding, user)
     observation = findings.my_observation(db, finding, user)
     is_new = observation is None
     if observation is None:
-        observation = Observation(finding_id=finding.id, user_id=user.id)
+        observation = Observation(finding_id=finding.id, user_id=user.id, **answer.columns())
         db.add(observation)
-    observation.visible = Visible(answer.visible).value
-    observation.feature_class = answer.feature_class.value if answer.feature_class is not None else None
-    observation.period = answer.period.value if answer.period is not None else None
-    observation.explanation = answer.explanation.value if answer.explanation is not None else None
-    observation.not_modern = answer.not_modern
-    observation.not_natural = answer.not_natural
-    observation.not_artefact = answer.not_artefact
+    elif _stored(observation) != answer.columns():
+        raise AnswerFinalError()
     observation.note = answer.note
+    observation.withdrawn_at = None
     db.flush()
-    findings.follow(db, user, finding)
     if is_new:
-        # No answer in the data: followers who haven't answered must not learn it.
-        activity.record(db, ActivityKind.OBSERVATION_ADDED, user, finding)
-    result = findings.reassess(db, finding, user)
+        # Recorded before following, with no actor and no data: followers
+        # learn that someone answered, not who or how.
+        activity.record(db, ActivityKind.OBSERVATION_ADDED, None, finding)
+    findings.follow(db, user, finding)
+    result = findings.reassess(db, finding, None)
     db.refresh(observation)
     return AnswerResult(observation, result, compare(db, finding, user, observation))
 
@@ -139,6 +208,7 @@ def compare(db: Session, finding: Finding, user: User, observation: Observation)
             Observation.finding_id == finding.id,
             Observation.user_id != user.id,
             Observation.user_id != finding.author_id,
+            Observation.withdrawn_at.is_(None),
         )
         .group_by(Observation.visible)
     ):
@@ -153,14 +223,17 @@ def compare(db: Session, finding: Finding, user: User, observation: Observation)
 
 
 def delete_observation(db: Session, finding: Finding, user: User) -> Reassessment:
-    """Take back your second look, and reassess the finding under its lock."""
+    """Take back your second look, and reassess the finding under its lock.
+
+    The answer is marked withdrawn, not deleted, so it can't be replaced.
+    """
     findings.lock(db, finding)
     observation = findings.my_observation(db, finding, user)
-    if observation is None:
+    if observation is None or observation.withdrawn_at is not None:
         raise ObservationNotFoundError()
-    db.delete(observation)
+    observation.withdrawn_at = datetime.now(UTC)
     db.flush()
-    return findings.reassess(db, finding, user)
+    return findings.reassess(db, finding, None)
 
 
 @dataclass(frozen=True)
@@ -173,16 +246,51 @@ class ObservationPage:
 def list_observations(
     db: Session, finding: Finding, viewer: User | None, *, limit: int, cursor: str | None = None
 ) -> ObservationPage:
-    """Everyone's answers, oldest first, or `AnswerFirstError` for someone who hasn't answered."""
+    """Everyone's standing answers, oldest first, or `AnswerFirstError` for someone who hasn't answered.
+
+    Someone who answered and took it back has seen the answers already, so
+    they still may.
+    """
     answered = findings.my_observation(db, finding, viewer) is not None
     if not findings.answers_visible(finding, viewer, answered):
         raise AnswerFirstError()
-    query = select(Observation).where(Observation.finding_id == finding.id).order_by(Observation.id)
+    query = (
+        select(Observation)
+        .where(Observation.finding_id == finding.id, Observation.withdrawn_at.is_(None))
+        .order_by(Observation.id)
+    )
     if cursor is not None:
         query = query.where(Observation.id > findings.id_from_cursor(cursor))
     rows = db.scalars(query.limit(limit + 1)).all()
     items, next_cursor = paginate(rows, limit, lambda obs: [obs.id])
     return ObservationPage(items, findings.users_by_id(db, (obs.user_id for obs in items)), next_cursor)
+
+
+_BLIND_PROMPTS: dict[NextStepCode, str] = {
+    NextStepCode.NEED_OBSERVERS: "More people need to say whether they can see it.",
+    NextStepCode.NEED_CLASS_AGREEMENT: "More people need to say what they think it is.",
+    NextStepCode.NEED_TRUSTED_REVIEW: (
+        "A trusted member or an archaeologist needs to say whether they can see it, or more people do."
+    ),
+}
+assert set(_BLIND_PROMPTS) | {NextStepCode.NEED_CHECK} == ANSWER_CODES
+
+
+def blind_step(step: NextStep) -> NextStep:
+    """A step as shown to someone who may not see the answers: what's wanted, but no numbers.
+
+    How many more people a step needs, and the weight a trusted review would
+    stand in for, are worked out from the tallies, so they're left out of
+    every step a second look meets. Other steps are returned unchanged.
+    """
+    if step.code not in ANSWER_CODES:
+        return step
+    if step.code is NextStepCode.NEED_CHECK:
+        assert step.check is not None, "a check step names its check"
+        prompt = f"More people need to say it {CHECK_PHRASES[step.check]}."
+    else:
+        prompt = _BLIND_PROMPTS[step.code]
+    return replace(step, prompt=prompt, people=None, weight_needed=None)
 
 
 # --------------------------------------------------------------------------

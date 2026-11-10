@@ -183,9 +183,11 @@ def test_a_page_hides_answers_until_you_have_given_yours(
     answers = client_as(reviewer).get(f"{path}/observations").json()["items"]
     assert {a["note"] for a in answers} == {ANSWER_NOTE, None}
 
-    # Taking your answer back hides them again.
+    # Taking your answer back stops it counting. You've seen the others, so they stay visible.
     assert client_as(reviewer).delete(f"{path}/observation").status_code == 204
-    assert client_as(reviewer).get(path).json()["assessment"]["tallies"] is None
+    taken_back = client_as(reviewer).get(path).json()
+    assert taken_back["assessment"]["tallies"]["observation_count"] == 1
+    assert taken_back["my_observation"]["withdrawn"] is True
 
 
 def test_the_reveal_shows_the_finding_in_full_and_how_your_answer_compares(

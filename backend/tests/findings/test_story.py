@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fieldclub.models import Activity, Notification, ReputationEvent, User
-from fieldclub.services import findings
+from fieldclub.services import findings, review
 from fieldclub.vocab import EvidenceKind, FeatureClass, Visible
 from tests.findings.support import add_desk_evidence, answer, create
 from tests.helpers import MakeUser
@@ -56,8 +56,9 @@ def test_spotted_to_seen_to_corroborated(db: Session, make_user: MakeUser) -> No
     assert second.reassessment.moved_up
     assert finding.tier == "seen"
     seen = _notified(db, "tier_changed")
-    # Ann (the finder) and Ben (who helped) are told. Cat made the change.
-    assert seen == {ann.id: [{"from": "spotted", "to": "seen"}], ben.id: [{"from": "spotted", "to": "seen"}]}
+    # Everyone following is told, Cat too: a change caused by an answer is
+    # credited to nobody, so it doesn't say how Cat answered.
+    assert seen == {user.id: [{"from": "spotted", "to": "seen"}] for user in (ann, ben, cat)}
     assert _points(db) == [(ann.id, "tier_seen", 2.0)]
 
     # Two independent kinds of desk evidence, from two people who aren't the finder.
@@ -72,9 +73,11 @@ def test_spotted_to_seen_to_corroborated(db: Session, make_user: MakeUser) -> No
         user: [data for data in items if data["to"] == "corroborated"]
         for user, items in _notified(db, "tier_changed").items()
     }
+    # Cat added the evidence that moved it, so Cat isn't told.
     assert corroborated == {
         ann.id: [{"from": "seen", "to": "corroborated"}],
         ben.id: [{"from": "seen", "to": "corroborated"}],
+        cat.id: [],
     }
     expected = sorted(
         [
@@ -112,14 +115,15 @@ def test_spotted_to_seen_to_corroborated(db: Session, make_user: MakeUser) -> No
 def test_a_tier_that_falls_and_climbs_again_pays_once_and_notifies_each_time(
     db: Session, make_user: MakeUser
 ) -> None:
-    ann, ben, cat, dan = (make_user() for _ in range(4))
+    ann, ben, cat = (make_user() for _ in range(3))
     finding = create(db, ann)
     answer(db, finding, ben)
     answer(db, finding, cat)
     assert finding.tier == "seen"
-    answer(db, finding, cat, Visible.NO)
+    review.delete_observation(db, finding, cat)
+    db.commit()
     assert finding.tier == "spotted"
-    answer(db, finding, dan)
+    # Giving the same answer again restores it.
     answer(db, finding, cat)
     assert finding.tier == "seen"
     awards = db.scalars(select(ReputationEvent.reason).where(ReputationEvent.user_id == ann.id)).all()

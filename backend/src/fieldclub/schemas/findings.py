@@ -5,17 +5,19 @@ Every position in a response is built by `location_out`, which goes through
 `Finding.outline` or `Finding.grid_ref` for itself.
 
 What a viewer who hasn't answered may see follows Decision 0008: the finding's
-title and claim, its tier, state and next steps, but no person's answer and
-no tally of answers. `FindingDetail.from_view` applies it from
-`FindingView.answers_visible`.
+title and claim, its tier, state and score, and its next steps without their
+numbers (`review.blind_step`), but no person's answer and no tally of
+answers. The score moves as answers come in, as a tier does; it shows how far
+along a finding is, not how anyone answered. `FindingDetail.from_view`
+applies all this from `FindingView.answers_visible`.
 """
 
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, UrlConstraints, model_validator
 
 from fieldclub.models import Comment, Finding, Observation, User
 from fieldclub.schemas.common import (
@@ -26,11 +28,12 @@ from fieldclub.schemas.common import (
     RequestModel,
     to_geojson,
 )
-from fieldclub.services import sensitivity
+from fieldclub.services import review, sensitivity
 from fieldclub.services.confidence import Assessment, CreditKind, EvidenceStatus, NextStep
 from fieldclub.services.findings import EvidenceView, FindingView
 from fieldclub.services.media import may_see_media
 from fieldclub.vocab import (
+    CHECK_EXPLANATIONS,
     EvidenceKind,
     Explanation,
     FeatureClass,
@@ -366,6 +369,8 @@ class ObservationOut(ApiModel):
     note: str | None
     created_at: datetime
     updated_at: datetime
+    # True once taken back. It no longer counts, and can't be replaced by another answer.
+    withdrawn: bool
 
     @classmethod
     def build(cls, observation: Observation, user: User) -> ObservationOut:
@@ -382,6 +387,7 @@ class ObservationOut(ApiModel):
             note=observation.note,
             created_at=observation.created_at,
             updated_at=observation.updated_at,
+            withdrawn=observation.withdrawn_at is not None,
         )
 
 
@@ -418,7 +424,10 @@ class FindingDetail(FindingSummary):
                 state_reason=assessment.state_reason.value if assessment.state_reason is not None else None,
                 score=assessment.score,
                 next_tier=assessment.next_tier,
-                next_steps=[NextStepOut.from_step(step) for step in assessment.next_steps],
+                next_steps=[
+                    NextStepOut.from_step(step if view.answers_visible else review.blind_step(step))
+                    for step in assessment.next_steps
+                ],
                 tallies=tallies,
             ),
             evidence=[_evidence_out(item, statuses, exact=exact, viewer=viewer) for item in view.evidence],
@@ -551,7 +560,12 @@ def finding_feature(finding: Finding, viewer: User | None) -> FindingFeature:
 
 
 class ObservationIn(RequestModel):
-    """A second look: can you see it, and optionally what do you think it is."""
+    """A second look: can you see it, and optionally what do you think it is.
+
+    It is final once given: only `note` can change afterwards. A check can't
+    be asserted together with its matching explanation, such as `not_modern`
+    with `explanation: modern`.
+    """
 
     visible: Visible
     feature_class: FeatureClass | None = None
@@ -561,6 +575,13 @@ class ObservationIn(RequestModel):
     not_natural: bool | None = None
     not_artefact: bool | None = None
     note: str | None = Field(default=None, max_length=TEXT_MAX)
+
+    @model_validator(mode="after")
+    def _consistent(self) -> ObservationIn:
+        check = review.contradicted_check(self)
+        if check is not None:
+            raise ValueError(f"An answer can't say both {check.value} and {CHECK_EXPLANATIONS[check].value}.")
+        return self
 
 
 class AnswerCounts(ApiModel):
@@ -652,7 +673,7 @@ class EvidenceIn(RequestModel):
     stance: Stance = Stance.SUPPORTS
     title: str | None = Field(default=None, min_length=1, max_length=TITLE_MAX * 2)
     note: str | None = Field(default=None, max_length=TEXT_MAX)
-    url: HttpUrl | None = Field(default=None)
+    url: Annotated[HttpUrl, UrlConstraints(max_length=URL_MAX)] | None = None
     record_id: int | None = Field(default=None, ge=1)
     source_key: str | None = Field(default=None, min_length=1, max_length=100)
     reference: str | None = Field(default=None, min_length=1, max_length=REFERENCE_MAX)

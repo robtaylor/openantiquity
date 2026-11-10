@@ -131,3 +131,8 @@ ALTER TABLE findings ADD COLUMN IF NOT EXISTS answers_to_next smallint;
 CREATE INDEX IF NOT EXISTS ix_findings_open_steps ON findings USING GIN (open_steps);
 
 CREATE INDEX IF NOT EXISTS ix_findings_created_at_id ON findings (created_at, id);
+
+-- Findings track: a second look taken back is kept, marked withdrawn, so it
+-- can't be replaced by an answer given after the reveal. For a database built
+-- before the column was added.
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS withdrawn_at timestamptz;
