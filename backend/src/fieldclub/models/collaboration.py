@@ -208,6 +208,11 @@ class WatchChannel(Base):
     title: Mapped[str | None] = mapped_column(Text)
     last_checked_at: Mapped[datetime | None] = mapped_column(TimestampTz)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    # The validators the feed last answered with, sent back so an unchanged feed costs a 304.
+    etag: Mapped[str | None] = mapped_column(Text)
+    last_modified: Mapped[str | None] = mapped_column(Text)
+    # Why the last scan of this channel failed, or None when it worked.
+    last_error: Mapped[str | None] = mapped_column(Text)
 
 
 __all__ = [

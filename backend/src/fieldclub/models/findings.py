@@ -289,6 +289,9 @@ class Mention(Base):
     start_seconds: Mapped[int | None] = mapped_column(Integer)
     note: Mapped[str | None] = mapped_column(Text)
     auto_detected: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # Removed by the person who added it or a moderator. The row stays, so the
+    # channel scan can't add the same link again.
+    deleted_at: Mapped[datetime | None] = mapped_column(TimestampTz)
 
 
 class Follow(Base):
