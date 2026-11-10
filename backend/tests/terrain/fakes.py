@@ -25,6 +25,11 @@ def ground(shape: tuple[int, int], res: float = 1.0) -> tuple[np.ndarray, np.nda
     return (cols + 0.5) * res, -(rows + 0.5) * res
 
 
+def laplacian(z: np.ndarray) -> np.ndarray:
+    """The 5-point Laplacian of a grid, one pixel smaller on every side."""
+    return z[1:-1, 2:] + z[1:-1, :-2] + z[2:, 1:-1] + z[:-2, 1:-1] - 4 * z[1:-1, 1:-1]
+
+
 def earthworks(east: np.ndarray, north: np.ndarray, *, slope: float = 0.0) -> np.ndarray:
     """A landscape with a known mound, ditch and bank on a regional slope rising to the east.
 

@@ -8,12 +8,21 @@ import numpy as np
 import pytest
 from pyproj import Transformer
 
+from fieldclub.terrain.catalogue import SourceTile, england_catalogue
 from fieldclub.terrain.cog import to_cog
-from fieldclub.terrain.errors import ElevationUnavailableError
+from fieldclub.terrain.errors import ElevationUnavailableError, ReadTooLargeError
 from fieldclub.terrain.grid import Window, tile_at
-from fieldclub.terrain.mirror import LocalMirrorStore, LocalSourceFetcher, Mirror
-from fieldclub.terrain.sources import Mosaic, file_source, mirror_source, project_window
-from tests.terrain.fakes import FunctionSource, catalogue_of, write_source_tile
+from fieldclub.terrain.mirror import Fetched, LocalMirrorStore, LocalSourceFetcher, Mirror
+from fieldclub.terrain.sources import (
+    ENGLAND_WGS84,
+    Mosaic,
+    _check_span,
+    file_source,
+    mirror_source,
+    project_window,
+)
+from fieldclub.terrain.styles import elevation_buffer
+from tests.terrain.fakes import FunctionSource, catalogue_of, laplacian, write_source_tile
 
 
 def linear(east: np.ndarray | float, north: np.ndarray | float) -> np.ndarray:
@@ -140,3 +149,100 @@ def test_a_cropped_coastal_tile_sits_beside_a_whole_one(tmp_path: Path) -> None:
         assert np.isfinite(heights[:3]).all(), resolution
         assert np.isnan(heights[3]), resolution
         assert np.abs(heights[:3] - linear(eastings[:3], northings[:3])).max() < 0.02
+
+
+class RefusingFetcher:
+    """A fetcher for tests that must fetch nothing."""
+
+    def fetch(self, tile: SourceTile, work_dir: Path) -> Fetched | None:
+        raise AssertionError(f"{tile.name} was fetched")
+
+
+def england_mirror(tmp_path: Path) -> Mirror:
+    return Mirror(england_catalogue(), LocalMirrorStore(tmp_path / "cogs"), [RefusingFetcher()], tmp_path)
+
+
+# The box of each one's projected pixels covers part of England: the first two
+# touched 167 catalogue tiles and the third 22 before reads were limited to
+# England's extent. The last is the zoom 7 tile at 179.9 E on the equator,
+# which failed with a grid too big to assemble.
+FAR_SIDE_TILES = [(16, 65024, 32768), (13, 8128, 4096), (13, 0, 4096), (7, *tile_at(179.9, 0.0, 7))]
+
+
+@pytest.mark.parametrize(("z", "x", "y"), FAR_SIDE_TILES)
+def test_a_tile_on_the_far_side_of_the_world_reads_nothing_and_fetches_nothing(
+    tmp_path: Path, z: int, x: int, y: int
+) -> None:
+    window = Window.tile(z, x, y, elevation_buffer(z))
+    eastings, northings = project_window(window)
+    finite = np.isfinite(eastings) & np.isfinite(northings)
+    e, n = eastings[finite], northings[finite]
+    # The hazard: the box of the projected pixels spans English eastings and northings.
+    assert e.max() > 100_000
+    assert e.min() < 660_000
+    assert n.min() < 100_000
+    assert n.max() > 600_000
+    heights = mirror_source(england_mirror(tmp_path)).read(window.bounds, window.width, window.height)
+    assert heights.shape == (window.height, window.width)
+    assert np.isnan(heights).all()
+
+
+def test_no_zoom_7_tile_outside_england_reads_anything(tmp_path: Path) -> None:
+    source = mirror_source(england_mirror(tmp_path))
+    west, south, east, north = ENGLAND_WGS84
+    corners = (tile_at(west, north, 7), tile_at(east, south, 7))
+    for x in range(0, 128, 3):
+        for y in range(0, 128, 3):
+            if corners[0][0] <= x <= corners[1][0] and corners[0][1] <= y <= corners[1][1]:
+                continue
+            window = Window.tile(7, x, y, elevation_buffer(7))
+            assert np.isnan(source.read(window.bounds, window.width, window.height)).all(), (x, y)
+
+
+def test_a_fetching_read_of_more_ground_than_a_tile_is_refused_before_any_fetch(tmp_path: Path) -> None:
+    source = mirror_source(england_mirror(tmp_path))
+    eastings = np.array([400_000.0, 420_000.0])
+    northings = np.array([160_000.0, 180_000.0])
+    with pytest.raises(ReadTooLargeError):
+        source.sample(eastings, northings, 1.0)
+
+
+def test_a_projection_far_larger_than_its_window_is_refused() -> None:
+    window = Window.tile(13, 4070, 2720)
+    eastings, northings = project_window(window)
+    _check_span(window, eastings, northings)
+    eastings[0, 0] += 100_000
+    with pytest.raises(ReadTooLargeError):
+        _check_span(window, eastings, northings)
+
+
+def white_noise(east: np.ndarray, north: np.ndarray) -> np.ndarray:
+    """A different height in every 4 m cell, from -1 to 1 m, as a fixed hash of its position."""
+    cells = np.floor(east / 4) * 12.9898 + np.floor(north / 4) * 78.233
+    return 100 + 2 * (np.sin(cells) * 43758.5453 % 1.0) - 1
+
+
+def test_detail_does_not_depend_on_where_a_pixel_falls_against_the_cells(tmp_path: Path) -> None:
+    write_source_tile(tmp_path / "src", "SU16nw", formula=white_noise)
+    mirror = Mirror(
+        catalogue_of((tmp_path / "src").glob("*.tif")),
+        LocalMirrorStore(tmp_path / "cogs"),
+        [LocalSourceFetcher(tmp_path / "src")],
+        tmp_path / "work",
+        convert=lambda src, dst: to_cog(src, dst, overview_count=1),
+    )
+    to_lonlat = Transformer.from_crs(27700, 4326, always_xy=True)
+    x, y = tile_at(*to_lonlat.transform(412_500, 167_500), 13)
+    # Zoom 13 has 5.8 m pixels and reads the 4 m cells.
+    window = Window(13, x * 512 + 100, y * 512 + 100, 300, 300)
+    z = mirror_source(mirror).read(window.bounds, window.width, window.height)
+    assert np.isfinite(z).all()
+    eastings, northings = project_window(window)
+    detail = np.abs(laplacian(z))
+    fx = (eastings[1:-1, 1:-1] / 4 - 0.5) % 1
+    fy = (northings[1:-1, 1:-1] / 4 - 0.5) % 1
+    off_centre = np.maximum(np.minimum(fx, 1 - fx), np.minimum(fy, 1 - fy))
+    on_centre = float(np.median(detail[off_centre < 0.15]))
+    half_way = float(np.median(detail[(np.abs(fx - 0.5) < 0.15) & (np.abs(fy - 0.5) < 0.15)]))
+    # White noise is the worst case: bilinear interpolation gave 1.8, the B-spline 1.23.
+    assert on_centre / half_way < 1.4

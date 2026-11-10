@@ -45,6 +45,11 @@ def nominal_ground_resolution(zoom: int) -> float:
     return resolution(zoom) * math.cos(math.radians(REFERENCE_LATITUDE))
 
 
+def longitude_of(x: np.ndarray) -> np.ndarray:
+    """Longitude in degrees of Web Mercator eastings."""
+    return np.degrees(x / EARTH_RADIUS)
+
+
 def latitude_of(y: np.ndarray) -> np.ndarray:
     """Latitude in degrees of Web Mercator northings."""
     return np.degrees(np.arctan(np.sinh(y / EARTH_RADIUS)))

@@ -21,3 +21,10 @@ class CredentialsMissingError(ElevationUnavailableError):
 class FetchFailedError(UpstreamError):
     code = "elevation_fetch_failed"
     message = "Elevation for this area couldn't be fetched from the bulk supply."
+
+
+class ReadTooLargeError(AppError):
+    """A read would cover far more ground than any tile or profile does. A bug, refused before any fetch."""
+
+    code = "elevation_read_too_large"
+    message = "That area is too large to read elevation for."
