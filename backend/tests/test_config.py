@@ -185,6 +185,15 @@ def test_gcs_storage_needs_a_bucket(clean_env: pytest.MonkeyPatch) -> None:
     assert settings().gcs_bucket == "fieldclub-data"
 
 
+def test_namespace_buckets_need_the_gcs_backend(clean_env: pytest.MonkeyPatch) -> None:
+    clean_env.setenv("FIELDCLUB_GCS_NAMESPACE_BUCKETS", '{"media": "fieldclub-photos"}')
+    with pytest.raises(ConfigError, match="FIELDCLUB_GCS_NAMESPACE_BUCKETS"):
+        settings()
+    clean_env.setenv("FIELDCLUB_STORAGE_BACKEND", "gcs")
+    clean_env.setenv("FIELDCLUB_GCS_BUCKET", "fieldclub-data")
+    assert settings().gcs_namespace_buckets == {"media": "fieldclub-photos"}
+
+
 def test_cookie_secure_and_schema_creation_can_be_forced(clean_env: pytest.MonkeyPatch) -> None:
     clean_env.setenv("FIELDCLUB_COOKIE_SECURE", "true")
     clean_env.setenv("FIELDCLUB_AUTO_CREATE_SCHEMA", "false")

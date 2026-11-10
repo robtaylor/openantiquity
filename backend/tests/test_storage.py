@@ -208,3 +208,23 @@ def test_get_storage_follows_settings(env: Callable[..., None], tmp_path: Path) 
             get_storage("../elsewhere")
     finally:
         storage.get_storage.cache_clear()
+
+
+def test_a_namespace_can_have_a_bucket_of_its_own(env: Callable[..., None]) -> None:
+    env(
+        STORAGE_BACKEND="gcs",
+        GCS_BUCKET="fieldclub-cache",
+        GCS_PREFIX="prod",
+        GCS_NAMESPACE_BUCKETS='{"media": "fieldclub-photos"}',
+    )
+    get_storage.cache_clear()
+    try:
+        photos = get_storage("media")
+        assert isinstance(photos, GcsStorage)
+        # Its own bucket, under the same prefix the shared bucket would use.
+        assert (photos.bucket_name, photos.prefix) == ("fieldclub-photos", "prod/media")
+        tiles = get_storage("tiles")
+        assert isinstance(tiles, GcsStorage)
+        assert (tiles.bucket_name, tiles.prefix) == ("fieldclub-cache", "prod/tiles")
+    finally:
+        storage.get_storage.cache_clear()

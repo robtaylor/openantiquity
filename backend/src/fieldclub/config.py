@@ -121,6 +121,9 @@ class Settings(BaseSettings):
     storage_backend: Literal["local", "gcs"] = "local"
     gcs_bucket: str | None = None
     gcs_prefix: str = ""
+    # Namespaces kept in a bucket of their own, such as {"media": "<photos bucket>"},
+    # so uploads and caches can have different lifecycles. Others use gcs_bucket.
+    gcs_namespace_buckets: dict[str, str] = {}
 
     # Outbound HTTP
     contact: str = ""
@@ -196,6 +199,10 @@ class Settings(BaseSettings):
             )
         if self.storage_backend == "gcs" and not self.gcs_bucket:
             raise ConfigError("FIELDCLUB_GCS_BUCKET is required when FIELDCLUB_STORAGE_BACKEND is 'gcs'.")
+        if self.gcs_namespace_buckets and self.storage_backend != "gcs":
+            raise ConfigError(
+                "FIELDCLUB_GCS_NAMESPACE_BUCKETS only applies when FIELDCLUB_STORAGE_BACKEND is 'gcs'."
+            )
         # The log mailer writes working sign-in links to the log, so it must
         # never run where other people sign in.
         if is_prod and self.mail_backend == "log":

@@ -176,12 +176,15 @@ def get_storage(namespace: str) -> Storage:
     """The configured storage for one kind of data, such as `tiles` or `media`.
 
     Locally that is `var/<namespace>/`. In a bucket it is the `<namespace>/`
-    prefix under `FIELDCLUB_GCS_PREFIX`.
+    prefix under `FIELDCLUB_GCS_PREFIX`, in the namespace's own bucket when
+    `FIELDCLUB_GCS_NAMESPACE_BUCKETS` names one and in `FIELDCLUB_GCS_BUCKET`
+    otherwise.
     """
     check_key(namespace)
     settings = get_settings()
     if settings.storage_backend == "gcs":
         assert settings.gcs_bucket, "Settings guarantee a bucket when the backend is gcs"
+        bucket = settings.gcs_namespace_buckets.get(namespace, settings.gcs_bucket)
         prefix = "/".join(part for part in (settings.gcs_prefix.strip("/"), namespace) if part)
-        return GcsStorage(settings.gcs_bucket, prefix)
+        return GcsStorage(bucket, prefix)
     return LocalStorage(settings.var_dir / namespace)
