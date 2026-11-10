@@ -27,6 +27,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/email/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Email Start
+         * @description Email a one-time sign-in link, bound to this browser by a cookie.
+         *
+         *     The answer is the same whether or not the address has an account.
+         */
+        post: operations["auth_email_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/email/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Email Verify
+         * @description Spend an emailed link and sign in. Unknown, used and expired links all fail with `link_invalid`.
+         *
+         *     In a browser other than the one that asked for the link, this answers
+         *     `confirmation_required` with the masked address until posted with `confirm`.
+         */
+        post: operations["auth_email_verify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/handle-suggestion": {
         parameters: {
             query?: never;
@@ -101,6 +146,54 @@ export interface paths {
         patch: operations["auth_update_me"];
         trace?: never;
     };
+    "/api/v1/auth/oauth/{provider}/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Oauth Callback
+         * @description Where the provider sends the browser back, by GET.
+         */
+        get: operations["auth_oauth_callback"];
+        put?: never;
+        /**
+         * Oauth Callback Post
+         * @description Where Apple posts back from another site. It can't send the client header, so `state` guards it.
+         */
+        post: operations["auth_oauth_callback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/oauth/{provider}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Oauth Start
+         * @description Send the browser to the provider. `next` is where to land afterwards: a path on this site.
+         *
+         *     The start is a same-site navigation, so the session cookie is here even
+         *     for Apple, whose callback won't carry it. The flow remembers its hash so
+         *     that the callback can end it.
+         */
+        get: operations["auth_oauth_start"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/welcome": {
         parameters: {
             query?: never;
@@ -119,6 +212,430 @@ export interface paths {
          *     band keeps neither the name nor the picture its sign-in provider gave.
          */
         post: operations["auth_welcome"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comments/{comment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Comment
+         * @description Remove your comment. A moderator can remove anyone's.
+         */
+        delete: operations["discussion_delete_comment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/context/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Links
+         * @description Links that open external viewers at this point, for the ones that cover it.
+         */
+        get: operations["context_links"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/context/live-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Live Sources
+         * @description The sources the browser queries for an area, with how to ask and how to credit each.
+         */
+        get: operations["context_live_sources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/evidence/{evidence_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Evidence
+         * @description Remove evidence you added. A moderator can remove anyone's.
+         */
+        delete: operations["evidence_delete_evidence"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/evidence/{evidence_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify
+         * @description An archaeologist or moderator confirms an HER entry, designation or publication.
+         */
+        post: operations["evidence_verify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/evidence/{evidence_id}/vote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Vote
+         * @description Endorse (+1) or object to (-1) evidence, or take your vote back (0).
+         */
+        put: operations["evidence_vote"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Findings
+         * @description Findings as this viewer may see them, as a page or as GeoJSON for the map.
+         *
+         *     `bbox` matches the position the viewer may see, so an obscured finding
+         *     matches by the centre of its square. A page holds up to 200; GeoJSON up to
+         *     1000, with the next page's cursor as `next_cursor`.
+         */
+        get: operations["findings_list_findings"];
+        put?: never;
+        /**
+         * Create Finding
+         * @description Mark a finding. A point and a feature class are all it needs.
+         */
+        post: operations["findings_create_finding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Findings
+         * @description A filtered set of findings as GeoJSON or HER-ready CSV. The next cursor is in `X-Next-Cursor`.
+         */
+        get: operations["findings_export_findings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/{public_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Finding
+         * @description A finding's page. Other people's answers are left out until you have given yours.
+         */
+        get: operations["findings_get_finding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Finding
+         * @description The finder corrects their finding. Fields left out are left alone.
+         */
+        patch: operations["findings_update_finding"];
+        trace?: never;
+    };
+    "/api/v1/findings/{public_id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Comments
+         * @description A finding's comments, oldest first. A deleted one stays as a placeholder for its replies.
+         */
+        get: operations["discussion_list_comments"];
+        put?: never;
+        /**
+         * Add Comment
+         * @description Comment on a finding. Everyone following it is told.
+         */
+        post: operations["discussion_add_comment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/{public_id}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Evidence
+         * @description Add evidence. Which fields each kind needs is in the `invalid_evidence` message when one is missing.
+         */
+        post: operations["evidence_add_evidence"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/{public_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Finding
+         * @description One finding as GeoJSON or HER-ready CSV.
+         */
+        get: operations["findings_export_finding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/{public_id}/follow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Follow
+         * @description Follow a finding, to hear when it changes.
+         */
+        put: operations["discussion_follow"];
+        post?: never;
+        /**
+         * Unfollow
+         * @description Stop following a finding.
+         */
+        delete: operations["discussion_unfollow"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/{public_id}/observation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Observation
+         * @description Give or change your second look. The reply reveals the finding in full and how your answer compares.
+         */
+        put: operations["observations_put_observation"];
+        post?: never;
+        /**
+         * Delete Observation
+         * @description Take back your second look.
+         */
+        delete: operations["observations_delete_observation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/{public_id}/observations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Observations
+         * @description Everyone's answers, for the finder and for people who have answered. Others get `answer_first`.
+         */
+        get: operations["observations_list_observations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/{public_id}/sensitivity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change Sensitivity
+         * @description Raise a finding's level (its finder, a trusted member or a moderator), or lower it (a moderator).
+         */
+        put: operations["findings_change_sensitivity"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/{public_id}/suggested-records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Suggested Records
+         * @description Records the finding might be, near the position this viewer may see of it.
+         */
+        get: operations["records_suggested_records"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/{public_id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Withdraw Finding
+         * @description The finder takes their finding back. It stays visible, marked withdrawn.
+         */
+        post: operations["findings_withdraw_finding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/geo/point": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Point
+         * @description Grid reference, nation, county and ground height at a WGS84 position.
+         */
+        get: operations["geo_point"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/geo/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Geo Search
+         * @description A grid reference, coordinates, a finding's id, a place or a record, as places the map can fly to.
+         */
+        get: operations["geo_geo_search"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -145,6 +662,193 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/records/nearby": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Nearby Records
+         * @description Records near a point, nearest first, with the distance to each in metres.
+         */
+        get: operations["records_nearby_records"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/records/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Records
+         * @description Records by text, source, category and area, best match first.
+         */
+        get: operations["records_search_records"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/records/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Record
+         * @description One record with its geometry, and its source's licence and attribution.
+         */
+        get: operations["records_get_record"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/review/next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Next Cards
+         * @description Findings waiting for a second look, one answer from moving up first.
+         *
+         *     Each card has the place and the finder's view only: no title, class,
+         *     description, tier or anyone's answers. Give `lon` and `lat` to prefer
+         *     nearby findings.
+         */
+        get: operations["review_next_cards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/review/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tasks
+         * @description Open next steps across findings, grouped by code, so people can pick the help they like.
+         *
+         *     Without `code`, every group with its first `limit` tasks. With `code`, that
+         *     group alone, paged by `cursor`. Steps met by a second look are blind.
+         */
+        get: operations["review_tasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Sources
+         * @description Every source in the index, with its licence, attribution, reuse class and record count.
+         */
+        get: operations["records_list_sources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/terrain/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Coverage
+         * @description The 5 km tiles that have 1 m elevation, as a GeoJSON FeatureCollection.
+         */
+        get: operations["terrain_get_coverage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/terrain/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile
+         * @description Ground height along a line, at evenly spaced samples. Lines are at most 5 km long.
+         */
+        post: operations["terrain_profile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tiles/records/{z}/{x}/{y}.mvt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Records Tile
+         * @description Counts by category on a grid below zoom 12, individual records from zoom 12 up.
+         */
+        get: operations["tiles_records_tile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -155,6 +859,15 @@ export interface components {
          * @enum {string}
          */
         AgeBand: "16_17" | "18_plus";
+        /** AnswerCounts */
+        AnswerCounts: {
+            /** No */
+            no: number;
+            /** Unsure */
+            unsure: number;
+            /** Yes */
+            yes: number;
+        };
         /** AppInfo */
         AppInfo: {
             /** Contribution Licence */
@@ -164,19 +877,96 @@ export interface components {
             /** Version */
             version: string;
         };
+        /**
+         * AssessmentOut
+         * @description The ladder as the finding page shows it: the meter, the step and what's missing.
+         */
+        AssessmentOut: {
+            /** Next Steps */
+            next_steps: components["schemas"]["NextStepOut"][];
+            next_tier: components["schemas"]["Tier"] | null;
+            /** Score */
+            score: number;
+            state: components["schemas"]["FindingState"];
+            /** State Reason */
+            state_reason: string | null;
+            tallies: components["schemas"]["Tallies"] | null;
+            tier: components["schemas"]["Tier"];
+        };
         /** AuthInfo */
         AuthInfo: {
             /** Providers */
             providers: components["schemas"]["ProviderOut"][];
         };
-        /** CheckOut */
-        CheckOut: {
-            /** Hint */
-            hint: string;
+        /** Body_auth_oauth_callback_post */
+        Body_auth_oauth_callback_post: {
+            /** Code */
+            code?: string | null;
+            /** Error */
+            error?: string | null;
+            /** State */
+            state?: string | null;
+            /** User */
+            user?: string | null;
+        };
+        /** CommentIn */
+        CommentIn: {
+            /** Body */
+            body: string;
+            /** Parent Id */
+            parent_id?: number | null;
+        };
+        /** CommentOut */
+        CommentOut: {
+            author: components["schemas"]["PublicUser"] | null;
+            /** Body */
+            body: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Deleted */
+            deleted: boolean;
+            /** Edited At */
+            edited_at: string | null;
             /** Id */
-            id: string;
-            /** Question */
-            question: string;
+            id: number;
+            /** Parent Id */
+            parent_id: number | null;
+        };
+        /**
+         * Comparison
+         * @description How your answer compares, shown once you have given it.
+         */
+        Comparison: {
+            community_class: components["schemas"]["FeatureClass"] | null;
+            finder_class: components["schemas"]["FeatureClass"];
+            /** Matches Finder */
+            matches_finder: boolean | null;
+            others: components["schemas"]["AnswerCounts"];
+        };
+        /** ContextLink */
+        ContextLink: {
+            /** Coverage */
+            coverage: string;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** No Frame */
+            no_frame: boolean;
+            /** Url */
+            url: string;
+            /** Verified */
+            verified: string;
+        };
+        /** ContextLinks */
+        ContextLinks: {
+            /** Grid Ref */
+            grid_ref: string | null;
+            /** Items */
+            items: components["schemas"]["ContextLink"][];
         };
         /** CoverageOverlay */
         CoverageOverlay: {
@@ -189,6 +979,17 @@ export interface components {
              * @enum {string}
              */
             type: "coverage";
+        };
+        /** CreditOut */
+        CreditOut: {
+            /** Evidence Id */
+            evidence_id?: number | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "spotted" | "saw_it" | "could_not_see" | "unsure" | "explained" | "answered" | "added_evidence" | "endorsed" | "verified";
+            user: components["schemas"]["PublicUser"];
         };
         /** DemSource */
         DemSource: {
@@ -220,6 +1021,84 @@ export interface components {
             handle: string;
             role?: components["schemas"]["Role"] | null;
         };
+        /**
+         * EmailStart
+         * @description Ask for a sign-in link. The answer is the same whether or not the address has an account.
+         */
+        EmailStart: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Next */
+            next?: string | null;
+        };
+        /**
+         * EmailStarted
+         * @description Always this, for any well-formed address.
+         */
+        EmailStarted: {
+            /**
+             * Message
+             * @default Check your email for a link to sign in. It works once, for fifteen minutes.
+             */
+            message: string;
+            /**
+             * Status
+             * @default sent
+             * @constant
+             */
+            status: "sent";
+        };
+        /**
+         * EmailVerify
+         * @description The token from the emailed link's fragment.
+         */
+        EmailVerify: {
+            /**
+             * Confirm
+             * @default false
+             */
+            confirm: boolean;
+            /** Token */
+            token: string;
+        };
+        /**
+         * EvidenceIn
+         * @description A piece of evidence. Which fields each kind needs is checked by `services.findings`.
+         */
+        EvidenceIn: {
+            kind: components["schemas"]["EvidenceKind"];
+            /** Media Id */
+            media_id?: number | null;
+            /** Note */
+            note?: string | null;
+            /** Occurred On */
+            occurred_on?: string | null;
+            /** Organisation */
+            organisation?: string | null;
+            outcome?: components["schemas"]["Outcome"] | null;
+            /** Record Id */
+            record_id?: number | null;
+            /** Reference */
+            reference?: string | null;
+            relation?: components["schemas"]["Relation"] | null;
+            /** Source Key */
+            source_key?: string | null;
+            /** @default supports */
+            stance: components["schemas"]["Stance"];
+            /** Title */
+            title?: string | null;
+            /** Url */
+            url?: string | null;
+            view?: components["schemas"]["ViewState"] | null;
+        };
+        /**
+         * EvidenceKind
+         * @enum {string}
+         */
+        EvidenceKind: "lidar_view" | "aerial" | "historic_map" | "record_link" | "document" | "photo" | "field_visit" | "geophysics" | "excavation" | "her_record" | "designation" | "publication";
         /** EvidenceKindOut */
         EvidenceKindOut: {
             /** Group */
@@ -233,6 +1112,63 @@ export interface components {
             /** Strand */
             strand: string;
         };
+        /**
+         * EvidenceOut
+         * @description One evidence item.
+         *
+         *     For a viewer who can't see the finding's exact position, everything that
+         *     could point at it (the address, the record, the reference, the photo and
+         *     the view) is left out and `redacted` is true.
+         */
+        EvidenceOut: {
+            contributor: components["schemas"]["PublicUser"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: number;
+            /** Independent */
+            independent: boolean;
+            kind: components["schemas"]["EvidenceKind"];
+            /** Media Id */
+            media_id: number | null;
+            /** My Vote */
+            my_vote: number | null;
+            /** Note */
+            note: string | null;
+            /** Occurred On */
+            occurred_on: string | null;
+            /** Organisation */
+            organisation: string | null;
+            outcome: components["schemas"]["Outcome"] | null;
+            /** Record Id */
+            record_id: number | null;
+            /** Redacted */
+            redacted: boolean;
+            /** Reference */
+            reference: string | null;
+            relation: components["schemas"]["Relation"] | null;
+            /** Source Key */
+            source_key: string | null;
+            stance: components["schemas"]["Stance"];
+            /** Standing */
+            standing: boolean;
+            /** Title */
+            title: string | null;
+            /** Url */
+            url: string | null;
+            verified_by: components["schemas"]["PublicUser"] | null;
+            view: components["schemas"]["ViewState"] | null;
+            /** Vote Total */
+            vote_total: number;
+        };
+        /**
+         * Explanation
+         * @enum {string}
+         */
+        Explanation: "modern" | "natural" | "artefact";
         /** ExplanationOut */
         ExplanationOut: {
             /** Hint */
@@ -242,6 +1178,11 @@ export interface components {
             /** Label */
             label: string;
         };
+        /**
+         * FeatureClass
+         * @enum {string}
+         */
+        FeatureClass: "enclosure" | "hillfort" | "round_barrow" | "long_barrow" | "hut_circle" | "settlement" | "field_system" | "ridge_and_furrow" | "linear" | "trackway" | "road" | "moat" | "motte" | "platform" | "pond" | "pit" | "industrial" | "military" | "ritual" | "garden" | "unknown";
         /** FeatureClassOut */
         FeatureClassOut: {
             /** Fish Term */
@@ -265,6 +1206,189 @@ export interface components {
             wales: string[];
         };
         /**
+         * FindingCreate
+         * @description A new finding. Only the point and the feature class are required.
+         */
+        FindingCreate: {
+            /** Description */
+            description?: string | null;
+            feature_class: components["schemas"]["FeatureClass"];
+            location: components["schemas"]["GeoJSONGeometry"];
+            outline?: components["schemas"]["GeoJSONGeometry"] | null;
+            /** @default unknown */
+            period: components["schemas"]["Period"];
+            sensitivity?: components["schemas"]["Sensitivity"] | null;
+            /** Title */
+            title?: string | null;
+            view_state?: components["schemas"]["ViewState"] | null;
+        };
+        /**
+         * FindingDetail
+         * @description A finding's page.
+         */
+        FindingDetail: {
+            /** Answers Visible */
+            answers_visible: boolean;
+            assessment: components["schemas"]["AssessmentOut"];
+            author: components["schemas"]["PublicUser"];
+            /** Comment Count */
+            comment_count: number;
+            /** Confidence */
+            confidence: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Credits */
+            credits: components["schemas"]["CreditOut"][];
+            /** Description */
+            description: string | null;
+            /** Evidence */
+            evidence: components["schemas"]["EvidenceOut"][];
+            /** Evidence Count */
+            evidence_count: number;
+            feature_class: components["schemas"]["FeatureClass"];
+            /** Following */
+            following: boolean;
+            location: components["schemas"]["LocationOut"];
+            /** Mention Count */
+            mention_count: number;
+            my_observation: components["schemas"]["ObservationOut"] | null;
+            /** Nation */
+            nation: string | null;
+            period: components["schemas"]["Period"];
+            /** Public Id */
+            public_id: string;
+            sensitivity: components["schemas"]["Sensitivity"];
+            state: components["schemas"]["FindingState"];
+            /** State Reason */
+            state_reason: string | null;
+            tier: components["schemas"]["Tier"];
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            view_state: components["schemas"]["ViewState"];
+        };
+        /**
+         * FindingFeature
+         * @description A finding on the map: always a point, at the position this viewer may see.
+         */
+        FindingFeature: {
+            geometry: components["schemas"]["GeoJSONGeometry"];
+            /** Id */
+            id: string;
+            properties: components["schemas"]["FindingFeatureProperties"];
+            /**
+             * Type
+             * @default Feature
+             * @constant
+             */
+            type: "Feature";
+        };
+        /**
+         * FindingFeatureCollection
+         * @description The map's findings. `next_cursor` is a foreign member, null on the last page.
+         */
+        FindingFeatureCollection: {
+            /** Features */
+            features?: components["schemas"]["FindingFeature"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /**
+             * Type
+             * @default FeatureCollection
+             * @constant
+             */
+            type: "FeatureCollection";
+        };
+        /** FindingFeatureProperties */
+        FindingFeatureProperties: {
+            /** Confidence */
+            confidence: number;
+            feature_class: components["schemas"]["FeatureClass"];
+            /** Grid Ref */
+            grid_ref: string | null;
+            /** Obscured */
+            obscured: boolean;
+            period: components["schemas"]["Period"];
+            /** Public Id */
+            public_id: string;
+            sensitivity: components["schemas"]["Sensitivity"];
+            /** Square */
+            square: string | null;
+            state: components["schemas"]["FindingState"];
+            tier: components["schemas"]["Tier"];
+            /** Title */
+            title: string;
+        };
+        /**
+         * FindingSort
+         * @enum {string}
+         */
+        FindingSort: "newest" | "oldest" | "confidence" | "updated";
+        /**
+         * FindingState
+         * @enum {string}
+         */
+        FindingState: "open" | "known" | "disputed" | "ruled_out" | "withdrawn";
+        /**
+         * FindingSummary
+         * @description A finding in a list. No answers and no tallies of answers.
+         */
+        FindingSummary: {
+            author: components["schemas"]["PublicUser"];
+            /** Comment Count */
+            comment_count: number;
+            /** Confidence */
+            confidence: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Evidence Count */
+            evidence_count: number;
+            feature_class: components["schemas"]["FeatureClass"];
+            location: components["schemas"]["LocationOut"];
+            /** Mention Count */
+            mention_count: number;
+            period: components["schemas"]["Period"];
+            /** Public Id */
+            public_id: string;
+            sensitivity: components["schemas"]["Sensitivity"];
+            state: components["schemas"]["FindingState"];
+            /** State Reason */
+            state_reason: string | null;
+            tier: components["schemas"]["Tier"];
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * FindingUpdate
+         * @description Changes the finder makes. Fields left out are left alone. `outline: null` removes it.
+         */
+        FindingUpdate: {
+            /** Description */
+            description?: string | null;
+            feature_class?: components["schemas"]["FeatureClass"] | null;
+            location?: components["schemas"]["GeoJSONGeometry"] | null;
+            outline?: components["schemas"]["GeoJSONGeometry"] | null;
+            period?: components["schemas"]["Period"] | null;
+            /** Title */
+            title?: string | null;
+            view_state?: components["schemas"]["ViewState"] | null;
+        };
+        /**
          * FindingsOverlay
          * @description Findings, fetched from `GET /findings?bbox=&format=geojson`. Never tiled, because the answer
          *     depends on the viewer.
@@ -279,6 +1403,77 @@ export interface components {
              * @enum {string}
              */
             type: "findings";
+        };
+        /** FollowOut */
+        FollowOut: {
+            /** Following */
+            following: boolean;
+        };
+        /**
+         * GeoJSONGeometry
+         * @description Any GeoJSON geometry in WGS84. Coordinates are longitude then latitude.
+         */
+        GeoJSONGeometry: {
+            /** Coordinates */
+            coordinates?: unknown[] | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "Point" | "MultiPoint" | "LineString" | "MultiLineString" | "Polygon" | "MultiPolygon" | "GeometryCollection";
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoPointOut */
+        GeoPointOut: {
+            /** County */
+            county: string | null;
+            /** Elevation */
+            elevation: number | null;
+            /** Grid Ref */
+            grid_ref: string | null;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            /** Nation */
+            nation: string | null;
+        };
+        /**
+         * GeoResult
+         * @description Something the map can fly to.
+         */
+        GeoResult: {
+            /** Bbox */
+            bbox?: number[] | null;
+            /** Detail */
+            detail?: string | null;
+            /** Label */
+            label: string;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            /**
+             * Obscured
+             * @default false
+             */
+            obscured: boolean;
+            /** Ref */
+            ref?: string | null;
+            source?: components["schemas"]["SourceRef"] | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "gridref" | "coordinates" | "finding" | "place" | "record";
+            /** Zoom */
+            zoom: number;
+        };
+        /** GeoResults */
+        GeoResults: {
+            /** Items */
+            items: components["schemas"]["GeoResult"][];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -311,6 +1506,66 @@ export interface components {
             overlays: (components["schemas"]["OpenMapTilesOverlay"] | components["schemas"]["RecordsOverlay"] | components["schemas"]["FindingsOverlay"] | components["schemas"]["CoverageOverlay"])[];
             /** Views */
             views: (components["schemas"]["RasterView"] | components["schemas"]["RakingView"])[];
+        };
+        /** LineString */
+        LineString: {
+            /** Coordinates */
+            coordinates: [
+                number,
+                number
+            ][];
+            /**
+             * Type
+             * @constant
+             */
+            type: "LineString";
+        };
+        /** LiveSourceOut */
+        LiveSourceOut: {
+            /** Attribution */
+            attribution: string;
+            /** Coverage */
+            coverage: string;
+            /** Endpoint */
+            endpoint: string;
+            /** Key */
+            key: string;
+            /** Licence */
+            licence: string;
+            /** Limits */
+            limits: string | null;
+            /** Link Template */
+            link_template: string | null;
+            /** Name */
+            name: string;
+            /** Publisher */
+            publisher: string;
+            /** Query Pattern */
+            query_pattern: string;
+            /** Response Fields */
+            response_fields: string;
+        };
+        /** LiveSources */
+        LiveSources: {
+            /** Items */
+            items: components["schemas"]["LiveSourceOut"][];
+        };
+        /**
+         * LocationOut
+         * @description A finding's position as this viewer may see it (Decision 0005).
+         */
+        LocationOut: {
+            /** Grid Ref */
+            grid_ref: string | null;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            /** Obscured */
+            obscured: boolean;
+            outline: components["schemas"]["GeoJSONGeometry"] | null;
+            /** Square */
+            square: string | null;
         };
         /**
          * Me
@@ -381,8 +1636,31 @@ export interface components {
             layers: components["schemas"]["Layers"];
             notices: components["schemas"]["Notices"];
             /** Sources */
-            sources: components["schemas"]["SourceOut"][];
+            sources: components["schemas"]["fieldclub__schemas__meta__SourceOut"][];
             vocab: components["schemas"]["Vocab"];
+        };
+        /**
+         * NextStepCode
+         * @enum {string}
+         */
+        NextStepCode: "need_observers" | "need_strand" | "need_class_agreement" | "need_check" | "need_trusted_review" | "need_ground" | "need_official";
+        /** NextStepOut */
+        NextStepOut: {
+            /** Check */
+            check?: string | null;
+            code: components["schemas"]["NextStepCode"];
+            /** Missing Strands */
+            missing_strands?: string[];
+            /** Pending Evidence */
+            pending_evidence?: number[];
+            /** People */
+            people?: number | null;
+            /** Prompt */
+            prompt: string;
+            /** Strands Needed */
+            strands_needed?: number | null;
+            /** Weight Needed */
+            weight_needed?: number | null;
         };
         /** Notices */
         Notices: {
@@ -391,6 +1669,56 @@ export interface components {
             field_visit_16_17: string;
             /** Sensitivity */
             sensitivity: string;
+        };
+        /**
+         * ObservationIn
+         * @description A second look: can you see it, and optionally what do you think it is.
+         *
+         *     It is final once given: only `note` can change afterwards. A check can't
+         *     be asserted together with its matching explanation, such as `not_modern`
+         *     with `explanation: modern`.
+         */
+        ObservationIn: {
+            explanation?: components["schemas"]["Explanation"] | null;
+            feature_class?: components["schemas"]["FeatureClass"] | null;
+            /** Not Artefact */
+            not_artefact?: boolean | null;
+            /** Not Modern */
+            not_modern?: boolean | null;
+            /** Not Natural */
+            not_natural?: boolean | null;
+            /** Note */
+            note?: string | null;
+            period?: components["schemas"]["Period"] | null;
+            visible: components["schemas"]["Visible"];
+        };
+        /** ObservationOut */
+        ObservationOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            explanation: components["schemas"]["Explanation"] | null;
+            feature_class: components["schemas"]["FeatureClass"] | null;
+            /** Not Artefact */
+            not_artefact: boolean | null;
+            /** Not Modern */
+            not_modern: boolean | null;
+            /** Not Natural */
+            not_natural: boolean | null;
+            /** Note */
+            note: string | null;
+            period: components["schemas"]["Period"] | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            user: components["schemas"]["PublicUser"];
+            visible: components["schemas"]["Visible"];
+            /** Withdrawn */
+            withdrawn: boolean;
         };
         /**
          * OpenMapTilesOverlay
@@ -415,6 +1743,58 @@ export interface components {
              */
             type: "openmaptiles";
         };
+        /**
+         * Origin
+         * @description The point suggestions were measured from: the position this viewer may see.
+         */
+        Origin: {
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            /** Obscured */
+            obscured: boolean;
+            /** Square */
+            square: string | null;
+        };
+        /**
+         * Outcome
+         * @enum {string}
+         */
+        Outcome: "supports" | "inconclusive" | "contradicts";
+        /** Page[CommentOut] */
+        Page_CommentOut_: {
+            /** Items */
+            items: components["schemas"]["CommentOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[FindingSummary] */
+        Page_FindingSummary_: {
+            /** Items */
+            items: components["schemas"]["FindingSummary"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[ObservationOut] */
+        Page_ObservationOut_: {
+            /** Items */
+            items: components["schemas"]["ObservationOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[ReviewCard] */
+        Page_ReviewCard_: {
+            /** Items */
+            items: components["schemas"]["ReviewCard"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /**
+         * Period
+         * @enum {string}
+         */
+        Period: "prehistoric" | "neolithic" | "bronze_age" | "iron_age" | "roman" | "early_medieval" | "medieval" | "post_medieval" | "modern" | "unknown";
         /** PeriodOut */
         PeriodOut: {
             /** Hint */
@@ -424,6 +1804,35 @@ export interface components {
             /** Label */
             label: string;
         };
+        /** ProfileOut */
+        ProfileOut: {
+            /** Length M */
+            length_m: number;
+            /** Resolution M */
+            resolution_m: number;
+            /** Samples */
+            samples: components["schemas"]["ProfileSample"][];
+        };
+        /** ProfileRequest */
+        ProfileRequest: {
+            line: components["schemas"]["LineString"];
+            /**
+             * Samples
+             * @default 200
+             */
+            samples: number;
+        };
+        /** ProfileSample */
+        ProfileSample: {
+            /** Distance M */
+            distance_m: number;
+            /** Elevation */
+            elevation: number | null;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+        };
         /** ProviderOut */
         ProviderOut: {
             /** Enabled */
@@ -432,6 +1841,26 @@ export interface components {
             id: string;
             /** Label */
             label: string;
+        };
+        /**
+         * PublicUser
+         * @description What anyone may see of a user, wherever a person is credited.
+         *
+         *     Built from a `User`, an account in the 16 to 17 band, or one that hasn't
+         *     chosen a band yet, shows its handle as its name and no picture (Decision
+         *     0009). `User.shows_handle_only` decides. The model refuses a dict, a row
+         *     or any other input, because those carry no age band and the rule couldn't
+         *     be applied.
+         */
+        PublicUser: {
+            /** Avatar Url */
+            avatar_url?: string | null;
+            /** Display Name */
+            display_name: string;
+            /** Handle */
+            handle: string;
+            /** Role */
+            role: string;
         };
         /**
          * RakingView
@@ -510,6 +1939,114 @@ export interface components {
             /** Label */
             label: string;
         };
+        /**
+         * RecordHit
+         * @description A record near a point. The distance is to the nearest part of its geometry.
+         */
+        RecordHit: {
+            /** Category */
+            category: string;
+            /** Distance M */
+            distance_m: number;
+            /** Id */
+            id: number;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            /** Name */
+            name: string;
+            /** Precision M */
+            precision_m: number | null;
+            /** Record Type */
+            record_type: string | null;
+            source: components["schemas"]["SourceRef"];
+            /** Source Key */
+            source_key: string;
+            /** Url */
+            url: string | null;
+        };
+        /** RecordHits */
+        RecordHits: {
+            /** Items */
+            items: components["schemas"]["RecordHit"][];
+        };
+        /**
+         * RecordOut
+         * @description One record in full, for its page.
+         */
+        RecordOut: {
+            /** Category */
+            category: string;
+            /** External Id */
+            external_id: string;
+            /** Geometry */
+            geometry: {
+                [key: string]: unknown;
+            };
+            /** Id */
+            id: number;
+            /**
+             * Ingested At
+             * Format: date-time
+             */
+            ingested_at: string;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            /** Monument Types */
+            monument_types: string[];
+            /** Name */
+            name: string;
+            /** Periods */
+            periods: string[];
+            /** Precision M */
+            precision_m: number | null;
+            /** Record Type */
+            record_type: string | null;
+            source: components["schemas"]["SourceRef"];
+            /** Source Key */
+            source_key: string;
+            /** Source Updated At */
+            source_updated_at: string | null;
+            /** Summary */
+            summary: string | null;
+            /** Url */
+            url: string | null;
+        };
+        /** RecordPage */
+        RecordPage: {
+            /** Items */
+            items: components["schemas"]["RecordSummary"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /**
+         * RecordSummary
+         * @description A record in a list: enough to show it and put it on the map.
+         */
+        RecordSummary: {
+            /** Category */
+            category: string;
+            /** Id */
+            id: number;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            /** Name */
+            name: string;
+            /** Precision M */
+            precision_m: number | null;
+            /** Record Type */
+            record_type: string | null;
+            source: components["schemas"]["SourceRef"];
+            /** Source Key */
+            source_key: string;
+            /** Url */
+            url: string | null;
+        };
         /** RecordsOverlay */
         RecordsOverlay: {
             /** Id */
@@ -525,29 +2062,87 @@ export interface components {
             type: "records";
         };
         /**
+         * Relation
+         * @enum {string}
+         */
+        Relation: "same_as" | "part_of" | "related";
+        /**
+         * Reveal
+         * @description What answering a second look shows you: the finding in full, and whether it moved.
+         */
+        Reveal: {
+            comparison: components["schemas"]["Comparison"];
+            finding: components["schemas"]["FindingDetail"];
+            /** Moved Up */
+            moved_up: boolean;
+            observation: components["schemas"]["ObservationOut"];
+            state_after: components["schemas"]["FindingState"];
+            state_before: components["schemas"]["FindingState"];
+            tier_after: components["schemas"]["Tier"];
+            tier_before: components["schemas"]["Tier"];
+        };
+        /**
+         * ReviewCard
+         * @description A blind second look: where to look and how, and nothing about what anyone thought.
+         */
+        ReviewCard: {
+            place: components["schemas"]["ReviewPlace"];
+            /** Public Id */
+            public_id: string;
+            view_state: components["schemas"]["ViewState"];
+        };
+        /** ReviewPlace */
+        ReviewPlace: {
+            /** Grid Ref */
+            grid_ref: string | null;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+        };
+        /**
          * Role
          * @enum {string}
          */
         Role: "member" | "trusted" | "expert" | "moderator" | "admin";
-        /** SourceOut */
-        SourceOut: {
+        /**
+         * Sensitivity
+         * @description How much of a finding's position each viewer sees (Decision 0005).
+         *
+         *     In order from least to most protected. `services.sensitivity` decides who
+         *     sees what.
+         * @enum {string}
+         */
+        Sensitivity: "open" | "protected" | "restricted";
+        /** SensitivityChange */
+        SensitivityChange: {
+            level: components["schemas"]["Sensitivity"];
+        };
+        /**
+         * SourceRef
+         * @description What a record must be shown with: who published it and under what terms.
+         */
+        SourceRef: {
             /** Attribution */
             attribution: string;
-            /** Category */
-            category: string;
-            /** Homepage */
-            homepage: string | null;
             /** Key */
             key: string;
             /** Licence */
             licence: string;
+            /** Licence Url */
+            licence_url: string | null;
             /** Name */
             name: string;
             /** Publisher */
             publisher: string;
-            /** Record Count */
-            record_count: number;
+            /** Reuse */
+            reuse: string;
         };
+        /**
+         * Stance
+         * @enum {string}
+         */
+        Stance: "supports" | "neutral" | "contradicts";
         /** StateOut */
         StateOut: {
             /** Description */
@@ -557,6 +2152,113 @@ export interface components {
             /** Label */
             label: string;
         };
+        /** SuggestedRecord */
+        SuggestedRecord: {
+            /** Category */
+            category: string;
+            /** Distance M */
+            distance_m: number;
+            /** Id */
+            id: number;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            /** Name */
+            name: string;
+            /** Precision M */
+            precision_m: number | null;
+            /** Record Type */
+            record_type: string | null;
+            /** Score */
+            score: number;
+            source: components["schemas"]["SourceRef"];
+            /** Source Key */
+            source_key: string;
+            /** Type Fit */
+            type_fit: boolean;
+            /** Url */
+            url: string | null;
+        };
+        /** Suggestions */
+        Suggestions: {
+            /** Items */
+            items: components["schemas"]["SuggestedRecord"][];
+            origin: components["schemas"]["Origin"];
+        };
+        /**
+         * Tallies
+         * @description How people answered, in total. Shown only to the finder and to people who have answered.
+         */
+        Tallies: {
+            /** Checks */
+            checks: components["schemas"]["fieldclub__schemas__findings__CheckOut"][];
+            /** Class Agreement */
+            class_agreement: number;
+            /** Class Support */
+            class_support: {
+                [key: string]: number;
+            };
+            community_class: components["schemas"]["FeatureClass"] | null;
+            /** Explanations */
+            explanations: {
+                [key: string]: number;
+            };
+            /** Observation Count */
+            observation_count: number;
+            /** Observers */
+            observers: number;
+            /** Seen */
+            seen: number;
+            /** Seen Ratio */
+            seen_ratio: number | null;
+            /** Unseen */
+            unseen: number;
+        };
+        /** TaskFinding */
+        TaskFinding: {
+            feature_class: components["schemas"]["FeatureClass"];
+            state: components["schemas"]["FindingState"];
+            tier: components["schemas"]["Tier"];
+            /** Title */
+            title: string;
+        };
+        /** TaskGroup */
+        TaskGroup: {
+            code: components["schemas"]["NextStepCode"];
+            /** Items */
+            items: components["schemas"]["TaskItem"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+            /** Total */
+            total: number;
+        };
+        /** TaskGroups */
+        TaskGroups: {
+            /** Groups */
+            groups: components["schemas"]["TaskGroup"][];
+        };
+        /**
+         * TaskItem
+         * @description One open next step on one finding.
+         *
+         *     For a step that is answered by a second look, `step` and `finding` are
+         *     null, so the task stays as blind as a review card.
+         */
+        TaskItem: {
+            code: components["schemas"]["NextStepCode"];
+            finding: components["schemas"]["TaskFinding"] | null;
+            place: components["schemas"]["LocationOut"];
+            /** Public Id */
+            public_id: string;
+            step: components["schemas"]["NextStepOut"] | null;
+            view_state: components["schemas"]["ViewState"];
+        };
+        /**
+         * Tier
+         * @enum {string}
+         */
+        Tier: "spotted" | "seen" | "corroborated" | "probable" | "ground_checked" | "confirmed";
         /** TierOut */
         TierOut: {
             /** Base Score */
@@ -581,10 +2283,38 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /**
+         * ViewState
+         * @description What the finder was looking at. Opening the finding restores it.
+         *
+         *     The keys are fixed so that a view can't carry anything else, such as a
+         *     centre point or a note, onto a blind review card.
+         */
+        ViewState: {
+            /** Bearing */
+            bearing?: number | null;
+            /** Exaggeration */
+            exaggeration?: number | null;
+            /** Layer */
+            layer?: string | null;
+            /** Pitch */
+            pitch?: number | null;
+            /** Sun Altitude */
+            sun_altitude?: number | null;
+            /** Sun Azimuth */
+            sun_azimuth?: number | null;
+            /** Zoom */
+            zoom?: number | null;
+        };
+        /**
+         * Visible
+         * @enum {string}
+         */
+        Visible: "yes" | "unsure" | "no";
         /** Vocab */
         Vocab: {
             /** Checks */
-            checks: components["schemas"]["CheckOut"][];
+            checks: components["schemas"]["fieldclub__schemas__meta__CheckOut"][];
             /** Evidence Kinds */
             evidence_kinds: components["schemas"]["EvidenceKindOut"][];
             /** Explanations */
@@ -603,6 +2333,24 @@ export interface components {
             tiers: components["schemas"]["TierOut"][];
         };
         /**
+         * VoteIn
+         * @description +1 endorses, -1 objects, 0 takes your vote back.
+         */
+        VoteIn: {
+            /**
+             * Value
+             * @enum {integer}
+             */
+            value: -1 | 0 | 1;
+        };
+        /** VoteOut */
+        VoteOut: {
+            /** Evidence Id */
+            evidence_id: number;
+            /** Value */
+            value: number;
+        };
+        /**
          * Welcome
          * @description The welcome sheet. Leave out handle or display name to keep the one you have.
          */
@@ -614,6 +2362,74 @@ export interface components {
             display_name?: string | null;
             /** Handle */
             handle?: string | null;
+        };
+        /** CheckOut */
+        fieldclub__schemas__findings__CheckOut: {
+            /** Against */
+            against: number;
+            /** Asserted */
+            asserted: number;
+            /** Check */
+            check: string;
+            /** Cleared */
+            cleared: boolean;
+        };
+        /** CheckOut */
+        fieldclub__schemas__meta__CheckOut: {
+            /** Hint */
+            hint: string;
+            /** Id */
+            id: string;
+            /** Question */
+            question: string;
+        };
+        /** SourceOut */
+        fieldclub__schemas__meta__SourceOut: {
+            /** Attribution */
+            attribution: string;
+            /** Category */
+            category: string;
+            /** Homepage */
+            homepage: string | null;
+            /** Key */
+            key: string;
+            /** Licence */
+            licence: string;
+            /** Name */
+            name: string;
+            /** Publisher */
+            publisher: string;
+            /** Record Count */
+            record_count: number;
+        };
+        /** SourceOut */
+        fieldclub__schemas__records__SourceOut: {
+            /** Access */
+            access: string;
+            /** Attribution */
+            attribution: string;
+            /** Category */
+            category: string;
+            /** Coverage */
+            coverage: string | null;
+            /** Homepage */
+            homepage: string | null;
+            /** Key */
+            key: string;
+            /** Last Ingest At */
+            last_ingest_at: string | null;
+            /** Licence */
+            licence: string;
+            /** Licence Url */
+            licence_url: string | null;
+            /** Name */
+            name: string;
+            /** Publisher */
+            publisher: string;
+            /** Record Count */
+            record_count: number;
+            /** Reuse */
+            reuse: string;
         };
     };
     responses: never;
@@ -634,6 +2450,72 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["DevLogin"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    auth_email_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailStart"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailStarted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    auth_email_verify: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailVerify"];
             };
         };
         responses: {
@@ -766,6 +2648,103 @@ export interface operations {
             };
         };
     };
+    auth_oauth_callback: {
+        parameters: {
+            query?: {
+                code?: string | null;
+                state?: string | null;
+                error?: string | null;
+            };
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    auth_oauth_callback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["Body_auth_oauth_callback_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    auth_oauth_start: {
+        parameters: {
+            query?: {
+                next?: string | null;
+            };
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     auth_welcome: {
         parameters: {
             query?: never;
@@ -799,6 +2778,830 @@ export interface operations {
             };
         };
     };
+    discussion_delete_comment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comment_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    context_links: {
+        parameters: {
+            query: {
+                lon: number;
+                lat: number;
+                zoom?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextLinks"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    context_live_sources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveSources"];
+                };
+            };
+        };
+    };
+    evidence_delete_evidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                evidence_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evidence_verify: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                evidence_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evidence_vote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                evidence_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    findings_list_findings: {
+        parameters: {
+            query?: {
+                format?: "json" | "geojson";
+                limit?: number | null;
+                cursor?: string | null;
+                /** @description west,south,east,north */
+                bbox?: string | null;
+                tier?: components["schemas"]["Tier"][] | null;
+                /** @description Withdrawn findings only when asked for */
+                state?: components["schemas"]["FindingState"][] | null;
+                feature_class?: components["schemas"]["FeatureClass"][] | null;
+                /** @description A handle */
+                author?: string | null;
+                q?: string | null;
+                sort?: components["schemas"]["FindingSort"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_FindingSummary_"] | components["schemas"]["FindingFeatureCollection"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    findings_create_finding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FindingCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    findings_export_findings: {
+        parameters: {
+            query?: {
+                format?: "geojson" | "csv";
+                limit?: number;
+                cursor?: string | null;
+                /** @description west,south,east,north */
+                bbox?: string | null;
+                tier?: components["schemas"]["Tier"][] | null;
+                /** @description Withdrawn findings only when asked for */
+                state?: components["schemas"]["FindingState"][] | null;
+                feature_class?: components["schemas"]["FeatureClass"][] | null;
+                /** @description A handle */
+                author?: string | null;
+                q?: string | null;
+                sort?: components["schemas"]["FindingSort"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/geo+json": unknown;
+                    "text/csv": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    findings_get_finding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    findings_update_finding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FindingUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discussion_list_comments: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_CommentOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discussion_add_comment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evidence_add_evidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvidenceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    findings_export_finding: {
+        parameters: {
+            query?: {
+                format?: "geojson" | "csv";
+            };
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/geo+json": unknown;
+                    "text/csv": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discussion_follow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discussion_unfollow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    observations_put_observation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ObservationIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reveal"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    observations_delete_observation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    observations_list_observations: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ObservationOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    findings_change_sensitivity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SensitivityChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    records_suggested_records: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Suggestions"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    findings_withdraw_finding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    geo_point: {
+        parameters: {
+            query: {
+                lon: number;
+                lat: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoPointOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    geo_geo_search: {
+        parameters: {
+            query: {
+                q: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoResults"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     meta_get_meta: {
         parameters: {
             query?: never;
@@ -815,6 +3618,304 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Meta"];
+                };
+            };
+        };
+    };
+    records_nearby_records: {
+        parameters: {
+            query: {
+                lon: number;
+                lat: number;
+                /** @description metres */
+                radius?: number;
+                /** @description Comma-separated values, such as `designation,monument` */
+                source?: string | null;
+                /** @description Comma-separated values, such as `designation,monument` */
+                category?: string | null;
+                limit?: number;
+                format?: "json" | "geojson";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordHits"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    records_search_records: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                /** @description Comma-separated values, such as `designation,monument` */
+                source?: string | null;
+                /** @description Comma-separated values, such as `designation,monument` */
+                category?: string | null;
+                /** @description west,south,east,north */
+                bbox?: string | null;
+                limit?: number;
+                cursor?: string | null;
+                format?: "json" | "geojson";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    records_get_record: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_next_cards: {
+        parameters: {
+            query?: {
+                lon?: number | null;
+                lat?: number | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ReviewCard_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_tasks: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+                code?: components["schemas"]["NextStepCode"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskGroups"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    records_list_sources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["fieldclub__schemas__records__SourceOut"][];
+                };
+            };
+        };
+    };
+    terrain_get_coverage: {
+        parameters: {
+            query?: {
+                bbox?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    terrain_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tiles_records_tile: {
+        parameters: {
+            query?: {
+                /** @description Comma-separated categories, such as `designation,find` */
+                category?: string | null;
+            };
+            header?: never;
+            path: {
+                z: number;
+                x: number;
+                y: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A Mapbox vector tile */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.mapbox-vector-tile": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
