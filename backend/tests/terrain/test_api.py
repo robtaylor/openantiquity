@@ -345,5 +345,6 @@ def test_a_point_off_the_grids_has_nulls(api: TestClient) -> None:
         "nation": None,
         "county": None,
         "elevation": None,
+        "sources": [],
     }
     assert error_code(api.get("/api/v1/geo/point", params={"lon": 200, "lat": 0})) == "validation_error"

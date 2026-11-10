@@ -16,9 +16,9 @@ run does the rest:
 A run that fails rolls back, so the rows from the last good run stay. A full
 run that yields nothing fails, and so does one that would leave fewer than
 `1 - FIELDCLUB_INGEST_MAX_SHRINK` of the rows it replaces, unless it was
-started with `allow_shrink`. A run with `limit` is partial: it replaces the
-loader's rows with at most that many, which is how a quick trial behaves, and
-the next full run puts the rest back.
+started with `allow_shrink`. A loader takes no limit. It replaces what it
+owns, so a run cut short at N rows would leave only N, and a quick trial
+against a shared database would empty the table for everyone.
 """
 
 from __future__ import annotations
@@ -106,7 +106,7 @@ class Loader(ABC):
         """Which rows of the table are this loader's, as a SQL condition."""
 
     @abstractmethod
-    def fetch(self, *, bbox: BBox | None = None, limit: int | None = None) -> Iterator[dict[str, Any]]:
+    def fetch(self, *, bbox: BBox | None = None) -> Iterator[dict[str, Any]]:
         """Yield rows for `model`: column values, with `geom` as a shapely geometry in WGS84."""
 
 
@@ -125,9 +125,7 @@ def _check_geometry(source_key: str, row: dict[str, Any]) -> BaseGeometry:
     return geom
 
 
-def _replace(
-    db: Session, loader: Loader, stats: LoadStats, bbox: BBox | None, limit: int | None, batch_size: int
-) -> None:
+def _replace(db: Session, loader: Loader, stats: LoadStats, bbox: BBox | None, batch_size: int) -> None:
     model = loader.model
     geom_column = model.__table__.c.geom
     scope = loader.owned()
@@ -137,7 +135,7 @@ def _replace(
     stats.deleted = int(deleted.rowcount)  # pyright: ignore[reportAttributeAccessIssue]
     area = shapely.box(*bbox) if bbox is not None else None
     batch: list[dict[str, Any]] = []
-    for row in loader.fetch(bbox=bbox, limit=limit):
+    for row in loader.fetch(bbox=bbox):
         geom = _check_geometry(loader.source.key, row)
         if area is not None and not area.intersects(geom):
             continue
@@ -146,8 +144,6 @@ def _replace(
             db.execute(insert(model), batch)
             stats.inserted += len(batch)
             batch = []
-        if limit is not None and stats.inserted + len(batch) >= limit:
-            break
     if batch:
         db.execute(insert(model), batch)
         stats.inserted += len(batch)
@@ -191,7 +187,6 @@ def run_loader(
     loader: Loader,
     *,
     bbox: BBox | None = None,
-    limit: int | None = None,
     allow_shrink: bool = False,
     batch_size: int | None = None,
     session_factory: sessionmaker[Session] | None = None,
@@ -202,9 +197,8 @@ def run_loader(
         if not loader.supports_bbox:
             raise BBoxNotSupportedError(f"{info.key} is loaded whole, so it takes no --bbox.")
         bbox = check_bbox(bbox)
-    assert limit is None or limit >= 1, "limit must be at least 1"
     batch_size = batch_size or get_settings().ingest_batch_size
-    stats = LoadStats(full=bbox is None and limit is None)
+    stats = LoadStats(full=bbox is None)
     clock = time.monotonic()
     factory = session_factory or SessionLocal
 
@@ -226,7 +220,7 @@ def run_loader(
             run_id = run.id
             logger.info("%s: run %d started (%s)", info.key, run_id, "full" if stats.full else "partial")
             try:
-                _replace(db, loader, stats, bbox, limit, batch_size)
+                _replace(db, loader, stats, bbox, batch_size)
                 if stats.full:
                     _check_full_run(loader, stats, allow_shrink)
                 db.commit()

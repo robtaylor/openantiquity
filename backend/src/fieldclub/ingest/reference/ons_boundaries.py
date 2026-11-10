@@ -202,7 +202,7 @@ class _OnsLayer(Loader):
         self.read = len(areas)
         return areas
 
-    def fetch(self, *, bbox: BBox | None = None, limit: int | None = None) -> Iterator[dict[str, Any]]:
+    def fetch(self, *, bbox: BBox | None = None) -> Iterator[dict[str, Any]]:
         assert bbox is None, "ONS boundaries are loaded whole"
         areas = self.boundaries()
         self.check(areas)
@@ -224,10 +224,9 @@ class OnsCountries(_OnsLayer):
         key="ons-countries-2025",
         name="Countries December 2025 boundaries (BGC)",
         publisher="Office for National Statistics",
-        licence="OGL v3 (ONS); not re-read today",
+        licence="Open Government Licence v3.0",
         licence_url=OGL,
-        attribution="Contains public sector information licensed under the Open Government Licence v3.0. "
-        + ONS_STATEMENT,
+        attribution=ONS_STATEMENT,
         category="boundary",
         access=SourceAccess.BULK,
         reuse=SourceReuse.OPEN,

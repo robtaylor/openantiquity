@@ -546,7 +546,7 @@ def create_finding(
         check_outline(outline, location)
     lon, lat = _point_parts(location)
     level = sensitivity.starting_sensitivity(feature_class, requested_sensitivity, author)
-    nation = geo.locate(db, lon, lat).nation
+    nation = geo.nation_of(db, Point(lon, lat))
 
     finding = ids.insert_with_public_id(
         db,
@@ -599,7 +599,7 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
 
     if "location" in changes:
         finding.location = to_db_geometry(location)
-        finding.nation = geo.locate(db, *_point_parts(location)).nation
+        finding.nation = geo.nation_of(db, Point(*_point_parts(location)))
     if "outline" in changes:
         finding.outline = to_db_geometry(outline) if outline is not None else None
     for name in ("title", "view_state"):
@@ -1116,6 +1116,8 @@ class FindingView:
     answers_visible: bool
     my_observation: Observation | None
     following: bool
+    # The nation as this viewer may know it (`sensitivity.visible_nation`).
+    nation: str | None
 
 
 def finding_view(db: Session, finding: Finding, viewer: User | None) -> FindingView:
@@ -1131,4 +1133,5 @@ def finding_view(db: Session, finding: Finding, viewer: User | None) -> FindingV
         answers_visible=answers_visible(finding, viewer, mine is not None),
         my_observation=mine,
         following=is_following(db, viewer, finding),
+        nation=sensitivity.visible_nation(db, finding, viewer),
     )

@@ -1151,9 +1151,9 @@
       "sample_request": "https://services1.arcgis.com/ESMARspQHYMw9BZ9/ArcGIS/rest/services/Countries_December_2025_Boundaries_UK_BGC/FeatureServer/0/query?where=1%3D1&outFields=*&outSR=27700&f=geojson",
       "format": "GeoJSON",
       "native_crs": "EPSG:27700",
-      "licence": "OGL v3 (ONS); not re-read today",
+      "licence": "Open Government Licence v3.0",
       "licence_url": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
-      "attribution": "Contains public sector information licensed under the Open Government Licence v3.0.",
+      "attribution": "Source: Office for National Statistics licensed under the Open Government Licence v.3.0. Contains OS data © Crown copyright and database right [year].",
       "reuse": "open",
       "expected_count": 4,
       "geometry": "Polygon (generalised to 20 m, clipped to coastline)",
@@ -1167,8 +1167,7 @@
       "record_url_template": null,
       "other_fields": null,
       "gotchas": [
-        "ONS attribution wording was not recorded; the attribution shown is OGL v3's default statement for providers that give none (research-ethics-legal-auth).",
-        "Licence page was not re-read on 2026-11-10."
+        "The attribution is the statement ONS's licence page asks for with its digital boundaries, read on 2026-11-10. [year] is the year of download."
       ],
       "wave": "england_v1",
       "later_reason": null,
@@ -1188,7 +1187,7 @@
       "native_crs": "EPSG:27700",
       "licence": "Open Government Licence (OS OpenData licence)",
       "licence_url": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
-      "attribution": "Contains OS data © Crown Copyright and database rights 2026. Contains Royal Mail data © Royal Mail copyright and database right 2026. Contains National Statistics data © Crown copyright and database right 2026.",
+      "attribution": "Contains OS data © Crown Copyright and database rights [year]. Contains Royal Mail data © Royal Mail copyright and database right [year]. Contains National Statistics data © Crown copyright and database right [year].",
       "reuse": "open",
       "expected_count": 3050396,
       "geometry": "Point plus bounding box",

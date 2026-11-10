@@ -10,8 +10,8 @@ says the loss is real.
 
 The same commands run the reference loaders in `ingest/reference/`, which
 fill the gazetteer and the admin areas instead of the record index. A loader
-replaces its rows: those in the box with `--bbox`, and all of them, with at
-most N, with `--limit N`.
+replaces its rows: those in the box with `--bbox`, and all of them otherwise.
+It refuses `--limit`, because a run that kept only N rows would delete the rest.
 """
 
 from __future__ import annotations
@@ -62,7 +62,12 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--bbox", type=parse_bbox, metavar="W,S,E,N", help="only records in this box, in degrees"
     )
-    run.add_argument("--limit", type=positive_int, metavar="N", help="stop after N records")
+    run.add_argument(
+        "--limit",
+        type=positive_int,
+        metavar="N",
+        help="stop after N records; connectors only, since a reference loader replaces all its rows",
+    )
     run.add_argument(
         "--allow-shrink",
         action="store_true",
@@ -91,11 +96,18 @@ def list_connectors() -> int:
 
 
 def load_one(key: str, bbox: BBox | None, limit: int | None, allow_shrink: bool = False) -> int:
-    """Run the reference loader for `key`."""
+    """Run the reference loader for `key`. A limit is refused before anything is touched."""
     loader_cls = reference.get(key)
     assert loader_cls is not None, f"{key} is not a loader"
+    if limit is not None:
+        print(
+            f"{key} replaces all its rows, so it takes no --limit: a run that kept {limit} would delete "
+            "the rest. Run it whole, or with --bbox where it allows one.",
+            file=sys.stderr,
+        )
+        return 1
     try:
-        run = run_loader(loader_cls(get_settings()), bbox=bbox, limit=limit, allow_shrink=allow_shrink)
+        run = run_loader(loader_cls(get_settings()), bbox=bbox, allow_shrink=allow_shrink)
     except AppError as exc:
         print(exc.message, file=sys.stderr)
         return 1

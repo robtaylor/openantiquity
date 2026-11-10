@@ -24,7 +24,8 @@ on that column only.
 Things callers must not do:
 
 - Don't return `finding.location`, `finding.outline` or `finding.grid_ref`
-  directly. Use the fields of `VisibleLocation`.
+  directly. Use the fields of `VisibleLocation`. The same goes for
+  `finding.nation`, which comes from the exact position: use `visible_nation`.
 - Don't filter or sort by `findings.location` for someone who can't see it.
   A bounding-box search over exact positions lets anyone find a protected
   site by narrowing the box. Use `location_public`.
@@ -55,6 +56,7 @@ from fieldclub import gridref
 from fieldclub.errors import DataIntegrityError, ForbiddenError
 from fieldclub.models import Finding, User
 from fieldclub.models.common import db_point, point_lon_lat
+from fieldclub.services import geo
 from fieldclub.vocab import (
     EXACT_LOCATION_ROLES,
     MODERATOR_ROLES,
@@ -237,6 +239,21 @@ def visible_location(finding: Finding, viewer: User | None) -> VisibleLocation:
         square=square.format(compact=True),
         square_ref=square,
     )
+
+
+def visible_nation(db: Session, finding: Finding, viewer: User | None) -> str | None:
+    """The nation of `finding` that `viewer` may know: from the 1 km square, when that is all they see.
+
+    `finding.nation` comes from the exact position. For a square that meets
+    two nations it would say which side of the border the finding is on, so
+    a viewer who sees only the square is told the square's nation instead,
+    which is None when it meets two.
+    """
+    seen = visible_location(finding, viewer)
+    square = seen.square_polygon()
+    if square is None:
+        return finding.nation
+    return geo.nation_of(db, square)
 
 
 def square_centre(finding: Finding) -> tuple[float, float] | None:

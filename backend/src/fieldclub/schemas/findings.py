@@ -399,7 +399,7 @@ class FindingDetail(FindingSummary):
         return cls(
             **_summary_fields(finding, view.author, viewer),
             description=finding.description,
-            nation=finding.nation,
+            nation=view.nation,
             view_state=ViewState.from_stored(finding.view_state),
             assessment=AssessmentOut(
                 tier=assessment.tier,

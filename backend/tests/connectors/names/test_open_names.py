@@ -22,6 +22,7 @@ from fieldclub.ingest.reference.os_open_names import (
     DOWNLOAD,
     HEADER,
     OpenNames,
+    area_name,
     kind_rank,
     size_rank,
 )
@@ -81,6 +82,22 @@ def test_the_source_carries_the_work_list_licence() -> None:
     assert info.reuse == entry["reuse"] == "open"
     assert info.category == entry["category"] == "place"
     assert info.publisher == entry["publisher"]
+
+
+@pytest.mark.parametrize(
+    ("value", "name"),
+    [
+        ("Powys - Powys", "Powys"),
+        ("Sir Ynys Mon - Isle of Anglesey", "Sir Ynys Mon - Isle of Anglesey"),
+        ("Wiltshire", "Wiltshire"),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_a_welsh_area_named_alike_in_both_languages_is_named_once(
+    value: str | None, name: str | None
+) -> None:
+    assert area_name(value) == name
 
 
 def rank(type_: str, local_type: str, mbr: tuple[float, float, float, float]) -> int:
@@ -143,6 +160,9 @@ def test_a_run_fills_the_gazetteer(db: Session) -> None:
     assert source is not None
     assert source.record_count == db.scalar(select(func.count()).select_from(Place))
     assert source.attribution.startswith("Contains OS data")
+    assert "[year]" not in source.attribution
+    assert source.last_ingest_at is not None
+    assert f"database rights {source.last_ingest_at.year}." in source.attribution
 
 
 @respx.mock
@@ -193,13 +213,17 @@ def test_a_partial_run_by_bbox_replaces_only_the_places_inside_it(db: Session) -
 
 
 @respx.mock
-def test_a_limit_replaces_the_places_with_at_most_that_many(db: Session) -> None:
-    serve_file(DOWNLOAD, OPEN_NAMES_ZIP.read_bytes())
+def test_a_limit_is_refused_and_keeps_every_place(db: Session, capsys: pytest.CaptureFixture[str]) -> None:
+    """A habitual `--limit 1` smoke test must not empty the gazetteer."""
+    host = serve_file(DOWNLOAD, OPEN_NAMES_ZIP.read_bytes())
     run_loader(OpenNames())
-    run_loader(OpenNames(), limit=5)
-    assert db.scalar(select(func.count()).select_from(Place)) == 5
-    run_loader(OpenNames())
-    assert (db.scalar(select(func.count()).select_from(Place)) or 0) > 50
+    before = places(db)
+    runs = db.scalar(select(func.count()).select_from(IngestRun))
+    assert cli.main(["run", KEY, "--limit", "1"]) == 1
+    assert "takes no --limit" in capsys.readouterr().err
+    assert places(db) == before
+    assert db.scalar(select(func.count()).select_from(IngestRun)) == runs
+    assert host.call_count == 1
 
 
 @respx.mock

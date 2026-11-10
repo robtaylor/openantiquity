@@ -6,7 +6,6 @@ See `tests/connectors/names/support.py` for how the fixtures were recorded.
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -30,17 +29,22 @@ from fieldclub.ingest.reference.ons_boundaries import (
     out_to_sea,
 )
 from fieldclub.ingest.runner import IngestFailedError
-from fieldclub.models import AdminArea, Source
+from fieldclub.models import AdminArea, Finding, Source
 from fieldclub.services import context, findings, geo
-from fieldclub.vocab import FeatureClass, Nation
-from tests.connectors.names.support import ONS_COUNTIES, ONS_COUNTRIES, WORKLIST, serve_file, worklist_entry
-from tests.helpers import AVEBURY, MakeUser
+from fieldclub.vocab import AdminAreaKind, FeatureClass, Nation
+from tests.connectors.names.support import ONS_COUNTIES, ONS_COUNTRIES, serve_file, worklist_entry
+from tests.helpers import AVEBURY, ClientAs, MakeUser
 
 CARDIFF = (-3.1791, 51.4816)
 EDINBURGH = (-3.1883, 55.9533)
 BELFAST = (-5.9301, 54.5973)
 DUBLIN = (-6.2603, 53.3498)
 NORTH_SEA = (1.9, 52.9)
+# In Wales by the fixture's simplified border, near Knighton, in a 1 km
+# square (SO 34 72) that meets England too.
+BORDER_WALES = (-2.97, 52.343)
+SEVERN_BRIDGE = (-2.64, 51.61)
+THE_WASH = (0.25, 52.95)
 
 
 @pytest.fixture(autouse=True)
@@ -80,28 +84,11 @@ def test_the_nations_carry_the_work_list_licence() -> None:
     assert info.licence_url == entry["licence_url"]
     assert info.reuse == entry["reuse"] == "open"
     assert info.category == entry["category"]
-    # The work-list's default statement, then the one ONS's licence page asks for.
-    assert info.attribution == f"{entry['attribution']} {ONS_STATEMENT}"
+    assert info.attribution == entry["attribution"] == ONS_STATEMENT
 
 
-def test_no_county_boundaries_were_in_the_work_list() -> None:
-    """Why the counties have a source of their own: the only candidate was left for later, untested."""
-    sources = json.loads(WORKLIST.read_text(encoding="utf-8"))
-    boundaries = {
-        entry["key"]: entry
-        for group in sources.values()
-        for entry in group
-        if entry.get("category") == "boundary"
-    }
-    counties = [
-        key
-        for key, entry in boundaries.items()
-        if re.search(r"\bcount(?:y|ies)\b", entry["name"], re.IGNORECASE) or "boundary-line" in key
-    ]
-    assert counties == ["os-boundary-line"]
-    assert boundaries["os-boundary-line"]["wave"] == "later"
-    assert get_loader("ons-counties-2025") is not None
-    assert OnsCounties.source.licence == "Open Government Licence v3.0"
+def test_the_counties_carry_the_ons_licence() -> None:
+    assert OnsCounties.source.licence == OnsCountries.source.licence == "Open Government Licence v3.0"
     assert OnsCounties.source.attribution == ONS_STATEMENT
 
 
@@ -146,6 +133,14 @@ def test_the_status_bar_shows_nation_and_county(db: Session, client: TestClient)
     run_loader(OnsCounties())
     body = client.get("/api/v1/geo/point", params={"lon": AVEBURY[0], "lat": AVEBURY[1]}).json()
     assert (body["nation"], body["county"]) == ("england", "Wiltshire")
+    assert [source["key"] for source in body["sources"]] == ["ons-counties-2025", "ons-countries-2025"]
+    for source in body["sources"]:
+        assert source["attribution"].startswith("Source: Office for National Statistics")
+
+
+def test_the_loaders_fill_the_areas_whose_sources_go_with_them() -> None:
+    loaders = {AdminAreaKind.NATION: OnsCountries.source.key, AdminAreaKind.COUNTY: OnsCounties.source.key}
+    assert loaders == geo.AREA_SOURCES
 
 
 @respx.mock
@@ -169,6 +164,63 @@ def test_a_new_finding_gets_its_nation(db: Session, make_user: MakeUser) -> None
     )
     db.commit()
     assert finding.nation == "wales"
+
+
+@respx.mock
+def test_a_finding_at_sea_gets_the_nearest_nation(db: Session, make_user: MakeUser) -> None:
+    serve_ons()
+    run_loader(OnsCountries())
+    assert geo.locate(db, *THE_WASH).nation is None
+    finding = findings.create_finding(
+        db, make_user(), location=Point(*THE_WASH), feature_class=FeatureClass.ENCLOSURE
+    )
+    assert finding.nation == "england"
+    assert geo.nation_of(db, Point(*NORTH_SEA)) is None
+
+
+@respx.mock
+def test_a_point_in_an_estuary_between_nations_is_offered_both_nations_viewers(db: Session) -> None:
+    """Not every viewer in Great Britain, as once happened for any point between two nations."""
+    serve_ons()
+    run_loader(OnsCountries())
+    assert geo.locate(db, *SEVERN_BRIDGE).nation is None
+    assert [code for code, _ in geo.nations_near(db, Point(*SEVERN_BRIDGE))] == ["england", "wales"]
+    links = {link.key for link in context.links_for(db, *SEVERN_BRIDGE).links}
+    assert "he-apex-viewer" in links
+    assert "trove-map-at-point" not in links
+    in_the_wash = {link.key for link in context.links_for(db, *THE_WASH).links}
+    assert "he-apex-viewer" in in_the_wash
+    assert "trove-map-at-point" not in in_the_wash
+
+
+@respx.mock
+def test_the_nation_of_a_finding_seen_only_by_its_square_comes_from_the_square(
+    db: Session, client: TestClient, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    """Decision 0005: a square that meets two nations must not tell which side of the border a finding is."""
+    serve_ons()
+    run_loader(OnsCountries())
+    finder = make_user()
+
+    def barrow(at: tuple[float, float]) -> Finding:
+        return findings.create_finding(
+            db, finder, location=Point(*at), feature_class=FeatureClass.ROUND_BARROW
+        )
+
+    border, inland = barrow(BORDER_WALES), barrow(CARDIFF)
+    db.commit()
+    assert border.nation == inland.nation == "wales"
+    assert border.sensitivity == inland.sensitivity == "protected"
+
+    def nation(viewer: TestClient, finding: Finding) -> str | None:
+        body = viewer.get(f"/api/v1/findings/{finding.public_id}").json()
+        return body["nation"]
+
+    assert nation(client, border) is None
+    assert nation(client, inland) == "wales"
+    member = client_as(make_user())
+    assert nation(member, border) == "wales"
+    assert nation(member, inland) == "wales"
 
 
 @respx.mock

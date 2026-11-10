@@ -18,6 +18,7 @@ from functools import cache
 from importlib import resources
 from typing import Any
 
+from shapely.geometry import Point
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
@@ -75,17 +76,23 @@ class PointLinks:
 def _coverages(db: Session, lon: float, lat: float, system: gridref.GridSystem | None) -> frozenset[str]:
     """The coverages that apply at a point.
 
-    The nation comes from `admin_areas`. Until that table is filled, a point
-    on the British grid is taken as somewhere in Great Britain, so every
-    British viewer is offered. A point on the Irish Grid is not taken as
-    Northern Ireland, because the grid covers the whole island and that guess
-    would offer Northern Ireland's viewers in Dublin (`geo.locate` refuses it
-    for the same reason). It gets only the viewers that cover the wider
-    world, like a point on neither grid.
+    The nation comes from `admin_areas`. A point at sea within
+    `geo.NEAR_NATION_M` of one or more nations, as in the Severn or the Wash,
+    gets the viewers of each of them. Otherwise, and until that table is
+    filled, a point on the British grid is taken as somewhere in Great
+    Britain, so every British viewer is offered. A point on the Irish Grid is
+    not taken as Northern Ireland, because the grid covers the whole island
+    and that guess would offer Northern Ireland's viewers in Dublin
+    (`geo.locate` refuses it for the same reason). It gets only the viewers
+    that cover the wider world, like a point on neither grid.
     """
     nation = geo.locate(db, lon, lat).nation
     if nation is not None:
         return _COVERAGES[nation]
+    # At sea, as in an estuary between two nations: the viewers of every nation near.
+    near = geo.nations_near(db, Point(lon, lat))
+    if near:
+        return frozenset[str]().union(*(_COVERAGES[code] for code, _ in near))
     if system is gridref.GridSystem.OSGB:
         return frozenset({"england", "scotland", "wales", "gb", "uk", "wider"})
     return frozenset({"wider"})

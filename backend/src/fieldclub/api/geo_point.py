@@ -9,7 +9,8 @@ from pydantic import BaseModel
 
 from fieldclub.api.deps import Db, TerrainDep
 from fieldclub.gridref import GridRefError, to_gridref
-from fieldclub.services.geo import locate
+from fieldclub.schemas.records import SourceRef, source_ref
+from fieldclub.services.geo import locality_sources, locate
 
 router = APIRouter(prefix="/geo", tags=["geo"])
 
@@ -24,6 +25,8 @@ class GeoPointOut(BaseModel):
     county: str | None
     # Ground height in metres, or null where there is no elevation data.
     elevation: float | None
+    # The boundary sources that gave the nation and county, whose attribution goes with them.
+    sources: list[SourceRef]
 
 
 @router.get("/point", response_model=GeoPointOut)
@@ -46,4 +49,5 @@ def point(
         nation=place.nation,
         county=place.county,
         elevation=terrain.elevation_at(lon, lat),
+        sources=[source_ref(source) for source in locality_sources(db, place)],
     )

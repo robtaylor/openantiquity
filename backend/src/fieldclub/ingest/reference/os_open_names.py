@@ -154,6 +154,18 @@ def _number(value: Any, what: str, place_id: str) -> float:
     return number
 
 
+def area_name(value: str | None) -> str | None:
+    """A district or county name, with a Welsh area named the same in both languages given once.
+
+    OS Open Names writes Welsh areas as "Welsh - English", so Powys is
+    "Powys - Powys". "Sir Ynys Mon - Isle of Anglesey" stays as it is.
+    """
+    if not value:
+        return None
+    welsh, dash, english = value.partition(" - ")
+    return welsh if dash and welsh == english else value
+
+
 def headings(path: Path) -> list[str]:
     """The column headings, from the zip's own heading file."""
     try:
@@ -186,9 +198,9 @@ class OpenNames(Loader):
         licence="Open Government Licence (OS OpenData licence)",
         licence_url="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
         attribution=(
-            "Contains OS data © Crown Copyright and database rights 2026. "
-            "Contains Royal Mail data © Royal Mail copyright and database right 2026. "
-            "Contains National Statistics data © Crown copyright and database right 2026."
+            "Contains OS data © Crown Copyright and database rights [year]. "
+            "Contains Royal Mail data © Royal Mail copyright and database right [year]. "
+            "Contains National Statistics data © Crown copyright and database right [year]."
         ),
         category="place",
         access=SourceAccess.BULK,
@@ -203,7 +215,7 @@ class OpenNames(Loader):
     def owned(self) -> ColumnElement[bool]:
         return Place.source == self.source.key
 
-    def fetch(self, *, bbox: BBox | None = None, limit: int | None = None) -> Iterator[dict[str, Any]]:
+    def fetch(self, *, bbox: BBox | None = None) -> Iterator[dict[str, Any]]:
         path = cache_dir(self.settings, self.source.key) / "opname_csv_gb.zip"
         fetched = download(DOWNLOAD, path, client=self.http, max_age=self.max_age)
         self.obtained_at = fetched.fetched_at
@@ -239,8 +251,8 @@ def to_places(
         raise UpstreamFormatError(f"OS Open Names entry {place_id} is in {country!r}.")
     common = {
         "kind": properties["LOCAL_TYPE"],
-        "district": properties["DISTRICT_BOROUGH"],
-        "county": properties["COUNTY_UNITARY"],
+        "district": area_name(properties["DISTRICT_BOROUGH"]),
+        "county": area_name(properties["COUNTY_UNITARY"]),
         "nation": NATIONS[country].value,
         "geom": to_wgs84(Point(easting, northing), "EPSG:27700"),
         "rank": base * 100 + size_rank((xmin, ymin, xmax, ymax)),
