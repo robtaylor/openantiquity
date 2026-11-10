@@ -41,14 +41,14 @@ def run[T](coroutine: Coroutine[Any, Any, T]) -> T:
     return asyncio.run(bounded())
 
 
-async def started_hub(**options: Any) -> EventHub:
+async def started_hub(lookup: events.Lookup = events.lookup_public, **options: Any) -> EventHub:
     settings: dict[str, Any] = {
         "queue_size": 16,
         "max_per_address": 4,
         "max_streams": 20,
         "retry_delays_s": (0.05,),
     } | options
-    hub = EventHub(events.conninfo(), events.lookup_public, **settings)
+    hub = EventHub(events.conninfo(), lookup, **settings)
     hub.start()
     await asyncio.wait_for(hub.connected.wait(), TIMEOUT_S)
     return hub
@@ -204,6 +204,136 @@ def test_a_slow_client_is_dropped_and_the_others_carry_on(scene: dict[str, Any])
         assert await received(slow) is Signal.DROPPED
         assert hub.subscriptions == {quick}
         await hub.stop()
+
+    run(scenario())
+
+
+def test_a_dropped_client_keeps_its_place_until_its_response_ends(scene: dict[str, Any]) -> None:
+    """A client that stopped reading may still hold its connection, so it still counts."""
+
+    async def scenario() -> None:
+        hub = await started_hub(queue_size=1, max_per_address=1, max_streams=2)
+        stuck = hub.subscribe(StreamFilter(), "a")
+        hub.subscribe(StreamFilter(), "b")
+        for _ in range(2):
+            await comment_elsewhere(scene["near"], scene["talker"])
+        await asyncio.sleep(0.3)
+        assert stuck.ended
+        assert stuck not in hub.subscriptions
+        assert hub.held == 2
+        with pytest.raises(TooManyStreamsError):
+            hub.subscribe(StreamFilter(), "a")
+        with pytest.raises(TooManyStreamsError):
+            hub.subscribe(StreamFilter(), "c")
+        # Its response has ended: the place is free.
+        hub.unsubscribe(stuck)
+        assert hub.held == 1
+        hub.subscribe(StreamFilter(), "a")
+        await hub.stop()
+        assert hub.held == 0
+
+    run(scenario())
+
+
+def test_an_event_that_cant_be_checked_is_skipped_and_the_listener_carries_on(
+    scene: dict[str, Any],
+) -> None:
+    calls: list[int] = []
+
+    async def failing_once(activity_id: int) -> events.Listed | None:
+        calls.append(activity_id)
+        if len(calls) == 1:
+            raise RuntimeError("not a database error")
+        return await events.lookup_public(activity_id)
+
+    async def scenario() -> None:
+        hub = await started_hub(lookup=failing_once)
+        everything = hub.subscribe(StreamFilter(), "a")
+        await comment_elsewhere(scene["near"], scene["talker"])
+        assert await nothing_for(everything)
+        await comment_elsewhere(scene["far"], scene["talker"])
+        got = await received(everything)
+        assert isinstance(got, Announcement)
+        assert got.finding == scene["far"].public_id
+        assert len(calls) == 2
+        await hub.stop()
+
+    run(scenario())
+
+
+def test_the_listener_starts_again_after_any_failure(scene: dict[str, Any], monkeypatch: Any) -> None:
+    async def scenario() -> None:
+        hub = await started_hub()
+        everything = hub.subscribe(StreamFilter(), "a")
+        deliver = hub.deliver
+
+        async def failing_once(payload: str) -> None:
+            monkeypatch.setattr(hub, "deliver", deliver)
+            raise RuntimeError("not a connection error")
+
+        monkeypatch.setattr(hub, "deliver", failing_once)
+        await comment_elsewhere(scene["near"], scene["talker"])
+        assert await received(everything) is Signal.RESYNC
+        await comment_elsewhere(scene["far"], scene["talker"])
+        got = await received(everything)
+        assert isinstance(got, Announcement)
+        assert got.finding == scene["far"].public_id
+        await hub.stop()
+
+    run(scenario())
+
+
+class _Fatal(BaseException):
+    """Something no handler in the hub catches, to stop the listener for good."""
+
+
+def test_a_listener_that_stops_is_started_by_the_next_client(scene: dict[str, Any]) -> None:
+    fatal = [True]
+
+    async def lookup(activity_id: int) -> events.Listed | None:
+        if fatal.pop() if fatal else False:
+            raise _Fatal()
+        return await events.lookup_public(activity_id)
+
+    async def scenario() -> None:
+        hub = await started_hub(lookup=lookup)
+        first = hub.subscribe(StreamFilter(), "a")
+        await comment_elsewhere(scene["near"], scene["talker"])
+        for _ in range(100):
+            if not hub.connected.is_set():
+                break
+            await asyncio.sleep(0.05)
+        assert not hub.connected.is_set(), "the listener didn't stop"
+        await asyncio.sleep(0)
+        second = hub.subscribe(StreamFilter(), "b")
+        await asyncio.wait_for(hub.connected.wait(), TIMEOUT_S)
+        # Both are told they may have missed something.
+        assert await received(first) is Signal.RESYNC
+        assert await received(second) is Signal.RESYNC
+        await comment_elsewhere(scene["far"], scene["talker"])
+        got = await received(second)
+        assert isinstance(got, Announcement)
+        assert got.finding == scene["far"].public_id
+        await hub.stop()
+
+    run(scenario())
+
+
+def test_stopping_never_raises_what_the_listener_raised(db: Session) -> None:
+    async def scenario() -> None:
+        hub = await started_hub()
+        task = hub._task
+        assert task is not None
+
+        async def dies() -> None:
+            raise RuntimeError("the listener went wrong")
+
+        # A listener that died before its done-callback ran.
+        hub._task = asyncio.get_running_loop().create_task(dies())
+        await asyncio.sleep(0)
+        await hub.stop()
+        task.cancel()
+        await asyncio.wait([task])
 
     run(scenario())
 

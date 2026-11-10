@@ -280,8 +280,10 @@ def run() -> None:
         async def shutdown(self, sockets: list[socket.socket] | None = None) -> None:
             # Uvicorn waits for open responses before the lifespan ends, and an
             # event stream never finishes by itself, so end the streams first.
-            await events.stop_hub()
-            await super().shutdown(sockets)
+            try:
+                await events.stop_hub()
+            finally:
+                await super().shutdown(sockets)
 
     settings = get_settings()
     logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -297,7 +299,7 @@ def run() -> None:
         # Without a limit uvicorn waits for every open connection after SIGTERM,
         # so one long request would hold each shutdown until the platform kills
         # the process.
-        timeout_graceful_shutdown=int(settings.shutdown_grace_s),
+        timeout_graceful_shutdown=settings.shutdown_grace_s,
     )
     Server(config).run()
 

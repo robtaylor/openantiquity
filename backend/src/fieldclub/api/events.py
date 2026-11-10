@@ -12,6 +12,9 @@ On the wire:
 - `event: resync`: events may have been missed. Refetch what is on screen.
 - `event: dropped` or `event: closed`: the stream ends. The browser's
   `EventSource` reconnects by itself after `retry` milliseconds.
+- A 429 before the stream starts (`too_many_streams` or `rate_limited`) is
+  final for an `EventSource`, which doesn't retry it. The client reopens
+  after a delay, or polls.
 - A comment line (`: ping`) every `FIELDCLUB_EVENTS_HEARTBEAT_S` seconds, so
   proxies keep the connection open.
 

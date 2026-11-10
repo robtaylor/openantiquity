@@ -20,12 +20,17 @@ How it is served (Decision 0001 makes every other endpoint synchronous):
   never announced.
 - Each client's queue is bounded. A client that falls that far behind is
   dropped: its queue is emptied, it gets a final `dropped` signal, and the
-  hub forgets it. Nothing is ever buffered for it without limit.
-- The listener reconnects after its connection fails, waiting a little
-  longer after each failure. Events sent while it was away are lost, so
-  after a reconnect every client gets a `resync` signal and should refetch
-  what it shows. With no event for `idle_check_s` the hub runs `SELECT 1`, so
-  a connection that died silently is noticed.
+  hub sends it nothing more. Nothing is ever buffered for it without limit.
+  It keeps its place under both caps until its response has ended
+  (`unsubscribe`), because a client that stopped reading may still hold its
+  connection open.
+- The listener reconnects after any failure, waiting a little longer after
+  each one in a row. Events sent while it was away are lost, so after a
+  reconnect every client gets a `resync` signal and should refetch what it
+  shows. With no event for `idle_check_s` the hub runs `SELECT 1`, so a
+  connection that died silently is noticed. An event that can't be checked
+  is skipped, never announced unchecked. Should the listener stop all the
+  same, the next client to subscribe starts it again.
 - `stop()` ends every client with a `closed` signal, so their responses
   finish and the server can shut down without waiting for them.
 
@@ -40,7 +45,6 @@ square, which anyone may see, and the square never leaves the server.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import json
 import logging
 from collections.abc import Awaitable, Callable, Sequence
@@ -49,7 +53,6 @@ from enum import StrEnum
 from typing import Any
 
 import psycopg
-from sqlalchemy.exc import SQLAlchemyError
 
 from fieldclub.db import SessionLocal, get_engine
 from fieldclub.errors import AppError
@@ -217,31 +220,36 @@ class EventHub:
         self.connected = asyncio.Event()
         # The listening connection's server process, for diagnostics and tests.
         self.backend_pid: int | None = None
+        # Clients that are sent events.
         self._subscriptions: set[Subscription] = set()
+        # Clients that hold a place under the caps: those above, and those
+        # dropped whose responses haven't ended yet.
+        self._held: set[Subscription] = set()
         self._per_address: dict[str, int] = {}
         self._task: asyncio.Task[None] | None = None
         self._stopped = False
+        # Set when the listener stopped unexpectedly, so its successor sends `resync`.
+        self._lost = False
 
     # Clients ---------------------------------------------------------------
 
     def subscribe(self, stream_filter: StreamFilter, address: str) -> Subscription:
         """Add a client, or raise `TooManyStreamsError`. Starts the listener if it isn't running."""
         assert not self._stopped, "the hub has been stopped"
-        if (
-            len(self._subscriptions) >= self.max_streams
-            or self._per_address.get(address, 0) >= self.max_per_address
-        ):
+        if len(self._held) >= self.max_streams or self._per_address.get(address, 0) >= self.max_per_address:
             raise TooManyStreamsError()
         subscription = Subscription(stream_filter, address, self.queue_size)
         self._subscriptions.add(subscription)
+        self._held.add(subscription)
         self._per_address[address] = self._per_address.get(address, 0) + 1
         self.start()
         return subscription
 
     def unsubscribe(self, subscription: Subscription) -> None:
-        """Forget a client. Harmless if it is already gone."""
-        if subscription not in self._subscriptions:
+        """Forget a client and free its place, once its response has ended. Harmless if it is already gone."""
+        if subscription not in self._held:
             return
+        self._held.discard(subscription)
         self._subscriptions.discard(subscription)
         remaining = self._per_address[subscription.address] - 1
         if remaining:
@@ -251,12 +259,19 @@ class EventHub:
 
     @property
     def subscriptions(self) -> frozenset[Subscription]:
+        """The clients that are sent events."""
         return frozenset(self._subscriptions)
 
+    @property
+    def held(self) -> int:
+        """How many places under the per-process cap are taken."""
+        return len(self._held)
+
     def _drop(self, subscription: Subscription) -> None:
+        """Stop sending to a client. Its place stays taken until `unsubscribe`."""
         logger.info("Dropping an event-stream client that fell %d events behind", self.queue_size)
         subscription.end(Signal.DROPPED)
-        self.unsubscribe(subscription)
+        self._subscriptions.discard(subscription)
 
     def _broadcast(self, signal: Signal) -> None:
         for subscription in list(self._subscriptions):
@@ -274,15 +289,15 @@ class EventHub:
             return
         try:
             listed = await self.lookup(event.id)
-        except SQLAlchemyError:
-            # Announcing it unchecked could tell people about something hidden.
+            if listed is None:
+                return
+            for subscription in list(self._subscriptions):
+                if subscription.filter.matches(event, listed.square) and not subscription.offer(event):
+                    self._drop(subscription)
+        except Exception:
+            # Whatever went wrong, the listener carries on. Announcing the
+            # event unchecked could tell people about something hidden.
             logger.exception("Couldn't check event %s, so it isn't announced", event.id)
-            return
-        if listed is None:
-            return
-        for subscription in list(self._subscriptions):
-            if subscription.filter.matches(event, listed.square) and not subscription.offer(event):
-                self._drop(subscription)
 
     # The listener ----------------------------------------------------------
 
@@ -291,18 +306,32 @@ class EventHub:
         assert asyncio.get_running_loop() is self.loop, "a hub belongs to the loop that made it"
         if self._task is None and not self._stopped:
             self._task = self.loop.create_task(self._listen(), name="fieldclub-event-listener")
+            self._task.add_done_callback(self._listener_ended)
+
+    def _listener_ended(self, task: asyncio.Task[None]) -> None:
+        """Forget a listener that has ended, so the next `subscribe` starts another."""
+        if self._task is task:
+            self._task = None
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None:
+            self._lost = True
+            self.connected.clear()
+            self.backend_pid = None
+            logger.error("The event listener stopped", exc_info=error)
 
     async def stop(self) -> None:
-        """Stop listening and end every client's stream with `closed`. Idempotent."""
+        """Stop listening and end every client's stream with `closed`. Idempotent, and never raises."""
         self._stopped = True
-        for subscription in list(self._subscriptions):
+        for subscription in list(self._held):
             subscription.end(Signal.CLOSED)
             self.unsubscribe(subscription)
         task, self._task = self._task, None
         if task is not None:
             task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+            # `wait` doesn't raise what the task raised: `_listener_ended` logs it.
+            await asyncio.wait([task])
         self.connected.clear()
         self.backend_pid = None
 
@@ -313,22 +342,29 @@ class EventHub:
                 async with await psycopg.AsyncConnection.connect(self.conninfo, autocommit=True) as conn:
                     await conn.execute(f"LISTEN {EVENT_CHANNEL}")
                     self.backend_pid = conn.info.backend_pid
-                    if failures:
+                    if failures or self._lost:
                         logger.info("The event listener is back after %d failed attempts", failures)
                         self._broadcast(Signal.RESYNC)
-                    failures = 0
+                    failures, self._lost = 0, False
                     self.connected.set()
                     while True:
                         async for notice in conn.notifies(timeout=self.idle_check_s):
                             await self.deliver(notice.payload)
                         # Quiet for a while: make sure the connection is still there.
                         await conn.execute("SELECT 1")
-            except (psycopg.Error, OSError) as exc:
+            except Exception as exc:
+                # A lost connection, or anything else: either way, start again.
                 self.connected.clear()
                 self.backend_pid = None
                 delay = self.retry_delays_s[min(failures, len(self.retry_delays_s) - 1)]
                 failures += 1
-                logger.warning("The event listener lost its connection (%s). Retrying in %.2f s", exc, delay)
+                expected = isinstance(exc, (psycopg.Error, OSError))
+                logger.warning(
+                    "The event listener failed (%s). Retrying in %.2f s",
+                    exc,
+                    delay,
+                    exc_info=None if expected else exc,
+                )
                 await asyncio.sleep(delay)
 
 

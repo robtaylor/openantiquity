@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
 import sys
@@ -566,17 +567,33 @@ def test_run_starts_uvicorn_with_the_configured_host_and_port(monkeypatch: pytes
 
         def run(self) -> None:
             started["ran"] = True
+            started["server"] = self
+
+        async def shutdown(self, sockets: object = None) -> None:
+            started["shut_down"] = True
 
     fake.Config = Config  # type: ignore[attr-defined]
     fake.Server = Server  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "uvicorn", fake)
     monkeypatch.setattr(main.logging, "basicConfig", lambda **options: None)
     monkeypatch.setattr(
-        main, "get_settings", lambda: get_settings().model_copy(update={"host": "0.0.0.0", "port": 8080})
+        main,
+        "get_settings",
+        lambda: get_settings().model_copy(update={"host": "0.0.0.0", "port": 8080, "shutdown_grace_s": 7}),
     )
 
     main.run()
     assert (started["app"], started["factory"]) == ("fieldclub.main:create_app", True)
     assert (started["host"], started["port"]) == ("0.0.0.0", 8080)
     assert started["proxy_headers"] is False
+    assert started["timeout_graceful_shutdown"] == 7
     assert started["ran"] is True
+
+    # Uvicorn's own shutdown runs even if ending the event streams fails.
+    async def failing_stop() -> None:
+        raise RuntimeError("the hub went wrong")
+
+    monkeypatch.setattr(main.events, "stop_hub", failing_stop)
+    with pytest.raises(RuntimeError, match="the hub went wrong"):
+        asyncio.run(started["server"].shutdown())
+    assert started["shut_down"] is True

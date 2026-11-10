@@ -327,3 +327,18 @@ def test_a_relative_var_dir_is_the_same_folder_from_any_working_directory(
     assert config.terrain_path(config.terrain_mirror) == str(expected / "lidar" / "england" / "mirror")
     clean_env.setattr(Path, "mkdir", lambda *args, **kwargs: None)
     assert cache_dir(config, "nhle") == expected / "ingest" / "nhle"
+
+
+def test_the_shutdown_grace_is_whole_seconds(clean_env: pytest.MonkeyPatch) -> None:
+    # Uvicorn takes an int, and truncating 0.5 to 0 would cut every request off at once.
+    clean_env.setenv("FIELDCLUB_SHUTDOWN_GRACE_S", "0.5")
+    with pytest.raises(ValueError, match="shutdown_grace_s"):
+        Settings()
+    clean_env.setenv("FIELDCLUB_SHUTDOWN_GRACE_S", "3")
+    assert Settings().shutdown_grace_s == 3
+
+
+def test_many_people_behind_one_address_can_all_have_live_events(clean_env: pytest.MonkeyPatch) -> None:
+    # A mobile network or a school puts many people behind one address, and a
+    # browser that is refused a stream doesn't try again.
+    assert settings().events_max_per_address >= 50
