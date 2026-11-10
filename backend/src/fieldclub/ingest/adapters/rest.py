@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Iterator
+from collections.abc import Generator
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -121,7 +121,7 @@ class RestJson:
         cursor: str | None = None,
         cursor_param: str | None = None,
         id_path: str | None = None,
-    ) -> Iterator[Any]:
+    ) -> Generator[Any]:
         """Every item of every page, in order. See the module docstring for what the arguments name."""
         assert not (next_url and cursor), "name the next page by its address or by a cursor, not both"
         assert (cursor is None) == (cursor_param is None), "a cursor path needs a cursor parameter and back"

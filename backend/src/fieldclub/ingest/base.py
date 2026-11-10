@@ -32,6 +32,17 @@ BBox = tuple[float, float, float, float]
 # this box nearly always means swapped axes or grid coordinates sent as degrees.
 BRITISH_ISLES: BBox = (-11.5, 49.0, 2.5, 61.5)
 
+
+def point_in_bbox(bbox: BBox, lon: float, lat: float) -> bool:
+    """Whether a point falls in a west, south, east, north box."""
+    return bbox[0] <= lon <= bbox[2] and bbox[1] <= lat <= bbox[3]
+
+
+def bbox_in_bbox(outer: BBox, inner: tuple[float, float, float, float]) -> bool:
+    """Whether `inner`, such as a geometry's `.bounds`, lies wholly inside `outer`."""
+    return outer[0] <= inner[0] and outer[1] <= inner[1] and inner[2] <= outer[2] and inner[3] <= outer[3]
+
+
 _KEY_PATTERN = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 
 

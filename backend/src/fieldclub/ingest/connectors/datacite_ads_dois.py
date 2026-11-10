@@ -30,7 +30,7 @@ from shapely.geometry.base import BaseGeometry
 
 from fieldclub.ingest.adapters.common import Polite, UpstreamFormatError
 from fieldclub.ingest.adapters.rest import RestJson, dig
-from fieldclub.ingest.base import BRITISH_ISLES, BBox, Connector, RecordIn, SourceInfo
+from fieldclub.ingest.base import BRITISH_ISLES, BBox, Connector, RecordIn, SourceInfo, point_in_bbox
 from fieldclub.ingest.registry import register
 from fieldclub.vocab import RecordCategory, SourceAccess, SourceReuse
 
@@ -102,16 +102,11 @@ def _number(value: Any) -> float | None:
     return number if number == number and abs(number) != float("inf") else None
 
 
-def _in_bounds(lon: float, lat: float) -> bool:
-    west, south, east, north = BRITISH_ISLES
-    return west <= lon <= east and south <= lat <= north
-
-
 def _oriented(first: float, second: float) -> tuple[float, float, bool] | None:
     """Longitude and latitude from a latitude and longitude as written, whichever way round they are right."""
-    if _in_bounds(second, first):
+    if point_in_bbox(BRITISH_ISLES, second, first):
         return second, first, False
-    if _in_bounds(first, second):
+    if point_in_bbox(BRITISH_ISLES, first, second):
         return first, second, True
     return None
 

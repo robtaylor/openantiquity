@@ -69,7 +69,9 @@ def test_list_shows_each_connector(
     lines = capsys.readouterr().out.splitlines()
     assert lines[0].split() == ["KEY", "CATEGORY", "ACCESS", "READY", "NAME"]
     assert lines[1].split() == ["aaa-needs-key", "monument", "live", "no", "Needs", "a", "key"]
-    assert lines[2].split() == ["fake-monuments", "monument", "bulk", "yes", "Fake", "monuments"]
+    # The real connectors are listed too, among them, so find the fake one by its key.
+    fake = next(line for line in lines if line.startswith("fake-monuments"))
+    assert fake.split() == ["fake-monuments", "monument", "bulk", "yes", "Fake", "monuments"]
 
 
 def test_run_ingests_and_reports(

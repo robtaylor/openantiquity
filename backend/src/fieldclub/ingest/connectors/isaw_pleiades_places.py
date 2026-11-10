@@ -34,7 +34,15 @@ from fieldclub.ingest.adapters import UpstreamFormatError, cache_dir
 from fieldclub.ingest.adapters.common import Feature, Polite
 from fieldclub.ingest.adapters.download import download
 from fieldclub.ingest.adapters.files import read_csv
-from fieldclub.ingest.base import BRITISH_ISLES, BBox, Connector, RecordIn, SourceInfo
+from fieldclub.ingest.base import (
+    BRITISH_ISLES,
+    BBox,
+    Connector,
+    RecordIn,
+    SourceInfo,
+    bbox_in_bbox,
+    point_in_bbox,
+)
 from fieldclub.ingest.registry import register
 from fieldclub.vocab import RecordCategory, SourceAccess, SourceReuse
 
@@ -156,8 +164,7 @@ def _rough_precision_m(wkt: str | None) -> float | None:
         west, south, east, north = shapely.from_wkt(wkt).bounds
     except (ShapelyError, TypeError, ValueError):
         return None
-    limits = BRITISH_ISLES
-    if not (limits[0] <= west and limits[1] <= south and east <= limits[2] and north <= limits[3]):
+    if not bbox_in_bbox(BRITISH_ISLES, (west, south, east, north)):
         return None
     width = (east - west) * METRES_PER_DEGREE * math.cos(math.radians((south + north) / 2))
     height = (north - south) * METRES_PER_DEGREE
@@ -173,9 +180,8 @@ def to_record(feature: Feature, types: dict[str, list[str]]) -> RecordIn | None:
     geometry = feature.geometry
     if geometry is None:
         return None
-    west, south, east, north = BRITISH_ISLES
     x, y = geometry.bounds[0], geometry.bounds[1]
-    if not (west <= x <= east and south <= y <= north):
+    if not point_in_bbox(BRITISH_ISLES, x, y):
         return None
     place_id = (p["id"] or "").strip()
     if not place_id:

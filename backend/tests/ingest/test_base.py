@@ -10,7 +10,14 @@ from shapely.geometry import Point
 
 from fieldclub import http
 from fieldclub.config import get_settings
-from fieldclub.ingest.base import BRITISH_ISLES, Connector, RecordIn, SourceInfo
+from fieldclub.ingest.base import (
+    BRITISH_ISLES,
+    Connector,
+    RecordIn,
+    SourceInfo,
+    bbox_in_bbox,
+    point_in_bbox,
+)
 from fieldclub.models import Record
 from tests.ingest.fakes import SOURCE, FakeConnector
 
@@ -124,3 +131,11 @@ def test_a_connector_whose_source_is_not_a_source_info_is_refused() -> None:
 
             def fetch(self, *, bbox=None, limit=None):
                 yield from ()
+
+
+def test_the_box_helpers_include_the_edges() -> None:
+    box = (-1.0, 50.0, 1.0, 52.0)
+    assert point_in_bbox(box, -1.0, 52.0)
+    assert not point_in_bbox(box, 1.01, 51.0)
+    assert bbox_in_bbox(box, (-1.0, 50.0, 1.0, 52.0))
+    assert not bbox_in_bbox(box, (-1.0, 50.0, 1.0, 52.1))

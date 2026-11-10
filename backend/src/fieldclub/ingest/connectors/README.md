@@ -20,8 +20,11 @@ Only `bulk` sources get a connector. A `live` source is queried by the browser a
 | `sparql` | `sparql` | `SparqlQuery(endpoint, query, client=self.http, geometry="coord").features()` |
 | `csv` | `files` | `read_csv(path, x="Easting", y="Northing", crs="EPSG:27700", encoding="cp1252")` |
 | `ndjson` | `files` | `read_ndjson(path)` |
+| `rest_json` | `rest` | `RestJson(self.http, polite=...).items(url, params=..., items="data", total="meta.total", next_url="links.next", id_path="id")` for a paged answer, `.document(url, dest=..., max_age=...)` for one big answer kept under `var/` |
 
 Every adapter yields `Feature(properties, geometry, id)`. The properties are plain Python values with NaN turned into None. The geometry is shapely in WGS84, longitude first, whatever the source's own CRS. Requests go through `Polite`, which leaves a second between requests, retries 408, 429 and 5xx with backoff, and honours `Retry-After`. Pass a `Polite(delay_s=...)` of your own when a source's `robots.txt` or terms ask for a longer gap.
+
+The REST reader follows the next page by a link (`next_url`, such as DataCite's `links.next`) or by a cursor (`cursor` and `cursor_param`, such as Crossref's), counts the distinct items by `id_path` against the total the service reports (`total`), and stops with an error when a next link or cursor repeats. It yields the JSON items as they are, for the connector to map.
 
 The ArcGIS and WFS readers count first and raise `IncompleteReadError` when fewer distinct features arrive than the count promised, so a truncated answer, or one that repeats a feature where it skipped another, fails the run instead of deleting records. ArcGIS features are told apart by object id. A WFS layer needs `sort_by`, a unique property, which both keeps the paging stable and tells the features apart.
 

@@ -35,7 +35,7 @@ from shapely.geometry import Point
 from fieldclub.ingest.adapters import UpstreamFormatError, cache_dir
 from fieldclub.ingest.adapters.common import Polite
 from fieldclub.ingest.adapters.rest import RestJson
-from fieldclub.ingest.base import BRITISH_ISLES, BBox, Connector, RecordIn, SourceInfo
+from fieldclub.ingest.base import BRITISH_ISLES, BBox, Connector, RecordIn, SourceInfo, point_in_bbox
 from fieldclub.ingest.registry import register
 from fieldclub.vocab import Period, RecordCategory, SourceAccess, SourceReuse
 
@@ -145,8 +145,7 @@ def to_record(item: Any) -> RecordIn | None:
         raise UpstreamFormatError(f"An XRONOS measurement changed shape: missing {missing}.")
     assert isinstance(m, dict)
     lat, lon = _coordinate(m["lat"]), _coordinate(m["lng"])
-    west, south, east, north = BRITISH_ISLES
-    if lat is None or lon is None or not (west <= lon <= east and south <= lat <= north):
+    if lat is None or lon is None or not point_in_bbox(BRITISH_ISLES, lon, lat):
         return None
     labnr = str(m["labnr"]).strip()
     site = m["site"].strip() if isinstance(m["site"], str) else ""

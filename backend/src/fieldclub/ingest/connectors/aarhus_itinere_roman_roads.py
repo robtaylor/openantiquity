@@ -26,7 +26,7 @@ from fieldclub.ingest.adapters import UpstreamFormatError, cache_dir
 from fieldclub.ingest.adapters.common import Feature, Polite, json_ready
 from fieldclub.ingest.adapters.download import download
 from fieldclub.ingest.adapters.files import read_ndjson
-from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo
+from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo, bbox_in_bbox
 from fieldclub.ingest.registry import register
 from fieldclub.vocab import Period, RecordCategory, SourceAccess, SourceReuse
 
@@ -97,7 +97,7 @@ def in_britain_or_ireland(geometry: BaseGeometry) -> bool:
     Gaul, such as a sea lane across the Channel, is left out.
     """
     west, south, east, north = geometry.bounds
-    inside = west >= ISLES[0] and south >= ISLES[1] and east <= ISLES[2] and north <= ISLES[3]
+    inside = bbox_in_bbox(ISLES, (west, south, east, north))
     # Nothing in Kent lies wholly south of Dover's latitude, so this is Boulogne's coast.
     return inside and not (east > 1.35 and north < 51.0)
 
