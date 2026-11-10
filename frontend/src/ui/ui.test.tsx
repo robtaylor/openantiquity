@@ -364,6 +364,28 @@ describe("Dialog", () => {
     await user.click(within(dialog).getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps Tab inside: from the last control to the first, and back", async () => {
+    const user = userEvent.setup();
+    render(
+      <Dialog open onClose={() => {}} title="Delete your account?" actions={<Button>Delete</Button>}>
+        <input aria-label="Reason" />
+      </Dialog>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Delete your account?" });
+    const close = within(dialog).getByRole("button", { name: "Close" });
+    const last = within(dialog).getByRole("button", { name: "Delete" });
+    // It opens with focus on its title. Shift+Tab from there goes round to the end.
+    expect(within(dialog).getByRole("heading", { name: "Delete your account?" })).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(last).toHaveFocus();
+    await user.tab();
+    expect(close).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(last).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(within(dialog).getByRole("textbox", { name: "Reason" })).toHaveFocus();
+  });
 });
 
 function SheetExample({ onClose }: { onClose: () => void }) {

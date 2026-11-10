@@ -2,7 +2,9 @@
  * The one place the frontend talks to the backend. Every request sends the
  * session cookie. Every mutation carries `X-FieldClub-Client: web`, which the API
  * requires and a cross-site form cannot send. Failures become an `ApiError`
- * built from the `{"error": {"code", "message"}}` envelope.
+ * built from the `{"error": {"code", "message", "details"}}` envelope. A 401
+ * from any path is announced to `onUnauthorised` listeners, which is how the
+ * session learns that nobody is signed in any more.
  */
 
 import { isRecord } from "./guards.js";
@@ -14,13 +16,35 @@ export class ApiError extends Error {
   readonly status: number;
   /** The stable code from the error envelope, such as "not_found". */
   readonly code: string;
+  /** The envelope's `details`, such as the masked address of `confirmation_required`. Empty when it had none. */
+  readonly details: Readonly<Record<string, unknown>>;
 
-  constructor(status: number, code: string, message: string, options?: ErrorOptions) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    options?: ErrorOptions & { details?: Record<string, unknown> },
+  ) {
     super(message, options);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.details = options?.details ?? {};
   }
+}
+
+type UnauthorisedListener = (path: string) => void;
+const unauthorisedListeners = new Set<UnauthorisedListener>();
+
+/**
+ * Call `listener` with the path of every request the server answers with 401.
+ * Returns a function that stops listening.
+ */
+export function onUnauthorised(listener: UnauthorisedListener): () => void {
+  unauthorisedListeners.add(listener);
+  return () => {
+    unauthorisedListeners.delete(listener);
+  };
 }
 
 export type QueryValue = string | number | boolean | null | undefined;
@@ -56,7 +80,8 @@ async function errorFrom(response: Response): Promise<ApiError> {
   }
   const envelope = isRecord(payload) && isRecord(payload.error) ? payload.error : undefined;
   if (envelope && typeof envelope.code === "string" && typeof envelope.message === "string") {
-    return new ApiError(response.status, envelope.code, envelope.message);
+    const details = isRecord(envelope.details) ? envelope.details : undefined;
+    return new ApiError(response.status, envelope.code, envelope.message, { details });
   }
   const reason = response.statusText ? `${response.status} ${response.statusText}` : String(response.status);
   const message = GATEWAY_STATUSES.has(response.status)
@@ -100,6 +125,9 @@ export async function apiFetch<T>(path: string, request: ApiRequest = {}): Promi
     });
   }
 
+  if (response.status === 401) {
+    for (const listener of [...unauthorisedListeners]) listener(path);
+  }
   if (!response.ok) throw await errorFrom(response);
   if (response.status === 204) return undefined as T;
   try {

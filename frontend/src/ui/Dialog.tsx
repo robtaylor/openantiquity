@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { type ReactNode, useEffect, useId, useRef } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef } from "react";
 import { IconButton } from "./IconButton.js";
 import { closeOnEscape } from "./Panel.js";
 import "./Dialog.css";
@@ -11,14 +11,45 @@ export interface DialogProps {
   children: ReactNode;
   /** Buttons for the foot of the dialog, with the main one last. */
   actions?: ReactNode;
+  /** Extra classes, for a dialog with a layout of its own. */
+  className?: string;
+}
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Tab from the last control goes to the first, and Shift+Tab from the first
+ * to the last. A native modal dialog lets Tab leave for the browser's own
+ * controls, which a person using the keyboard can lose themselves in.
+ */
+function wrapTab(event: KeyboardEvent<HTMLElement>): void {
+  if (event.key !== "Tab" || event.defaultPrevented) return;
+  const controls = [...event.currentTarget.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+    (element) => !element.closest("[inert], [hidden]"),
+  );
+  const first = controls[0];
+  const last = controls[controls.length - 1];
+  if (!first || !last) return;
+  // Focus may be on something that isn't a control, such as the title.
+  const index = controls.indexOf(document.activeElement as HTMLElement);
+  if (event.shiftKey && index <= 0) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && index === controls.length - 1) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 /**
- * A modal dialog on the native `<dialog>` element, which traps focus, closes
- * on Escape and puts focus back where it came from.
+ * A modal dialog on the native `<dialog>` element. Opening it puts focus on
+ * its title. It keeps Tab inside, closes on Escape and puts focus back where
+ * it came from.
  */
-export function Dialog({ open, onClose, title, children, actions }: DialogProps) {
+export function Dialog({ open, onClose, title, children, actions, className }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const titleId = useId();
 
   useEffect(() => {
@@ -28,6 +59,9 @@ export function Dialog({ open, onClose, title, children, actions }: DialogProps)
       // jsdom has no showModal, so tests fall back to the open attribute.
       if (typeof dialog.showModal === "function") dialog.showModal();
       else dialog.setAttribute("open", "");
+      // As a panel does: focus on the title, so a screen reader says what
+      // opened and the next Tab lands on the first control.
+      titleRef.current?.focus({ preventScroll: true });
     } else if (!open && dialog.open) {
       if (typeof dialog.close === "function") dialog.close();
       else dialog.removeAttribute("open");
@@ -37,9 +71,13 @@ export function Dialog({ open, onClose, title, children, actions }: DialogProps)
   return (
     <dialog
       ref={ref}
-      className="fc-dialog"
+      className={className ? `fc-dialog ${className}` : "fc-dialog"}
       aria-labelledby={titleId}
-      onClose={onClose}
+      onClose={() => {
+        // The browser sends "close" a moment after the dialog shuts. If it has
+        // been opened again since, the event is stale and is ignored.
+        if (!ref.current?.open) onClose();
+      }}
       onCancel={(event) => {
         event.preventDefault();
         onClose();
@@ -48,12 +86,15 @@ export function Dialog({ open, onClose, title, children, actions }: DialogProps)
         // A click on the backdrop lands on the dialog element itself.
         if (event.target === event.currentTarget) onClose();
       }}
-      onKeyDown={closeOnEscape(onClose)}
+      onKeyDown={(event) => {
+        closeOnEscape(onClose)(event);
+        wrapTab(event);
+      }}
     >
       {open ? (
         <>
           <div className="fc-dialog__header">
-            <h2 className="fc-dialog__title" id={titleId}>
+            <h2 className="fc-dialog__title" id={titleId} ref={titleRef} tabIndex={-1}>
               {title}
             </h2>
             <IconButton label="Close" onClick={onClose}>

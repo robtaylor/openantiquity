@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { json } from "../test/http.js";
-import { ApiError, apiFetch, apiUrl } from "./client.js";
+import { ApiError, apiFetch, apiUrl, onUnauthorised } from "./client.js";
 
 function stubFetch(outcome: Response | { throws: unknown }) {
   const mock = vi.fn(async (_url: string, _init?: RequestInit) => {
@@ -97,5 +97,45 @@ describe("apiUrl", () => {
   it("requires a leading slash", () => {
     expect(() => apiUrl("meta")).toThrow(ApiError);
     expect(apiUrl("/meta")).toBe("/api/v1/meta");
+  });
+});
+
+describe("error details and signed-out answers", () => {
+  it("keeps the details object from the error envelope", async () => {
+    stubFetch(
+      json(
+        {
+          error: {
+            code: "confirmation_required",
+            message: "Confirm the address to sign in.",
+            details: { email: "a***@example.org" },
+          },
+        },
+        409,
+      ),
+    );
+    const error = await apiFetch("/auth/email/verify", { method: "POST", body: { token: "t" } }).catch(
+      (e: unknown) => e,
+    );
+    expect(error).toMatchObject({ status: 409, code: "confirmation_required", details: { email: "a***@example.org" } });
+  });
+
+  it("gives an empty details object when the envelope has none", async () => {
+    stubFetch(json({ error: { code: "not_found", message: "Gone." } }, 404));
+    const error = await apiFetch("/findings/x").catch((e: unknown) => e);
+    expect(error).toMatchObject({ details: {} });
+  });
+
+  it("tells every listener about a 401, whichever path it came from, until they stop listening", async () => {
+    const heard: string[] = [];
+    const stop = onUnauthorised((path) => heard.push(path));
+    stubFetch(json({ error: { code: "unauthorised", message: "Sign in first." } }, 401));
+    await apiFetch("/findings", { method: "POST", body: {} }).catch(() => undefined);
+    stubFetch(json({ error: { code: "forbidden", message: "No." } }, 403));
+    await apiFetch("/findings/x").catch(() => undefined);
+    stop();
+    stubFetch(json({ error: { code: "unauthorised", message: "Sign in first." } }, 401));
+    await apiFetch("/auth/me").catch(() => undefined);
+    expect(heard).toEqual(["/findings"]);
   });
 });
