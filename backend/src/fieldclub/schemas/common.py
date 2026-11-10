@@ -236,20 +236,3 @@ def from_geojson(
     if not (-180 <= min_lon <= max_lon <= 180 and -90 <= min_lat <= max_lat <= 90):
         raise ValidationFailedError("Coordinates must be longitude then latitude, in degrees.")
     return geom
-
-
-def feature(
-    geometry: WKBElement | WKTElement | BaseGeometry | None,
-    properties: dict[str, Any],
-    feature_id: str | int | None = None,
-) -> dict[str, Any]:
-    """A GeoJSON Feature dict."""
-    result: dict[str, Any] = {"type": "Feature", "geometry": to_geojson(geometry), "properties": properties}
-    if feature_id is not None:
-        result["id"] = feature_id
-    return result
-
-
-def feature_collection(features: Sequence[dict[str, Any]]) -> dict[str, Any]:
-    """A GeoJSON FeatureCollection dict."""
-    return {"type": "FeatureCollection", "features": list(features)}

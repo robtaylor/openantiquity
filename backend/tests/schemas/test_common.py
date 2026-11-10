@@ -27,8 +27,6 @@ from fieldclub.schemas.common import (
     RequestModel,
     decode_cursor,
     encode_cursor,
-    feature,
-    feature_collection,
     from_geojson,
     paginate,
     to_db_geometry,
@@ -304,20 +302,22 @@ def test_to_db_geometry_carries_the_srid() -> None:
     assert to_shape(element).equals(Point(-1.8542, 51.4286))
 
 
-def test_feature_and_collection_helpers_validate_as_geojson() -> None:
-    marked = feature(Point(-1.8542, 51.4286), {"tier": "seen"}, feature_id="7K3QXM")
-    bare = feature(None, {"obscured": True})
-    assert marked == {
+def test_feature_collection_models_validate_as_geojson() -> None:
+    marked = GeoJSONFeature(
+        id="7K3QXM",
+        geometry=GeoJSONGeometry.model_validate(to_geojson(Point(-1.8542, 51.4286))),
+        properties={"tier": "seen"},
+    )
+    bare = GeoJSONFeature(geometry=None, properties={"obscured": True})
+    assert marked.model_dump(exclude_none=True) == {
         "type": "Feature",
         "id": "7K3QXM",
         "geometry": {"type": "Point", "coordinates": [-1.8542, 51.4286]},
         "properties": {"tier": "seen"},
     }
-    assert bare == {"type": "Feature", "geometry": None, "properties": {"obscured": True}}
-    collection = feature_collection([marked, bare])
-    parsed = GeoJSONFeatureCollection.model_validate(collection)
+    collection = GeoJSONFeatureCollection(features=[marked, bare])
+    parsed = GeoJSONFeatureCollection.model_validate(collection.model_dump())
     assert [item.id for item in parsed.features] == ["7K3QXM", None]
-    assert GeoJSONFeature.model_validate(marked).geometry is not None
     assert GeoJSONFeatureCollection().model_dump() == {"type": "FeatureCollection", "features": []}
 
 

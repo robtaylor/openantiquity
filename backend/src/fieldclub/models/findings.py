@@ -11,6 +11,7 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     ForeignKey,
+    Index,
     Integer,
     SmallInteger,
     Text,
@@ -20,9 +21,11 @@ from sqlalchemy import (
     func,
     inspect,
 )
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapped, Mapper, mapped_column
 
+from fieldclub import gridref
 from fieldclub.db import Base
 from fieldclub.models.common import (
     CreatedAt,
@@ -34,6 +37,7 @@ from fieldclub.models.common import (
     fk,
     json_column,
     point,
+    point_lon_lat,
 )
 from fieldclub.vocab import (
     EvidenceKind,
@@ -67,6 +71,10 @@ class Finding(Base):
         enum_check("state_reason", StateReason),
         enum_check("nation", Nation),
         CheckConstraint("confidence BETWEEN 0 AND 100", name="confidence_range"),
+        # The help-wanted queue looks findings up by open step.
+        Index("ix_findings_open_steps", "open_steps", postgresql_using="gin"),
+        # Lists sort newest first by default.
+        Index("ix_findings_created_at_id", "created_at", "id"),
     )
 
     id: Mapped[IdPk]
@@ -108,6 +116,14 @@ class Finding(Base):
     updated_at: Mapped[datetime] = mapped_column(TimestampTz, server_default=func.now(), onupdate=func.now())
     tier_changed_at: Mapped[datetime | None] = mapped_column(TimestampTz)
     hidden_at: Mapped[datetime | None] = mapped_column(TimestampTz)
+    # The codes of the assessment's next steps, so the help-wanted queue can
+    # find them with an index. Written with the assessment by
+    # `services.findings.reassess`.
+    open_steps: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list, server_default="{}")
+    # How many more second looks, at a member's weight, would move the finding
+    # up a tier. None when answers alone can't. The second-look queue offers
+    # the smallest first. Written with the assessment.
+    answers_to_next: Mapped[int | None] = mapped_column(SmallInteger)
 
     def __repr__(self) -> str:
         return f"<Finding {self.public_id} {self.feature_class} {self.tier}/{self.state}>"
@@ -121,6 +137,7 @@ def _before_insert_finding(_mapper: Mapper[Finding], _conn: Connection, finding:
     if finding.sensitivity is None:
         finding.sensitivity = sensitivity.default_sensitivity(finding.feature_class).value
     sensitivity.refresh_location_public(finding)
+    _refresh_grid_ref(finding)
 
 
 @event.listens_for(Finding, "before_update")
@@ -142,6 +159,17 @@ def _before_update_finding(_mapper: Mapper[Finding], _conn: Connection, finding:
         or finding.location_public is None
     ):
         sensitivity.refresh_location_public(finding)
+    if state.attrs.location.history.has_changes():
+        _refresh_grid_ref(finding)
+
+
+def _refresh_grid_ref(finding: Finding) -> None:
+    """Keep `grid_ref` in step with `location`: the 10 m reference, or None off both grids."""
+    lon, lat = point_lon_lat(finding.location, f"finding {finding.public_id}")
+    try:
+        finding.grid_ref = gridref.to_gridref(lon, lat)
+    except gridref.GridRefError:
+        finding.grid_ref = None
 
 
 class Observation(Base):

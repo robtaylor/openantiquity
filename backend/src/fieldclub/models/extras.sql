@@ -120,3 +120,14 @@ ALTER TABLE magic_links ADD COLUMN IF NOT EXISTS browser_hash text;
 -- new database. This adds it to one built before the constraint existed.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_reputation_events_user_id_finding_id_reason
     ON reputation_events (user_id, finding_id, reason);
+
+-- Findings queue columns (services.findings.reassess writes them). The model
+-- declares both columns and both indexes for a new database. These add them
+-- to one built before they existed.
+ALTER TABLE findings ADD COLUMN IF NOT EXISTS open_steps text[] NOT NULL DEFAULT '{}';
+
+ALTER TABLE findings ADD COLUMN IF NOT EXISTS answers_to_next smallint;
+
+CREATE INDEX IF NOT EXISTS ix_findings_open_steps ON findings USING GIN (open_steps);
+
+CREATE INDEX IF NOT EXISTS ix_findings_created_at_id ON findings (created_at, id);
