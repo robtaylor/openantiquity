@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import pytest
 from shapely.geometry import Point
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from fieldclub.models import Source
 from fieldclub.services import records
-from fieldclub.services.records import InvalidSearchError, RecordNotFoundError
+from fieldclub.services.records import InvalidSearchError, RecordNotFoundError, SearchTimeoutError
 from tests.records.support import OVERTON, SILBURY, add_record, add_source
 
 HOSTILE = [
@@ -27,6 +28,10 @@ HOSTILE = [
     "",
     "   ",
     "église",
+    # Lower-casing these changes the characters they're made of.
+    "İstanbul",
+    "İ",
+    "ﬁeld ½ Ŀl ǅ क़",
 ]
 
 
@@ -143,9 +148,24 @@ def test_hostile_text_is_reduced_to_letters_and_digits() -> None:
     assert records.query_words("barrow & | ! <-> :* ( ) \\") == ["barrow"]
     assert records.query_words("silbury'; DROP TABLE records; --") == ["silbury", "drop", "table", "records"]
     assert records.prefix_tsquery(["silbury", "hill"]) == "silbury:* & hill:*"
+    assert records.prefix_tsquery(["st", "mary"]) == "st & mary:*"
     assert records.clean_query("\x00silbury‮  hill\x07") == "silbury hill"
     assert len(records.clean_query("s" * 10_000)) == records.MAX_QUERY_CHARS
     assert len(records.query_words("a " * 100)) == records.MAX_QUERY_WORDS
+
+
+def test_folding_happens_before_the_words_are_picked_out() -> None:
+    assert records.query_words("İstanbul") == ["istanbul"]
+    assert records.query_words("ﬁeld") == ["field"]
+    assert records.query_words("½") == ["1", "2"]
+
+
+def test_every_character_gives_words_the_tsquery_accepts() -> None:
+    # Each code point alone, doubled and inside a word, as a pasted name might hold it.
+    for code in range(0x30000):
+        char = chr(code)
+        for text in (char, char * 2, f"a{char}b"):
+            records.prefix_tsquery(records.query_words(text))
 
 
 def test_quoted_words_still_match(db: Session, index: dict[str, int]) -> None:
@@ -213,3 +233,45 @@ def test_sources_are_listed_with_their_counts(db: Session, index: dict[str, int]
 def test_the_database_refuses_a_source_without_licence_or_attribution(db: Session, column: str) -> None:
     with pytest.raises(IntegrityError, match="ck_sources_licence_and_attribution_given"):
         add_source(db, "blank", **{column: "  "})
+
+
+# --------------------------------------------------------------------------
+# What keeps a search quick on a big index
+# --------------------------------------------------------------------------
+
+
+def test_short_and_stop_words_stay_out_of_the_trigram_match(db: Session) -> None:
+    terms = records._terms(db, ["the", "st", "bowl", "a", "barrow"])
+    assert terms.trigram == "bowl barrow"
+    assert terms.phrase == "the st bowl a barrow"
+    # Short words are matched whole, longer ones as prefixes.
+    assert terms.tsquery == "the:* & st & bowl:* & a & barrow:*"
+    only_stop_words = records._terms(db, ["the", "a"])
+    assert only_stop_words.tsquery is None
+    assert only_stop_words.trigram is None
+
+
+def test_a_name_that_starts_with_stop_words_is_still_found(db: Session, index: dict[str, int]) -> None:
+    assert names(records.search(db, "the")[0]) == ["The West Ropery (site of), South Yard"]
+    assert names(records.search(db, "the west r")[0])[0] == "The West Ropery (site of), South Yard"
+
+
+def test_each_index_gives_a_capped_number_of_candidates(
+    db: Session, index: dict[str, int], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Three records match "barrow" or "hill"; with one candidate an index, at most three come back.
+    monkeypatch.setattr(records, "SEARCH_CANDIDATES", 1)
+    found, _ = records.search(db, "barrow")
+    assert 1 <= len(found) <= 3
+
+
+def test_a_slow_statement_is_cancelled_and_the_session_survives(db: Session) -> None:
+    before = db.scalar(select(func.current_setting("statement_timeout")))
+    with pytest.raises(SearchTimeoutError), records.time_limit(db, 50):
+        db.execute(select(func.pg_sleep(1)))
+    # The savepoint took the cancelled statement and the limit with it.
+    assert db.scalar(select(func.current_setting("statement_timeout"))) == before
+    with records.time_limit(db, 5000):
+        db.execute(select(func.pg_sleep(0)))
+    assert db.scalar(select(func.current_setting("statement_timeout"))) == before
+    assert db.scalar(select(func.count()).select_from(Source)) == 0

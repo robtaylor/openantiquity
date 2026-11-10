@@ -16,6 +16,7 @@ may see it (Decision 0005), never more exactly.
 
 from __future__ import annotations
 
+import logging
 import math
 import re
 from dataclasses import dataclass
@@ -28,6 +29,8 @@ from fieldclub import gridref
 from fieldclub.models import Place, Source, User
 from fieldclub.schemas.records import GeoResultType
 from fieldclub.services import ids, records, sensitivity
+
+logger = logging.getLogger(__name__)
 
 PLACE_LIMIT = 5
 RECORD_LIMIT = 5
@@ -203,7 +206,12 @@ def places(db: Session, text: str, limit: int = PLACE_LIMIT) -> list[GeoHit]:
 
 
 def record_hits(db: Session, text: str, limit: int = RECORD_LIMIT) -> list[GeoHit]:
-    found, _ = records.search(db, text, limit=limit)
+    """Records named like the query. A record search that runs out of time gives none, not an error."""
+    try:
+        found, _ = records.search(db, text, limit=limit)
+    except records.SearchTimeoutError:
+        logger.warning("Record search for %r ran out of time; the search box shows no records", text)
+        return []
     hits = []
     for result in found:
         record = result.record

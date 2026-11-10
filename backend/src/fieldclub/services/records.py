@@ -4,13 +4,16 @@ Every function returns records paired with their `Source`, so the caller can
 always show the licence and attribution. Records of a disabled source are
 never returned.
 
-Text search uses two indexes. The generated `records.search` tsvector finds
-records by the words of their name, types and summary, with every word of the
-query treated as a prefix so a half-typed word still matches. The trigram
-index on `records.name` finds names that are spelt differently from the
-query. Only letters and digits from the query reach either, so quotes,
-tsquery operators and control characters can't break the query or change
-its meaning.
+Text search uses three indexes. A btree on `lower(name)` finds names that
+start with the query. The generated `records.search` tsvector finds records
+by the words of their name, types and summary, with every word of three or
+more letters treated as a prefix so a half-typed word still matches. The
+trigram index on `records.name` finds names that are spelt differently from
+the query, leaving out short words and stop words, which share trigrams with
+much of the index. Each index gives at most `SEARCH_CANDIDATES` matches, and
+only those are ranked, so a common word stays quick on a large index. Only
+letters and digits from the query reach any of them, so quotes, tsquery
+operators and control characters can't break the query or change its meaning.
 """
 
 from __future__ import annotations
@@ -18,16 +21,30 @@ from __future__ import annotations
 import math
 import re
 import unicodedata
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
+from psycopg.errors import QueryCanceled
 from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
-from sqlalchemy import ColumnElement, Integer, Select, cast, func, literal, or_, select, true
+from sqlalchemy import (
+    ColumnElement,
+    Integer,
+    Select,
+    cast,
+    func,
+    literal,
+    select,
+    true,
+    union,
+)
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
-from fieldclub.errors import BadRequestError, NotFoundError
+from fieldclub.errors import AppError, BadRequestError, NotFoundError
 from fieldclub.ingest import runner
 from fieldclub.ingest.errors import IngestError
 from fieldclub.models import Finding, Record, Source, User
@@ -48,6 +65,13 @@ MAX_WORD_CHARS = 40
 NAME_SIMILARITY = 0.4
 # Offsets beyond this are refused. Nobody reads 2,000 search results.
 MAX_OFFSET = 2000
+# How many matches each index may give before they are ranked: enough to page
+# to `MAX_OFFSET`. Ranking every match of a common word took a second at 500,000 records.
+SEARCH_CANDIDATES = MAX_OFFSET + 200
+# Shorter words share trigrams with too much of the index to be worth a spelling match.
+MIN_TRIGRAM_WORD = 3
+# A search slower than this is cancelled. The search box asks again as people type.
+SEARCH_TIMEOUT_MS = 2000
 
 MAX_RADIUS_M = 20_000.0
 METRES_PER_DEGREE = 111_320.0
@@ -76,6 +100,12 @@ class FindingNotFoundError(NotFoundError):
 
 class InvalidSearchError(BadRequestError):
     code = "invalid_search"
+
+
+class SearchTimeoutError(AppError):
+    status_code = 503
+    code = "search_timeout"
+    message = "That search took too long. Add another word, or search a smaller area."
 
 
 @dataclass(frozen=True)
@@ -116,19 +146,32 @@ def clean_query(text: str | None) -> str:
     return " ".join(cleaned.split())
 
 
+def fold(text: str) -> str:
+    """The text in lower case and NFKC form, with a Turkish dotted capital I read as a plain i.
+
+    Lower-casing can change the characters a word is made of: "İ" becomes
+    "i" and a combining dot, and NFKC turns "½" into 1, a fraction slash and 2. So the words are
+    picked out after folding, never before.
+    """
+    folded = unicodedata.normalize("NFKC", unicodedata.normalize("NFKC", text).lower())
+    return folded.replace("i̇", "i")
+
+
 def query_words(text: str) -> list[str]:
     """The words of a query that reach the database: letters and digits only, lower case."""
-    return [word[:MAX_WORD_CHARS].lower() for word in _WORD.findall(text)][:MAX_QUERY_WORDS]
+    return [word[:MAX_WORD_CHARS] for word in _WORD.findall(fold(text))][:MAX_QUERY_WORDS]
 
 
 def prefix_tsquery(words: list[str]) -> str:
-    """`to_tsquery` text matching every word as a prefix, such as `silbury:* & hil:*`.
+    """`to_tsquery` text matching every word as a prefix, such as `silbury:* & hil:* & st`.
 
-    Safe because each word is letters and digits only. Stop words like
-    "the" drop out in PostgreSQL rather than matching nothing.
+    Safe because each word is letters and digits only. A word shorter than
+    `MIN_TRIGRAM_WORD` is matched whole, because a one- or two-letter prefix
+    matches thousands of lexemes. Stop words like "the" drop out in
+    PostgreSQL rather than matching nothing.
     """
     assert all(_WORD.fullmatch(word) for word in words), "words must be letters and digits only"
-    return " & ".join(f"{word}:*" for word in words)
+    return " & ".join(word if len(word) < MIN_TRIGRAM_WORD else f"{word}:*" for word in words)
 
 
 # --------------------------------------------------------------------------
@@ -191,6 +234,96 @@ def use_name_similarity(db: Session) -> None:
     db.execute(select(func.set_config("pg_trgm.word_similarity_threshold", str(NAME_SIMILARITY), true())))
 
 
+@contextmanager
+def time_limit(db: Session, milliseconds: int = SEARCH_TIMEOUT_MS) -> Iterator[None]:
+    """Cancel any statement inside that runs longer than `milliseconds`, as `SearchTimeoutError`.
+
+    The block runs in a savepoint, so a cancelled statement leaves the
+    session's transaction usable, and the limit ends with the block.
+    """
+    assert milliseconds > 0, "a time limit must be positive"
+    previous = db.scalar(select(func.current_setting("statement_timeout")))
+    try:
+        with db.begin_nested():
+            db.execute(select(func.set_config("statement_timeout", str(milliseconds), true())))
+            yield
+            db.execute(select(func.set_config("statement_timeout", previous, true())))
+    except OperationalError as exc:
+        if isinstance(exc.orig, QueryCanceled):
+            raise SearchTimeoutError() from None
+        raise
+
+
+@dataclass(frozen=True)
+class _Terms:
+    """What a query's words become in SQL."""
+
+    # All the words, for the name-starts-with match and the ranking.
+    phrase: str
+    # The `to_tsquery` text, or None when PostgreSQL drops every word as a stop word.
+    tsquery: str | None
+    # The words worth a trigram match, or None when none are.
+    trigram: str | None
+
+
+def _terms(db: Session, words: list[str]) -> _Terms:
+    """Ask PostgreSQL which words are stop words, then build each kind of match from the rest.
+
+    A stop word or a word under `MIN_TRIGRAM_WORD` letters shares a trigram
+    with a large part of the index, so it stays out of the trigram match. A
+    word that short is matched whole in the full-text match, because a one-
+    or two-letter prefix matches thousands of lexemes. The name-starts-with
+    match still catches it as the start of a name.
+    """
+    tsquery = prefix_tsquery(words)
+    # One row: the node count of the whole tsquery, then one count per word, 0 for a stop word.
+    nodes, *word_nodes = db.execute(
+        select(
+            func.numnode(_tsquery(tsquery)),
+            *(func.numnode(func.plainto_tsquery("english", literal(word))) for word in words),
+        )
+    ).one()
+    kept = [
+        word for word, count in zip(words, word_nodes, strict=True) if count and len(word) >= MIN_TRIGRAM_WORD
+    ]
+    return _Terms(phrase=" ".join(words), tsquery=tsquery if nodes else None, trigram=" ".join(kept) or None)
+
+
+def _tsquery(text: str) -> ColumnElement[Any]:
+    return func.to_tsquery("english", literal(text))
+
+
+def _candidates(
+    terms: _Terms,
+    *,
+    sources: list[str] | None,
+    categories: list[str] | None,
+    bbox: tuple[float, float, float, float] | None,
+) -> Any:
+    """The ids of at most `SEARCH_CANDIDATES` matches from each index, as one subquery.
+
+    Each arm stops at that many, so a common word costs a few thousand rows
+    rather than ranking a large part of the table. A word that matches more
+    records than that gives an arbitrary few thousand of them to rank, in
+    the order the index scan found them, so its best match may be missed.
+    Another word, or a smaller area, brings it back.
+    """
+
+    def arm(condition: ColumnElement[bool]) -> AnySelect:
+        statement = select(Record.id).join(Source, Source.key == Record.source_key).where(Source.enabled)
+        statement = _filters(statement, sources=sources, categories=categories, bbox=bbox)
+        return statement.where(condition).limit(SEARCH_CANDIDATES)
+
+    # The phrase is letters, digits and single spaces, so it holds no LIKE wildcard.
+    assert re.fullmatch(r"[^\W_]+( [^\W_]+)*", terms.phrase), "the phrase must be words and spaces"
+    arms = [arm(func.lower(Record.name).like(literal(terms.phrase + "%")))]
+    if terms.tsquery is not None:
+        arms.append(arm(Record.search.op("@@")(_tsquery(terms.tsquery))))
+    if terms.trigram is not None:
+        arms.append(arm(Record.name.op("%>")(literal(terms.trigram))))
+    return union(*(statement.subquery().select() for statement in arms)).subquery()
+
+
 def search(
     db: Session,
     q: str | None = None,
@@ -203,10 +336,13 @@ def search(
 ) -> tuple[list[RecordResult], str | None]:
     """Records matching the text, filters and box, best match first. Returns a page and the next cursor.
 
+    A record matches when its name starts with the query, when its words
+    match the query's as prefixes, or when its name is spelt like the query.
     Ranking puts a name that starts with the query first, then weighs the
     full-text rank (name words count most, then types, then the summary)
     with how closely the name is spelt like the query. Without text,
-    records come in name order.
+    records come in name order. A search that runs past `SEARCH_TIMEOUT_MS`
+    raises `SearchTimeoutError`.
     """
     assert 1 <= limit <= 200, "limit must be between 1 and 200"
     offset = decode_cursor(cursor, 1)[0] if cursor else 0
@@ -214,28 +350,30 @@ def search(
         raise InvalidSearchError("That page is out of range. Narrow the search instead.")
     text = clean_query(q)
     words = query_words(text)
-    statement = _filters(_base(), sources=sources, categories=categories, bbox=bbox)
-
-    if words:
-        phrase = " ".join(words)
-        tsquery = func.to_tsquery("english", literal(prefix_tsquery(words)))
-        # Matching uses word similarity, which is what the index serves. Ranking
-        # uses the strict form, which tells "Silbury" from "Ropery" for "silbery".
-        similarity = func.strict_word_similarity(literal(phrase), Record.name)
-        starts = func.starts_with(func.lower(Record.name), literal(phrase))
-        rank = func.ts_rank_cd(Record.search, tsquery, 1) * 4 + similarity + cast(starts, Integer) * 2
-        use_name_similarity(db)
-        statement = statement.where(
-            or_(Record.search.op("@@")(tsquery), Record.name.op("%>")(literal(phrase)))
-        )
-        statement = statement.order_by(rank.desc(), Record.id)
-    elif text:
+    if text and not words:
         # Punctuation and nothing else: nothing can match.
         return [], None
-    else:
-        statement = statement.order_by(Record.name, Record.id)
+    statement = _filters(_base(), sources=sources, categories=categories, bbox=bbox)
 
-    rows = db.execute(statement.offset(offset).limit(limit + 1)).all()
+    with time_limit(db):
+        if words:
+            terms = _terms(db, words)
+            # Matching uses word similarity, which is what the index serves. Ranking
+            # uses the strict form, which tells "Silbury" from "Ropery" for "silbery".
+            rank = (
+                func.strict_word_similarity(literal(terms.phrase), Record.name)
+                + cast(func.starts_with(func.lower(Record.name), literal(terms.phrase)), Integer) * 2
+            )
+            if terms.tsquery is not None:
+                rank = rank + func.ts_rank_cd(Record.search, _tsquery(terms.tsquery), 1) * 4
+            use_name_similarity(db)
+            candidates = _candidates(terms, sources=sources, categories=categories, bbox=bbox)
+            statement = statement.where(Record.id.in_(select(candidates.c.id)))
+            statement = statement.order_by(rank.desc(), Record.id)
+        else:
+            statement = statement.order_by(Record.name, Record.id)
+        rows = db.execute(statement.offset(offset).limit(limit + 1)).all()
+
     items = _results(rows[:limit])
     next_cursor = (
         encode_cursor([offset + limit]) if len(rows) > limit and offset + limit <= MAX_OFFSET else None

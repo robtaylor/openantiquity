@@ -6,6 +6,7 @@ from shapely.geometry import Point
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
+from fieldclub.services import records
 from fieldclub.vocab import FeatureClass
 from tests.helpers import ClientAs, MakeFinding, MakeUser, error_code
 from tests.records.support import OVERTON, SILBURY, add_record, add_source
@@ -71,12 +72,25 @@ def test_search_filters_and_pages(client: TestClient, index: dict[str, int]) -> 
         {"q": "a & b | !c <-> d:*"},
         {"q": "\\\\\\"},
         {"q": "😀 barrow"},
+        {"q": "\u0130stanbul"},
     ],
 )
 def test_hostile_search_text_is_answered(client: TestClient, index: dict[str, int], params: dict) -> None:
     response = client.get("/api/v1/records/search", params=params)
     assert response.status_code == 200, response.text
     assert isinstance(response.json()["items"], list)
+
+
+def test_a_search_that_runs_out_of_time(
+    client: TestClient, index: dict[str, int], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def too_slow(*args: object, **kwargs: object) -> None:
+        raise records.SearchTimeoutError()
+
+    monkeypatch.setattr(records, "search", too_slow)
+    response = client.get("/api/v1/records/search", params={"q": "barrow"})
+    assert response.status_code == 503
+    assert error_code(response) == "search_timeout"
 
 
 def test_too_long_a_search_is_refused(client: TestClient, index: dict[str, int]) -> None:

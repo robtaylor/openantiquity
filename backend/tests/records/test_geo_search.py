@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from fieldclub import gridref
 from fieldclub.models import Place
 from fieldclub.models.common import db_point
-from fieldclub.services import search
+from fieldclub.services import records, search
 from fieldclub.vocab import FeatureClass
 from tests.helpers import ClientAs, MakeFinding, MakeUser
 from tests.records.support import SILBURY, add_record, add_source
@@ -157,7 +157,9 @@ def test_a_hidden_finding_is_not_found(db: Session, make_finding: MakeFinding) -
     assert "finding" not in types(search.geo_search(db, finding.public_id, None))
 
 
-@pytest.mark.parametrize("query", ["", "   ", "\x00", "'; --", "& | !", "‮", "SU", "SU 12 3"])
+@pytest.mark.parametrize(
+    "query", ["", "   ", "\x00", "'; --", "& | !", "\u202e", "SU", "SU 12 3", "\u0130", "\u0130stanbul"]
+)
 def test_odd_queries_give_nothing_or_names(db: Session, gazetteer: None, query: str) -> None:
     hits = search.geo_search(db, query, None)
     assert all(hit.type in ("place", "record") for hit in hits)
@@ -178,7 +180,21 @@ def test_the_endpoint(client: TestClient, gazetteer: None) -> None:
     assert record["source"]["reuse"] == "open"
     assert client.get("/api/v1/geo/search", params={"q": ""}).status_code == 422
     assert client.get("/api/v1/geo/search", params={"q": "x" * 201}).status_code == 422
+    # Lower-casing a Turkish dotted I adds a combining mark, which once failed an assertion.
+    assert client.get("/api/v1/geo/search", params={"q": "\u0130"}).status_code == 200
     assert (
         client.get("/api/v1/geo/search", params={"q": "avebury", "limit": 2}).json()["items"][1]["type"]
         == "place"
     )
+
+
+def test_a_record_search_that_runs_out_of_time_leaves_the_rest(
+    db: Session, gazetteer: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def too_slow(*args: object, **kwargs: object) -> None:
+        raise records.SearchTimeoutError()
+
+    monkeypatch.setattr(records, "search", too_slow)
+    hits = search.geo_search(db, "avebury", None)
+    assert hits
+    assert {hit.type for hit in hits} == {"place"}
