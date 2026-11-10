@@ -25,7 +25,7 @@ uv sync
 uv run pytest                     # each session creates and drops its own database
 uv run ruff check . && uv run ruff format --check .
 uv run pyright
-uv run fieldclub-api              # serves on :8000
+uv run fieldclub-api              # serves on :8000, or on FIELDCLUB_PORT
 uv run fieldclub-ingest list
 ```
 
@@ -33,7 +33,7 @@ Frontend, from `frontend/`:
 
 ```
 pnpm install
-pnpm dev                          # :5173, proxies /api and /tiles to :8000
+pnpm dev                          # :5173, proxies /api and /tiles to :8000, or to FIELDCLUB_API_URL
 pnpm test && pnpm typecheck && pnpm lint
 pnpm build
 pnpm gen:api                      # regenerate API types from the backend's OpenAPI schema

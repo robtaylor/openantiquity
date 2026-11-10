@@ -1,7 +1,8 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
-const BACKEND = "http://localhost:8000";
+// Where the API is. Set FIELDCLUB_API_URL when something else has port 8000.
+const BACKEND = process.env.FIELDCLUB_API_URL ?? "http://localhost:8000";
 
 const proxy = {
   "/api": { target: BACKEND, changeOrigin: false },
