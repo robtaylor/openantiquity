@@ -1,0 +1,54 @@
+# The image is built from the repository root with infra/Dockerfile. It copies
+# only backend/pyproject.toml, backend/uv.lock, backend/src, the frontend's
+# sources and the deployment glue in infra/jobs, so most of this list is a
+# second line of defence. Secrets and runtime data must never reach the
+# build context at all.
+
+# Secrets and runtime data
+.env
+.env.*
+**/.env
+**/.env.*
+var
+**/var
+*.pem
+*.p8
+*.key
+known_hosts
+*_known_hosts
+
+# Version control, editors and agents
+.git
+.github
+.claude
+.tldr
+thoughts
+.idea
+.vscode
+**/.DS_Store
+
+# Python
+**/.venv
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.ruff_cache
+**/.coverage
+**/htmlcov
+backend/tests
+
+# Node
+**/node_modules
+frontend/dist
+frontend/test-results
+frontend/playwright-report
+frontend/e2e
+**/*.tsbuildinfo
+
+# Terraform and docs
+infra/terraform
+**/.terraform
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfvars
+docs
