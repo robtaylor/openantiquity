@@ -78,6 +78,7 @@ def test_vocab_has_exactly_the_documented_vocabularies(meta: dict) -> None:
         "explanations",
         "mention_kinds",
         "record_categories",
+        "report_reasons",
     ]
 
 

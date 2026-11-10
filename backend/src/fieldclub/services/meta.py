@@ -23,6 +23,7 @@ def build_vocab() -> schema.Vocab:
         explanations=[schema.ExplanationOut.model_validate(item) for item in vocab.EXPLANATIONS],
         mention_kinds=[schema.MentionKindOut.model_validate(item) for item in vocab.MENTION_KINDS],
         record_categories=[schema.RecordCategoryOut.model_validate(item) for item in vocab.RECORD_CATEGORIES],
+        report_reasons=[schema.ReportReasonOut.model_validate(item) for item in vocab.REPORT_REASONS],
     )
 
 

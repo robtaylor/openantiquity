@@ -74,6 +74,14 @@ class RecordCategoryOut(ApiModel):
     colour: str
 
 
+class ReportReasonOut(ApiModel):
+    id: str
+    label: str
+    hint: str
+    # Hours within which the law expects a report for this reason to be dealt with, or null.
+    due_hours: int | None
+
+
 class Vocab(BaseModel):
     feature_classes: list[FeatureClassOut]
     periods: list[PeriodOut]
@@ -84,6 +92,7 @@ class Vocab(BaseModel):
     explanations: list[ExplanationOut]
     mention_kinds: list[MentionKindOut]
     record_categories: list[RecordCategoryOut]
+    report_reasons: list[ReportReasonOut]
 
 
 # --------------------------------------------------------------------------

@@ -1,0 +1,261 @@
+"""Roles, the list of members who could be made trusted, and bans (Decisions 0005 and 0008)."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+
+import pytest
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from fieldclub.models import Activity, Finding, ReputationEvent, UserSession
+from fieldclub.services import findings, reputation
+from fieldclub.vocab import EvidenceKind, Role, Tier
+from tests.findings.support import add_desk_evidence, answer, create
+from tests.helpers import ClientAs, MakeUser, count, error_code
+from tests.moderation.support import API, REASON, log_entries
+
+ROLES = [role.value for role in Role]
+
+
+def set_role(client, handle: str, role: str):
+    return client.put(f"{API}/mod/users/{handle}/role", json={"role": role, **REASON})
+
+
+def expected(actor: str, current: str, new: str) -> bool:
+    """Whether `actor` may move someone from `current` to `new`: admins are never made here,
+    and only an admin makes or unmakes a moderator."""
+    if Role.ADMIN.value in (current, new):
+        return False
+    return actor == Role.ADMIN.value or Role.MODERATOR.value not in (current, new)
+
+
+@pytest.mark.parametrize("actor", ["moderator", "admin"])
+@pytest.mark.parametrize("current", ROLES)
+@pytest.mark.parametrize("new", ROLES)
+def test_every_role_change_in_every_direction(
+    actor: str, current: str, new: str, client_as: ClientAs, make_user: MakeUser, db: Session
+) -> None:
+    target = make_user(current, handle="Target", reputation=60.0)
+    response = set_role(client_as(make_user(actor)), "Target", new)
+    db.refresh(target)
+    if expected(actor, current, new):
+        assert response.status_code == 200, response.text
+        assert response.json()["role"] == new
+        assert target.role == new
+        changed = [e for e in log_entries(db) if e.action == "change_role"]
+        assert len(changed) == (0 if current == new else 1)
+        if current != new:
+            assert changed[0].data == {"from": current, "to": new}
+            assert changed[0].reason == REASON["reason"]
+    else:
+        assert (response.status_code, error_code(response)) == (403, "role_change_forbidden")
+        assert target.role == current
+
+
+@pytest.mark.parametrize("role", ["moderator", "admin"])
+def test_nobody_changes_their_own_role(role: str, client_as: ClientAs, make_user: MakeUser) -> None:
+    me = make_user(role, handle="Me")
+    response = set_role(client_as(me), "Me", "member")
+    assert (response.status_code, error_code(response)) == (403, "role_change_forbidden")
+
+
+def test_a_member_becomes_trusted_only_with_fifty_points(client_as: ClientAs, make_user: MakeUser) -> None:
+    client = client_as(make_user(Role.MODERATOR))
+    make_user(handle="Short", reputation=49.0)
+    make_user(handle="Enough", reputation=50.0)
+    short = set_role(client, "Short", "trusted")
+    assert (short.status_code, error_code(short)) == (409, "not_eligible")
+    assert set_role(client, "Enough", "trusted").status_code == 200
+    # An archaeologist needs no points.
+    assert set_role(client, "Short", "expert").status_code == 200
+
+
+def test_banned_deleted_and_unknown_people(client_as: ClientAs, make_user: MakeUser) -> None:
+    client = client_as(make_user(Role.ADMIN))
+    make_user(handle="Banned", banned_at=datetime(2026, 11, 1, tzinfo=UTC), reputation=80.0)
+    make_user(handle="Gone", deleted_at=datetime(2026, 11, 1, tzinfo=UTC))
+    banned = set_role(client, "Banned", "trusted")
+    assert (banned.status_code, error_code(banned)) == (409, "user_banned")
+    for handle in ("Gone", "Nobody"):
+        response = set_role(client, handle, "trusted")
+        assert (response.status_code, error_code(response)) == (404, "user_not_found")
+    bad = client.put(f"{API}/mod/users/Banned/role", json={"role": "emperor", **REASON})
+    assert bad.status_code == 422
+    no_reason = client.put(f"{API}/mod/users/Banned/role", json={"role": "member"})
+    assert no_reason.status_code == 422
+
+
+def test_a_new_role_reweights_what_the_person_has_done(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    # One member's yes and an expert's would reach Seen; two members' yes would too, but one won't.
+    finding = create(db, make_user())
+    archaeologist = make_user(handle="Arch")
+    answer(db, finding, archaeologist)
+    answer(db, finding, make_user(), visible="no")
+    db.refresh(finding)
+    assert finding.tier == Tier.SPOTTED.value
+    assert set_role(client_as(make_user(Role.MODERATOR)), "Arch", "expert").status_code == 200
+    db.expire_all()
+    finding = findings.get_finding(db, finding.public_id, None)
+    assert finding.assessment["seen"] == 3.0
+
+
+# --------------------------------------------------------------------------
+# Who could be made trusted
+# --------------------------------------------------------------------------
+
+
+def test_the_eligible_list_shows_where_points_came_from_and_who_else_was_there(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    farmer = make_user(handle="Farmer")
+    friend_a, friend_b = make_user(handle="FriendA"), make_user(handle="FriendB")
+    make_user(handle="Poor", reputation=10.0)
+    make_user(Role.TRUSTED, handle="AlreadyTrusted", reputation=200.0)
+    first = create(db, farmer)
+    second = create(db, farmer)
+    for finding in (first, second):
+        answer(db, finding, friend_a)
+        answer(db, finding, friend_b)
+    db.refresh(farmer)
+    assert farmer.reputation == 2 * reputation.TIER_POINTS[Tier.SEEN]
+    # Top the farmer up to fifty with a hand-written award not tied to a finding.
+    db.add(ReputationEvent(user_id=farmer.id, delta=46.0, reason="test_bonus", finding_id=None))
+    farmer.reputation = 50.0
+    db.commit()
+
+    response = client_as(make_user(Role.MODERATOR)).get(f"{API}/mod/users/eligible")
+    assert response.status_code == 200
+    (item,) = response.json()["items"]
+    assert item["user"]["handle"] == "Farmer"
+    assert item["user"]["reputation"] == 50.0
+    sources = item["sources"]
+    assert sources[0]["finding"] is None
+    assert sources[0]["points"] == 46.0
+    by_finding = {s["finding"]["public_id"]: s for s in sources if s["finding"] is not None}
+    assert set(by_finding) == {first.public_id, second.public_id}
+    for source in by_finding.values():
+        assert source["points"] == 2.0
+        assert source["reasons"] == ["tier_seen"]
+        assert sorted(p["handle"] for p in source["others"]) == ["FriendA", "FriendB"]
+    assert [(a["user"]["handle"], a["shared_findings"]) for a in item["associates"]] == [
+        ("FriendA", 2),
+        ("FriendB", 2),
+    ]
+
+
+# --------------------------------------------------------------------------
+# Bans
+# --------------------------------------------------------------------------
+
+
+def test_a_ban_ends_the_persons_sessions_at_once(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    target = make_user(handle="Target")
+    theirs = client_as(target)
+    second_device = client_as(target)
+    assert theirs.get(f"{API}/auth/me").status_code == 200
+    response = client_as(make_user(Role.MODERATOR)).post(f"{API}/mod/users/Target/ban", json=REASON)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["sessions_ended"] == 2
+    assert body["user"]["banned"] is True
+    assert count(db, UserSession) == 1  # the moderator's
+    for client in (theirs, second_device):
+        me = client.get(f"{API}/auth/me")
+        assert me.status_code == 401
+        write = client.post(f"{API}/findings", json={"location": {"type": "Point"}, "feature_class": "pit"})
+        assert write.status_code == 401
+    db.refresh(target)
+    assert target.banned_at is not None
+
+
+def test_who_may_ban_whom(client_as: ClientAs, make_user: MakeUser) -> None:
+    moderator, admin = make_user(Role.MODERATOR, handle="Mod"), make_user(Role.ADMIN, handle="Admin")
+    make_user(Role.MODERATOR, handle="OtherMod")
+    make_user(Role.ADMIN, handle="OtherAdmin")
+    make_user(Role.EXPERT, handle="Expert")
+    by_mod, by_admin = client_as(moderator), client_as(admin)
+
+    def ban(client, handle: str):
+        return client.post(f"{API}/mod/users/{handle}/ban", json=REASON)
+
+    for client, handle in [
+        (by_mod, "Mod"),
+        (by_mod, "OtherMod"),
+        (by_mod, "OtherAdmin"),
+        (by_admin, "OtherAdmin"),
+    ]:
+        response = ban(client, handle)
+        assert (response.status_code, error_code(response)) == (403, "ban_forbidden"), handle
+    assert ban(by_mod, "Expert").status_code == 200
+    again = ban(by_mod, "Expert")
+    assert (again.status_code, error_code(again)) == (409, "already_banned")
+    assert ban(by_admin, "OtherMod").status_code == 200
+    unban = by_mod.post(f"{API}/mod/users/OtherMod/unban", json=REASON)
+    assert (unban.status_code, error_code(unban)) == (403, "ban_forbidden")
+    assert by_admin.post(f"{API}/mod/users/OtherMod/unban", json=REASON).status_code == 200
+    not_banned = by_admin.post(f"{API}/mod/users/OtherMod/unban", json=REASON)
+    assert (not_banned.status_code, error_code(not_banned)) == (409, "not_banned")
+
+
+def test_a_banned_persons_answers_evidence_and_votes_stop_counting_until_the_ban_is_lifted(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    finder = make_user(handle="Finder")
+    banned = make_user(handle="Ringleader")
+    finding = create(db, finder)
+    answer(db, finding, banned)
+    answer(db, finding, make_user())
+    evidence, _ = add_desk_evidence(db, finding, banned, EvidenceKind.AERIAL, title="Doctored aerial")
+    other, _ = add_desk_evidence(db, finding, make_user(), EvidenceKind.HISTORIC_MAP)
+    findings.vote(db, other.id, banned, 1)
+    db.commit()
+    db.refresh(finding)
+    assert finding.tier == Tier.SEEN.value
+    before = finding.assessment
+    assert before["seen"] == 2.0
+    activity_before = count(db, Activity)
+
+    moderator = client_as(make_user(Role.MODERATOR))
+    response = moderator.post(f"{API}/mod/users/Ringleader/ban", json=REASON)
+    assert response.json()["findings_reassessed"] == 1
+
+    db.expire_all()
+    finding = findings.get_finding(db, finding.public_id, None)
+    assert finding.tier == Tier.SPOTTED.value
+    assert finding.assessment["seen"] == 1.0
+    assert finding.evidence_count == 1
+    # The tier change names nobody.
+    changes = db.scalars(select(Activity).where(Activity.id > activity_before)).all()
+    assert [(a.kind, a.actor_id) for a in changes] == [("tier_changed", None)]
+    viewer = client_as(make_user())
+    page = viewer.get(f"{API}/findings/{finding.public_id}").json()
+    assert "Doctored aerial" not in str(page)
+    assert all(c["user"]["handle"] != "Ringleader" for c in page["credits"])
+    observations = client_as(finder).get(f"{API}/findings/{finding.public_id}/observations").json()["items"]
+    assert [o["user"]["handle"] for o in observations if o["user"]["handle"] == "Ringleader"] == []
+    export = viewer.get(f"{API}/findings/{finding.public_id}/export?format=csv").text
+    assert "Aerial" not in export
+    gone = viewer.put(f"{API}/evidence/{evidence.id}/vote", json={"value": 1})
+    assert (gone.status_code, error_code(gone)) == (404, "evidence_not_found")
+
+    moderator.post(f"{API}/mod/users/Ringleader/unban", json=REASON)
+    db.expire_all()
+    restored = db.scalar(select(Finding).where(Finding.id == finding.id))
+    assert restored is not None
+    assert restored.tier == Tier.SEEN.value
+    assert restored.assessment["seen"] == before["seen"]
+    assert restored.evidence_count == 2
+    actions = [e.action for e in log_entries(db)]
+    assert actions == ["ban", "unban"]
+
+
+def test_a_banned_account_is_not_in_the_eligible_list(client_as: ClientAs, make_user: MakeUser) -> None:
+    make_user(handle="Banned", reputation=90.0, banned_at=datetime(2026, 11, 1, tzinfo=UTC))
+    make_user(handle="Gone", reputation=90.0, deleted_at=datetime(2026, 11, 1, tzinfo=UTC))
+    items = client_as(make_user(Role.MODERATOR)).get(f"{API}/mod/users/eligible").json()["items"]
+    assert items == []
