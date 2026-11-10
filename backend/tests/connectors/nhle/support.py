@@ -58,5 +58,5 @@ def changed_copy(fixture: str, destination: Path, sql: str) -> bytes:
     destination.write_bytes((FIXTURES / fixture).read_bytes())
     with sqlite3.connect(destination) as conn:
         (table,) = conn.execute("SELECT table_name FROM gpkg_contents").fetchone()
-        conn.execute(sql.format(table=table))
+        conn.executescript(sql.format(table=table))
     return destination.read_bytes()

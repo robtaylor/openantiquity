@@ -16,6 +16,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, ClassVar
 
 from fieldclub.ingest.adapters import UpstreamFormatError, cache_dir
@@ -110,6 +111,7 @@ class NhleLayer(Connector):
                 f"The {self.source.name} export changed shape: crs {info.get('crs')}, "
                 f"geometry {info.get('geometry_type')}, missing {missing}."
             )
+        self.prepare(path, info)
         seen: set[str] = set()
         for feature in read_vector(path, where=self.where, bbox=bbox, info=info):
             record = self.to_record(feature)
@@ -119,6 +121,9 @@ class NhleLayer(Connector):
                 )
             seen.add(record.external_id)
             yield record
+
+    def prepare(self, path: Path, info: dict[str, Any]) -> None:
+        """Run before the rows are read, for a layer that needs the whole file to name a row."""
 
     def to_record(self, feature: Feature) -> RecordIn:
         properties = feature.properties

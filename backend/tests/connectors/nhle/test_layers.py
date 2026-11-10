@@ -234,6 +234,36 @@ def test_an_export_that_changed_shape_fails_the_run(layer: Layer, db: Session, t
     assert db.scalars(select(Record)).all() == []
 
 
+# The same fields in a points layer and its polygons layer, so only the geometry type tells them apart.
+OTHER_OF_PAIR = {
+    "listed_buildings_points.gpkg": "listed_buildings_polygons.gpkg",
+    "listed_buildings_polygons.gpkg": "listed_buildings_points.gpkg",
+    "bpn_points.gpkg": "bpn_polygons.gpkg",
+    "bpn_polygons.gpkg": "bpn_points.gpkg",
+    "coi_points.gpkg": "coi_polygons.gpkg",
+    "coi_polygons.gpkg": "coi_points.gpkg",
+}
+
+
+@respx.mock
+def test_an_export_from_the_other_layer_of_its_pair_fails_the_run(layer: Layer, db: Session) -> None:
+    if layer.fixture not in OTHER_OF_PAIR:
+        pytest.skip("this layer has no points or polygons twin")
+    serve(layer, (FIXTURES / OTHER_OF_PAIR[layer.fixture]).read_bytes())
+    with pytest.raises(IngestFailedError, match="changed shape"):
+        run_connector(connector(layer))
+    assert db.scalars(select(Record)).all() == []
+
+
+@respx.mock
+def test_an_export_in_another_crs_fails_the_run(layer: Layer, db: Session, tmp_path: Path) -> None:
+    sql = "UPDATE gpkg_geometry_columns SET srs_id = 4326; UPDATE gpkg_contents SET srs_id = 4326"
+    serve(layer, changed_copy(layer.fixture, tmp_path / "changed.gpkg", sql))
+    with pytest.raises(IngestFailedError, match="changed shape"):
+        run_connector(connector(layer))
+    assert db.scalars(select(Record)).all() == []
+
+
 @respx.mock
 def test_two_rows_with_one_id_fail_the_run(layer: Layer, db: Session, tmp_path: Path) -> None:
     sql = "UPDATE {table} SET ListEntry = 1000000, NGR = 'SU 1 1'"

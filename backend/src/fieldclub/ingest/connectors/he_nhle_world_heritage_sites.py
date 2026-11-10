@@ -3,7 +3,9 @@
 Work-list key `he-nhle-world-heritage-sites`. 27 polygons for 18 sites: a site
 has a row for its core area and often another for its buffer zone, both under
 the one list entry number. The id is the list entry and the part, such as
-`1000096-core-area`, so each part is stored once and none replaces another.
+`1000096-core-area`, so each part is stored once and none replaces another. A name search finds a
+site and its buffer zone separately, as `<name>` and `<name> (buffer zone)`.
+That is intended: the buffer zone is a place on the map in its own right.
 """
 
 from __future__ import annotations

@@ -1,9 +1,11 @@
 """Listed buildings as outlines, from NHLE layer 3 of the Open Data Hub export.
 
 Work-list key `he-nhle-listed-buildings-polygons`. The layer has a row for
-every listed building, but only 10,080 of the 379,685 hold a real outline. The
+every listed building, but only 10,080 of the 379,685 have `area_ha` set. The
 rest are placeholder triangles about 2.5 m across with `area_ha` empty, so this
-connector reads only the rows where `area_ha` is set.
+connector reads only the rows where `area_ha` is set. Those rows hold an outline
+or a small symbol: about 1,900 are 0.79 m² circles of radius 0.5 m, a stock mark
+for war memorials, milestones and fountains, and about 3,700 are under 10 m².
 
 The same list entries are in the points layer, which holds every one of them.
 The source is therefore registered disabled: its records are stored when it is

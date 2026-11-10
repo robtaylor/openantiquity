@@ -133,8 +133,8 @@ def test_a_certificate_over_two_places_is_two_records(db: Session) -> None:
         db.execute(delete(Record))
         db.commit()
         records = run(key, fixture, db)
-        assert set(records) == {"1431354-TQ2898180692", "1495772-SP8547238825", "1495772-SP8545138855"}
-        bond = records["1431354-TQ2898180692"]
+        assert set(records) == {"1431354", "1495772-SP8547238825", "1495772-SP8545138855"}
+        bond = records["1431354"]
         assert bond.name == "163 New Bond Street"
         assert bond.record_type == "Certificate of immunity from listing"
         assert bond.summary == "Certificate issued 29 June 2022, expiring 28 June 2027"

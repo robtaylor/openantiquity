@@ -11,7 +11,12 @@ more. The id is therefore built from the fields that name the area: a hash
 of the local planning authority, the lower-cased name and the designation
 date, `DATE_OF_DE`, which is unique in the export. An area renamed or
 redesignated upstream is a new record and the old one is removed by the next
-full run.
+full run, and evidence and investigation links to it are cleared. So is every
+area of an authority that is renamed, as local government reorganisation does
+in bulk (the 2023 North Yorkshire and Somerset unitaries). The runner's shrink
+check refuses a run that would delete over a quarter of the stored areas, but
+not a smaller renaming, so a run that reports many `deleted` after a
+reorganisation should be read before it is accepted.
 """
 
 from __future__ import annotations

@@ -2,8 +2,8 @@
 
 Work-list key `he-nhle-certificates-of-immunity-polygons`. 222 polygons, the
 outlines of the certificates the points layer marks. This is the layer that is
-stored and shown. The id is built as the points layer's is, from the list
-entry and the grid reference.
+stored and shown. The id is built as the points layer's is: the list entry,
+with the grid reference added for an entry that occurs more than once.
 """
 
 from __future__ import annotations
