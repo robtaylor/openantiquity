@@ -86,6 +86,9 @@ TRUSTED_AT = 50.0
 KNOWN_RECORD = "known_record"
 OBSERVATION_CORROBORATED = "observation_corroborated"
 OBSERVATION_RULED_OUT = "observation_ruled_out"
+# The reasons that pay for an answer that matched the outcome, and so show how
+# someone answered (Decision 0008). Nobody else may see them itemised.
+ANSWER_REASONS: frozenset[str] = frozenset({OBSERVATION_CORROBORATED, OBSERVATION_RULED_OUT})
 
 
 def tier_reason(tier: Tier) -> str:
