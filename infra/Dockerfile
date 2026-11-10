@@ -87,7 +87,10 @@ COPY --chown=root:root infra/jobs /app/jobs
 # Paths are explicit because the package is installed into site-packages, so
 # the settings' repository-relative defaults would point inside the virtualenv.
 # Everything the process writes goes under /tmp, which on Cloud Run is memory:
-# nothing written there needs to outlive the instance.
+# nothing written there needs to outlive the instance. GDAL reads gs:// with
+# the identity Cloud Run lends the container only if it believes it is on
+# Google's machines, which it can't tell from inside a container, hence
+# CPL_MACHINE_IS_GCE.
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -98,6 +101,7 @@ ENV PATH=/app/.venv/bin:$PATH \
     FIELDCLUB_TERRAIN_SOURCE_DIR= \
     FIELDCLUB_ENV_FILE= \
     GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR \
+    CPL_MACHINE_IS_GCE=YES \
     GDAL_HTTP_MAX_RETRY=3 \
     GDAL_HTTP_RETRY_DELAY=1
 

@@ -13,21 +13,27 @@ locals {
     "national-build"  = "Field Club national overview"
   }
 
-  # Bucket roles by workload. objectUser reads, writes and lists objects;
-  # objectViewer only reads and lists.
+  # Bucket roles by workload. objectUser reads, writes, replaces, deletes and
+  # lists objects; objectViewer only reads and lists; objectCreator only adds
+  # objects that don't exist yet. Nothing may delete or replace a mirror file:
+  # the mirror's writers get objectViewer plus objectCreator, and the national
+  # build may change only the national overview's folder, where it also keeps
+  # the download and its temporary copy.
   bucket_access = merge(
     {
-      "service/cache"       = { workload = "service", bucket = "cache", role = "roles/storage.objectUser" }
-      "service/photos"      = { workload = "service", bucket = "photos", role = "roles/storage.objectUser" }
-      "ingest/cache"        = { workload = "ingest", bucket = "cache", role = "roles/storage.objectUser" }
-      "elevation-copy/elev" = { workload = "elevation-copy", bucket = "elevation", role = "roles/storage.objectUser" }
-      "national-build/elev" = { workload = "national-build", bucket = "elevation", role = "roles/storage.objectUser" }
+      "service/cache"                = { workload = "service", bucket = "cache", role = "roles/storage.objectUser" }
+      "service/photos"               = { workload = "service", bucket = "photos", role = "roles/storage.objectUser" }
+      "ingest/cache"                 = { workload = "ingest", bucket = "cache", role = "roles/storage.objectUser" }
+      "service/elev-read"            = { workload = "service", bucket = "elevation", role = "roles/storage.objectViewer" }
+      "elevation-copy/elev-read"     = { workload = "elevation-copy", bucket = "elevation", role = "roles/storage.objectViewer" }
+      "elevation-copy/elev-add"      = { workload = "elevation-copy", bucket = "elevation", role = "roles/storage.objectCreator" }
+      "national-build/elev-read"     = { workload = "national-build", bucket = "elevation", role = "roles/storage.objectViewer" }
+      "national-build/elev-national" = { workload = "national-build", bucket = "elevation", role = "roles/storage.objectUser", only = "${dirname(local.national_object)}/" }
     },
-    # The service writes to the mirror only when it may fetch a missing tile.
-    { "service/elev" = {
-      workload = "service", bucket = "elevation",
-      role     = var.service_fetches_elevation ? "roles/storage.objectUser" : "roles/storage.objectViewer"
-    } },
+    # The service adds to the mirror only while it may fetch a missing tile.
+    var.service_fetches_elevation ? {
+      "service/elev-add" = { workload = "service", bucket = "elevation", role = "roles/storage.objectCreator" }
+    } : {},
   )
   buckets = {
     elevation = google_storage_bucket.elevation.name
@@ -60,6 +66,15 @@ resource "google_storage_bucket_iam_member" "workload" {
   bucket = local.buckets[each.value.bucket]
   role   = each.value.role
   member = google_service_account.workload[each.value.workload].member
+
+  # A grant limited to the objects whose names start with `only`.
+  dynamic "condition" {
+    for_each = try(each.value.only, "") == "" ? [] : [each.value.only]
+    content {
+      title      = "only ${condition.value}"
+      expression = "resource.name.startsWith(\"projects/_/buckets/${local.buckets[each.value.bucket]}/objects/${condition.value}\")"
+    }
+  }
 }
 
 # Cloud Scheduler starts the recurring jobs as this account, which may only

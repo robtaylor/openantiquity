@@ -25,6 +25,11 @@ resource "google_sql_database_instance" "main" {
     tier              = var.db_tier
     availability_type = "ZONAL"
 
+    # Google's own guard against deleting the instance, on top of Terraform's.
+    deletion_protection_enabled = var.db_deletion_protection
+    # Deleting the instance would otherwise take its backups with it.
+    retain_backups_on_delete = true
+
     disk_type             = "PD_SSD"
     disk_size             = var.db_disk_gb
     disk_autoresize       = true
@@ -57,6 +62,12 @@ resource "google_sql_database_instance" "main" {
 
     insights_config {
       query_insights_enabled = false
+    }
+
+    # One last backup taken as the instance is deleted, kept for a month.
+    final_backup_config {
+      enabled        = true
+      retention_days = 30
     }
   }
 

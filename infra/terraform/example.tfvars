@@ -5,8 +5,8 @@
 project_id      = "your-project-id"
 billing_account = "000000-000000-000000"
 
-# false for the first apply; true once an image is pushed and the database URL
-# and session key secrets have values.
+# false for the first apply; true once an image is pushed and the database URL,
+# session key and four defra-sftp-* secrets have values (infra/README.md, step 6).
 run_workloads = false
 image_tag     = "latest"
 
@@ -25,14 +25,17 @@ mail = {
   from     = "Field Club <signin@example.org>"
 }
 
+# currency must be the billing account's own.
 budget = {
   amount   = 40
   currency = "GBP"
   emails   = []
 }
 
-# owner/name of the GitHub repository that may push images and run plans.
-github_repository = ""
+# owner/name of the GitHub repository that may push images and run plans, and
+# its numeric id (gh api repos/<owner>/<name> --jq .id). Set both in step 12.
+github_repository    = ""
+github_repository_id = ""
 
 # national_built = true once the national overview job has written its file.
 # service_fetches_elevation = false once the whole-country copy has finished.

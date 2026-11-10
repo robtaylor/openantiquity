@@ -5,6 +5,9 @@
 # A secret is passed to a workload only when it is in use, because Cloud Run
 # refuses to deploy a revision that names a secret with no version. So a
 # sign-in provider's secret is wired once its client id is set, and so on.
+# The database URL, the session key, the four defra-sftp-* secrets and every
+# extra_secrets entry are always wired, so each needs a version before the
+# apply with run_workloads = true (infra/README.md, step 4).
 
 locals {
   all_workloads = ["service", "schema", "ingest", "scan-channels", "refresh-sources", "elevation-copy", "national-build"]

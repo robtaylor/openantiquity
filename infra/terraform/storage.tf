@@ -11,11 +11,14 @@ resource "google_storage_bucket" "elevation" {
   public_access_prevention    = "enforced"
   force_destroy               = false
 
-  # Every file can be made again from Defra's supply, so deleted objects
-  # aren't kept: at about 177 GB a week of soft-deleted copies would cost as
-  # much as the mirror.
-  soft_delete_policy {
-    retention_duration_seconds = 0
+  # About 177 GB and eight hours of copying from a supply Defra may not keep
+  # offering, so the mirror is guarded three ways. Terraform refuses to
+  # destroy the bucket. No workload may delete or replace a mirror file
+  # (iam.tf). And the default soft delete keeps anything deleted by hand for
+  # seven days. It costs nothing until something is deleted, and mirror files
+  # never are.
+  lifecycle {
+    prevent_destroy = true
   }
 
   depends_on = [google_project_service.enabled]

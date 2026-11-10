@@ -26,11 +26,11 @@ export P=<field-club-project-id>
 
 - **Cloud Run service `fieldclub`** serves the API, the tiles and the built frontend from one image. It scales to zero.
 - **Cloud Run jobs** run the same image with another command: `fieldclub-schema`, `fieldclub-ingest`, `fieldclub-scan-channels`, `fieldclub-refresh-sources`, `fieldclub-elevation-copy` and `fieldclub-national-build`.
-- **Cloud Scheduler** starts the channel scan every six hours and the source refresh every night, and any ingest listed in `ingest_schedules`.
+- **Cloud Scheduler** starts any ingest listed in `ingest_schedules`. The channel scan and the source refresh are left unscheduled until the image has their `fieldclub-jobs` command; then set `schedules` (its description gives the intended times).
 - **Cloud SQL** for PostgreSQL 17, Enterprise edition, `db-g1-small`, 20 GB SSD that grows by itself, seven daily backups.
-- **Three private buckets**: `<project>-elevation` (the mirror), `<project>-cache` (rendered tiles, cached elevation and ingest downloads, with deletion rules) and `<project>-photos` (uploads, kept).
+- **Three private buckets**: `<project>-elevation` (the mirror), `<project>-cache` (rendered tiles, cached elevation and ingest downloads, with deletion rules) and `<project>-photos` (uploads, kept). Terraform refuses to destroy the elevation bucket (`prevent_destroy`), no workload may delete or replace a file in the mirror, and anything deleted by hand is kept for seven days by soft delete. Tearing the project down means removing the `prevent_destroy` line first.
 - **Secret Manager** holds twelve secrets, all created empty.
-- **One service account per workload**, a scheduler account, and a deployer account that GitHub reaches through workload identity federation.
+- **One service account per workload**, a scheduler account, and a deployer account that GitHub's `deploy.yml` reaches through workload identity federation.
 - **Artifact Registry** repository `fieldclub`, keeping the five newest images and anything younger than 30 days.
 - **A monthly budget alert**, by default £40.
 
@@ -40,17 +40,27 @@ The database is reachable only by the service and the jobs. It has a public addr
 
 Each step says where its values come from. Steps 1 to 3 need the owner's own Google account with Owner on the project and Billing Account Administrator, or Billing Account User plus budget permissions, on the billing account.
 
+Steps 2 and 5 run from the repository root. Step 3 moves into `infra/terraform`, and the Terraform and gcloud commands of the other steps run from there. Step 4 reads a file kept only in the main checkout, so also set `MAIN` to that checkout's absolute path:
+
+```
+export MAIN=<absolute path of the main checkout>
+```
+
 ### 1. Make the project and turn on billing
 
 Create a project in the console. Note its id, then link it to a billing account under Billing, Account management, and note the billing account id, which looks like `012345-6789AB-CDEF01`. Record both in the deployment workstream of `docs/plans/v1-england.md`, as WS2 of `docs/plans/owner-actions.md` asks.
 
-### 2. Make the state bucket
+### 2. Sign in and make the state bucket
+
+gcloud needs the owner signed in, and Terraform's state backend and Google provider need application default credentials as well:
 
 ```
+gcloud auth login
+gcloud auth application-default login
 bash infra/bootstrap.sh "$P"
 ```
 
-It checks the project and its billing, enables the three APIs Terraform needs to begin, and makes `gs://$P-tfstate` with versioning. It is safe to run again.
+It checks the project and its billing, enables the three APIs Terraform needs to begin, and makes `gs://$P-tfstate` with versioning. It is safe to run again. A second argument puts the bucket in another region than `europe-west2`; keep it the same as `region` in `terraform.tfvars`.
 
 ### 3. First apply: everything except the workloads
 
@@ -61,7 +71,11 @@ terraform init -backend-config="bucket=$P-tfstate"
 terraform apply
 ```
 
-With `run_workloads = false` this makes the registry, buckets, database, empty secrets, service accounts, federation and budget. It takes about ten minutes, most of it the database.
+With `run_workloads = false` this makes the registry, buckets, database, empty secrets, service accounts and budget. It takes about ten minutes, most of it the database.
+
+Leave `github_repository` empty for now: the federation is set up in step 12. `budget.currency` must be the billing account's own currency, shown on its overview page, or the budget is refused.
+
+This apply turns on the APIs it then uses at once, and Google takes a minute or two to make a newly enabled API usable. If it stops with an error saying an API is not enabled or has not been used in the project, wait a few minutes and run `terraform apply` again. It carries on from where it stopped.
 
 ### 4. Make the database login and add each secret
 
@@ -93,8 +107,8 @@ printf '%s' "$VALUE" | gcloud secrets versions add fieldclub-<id> --project="$P"
 |---|---|---|
 | `database-url` | Built above | Always |
 | `secret-key` | Generated above | Always |
-| `defra-sftp-host`, `defra-sftp-user`, `defra-sftp-password` | Defra's email under ticket DSP3-11967, also in the untracked `.env` as `DEFRA_SFTP_*` | For the elevation copy, and for the service while `service_fetches_elevation` is true |
-| `defra-sftp-known-hosts` | The pinned host key, `var/defra_known_hosts` in the main checkout: `--data-file=var/defra_known_hosts` | With the three above |
+| `defra-sftp-host`, `defra-sftp-user`, `defra-sftp-password` | Defra's email under ticket DSP3-11967, also in the untracked `.env` as `DEFRA_SFTP_*` | Always, before step 6: the elevation copy job is always given them |
+| `defra-sftp-known-hosts` | The pinned host key, `var/defra_known_hosts` in the main checkout: `--data-file="$MAIN/var/defra_known_hosts"` | Always, with the three above |
 | `google-client-secret` | Google Cloud console, APIs & Services, Credentials, the OAuth client of type Web application | When `google_client_id` is set |
 | `microsoft-client-secret` | Microsoft Entra admin centre, App registrations, Certificates & secrets | When `microsoft_client_id` is set |
 | `apple-private-key` | Apple Developer, Keys, the Sign in with Apple key's `.p8` file: `--data-file=AuthKey_XXXX.p8` | When the three Apple ids are set |
@@ -104,22 +118,36 @@ printf '%s' "$VALUE" | gcloud secrets versions add fieldclub-<id> --project="$P"
 
 Register each sign-in provider with the redirect address `<public_url>/api/v1/auth/oauth/<provider>/callback`, where `<provider>` is `google`, `microsoft`, `apple`, `facebook` or `osm`. `terraform output public_url` gives the address. OpenStreetMap only accepts https, which the run.app address is.
 
+Each secret named in `extra_secrets` needs a value before step 6 too.
+
 A provider is offered only when its id is in `terraform.tfvars` and its secret has a value. Add the secret first, then the id, then apply. Cloud Run refuses to deploy a revision that names a secret with no version, so Terraform only wires a secret once its provider is configured.
 
 ### 5. Push the first image
 
-Either run the "Build and plan" workflow (see [A deploy](#a-deploy)) once the repository variables are set, or push from a machine with Docker:
+From a machine with Docker, at the repository root (`cd "$(git rev-parse --show-toplevel)"`). The deploy workflow can't do this yet, because its federation comes in step 12.
 
 ```
-gcloud auth configure-docker europe-west2-docker.pkg.dev
+repository=$(terraform -chdir=infra/terraform output -raw image_repository)
+gcloud auth configure-docker "${repository%%/*}"
 tag=$(git rev-parse --short=12 HEAD)
 docker buildx build -f infra/Dockerfile --platform linux/amd64 \
-  -t "europe-west2-docker.pkg.dev/$P/fieldclub/fieldclub:$tag" --push .
+  -t "$repository:$tag" --push .
 ```
 
 ### 6. Second apply: the service and jobs
 
-Set `run_workloads = true` and `image_tag` to the tag just pushed, then `terraform apply`. The service starts on `terraform output service_url`.
+First check that every secret Cloud Run will be given has a value: the database URL, the session key, all four `defra-sftp-*` secrets and any in `extra_secrets`. Cloud Run refuses a revision that names a secret with no version, and the apply fails part-way. This lists the secrets still empty:
+
+```
+for secret in $(terraform output -json secrets | python3 -c 'import json,sys; print(*json.load(sys.stdin))'); do
+  gcloud secrets versions list "$secret" --project="$P" --filter=state:ENABLED --limit=1 \
+    --format='value(name)' | grep -q . || echo "$secret"
+done
+```
+
+A provider's or the mail relay's secret may stay empty while its id is unset. Then set `run_workloads = true` and `image_tag` to the tag just pushed, and `terraform apply`. The service starts on `terraform output service_url`.
+
+The service is public from this moment, but the tables don't exist until step 7, so until then the API answers with errors. Nobody has the address yet; run step 7 straight away.
 
 ### 7. Create the schema
 
@@ -137,13 +165,15 @@ gcloud run jobs execute fieldclub-elevation-copy --region=europe-west2 --project
 
 The job splits the 5,877 tiles into four shares of 88.4 GB each, by size, and runs two shares at a time, one SFTP connection each. At the 8 MB/s per connection measured on 2026-11-10 a share takes about 3.1 hours to download and 0.8 hours to convert, so the copy takes about eight hours. See [The elevation copy](#the-elevation-copy) for why it runs like this.
 
+While `service_fetches_elevation` is true, every service instance can open a connection of its own for a tile someone is looking at, so Defra may see the job's two plus up to `service_max_instances` more. Instances don't share their tile locks, so two of them can fetch the same tile at once; the second upload is then dropped. To keep Defra at two connections during the copy, set `service_fetches_elevation = false` and apply before starting the job, and set it back afterwards if the copy is incomplete.
+
 Progress is the number of files in the mirror:
 
 ```
 gcloud storage ls "gs://$P-elevation/england/mirror/" | wc -l
 ```
 
-A task that fails is retried twice. Running the job again fetches only what is still missing. When all 5,877 are there, set `service_fetches_elevation = false` and apply, so the service no longer holds Defra's credentials.
+A task that fails is retried twice. A task stops at once if Defra refuses the login or shows a host key other than the pinned one, and after five tiles fail in a row, so a broken supply costs a handful of attempts rather than one per tile. Running the job again fetches only what is still missing. When all 5,877 are there, set `service_fetches_elevation = false` and apply, so the service no longer holds Defra's credentials.
 
 ### 9. Build the national overview
 
@@ -174,7 +204,7 @@ Until a domain is needed, the run.app address is stable and on https, and every 
 
 ### 12. Set up the deploy workflow
 
-`terraform apply` with `github_repository = "<owner>/<name>"` makes the federation. Then, in the repository's Settings, Secrets and variables, Actions, Variables, set:
+Set `github_repository = "<owner>/<name>"` and `github_repository_id` to the number `gh api repos/<owner>/<name> --jq .id` prints, then `terraform apply` to make the federation. It trusts only `deploy.yml` started by hand on `main` in the repository with that id, so another workflow, another branch, or a new repository given the same name later gets nothing. Then, in the repository's Settings, Secrets and variables, Actions, Variables, set:
 
 | Variable | Value |
 |---|---|
@@ -185,15 +215,17 @@ Until a domain is needed, the run.app address is stable and on https, and every 
 
 The plan reads the budget, which lives on the billing account, not the project. Grant the deployer Billing Account Viewer on the billing account in the console, or the plan stops there.
 
+The deployer can read the Terraform state but not write it, so the workflow plans with `-lock=false`. A plan run while the owner is applying may show a state that is about to change; plan again afterwards.
+
 ## A deploy
 
 1. Merge to `main`. CI runs both check suites, the docs lint, the Terraform checks and an image build.
-2. In GitHub, Actions, "Build and plan", run the workflow on `main`. It pushes the image tagged with the commit and writes the plan to the run's summary.
-3. Read the plan. A deploy that changes only code shows the service and each job moving to the new image and nothing else.
+2. In GitHub, Actions, "Build and plan", run the workflow on `main`. It pushes the image tagged with the commit and lists in the run's summary which resources the plan would change, without their values: if the repository is public, anyone can read a run's summary and log.
+3. Read the list. A deploy that changes only code shows the service and each job being updated and nothing else. `terraform apply` in step 4 prints the whole plan before it asks to go ahead.
 4. Put the commit in `image_tag` in `terraform.tfvars` (and in the `TFVARS` variable), then from `infra/terraform` run `terraform apply`.
 5. If the models gained a table, run the schema job (step 7).
 
-Cloud Run starts the new revision, waits for `/healthz` to answer, then moves all traffic to it. The old revision stops taking requests and finishes what it holds within ten seconds.
+Cloud Run starts the new revision, waits for `/healthz` to answer, then moves all traffic to it. New requests go to the new revision. Requests already open on the old one, such as event streams, are not cut off when traffic moves: they run on until they end or reach the 600 s request timeout, which wasn't checked on a real project. When Cloud Run stops an old instance it sends SIGTERM and kills the process ten seconds later; the server closes whatever it still holds after five seconds (`GRACEFUL_SHUTDOWN_SECONDS` in `fieldclub.main`), so it stops before it is killed. Until the old instances stop, they still hold their database connections (see [Sizing](#sizing)).
 
 ## Rolling back
 
@@ -247,9 +279,11 @@ One vCPU renders about 8 new tiles a second at best, so a fresh screen of 12 to 
 
 Concurrency is 20, not 4, because most requests wait rather than compute: cached tiles, JSON, and open event streams that each take a slot. At 4, three open streams would leave one slot and force a new instance for every visitor. Cloud Run also adds instances when CPU passes 60%, so a burst of renders spreads out anyway.
 
+That sets a ceiling. Three instances of 20 slots are 60 requests at once, and each open tab holds one slot with its event stream, so about 60 open tabs fill the service and further requests wait or are refused. Raise `service_max_instances` or `service_concurrency` before that, minding the database connections below.
+
 1 GiB holds the 370 MiB measured plus a source tile fetched from Defra while the copy is incomplete. A fetch stages up to 90 MB on the in-memory disk and its 1.8 s conversion peaked at 236 MiB.
 
-Three instances at most caps cost and connections: each instance holds up to 8 database connections, so 24 at most, inside the 50 that `db-g1-small` allows with room for the jobs at 4 each.
+Three instances at most caps cost and connections: each instance holds up to 8 database connections, so 24 at most, inside the 50 that `db-g1-small` allows. The four jobs that use the database hold up to 4 each, 16 more, so 40 with everything busy. During a deploy the old revision's instances keep their connections until they stop, so for a short while the service can hold up to 48 and, with the jobs, pass 50. A connection refused then is an error for that request. Avoid starting jobs during a deploy, or move up a tier before raising `service_max_instances`.
 
 Startup took 2.1 s to the first `/healthz` answer natively on arm64, and 5.6 s for the amd64 image under emulation on the same machine. Cloud Run adds the image fetch, about 280 MB compressed, and startup CPU boost is on. Expect a cold start of several seconds; with scale to zero, the first visitor after a quiet spell waits for it.
 
@@ -269,12 +303,12 @@ The copy has 5,877 files, 353.6 GB, from one SFTP server that Defra offered free
 
 It runs as a Cloud Run job with four tasks, two at a time, rather than on a temporary machine:
 
-- **It is polite by construction.** Each task holds one connection, so the job's parallelism is the number of connections Defra sees: 2, which can be lowered to 1 or raised in `elevation_copy`.
+- **It is polite by construction.** Each task holds one connection, so the job's parallelism is the number of connections the job opens: 2, which can be lowered to 1 or raised in `elevation_copy`. The service adds its own while it fetches missing tiles (step 8). A read that hears nothing for 60 seconds gives up, a failed attempt waits 2 seconds before the next, doubling each time up to a minute, and a refused login or a run of five failed tiles stops the task.
 - **It resumes.** A tile already in the mirror is skipped, so a failed task, or the whole job run again, fetches only what is missing.
 - **Nothing to forget.** A machine has to be made, given credentials on its disk, watched and deleted. The job uses the same image, identity and secrets as everything else, and stops costing when it ends.
 - **It is cheap.** Converting a tile took 1.8 s and peaked at 236 MiB, so the work is waiting on the network. Four tasks of about four hours at 1 vCPU and 2 GiB come to about 58,000 vCPU-seconds, inside the jobs free tier of 240,000 a month, and $1.27 at the published rate beyond it.
 
-A task may run for up to eight hours (`elevation_copy.timeout`), double what one should need. Cloud Run allows up to 168.
+A task may run for up to five hours (`elevation_copy.timeout`), an hour more than one should need, so a task that stalls is stopped then and retried. Cloud Run allows up to 168.
 
 The converted mirror is about half the source: SU16nw went from 48 MB to 24 MB. The bucket ends at about 177 GB.
 
@@ -295,23 +329,25 @@ Assumptions for light use: 50 visits a day of ten minutes each, 300 tile request
 | Item | Price used | At rest | Light use |
 |---|---|---|---|
 | Cloud SQL `db-g1-small` | $0.035 an hour | $25.55 | $25.55 |
-| Cloud SQL SSD, 20 GB | $0.17 a GB-month | $3.40 | $3.40 |
-| Cloud SQL backups, about 15 GB | $0.08 a GB-month | $1.20 | $1.20 |
+| Cloud SQL SSD, 30 to 70 GB once the records are in | $0.17 a GB-month | $5.10 to $11.90 | $5.10 to $11.90 |
+| Cloud SQL backups, about 20 to 50 GB | $0.08 a GB-month | $1.60 to $4.00 | $1.60 to $4.00 |
 | Elevation mirror, 177 GB | $0.020 a GB-month | $3.54 | $3.54 |
 | Tile cache and photos, 6 GB | $0.020 a GB-month | $0.12 | $0.12 |
 | Artifact Registry, 1.4 GB, 0.5 GB free | $0.10 a GB-month | $0.09 | $0.09 |
 | Secret Manager, 12 versions, 6 free | $0.06 a version-month | $0.36 | $0.36 |
-| Cloud Scheduler, 2 jobs, 3 free | $0.10 a job-month | $0 | $0 |
+| Cloud Scheduler, up to 3 jobs, 3 free | $0.10 a job-month | $0 | $0 |
 | Cloud Run jobs, scan and refresh | Inside the free tier | $0 | $0 |
-| Cloud Run service, 900,000 s of instance time | $0.000024 a vCPU-s, $0.0000025 a GiB-s, after the free tier | $0 | $18.63 |
+| Cloud Run service, 900,000 s of instance time | $0.000024 a vCPU-s, $0.0000025 a GiB-s, after the free tier | $0 | $18.63 at least |
 | Cloud Run requests, 450,000 | 2 million free | $0 | $0 |
 | Internet egress, 68 GB | $0.12 a GB | $0 | $8.10 |
 | Storage operations, 225,000 writes and about 2.5 million reads | $0.005 and $0.0004 a thousand | $0 | $2.13 |
 | Budget alert | Free | $0 | $0 |
-| **Total** | | **about $34** | **about $63** |
+| **Total** | | **about $36 to $46** | **about $65 to $75** |
 | With the CDN module on | $0.025 an hour plus $0.008 a GB | +$18.25 | +$19.35 |
 
-The light-use Cloud Run line depends almost entirely on the event stream. Without it, the same visits keep an instance busy for about 45,000 s a month, inside the free tier, and light use comes to about $44. The web client closing the stream while its tab is hidden is the cheapest saving available.
+The disk starts at 20 GB but grows by itself as the records arrive and never shrinks, so it is priced at the 30 to 70 GB the ten million records are expected to need (see [The database](#the-database-db-g1-small)). The Cloud Run line is Iowa's Tier 1 rate less a free tier that is itself counted at Tier 1 rates, so in London, Tier 2, it can only be higher.
+
+The light-use Cloud Run line depends almost entirely on the event stream. Without it, the same visits keep an instance busy for about 45,000 s a month, inside the free tier, and light use comes to about $46 to $55. The web client closing the stream while its tab is hidden is the cheapest saving available.
 
 What these figures leave out, because it couldn't be priced from the pages read:
 
@@ -326,7 +362,8 @@ What these figures leave out, because it couldn't be priced from the pages read:
 
 - That the first apply succeeds, including the budget, which needs permissions on the billing account.
 - That `terraform plan` from the deploy workflow succeeds through federation, with the deployer's read-only roles.
-- That GDAL reads `gs://` through `/vsigs/` with the service account Cloud Run lends it, with no key file.
+- That GDAL reads `gs://` through `/vsigs/` with the service account Cloud Run lends it, with no key file. The image sets `CPL_MACHINE_IS_GCE=YES` so that GDAL asks the metadata server for it, as GDAL's documentation says a container must.
+- That an upload with `if_generation_match=0` from an account holding only `objectCreator` is answered with a failed precondition, or a refusal, when the tile is already there. The mirror accepts either.
 - That the Cloud SQL connector, the unix socket at `/cloudsql` and `connector_enforcement = REQUIRED` work together, and that the `fieldclub` login may create the PostGIS, pg_trgm and citext extensions.
 - That the Cloud Storage volumes mount for the ingest and national jobs, and that the ingest downloader's partial files and renames behave on them.
 - The cold start on Cloud Run, and real tile latency with the mirror in a bucket.

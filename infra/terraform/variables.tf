@@ -14,6 +14,8 @@ variable "project_id" {
 variable "billing_account" {
   description = "The billing account id (XXXXXX-XXXXXX-XXXXXX) the budget alert watches."
   type        = string
+  # Kept out of plans, which the deploy workflow runs where others may read them.
+  sensitive = true
 
   validation {
     condition     = can(regex("^[0-9A-F]{6}-[0-9A-F]{6}-[0-9A-F]{6}$", var.billing_account))
@@ -39,9 +41,10 @@ variable "run_workloads" {
   description = <<-EOT
     Create the Cloud Run service, jobs and schedules. Leave false for the first
     apply, which makes the registry, buckets, database and empty secrets. Set it
-    true once an image is in the registry and the database URL and session key
-    secrets have values: Cloud Run refuses to deploy a revision that names a
-    secret with no version.
+    true once an image is in the registry and these secrets have values: the
+    database URL, the session key, all four defra-sftp-* secrets (the elevation
+    copy always uses them) and every extra_secrets entry. Cloud Run refuses to
+    deploy a revision that names a secret with no version.
   EOT
   type        = bool
   default     = false
@@ -86,7 +89,14 @@ variable "service_concurrency" {
 }
 
 variable "service_max_instances" {
-  description = "The most instances the service may run. Caps cost and database connections."
+  description = <<-EOT
+    The most instances the service may run. Caps cost and database connections:
+    each instance holds up to 8, and during a deploy the old revision's
+    instances still hold theirs. Each instance takes service_concurrency
+    requests, and every open tab's event stream holds one. While
+    service_fetches_elevation is true each instance may also open its own
+    connection to Defra. See infra/README.md, Sizing.
+  EOT
   type        = number
   default     = 3
 }
@@ -215,22 +225,33 @@ variable "elevation_copy" {
   type = object({
     tasks       = optional(number, 4)
     parallelism = optional(number, 2)
-    timeout     = optional(string, "28800s")
+    # A share should take about four hours. A stalled task gives up here.
+    timeout = optional(string, "18000s")
   })
   default = {}
 }
 
 variable "national_build_args" {
-  description = "Arguments to fieldclub-terrain that build the national overview into the elevation bucket."
+  description = <<-EOT
+    Arguments to fieldclub-terrain that build the national overview into the
+    elevation bucket. The job is only ever started by hand. The default names a
+    subcommand the terrain track has still to add: check `fieldclub-terrain
+    --help` in the image before running it.
+  EOT
   type        = list(string)
   default     = ["national", "build"]
 }
 
 variable "schedules" {
-  description = "Cron schedules (Europe/London) for the recurring jobs. An empty string leaves a job unscheduled."
+  description = <<-EOT
+    Cron schedules (Europe/London) for the recurring jobs. An empty string
+    leaves a job unscheduled, which is the default: both run `fieldclub-jobs`,
+    which the image doesn't have yet. Once it does, "15 */6 * * *" for the
+    channel scan and "30 4 * * *" for the source refresh.
+  EOT
   type = object({
-    scan_channels   = optional(string, "15 */6 * * *")
-    refresh_sources = optional(string, "30 4 * * *")
+    scan_channels   = optional(string, "")
+    refresh_sources = optional(string, "")
   })
   default = {}
 }
@@ -261,6 +282,21 @@ variable "github_repository" {
   description = "owner/name of the GitHub repository whose deploy workflow may push images and plan. Empty makes no federation."
   type        = string
   default     = ""
+}
+
+variable "github_repository_id" {
+  description = <<-EOT
+    The repository's numeric id, from `gh api repos/<owner>/<name> --jq .id`.
+    A name can be given up and registered again by someone else; the id can't.
+    Required with github_repository.
+  EOT
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.github_repository_id == "" || can(regex("^[0-9]+$", var.github_repository_id))
+    error_message = "A repository id is a number."
+  }
 }
 
 variable "cdn" {
