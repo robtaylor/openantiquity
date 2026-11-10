@@ -6,10 +6,11 @@ Britain, transcribed by volunteers: 2,552,459 labels in one UTF-16 CSV inside
 a 146 MB zip, a snapshot of July 2018 under CC BY-SA 4.0.
 
 Only the labels that name an antiquity are stored, as `map_label` records:
-45,124 of them, such as "Tumulus", "Moat", "Camp", "Intrenchment", "Hut
-Circles", "ROMAN ROAD (Site of)" and "Urn found". The rest are footpaths,
-wells, boundary stones, farms, field names and the other furniture of the
-map, which the map label layer ("Antiquities on old maps") is not for. The
+46,468 of them, such as "Tumulus", "Moat", "Camp", "Intrenchment", "Hut
+Circles", "ROMAN ROAD (Site of)", "Urn found", "Stone Cross" and "Holy
+Well". The rest are footpaths, ordinary wells, boundary stones, farms, field
+names, public houses and the other furniture of the map, which the map label
+layer ("Antiquities on old maps") is not for. The
 labels for quarries, shafts, pits, levels, kilns and mines (about 114,000)
 are left out too: they are the 1900 map's record of industry, not of
 antiquities, and would outnumber the antiquities in the layer more than two
@@ -89,34 +90,56 @@ _ANTIQUITY_WORDS = (
     r"tumul[iu]s?|tuml|barrows?|cairns?|camps?|forts?|earthworks?|[ei]ntrenchments?|moat(?:ed)?|mounds?"
     r"|mottes?|standing stones?|stone circles?|circle of stones|stone rows?|cromlechs?|dolmens?|menhirs?"
     r"|hut circles?|enclosures?|dykes?|dikes?|wansdyke|wansdike|ramparts?|lynchets?|cists?|kists?|kistvaens?"
-    r"|brochs?|duns?|crannogs?|raths?|henges?|long ?stones?|cup and ring|tesserae|roman|british|saxon|danish"
+    r"|brochs?|crannogs?|raths?|henges?|long ?stones?|cup and ring|tesserae|roman|british|saxon|danish"
     r"|druid(?:s|ical)?|celtic|pictish|picts'?|site of|sites of|remains of|ruins?|found|supposed"
     r"|castle|castell|tomen|chambered|battle|urns?|coins?|sculptured stones?|inscribed stones?|ancient"
     r"|settlement|fosse|vallum|earth ?houses?|erd houses?|souterrains?|grim'?s (?:ditch|dyke|dike)"
+    r"|(?:stone|standing|market|high|preaching) cross(?:es)?|cross (?:base|shaft)s?"
+    r"|(?:base|shaft|pedestal|socket) of (?:a |the |old |stone )?cross"
+    r"|holy wells?|(?:our )?lady'?s? wells?|(?:st\.?|saint) [^\W\d_][^()]*?wells?|(?<=\()dun"
 )
 _ANTIQUITY = re.compile(rf"\b(?:{_ANTIQUITY_WORDS})\b", re.IGNORECASE)
+# Labels that name an antiquity only as the whole label. A plain "Cross"
+# marks a standing cross, where "Cross Hands" is a village. A "Dun" alone,
+# or followed by a Gaelic name as in "Dun Telve", marks a fort, where
+# "Dun Moss", "Dun Law" and "Duns" (a town) do not.
+_NOT_GAELIC = (
+    r"moss|law|cow'?s?|knowe|rig|muir|stone|cleuch|grain|brae|mount|horse|fields?|knees|side|head|fell"
+)
+_WHOLE_LABEL = re.compile(
+    rf"\s*(?:cross(?:es)?|(?:the )?dun(?:\s+(?!(?:{_NOT_GAELIC})\b)[^\W\d_].*)?)\s*", re.IGNORECASE
+)
 # A label that ends with one of these names a building, a road, a farm or a
 # hill called after an antiquity: "Moat Farm", "Castle Street", "Camp Hill".
 _NAMED_AFTER = re.compile(
     r"\b(?:farm|fm|cottages?|cotts?|inn|hotel|house|ho|lodge|lane|road|rd|street|st|terrace|hall|school|schs?"
     r"|mill|bridge|station|sta|arms|place|avenue|gardens?|crescent|plantation|covert|wood|copse|cemetery"
     r"|works?|quarry|pit|church|chapel|chap|grange|park|green|common|hill|hills|down|moor|view|mains|villa"
-    r"|villas|railway|canal|bay|point|rocks?|islands?|isle|burn|loch|brook|river|pool)\.?\s*$",
+    r"|villas|railway|canal|bay|point|rocks?|islands?|isle|burn|loch|brook|river|pool|barn)\.?\s*$",
     re.IGNORECASE,
 )
 # Kept whatever they end with: these say the label marks an antiquity.
 _MARKS_ANTIQUITY = re.compile(
     r"\b(?:site of|sites of|remains of|ruins? of|found|roman|ancient|track of|stone rows?)\b", re.IGNORECASE
 )
-# Never antiquities, whatever else they say.
+# Never antiquities, whatever else they say: railways and their initials
+# ("N. B. R.", "L. & N. W. R."), and public and beer houses ("P. H.", "B. H.").
 _NOT_ANTIQUITY = re.compile(
-    r"\b(?:railway|burial ground|burial gd|furness|homestead|dyke row|flood dyke)\b", re.IGNORECASE
+    r"\b(?:railway|burial ground|burial gd|furness|homestead|dyke row|flood dyke)\b"
+    r"|\b[pb]\.\s*h\.|(?:\b[a-z]\.\s*(?:&\s*)?){1,4}r\.(?!\w)",
+    re.IGNORECASE,
 )
+# "Roman Catholic" and "R. C." say nothing about age, so they are read as
+# if absent: "R. C. Chapel" is left out, "R. C. Chapel (In Ruins)" is kept.
+_CATHOLIC = re.compile(r"\broman catholic\b|\br\.\s*c\.", re.IGNORECASE)
 
 
 def is_antiquity(text: str) -> bool:
     """Whether a label on the six-inch map names an antiquity."""
-    if not _ANTIQUITY.search(text) or _NOT_ANTIQUITY.search(text):
+    text = _CATHOLIC.sub(" ", text)
+    if _NOT_ANTIQUITY.search(text):
+        return False
+    if not (_WHOLE_LABEL.fullmatch(text) or _ANTIQUITY.search(text)):
         return False
     return bool(_MARKS_ANTIQUITY.search(text)) or not _NAMED_AFTER.search(text)
 
