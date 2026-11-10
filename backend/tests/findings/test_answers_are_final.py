@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fieldclub.models import Activity, Notification, User
-from fieldclub.services import findings, sensitivity
+from fieldclub.services import findings, review, sensitivity
 from fieldclub.services.findings import EvidenceFields
 from fieldclub.vocab import EvidenceKind, FeatureClass, Outcome, Role, Visible
 from tests.findings.support import API, add_desk_evidence, answer, create
@@ -51,6 +51,19 @@ def test_an_answer_cannot_change_after_the_reveal(
     assert noted.status_code == 200
     assert noted.json()["observation"]["note"] == "Hard to tell in this light"
     assert _tallies(client_as, finder, finding.public_id) == before
+
+
+def test_the_comparison_counts_only_other_people_s_standing_answers(db: Session, make_user: MakeUser) -> None:
+    finding = create(db, make_user())
+    answer(db, finding, make_user(), Visible.YES)
+    answer(db, finding, make_user(), Visible.NO)
+    taken_back = make_user()
+    answer(db, finding, taken_back, Visible.YES)
+    review.delete_observation(db, finding, taken_back)
+    db.commit()
+
+    result = answer(db, finding, make_user(), Visible.UNSURE)
+    assert result.comparison.others == {Visible.YES: 1, Visible.NO: 1, Visible.UNSURE: 0}
 
 
 def test_taking_an_answer_back_cannot_reset_it(db: Session, client_as: ClientAs, make_user: MakeUser) -> None:

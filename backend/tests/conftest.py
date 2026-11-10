@@ -102,12 +102,10 @@ from fieldclub.config import (  # noqa: E402
 from fieldclub.main import create_app  # noqa: E402
 from fieldclub.models import Finding, User  # noqa: E402
 from fieldclub.models.common import db_point  # noqa: E402
-from fieldclub.services import ids  # noqa: E402
+from fieldclub.services import findings, ids  # noqa: E402
 from fieldclub.vocab import AgeBand, FeatureClass, Role, Sensitivity  # noqa: E402
-from tests.helpers import BASE_URL  # noqa: E402
+from tests.helpers import AVEBURY, BASE_URL  # noqa: E402
 
-# Avebury. The default position for `make_finding`.
-AVEBURY = (-1.8542, 51.4286)
 TERMS_ACCEPTED_AT = datetime(2026, 1, 1, tzinfo=UTC)
 
 
@@ -398,18 +396,24 @@ def make_finding(db: Session, make_user: Callable[..., User]) -> Callable[..., F
         **columns: Any,
     ) -> Finding:
         author = author or make_user()
-        finding = Finding(
-            public_id=columns.pop("public_id", None) or ids.new_public_id(db, Finding),
-            author_id=author.id,
-            title=columns.pop("title", f"Test finding {next(_counter)}"),
-            feature_class=FeatureClass(feature_class).value,
-            sensitivity=Sensitivity(sensitivity).value if sensitivity is not None else None,
-            location=db_point(lon, lat),
-            grid_ref=columns.pop("grid_ref", None) or gridref.to_gridref(lon, lat),
-            view_state=columns.pop("view_state", {"layer": "composite", "zoom": 16}),
+        public_id = columns.pop("public_id", None)
+        fields: dict[str, Any] = {
+            "author_id": author.id,
+            "title": columns.pop("title", f"Test finding {next(_counter)}"),
+            "feature_class": FeatureClass(feature_class).value,
+            "sensitivity": Sensitivity(sensitivity).value if sensitivity is not None else None,
+            "location": db_point(lon, lat),
+            "grid_ref": columns.pop("grid_ref", None) or gridref.to_gridref(lon, lat),
+            "view_state": columns.pop("view_state", {"layer": "composite", "zoom": 16}),
             **columns,
-        )
-        db.add(finding)
+        }
+        if public_id is None:
+            finding = ids.insert_with_public_id(
+                db, lambda generated: Finding(public_id=generated, **fields), findings.PUBLIC_ID_CONSTRAINT
+            )
+        else:
+            finding = Finding(public_id=public_id, **fields)
+            db.add(finding)
         db.commit()
         return finding
 

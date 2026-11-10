@@ -37,6 +37,7 @@ from fieldclub.ingest.adapters.common import (
     Polite,
     Tally,
     UpstreamFormatError,
+    json_body,
     plain,
     to_wgs84,
 )
@@ -86,10 +87,7 @@ class ArcGISLayer:
         response = self.polite.request(
             self.client, "GET", f"{self.url}{path}", params={**params, "f": "json"}
         )
-        try:
-            body = response.json()
-        except ValueError:
-            raise UpstreamFormatError(f"{self.url}{path} did not answer with JSON.") from None
+        body = json_body(response, f"{self.url}{path}")
         if not isinstance(body, dict):
             raise UpstreamFormatError(f"{self.url}{path} answered with {type(body).__name__}, not an object.")
         if "error" in body:

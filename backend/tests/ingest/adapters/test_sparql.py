@@ -16,7 +16,7 @@ QUERY = (
 
 
 def make_query(**kwargs) -> SparqlQuery:
-    return SparqlQuery(ENDPOINT, QUERY, client=httpx.Client(), polite=NoWait(delay_s=0), **kwargs)
+    return SparqlQuery(ENDPOINT, QUERY, client=httpx.Client(), polite=NoWait(), **kwargs)
 
 
 @respx.mock

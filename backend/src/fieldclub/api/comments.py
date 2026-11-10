@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, status
 
 from fieldclub.api.deps import Contributor, Db, OptionalUser, PageQuery, rate_limit
 from fieldclub.schemas.common import Page
@@ -53,7 +53,7 @@ def delete_comment(comment_id: int, user: Contributor, db: Db) -> None:
     response_model=FollowOut,
     dependencies=[Depends(rate_limit("follows", 300, per_seconds=3600))],
 )
-def follow(public_id: str, user: Contributor, db: Db, response: Response) -> FollowOut:
+def follow(public_id: str, user: Contributor, db: Db) -> FollowOut:
     """Follow a finding, to hear when it changes."""
     findings.follow(db, user, findings.get_finding(db, public_id, user))
     db.commit()

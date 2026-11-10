@@ -42,6 +42,7 @@ Services flush and never commit.
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -54,9 +55,9 @@ from sqlalchemy.orm import Session
 from fieldclub.errors import ConflictError, ForbiddenError, NotFoundError
 from fieldclub.models import Finding, Observation, User
 from fieldclub.models.common import SRID
-from fieldclub.schemas.common import encode_cursor, paginate
-from fieldclub.services import activity, findings
-from fieldclub.services.confidence import CHECK_PHRASES, NextStep
+from fieldclub.schemas.common import int_from_cursor, offset_page, paginate
+from fieldclub.services import activity, findings, sensitivity
+from fieldclub.services.confidence import CHECK_PHRASES, NextStep, load_next_steps
 from fieldclub.services.findings import ANSWER_CODES, Reassessment
 from fieldclub.vocab import (
     CHECK_EXPLANATIONS,
@@ -197,22 +198,18 @@ def put_observation(db: Session, finding: Finding, user: User, answer: Answer) -
     findings.follow(db, user, finding)
     result = findings.reassess(db, finding, None)
     db.refresh(observation)
-    return AnswerResult(observation, result, compare(db, finding, user, observation))
+    return AnswerResult(observation, result, compare(result, user, observation))
 
 
-def compare(db: Session, finding: Finding, user: User, observation: Observation) -> Comparison:
+def compare(result: Reassessment, user: User, observation: Observation) -> Comparison:
+    """Compare an answer with the assessment it just went into.
+
+    The assessment's answers are the standing ones other than the finder's,
+    so leaving out this person's own leaves everyone else's.
+    """
+    finding = result.finding
     others = dict.fromkeys(Visible, 0)
-    for visible, number in db.execute(
-        select(Observation.visible, func.count())
-        .where(
-            Observation.finding_id == finding.id,
-            Observation.user_id != user.id,
-            Observation.user_id != finding.author_id,
-            Observation.withdrawn_at.is_(None),
-        )
-        .group_by(Observation.visible)
-    ):
-        others[Visible(visible)] = number
+    others.update(Counter(obs.visible for obs in result.assessment.observations if obs.user_id != user.id))
     named = observation.feature_class
     return Comparison(
         finder_class=FeatureClass(finding.feature_class),
@@ -260,7 +257,7 @@ def list_observations(
         .order_by(Observation.id)
     )
     if cursor is not None:
-        query = query.where(Observation.id > findings.id_from_cursor(cursor))
+        query = query.where(Observation.id > int_from_cursor(cursor))
     rows = db.scalars(query.limit(limit + 1)).all()
     items, next_cursor = paginate(rows, limit, lambda obs: [obs.id])
     return ObservationPage(items, findings.users_by_id(db, (obs.user_id for obs in items)), next_cursor)
@@ -301,26 +298,26 @@ def blind_step(step: NextStep) -> NextStep:
 NEARBY_M = 25_000
 # States that still take answers. A ruled-out or withdrawn finding offers no next step.
 _REVIEWABLE_STATES = (FindingState.OPEN.value, FindingState.KNOWN.value, FindingState.DISPUTED.value)
-_NO_ANSWER_COUNT = 32767
 
 
 def _answerable(viewer: User | None) -> ColumnElement[bool]:
     """Findings this viewer could take a second look at: exactly visible, not theirs, not yet answered."""
-    clause = findings.as_sql(findings.exact_clause(viewer)) & Finding.hidden_at.is_(None)
+    clause = sensitivity.as_sql(sensitivity.sees_exact_clause(viewer)) & Finding.hidden_at.is_(None)
     clause &= Finding.state.in_(_REVIEWABLE_STATES)
-    if viewer is not None and viewer.is_active:
-        answered = exists().where(Observation.finding_id == Finding.id, Observation.user_id == viewer.id)
-        clause &= (Finding.author_id != viewer.id) & not_(answered)
+    active = sensitivity.active_viewer(viewer)
+    if active is not None:
+        answered = exists().where(Observation.finding_id == Finding.id, Observation.user_id == active.id)
+        clause &= (Finding.author_id != active.id) & not_(answered)
     return clause
 
 
 def _queue_order(viewer: User | None, near: tuple[float, float] | None) -> list[ColumnElement[Any]]:
-    priority = func.coalesce(Finding.answers_to_next, _NO_ANSWER_COUNT)
+    priority = func.coalesce(Finding.answers_to_next, findings.ANSWERS_TO_NEXT_MAX)
     if near is None:
         return [priority.asc(), Finding.created_at.asc(), Finding.id.asc()]
     # Every row is one the viewer sees exactly, but a signed-out visitor's
     # query still measures on the public position only.
-    column = Finding.location if viewer is not None and viewer.is_active else Finding.location_public
+    column = Finding.location if sensitivity.active_viewer(viewer) is not None else Finding.location_public
     here = func.ST_SetSRID(func.ST_MakePoint(*near), SRID)
     distance = func.ST_Distance(cast(column, Geography), cast(here, Geography))
     return [(distance > NEARBY_M).asc(), priority.asc(), distance.asc(), Finding.id.asc()]
@@ -329,10 +326,8 @@ def _queue_order(viewer: User | None, near: tuple[float, float] | None) -> list[
 def _offset_page(
     db: Session, query: Select[Finding], *, limit: int, cursor: str | None
 ) -> tuple[list[Finding], str | None]:
-    offset = 0 if cursor is None else findings.id_from_cursor(cursor)
-    rows = db.scalars(query.offset(offset).limit(limit + 1)).all()
-    items = list(rows[:limit])
-    return items, encode_cursor([offset + limit]) if len(rows) > limit else None
+    offset = 0 if cursor is None else int_from_cursor(cursor)
+    return offset_page(db.scalars(query.offset(offset).limit(limit + 1)).all(), offset, limit)
 
 
 def review_queue(
@@ -376,9 +371,8 @@ def _task_query(code: NextStepCode, viewer: User | None) -> Select[Finding]:
     return query.where(Finding.hidden_at.is_(None)).order_by(Finding.updated_at.desc(), Finding.id.desc())
 
 
-def _step(finding: Finding, code: NextStepCode) -> NextStep:
-    assessment = findings.current_assessment(finding)
-    return next(step for step in assessment.next_steps if step.code is code)
+def _step(steps: tuple[NextStep, ...], code: NextStepCode) -> NextStep:
+    return next(step for step in steps if step.code is code)
 
 
 def tasks(
@@ -392,17 +386,26 @@ def tasks(
     """Open next steps across findings, grouped by code. The cursor pages a single code."""
     assert code is not None or cursor is None, "a cursor pages one code's tasks"
     groups = []
+    # Each finding's stored next steps, decoded once even when it has a task in several groups.
+    steps: dict[int, tuple[NextStep, ...]] = {}
+
+    def task(finding: Finding, each: NextStepCode) -> Task:
+        if each in ANSWER_CODES:
+            return Task(finding, each, None)
+        if finding.id not in steps:
+            steps[finding.id] = load_next_steps(finding.assessment)
+        return Task(finding, each, _step(steps[finding.id], each))
+
     for each in [code] if code is not None else list(NextStepCode):
         query = _task_query(each, viewer)
         total = db.scalar(select(func.count()).select_from(query.order_by(None).subquery()))
         assert total is not None
         rows, next_cursor = _offset_page(db, query, limit=limit, cursor=cursor)
-        blind = each in ANSWER_CODES
         groups.append(
             TaskGroup(
                 code=each,
                 total=total,
-                tasks=[Task(f, each, None if blind else _step(f, each)) for f in rows],
+                tasks=[task(f, each) for f in rows],
                 next_cursor=next_cursor,
             )
         )

@@ -13,8 +13,7 @@ from typing import Annotated
 from fastapi import APIRouter, Path, Query
 from fastapi.responses import Response
 
-from fieldclub.api.deps import Db
-from fieldclub.api.records import split_list
+from fieldclub.api.deps import Db, split_list
 from fieldclub.services import record_tiles
 
 MOUNT_AT_ROOT = True

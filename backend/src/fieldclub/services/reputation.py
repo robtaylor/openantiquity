@@ -65,7 +65,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from fieldclub.models import ReputationEvent, User
-from fieldclub.services.confidence import Assessment, EvidenceStatus
+from fieldclub.services.confidence import CLOSED_STATES, Assessment, EvidenceStatus
 from fieldclub.vocab import FindingState, Role, Tier, Visible
 
 logger = logging.getLogger(__name__)
@@ -86,8 +86,6 @@ TRUSTED_AT = 50.0
 KNOWN_RECORD = "known_record"
 OBSERVATION_CORROBORATED = "observation_corroborated"
 OBSERVATION_RULED_OUT = "observation_ruled_out"
-
-_NOT_EARNING = frozenset({FindingState.RULED_OUT, FindingState.WITHDRAWN})
 
 
 def tier_reason(tier: Tier) -> str:
@@ -112,13 +110,13 @@ class RecordedAwards:
 
 
 def _earned_tiers(assessment: Assessment | None) -> frozenset[Tier]:
-    if assessment is None or assessment.state in _NOT_EARNING:
+    if assessment is None or assessment.state in CLOSED_STATES:
         return frozenset({Tier.SPOTTED})
     return assessment.satisfied
 
 
 def _earns_known(assessment: Assessment | None) -> bool:
-    return assessment is not None and assessment.known and assessment.state not in _NOT_EARNING
+    return assessment is not None and assessment.known and assessment.state not in CLOSED_STATES
 
 
 def _endorsed(status: EvidenceStatus | None) -> bool:

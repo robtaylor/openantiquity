@@ -49,9 +49,9 @@ from fieldclub.ingest import runner
 from fieldclub.ingest.errors import IngestError
 from fieldclub.models import Finding, Record, Source, User
 from fieldclub.models.common import SRID
-from fieldclub.schemas.common import decode_cursor, encode_cursor
-from fieldclub.services import sensitivity
-from fieldclub.vocab import MODERATOR_ROLES, FeatureClass, RecordCategory, Role
+from fieldclub.schemas.common import decode_cursor, offset_page
+from fieldclub.services import findings, geo, record_tiles, sensitivity
+from fieldclub.vocab import FeatureClass
 
 # The search box sends at most this much. The API refuses longer, and the
 # service cuts anything longer that reaches it another way.
@@ -188,11 +188,6 @@ def _base() -> AnySelect:
     )
 
 
-def _envelope(bbox: tuple[float, float, float, float]) -> ColumnElement[Any]:
-    west, south, east, north = bbox
-    return func.ST_MakeEnvelope(west, south, east, north, SRID)
-
-
 def check_bbox(bbox: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
     """The ingest runner's bbox check, raised as a search error."""
     try:
@@ -210,13 +205,11 @@ def _filters(
 ) -> AnySelect:
     if sources:
         statement = statement.where(Record.source_key.in_(sources))
+    categories = record_tiles.check_categories(categories, InvalidSearchError)
     if categories:
-        unknown = [value for value in categories if value not in RecordCategory]
-        if unknown:
-            raise InvalidSearchError(f"Unknown record categories: {', '.join(unknown)}.")
         statement = statement.where(Record.category.in_(categories))
     if bbox is not None:
-        statement = statement.where(func.ST_Intersects(Record.geom, _envelope(check_bbox(bbox))))
+        statement = statement.where(func.ST_Intersects(Record.geom, geo.envelope(check_bbox(bbox))))
     return statement
 
 
@@ -229,9 +222,14 @@ def _results(rows: Any, distance: bool = False) -> list[RecordResult]:
 # --------------------------------------------------------------------------
 
 
+def _name_similarity() -> ColumnElement[Any]:
+    """A column that makes `%>` match at `NAME_SIMILARITY` for the rest of the transaction."""
+    return func.set_config("pg_trgm.word_similarity_threshold", str(NAME_SIMILARITY), true())
+
+
 def use_name_similarity(db: Session) -> None:
     """Make `%>` match at `NAME_SIMILARITY` for the rest of this transaction."""
-    db.execute(select(func.set_config("pg_trgm.word_similarity_threshold", str(NAME_SIMILARITY), true())))
+    db.execute(select(_name_similarity()))
 
 
 @contextmanager
@@ -269,6 +267,9 @@ class _Terms:
 def _terms(db: Session, words: list[str]) -> _Terms:
     """Ask PostgreSQL which words are stop words, then build each kind of match from the rest.
 
+    The same statement sets the word similarity that the trigram match uses,
+    as `use_name_similarity` does, so a search costs no extra round trip for it.
+
     A stop word or a word under `MIN_TRIGRAM_WORD` letters shares a trigram
     with a large part of the index, so it stays out of the trigram match. A
     word that short is matched whole in the full-text match, because a one-
@@ -276,13 +277,16 @@ def _terms(db: Session, words: list[str]) -> _Terms:
     match still catches it as the start of a name.
     """
     tsquery = prefix_tsquery(words)
-    # One row: the node count of the whole tsquery, then one count per word, 0 for a stop word.
-    nodes, *word_nodes = db.execute(
+    # One row: the similarity setting, the node count of the whole tsquery,
+    # then one count per word, 0 for a stop word.
+    row = db.execute(
         select(
+            _name_similarity(),
             func.numnode(_tsquery(tsquery)),
             *(func.numnode(func.plainto_tsquery("english", literal(word))) for word in words),
         )
     ).one()
+    _, nodes, *word_nodes = tuple(row)
     kept = [
         word for word, count in zip(words, word_nodes, strict=True) if count and len(word) >= MIN_TRIGRAM_WORD
     ]
@@ -353,7 +357,6 @@ def search(
     if text and not words:
         # Punctuation and nothing else: nothing can match.
         return [], None
-    statement = _filters(_base(), sources=sources, categories=categories, bbox=bbox)
 
     with time_limit(db):
         if words:
@@ -366,19 +369,17 @@ def search(
             )
             if terms.tsquery is not None:
                 rank = rank + func.ts_rank_cd(Record.search, _tsquery(terms.tsquery), 1) * 4
-            use_name_similarity(db)
+            # The candidates carry the filters already, so the outer query needs only their ids.
             candidates = _candidates(terms, sources=sources, categories=categories, bbox=bbox)
-            statement = statement.where(Record.id.in_(select(candidates.c.id)))
+            statement = _base().where(Record.id.in_(select(candidates.c.id)))
             statement = statement.order_by(rank.desc(), Record.id)
         else:
+            statement = _filters(_base(), sources=sources, categories=categories, bbox=bbox)
             statement = statement.order_by(Record.name, Record.id)
         rows = db.execute(statement.offset(offset).limit(limit + 1)).all()
 
-    items = _results(rows[:limit])
-    next_cursor = (
-        encode_cursor([offset + limit]) if len(rows) > limit and offset + limit <= MAX_OFFSET else None
-    )
-    return items, next_cursor
+    page, next_cursor = offset_page(rows, offset, limit, max_offset=MAX_OFFSET)
+    return _results(page), next_cursor
 
 
 # --------------------------------------------------------------------------
@@ -387,7 +388,7 @@ def search(
 
 
 def check_point(lon: float, lat: float) -> None:
-    if not (math.isfinite(lon) and math.isfinite(lat) and -180 <= lon <= 180 and -90 <= lat <= 90):
+    if not gridref.is_lon_lat(lon, lat):
         raise InvalidSearchError("lon and lat must be a position in degrees.")
 
 
@@ -511,10 +512,8 @@ def load_finding(db: Session, public_id: str, viewer: User | None) -> Finding:
     finding = db.scalars(select(Finding).where(Finding.public_id == public_id)).one_or_none()
     if finding is None:
         raise FindingNotFoundError()
-    if finding.hidden_at is not None:
-        active = viewer if viewer is not None and viewer.is_active else None
-        if active is None or Role(active.role) not in MODERATOR_ROLES:
-            raise FindingNotFoundError()
+    if finding.hidden_at is not None and not findings.is_moderator(viewer):
+        raise FindingNotFoundError()
     return finding
 
 
@@ -533,7 +532,7 @@ def suggest_for_finding(
     """
     assert 1 <= limit <= 50, "limit must be between 1 and 50"
     origin = sensitivity.visible_location(finding, viewer)
-    area = gridref.parse_gridref(origin.square).polygon() if origin.square else None
+    area = origin.square_polygon()
     assert origin.obscured == (area is not None), "an obscured position always has its square"
     candidates = nearby(
         db, origin.lon, origin.lat, radius_m=SUGGEST_RADIUS_M, limit=SUGGEST_CANDIDATES, area=area

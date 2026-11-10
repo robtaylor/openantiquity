@@ -23,6 +23,7 @@ from __future__ import annotations
 import contextlib
 import fcntl
 import logging
+import shutil
 import threading
 import time
 from collections.abc import Callable, Iterator, Sequence
@@ -80,7 +81,7 @@ class LocalMirrorStore:
         if local.stat().st_dev == target.parent.stat().st_dev:
             local.replace(staged)
         else:
-            staged.write_bytes(local.read_bytes())
+            shutil.copyfile(local, staged)
             local.unlink()
         staged.replace(target)
 
@@ -201,8 +202,8 @@ UNREADABLE_SUFFIX = ".unreadable"
 
 
 def _set_aside(fetched: Fetched) -> None:
+    """Rename an unreadable file on disk. A temporary download is deleted by `Mirror._add` instead."""
     if fetched.temporary:
-        fetched.path.unlink(missing_ok=True)
         return
     aside = fetched.path.with_name(fetched.path.name + UNREADABLE_SUFFIX)
     fetched.path.replace(aside)

@@ -15,7 +15,7 @@ applies all this from `FindingView.answers_visible`.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, UrlConstraints, model_validator
 
@@ -26,10 +26,18 @@ from fieldclub.schemas.common import (
     GeoJSONGeometry,
     PublicUser,
     RequestModel,
-    to_geojson,
+    geojson_geometry,
+    geojson_point,
 )
 from fieldclub.services import review, sensitivity
-from fieldclub.services.confidence import Assessment, CreditKind, EvidenceStatus, NextStep
+from fieldclub.services.confidence import (
+    ANSWER_CREDIT_KINDS,
+    Assessment,
+    Credit,
+    CreditKind,
+    EvidenceStatus,
+    NextStep,
+)
 from fieldclub.services.findings import EvidenceView, FindingView
 from fieldclub.services.media import may_see_media
 from fieldclub.vocab import (
@@ -49,17 +57,15 @@ from fieldclub.vocab import (
 )
 
 TITLE_MAX = 120
+TEXT_MAX = 5000
+URL_MAX = 2000
+REFERENCE_MAX = 200
 
 
 def _maybe[E: (FeatureClass, Period, Explanation, Relation, Outcome)](
     enum: type[E], value: str | None
 ) -> E | None:
     return enum(value) if value is not None else None
-
-
-TEXT_MAX = 5000
-URL_MAX = 2000
-REFERENCE_MAX = 200
 
 
 # --------------------------------------------------------------------------
@@ -121,18 +127,13 @@ class LocationOut(ApiModel):
 def location_out(finding: Finding, viewer: User | None) -> LocationOut:
     """The one way a response gets a finding's position."""
     seen = sensitivity.visible_location(finding, viewer)
-    return location_from(seen)
-
-
-def location_from(seen: sensitivity.VisibleLocation) -> LocationOut:
-    outline = to_geojson(seen.outline)
     return LocationOut(
         lon=round(seen.lon, 6),
         lat=round(seen.lat, 6),
         obscured=seen.obscured,
         grid_ref=seen.grid_ref,
         square=seen.square,
-        outline=GeoJSONGeometry.model_validate(outline) if outline is not None else None,
+        outline=geojson_geometry(seen.outline),
     )
 
 
@@ -312,10 +313,7 @@ CreditOutKind = Literal[
     "endorsed",
     "verified",
 ]
-
-ANSWER_CREDITS = frozenset(
-    {CreditKind.SAW_IT, CreditKind.COULD_NOT_SEE, CreditKind.UNSURE, CreditKind.EXPLAINED}
-)
+assert {kind.value for kind in CreditKind} <= set(get_args(CreditOutKind)), "a credit kind has no output"
 
 
 class CreditOut(ApiModel):
@@ -444,24 +442,24 @@ class FindingDetail(FindingSummary):
 
 def _credits(view: FindingView) -> list[CreditOut]:
     """Who did what. How each person answered is shown only when answers are visible."""
-    credits: list[CreditOut] = []
-    seen: set[tuple[int, str, int | None]] = set()
-    for credit in view.assessment.credits:
-        kind: str = credit.kind.value
-        if credit.kind in ANSWER_CREDITS and not view.answers_visible:
-            kind = "answered"
-        key = (credit.user_id, kind, credit.evidence_id)
-        if key in seen:
-            continue
-        seen.add(key)
-        credits.append(
-            CreditOut(
-                user=PublicUser.from_user(view.people[credit.user_id]),
-                kind=kind,
-                evidence_id=credit.evidence_id,
-            )
+
+    def kind(credit: Credit) -> CreditOutKind:
+        hidden = credit.kind in ANSWER_CREDIT_KINDS and not view.answers_visible
+        # Every `CreditKind` value is a `CreditOutKind`.
+        return "answered" if hidden else cast(CreditOutKind, credit.kind.value)
+
+    credits = view.assessment.credits
+    # Each person gives at most one answer, so hiding how they answered can't merge two credits.
+    keys = [(credit.user_id, kind(credit), credit.evidence_id) for credit in credits]
+    assert len(set(keys)) == len(keys), "two credits are the same once answers are hidden"
+    return [
+        CreditOut(
+            user=PublicUser.from_user(view.people[credit.user_id]),
+            kind=kind(credit),
+            evidence_id=credit.evidence_id,
         )
-    return credits
+        for credit in credits
+    ]
 
 
 def _evidence_out(
@@ -537,7 +535,7 @@ def finding_feature(finding: Finding, viewer: User | None) -> FindingFeature:
     where = location_out(finding, viewer)
     return FindingFeature(
         id=finding.public_id,
-        geometry=GeoJSONGeometry(type="Point", coordinates=[where.lon, where.lat]),
+        geometry=geojson_point(where.lon, where.lat),
         properties=FindingFeatureProperties(
             public_id=finding.public_id,
             title=finding.title,

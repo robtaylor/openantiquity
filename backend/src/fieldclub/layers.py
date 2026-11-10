@@ -39,13 +39,6 @@ from fieldclub.terrain.render import DEM_KIND, tile_version
 from fieldclub.terrain.service import TILE_EDITIONS
 from fieldclub.terrain.styles import MAXZOOM, MINZOOM
 
-# --- Terrain (b1/terrain): the zoom range comes from what the terrain service serves.
-# Below zoom 13 the tiles are drawn from the 10 m national composite, from 13
-# to 16 from the 1 m mirror. Both are the Environment Agency's 2022 composite,
-# so one attribution covers them.
-LIDAR_MINZOOM = MINZOOM
-LIDAR_MAXZOOM = MAXZOOM
-
 
 def terrain_tiles(path: str, kind: str) -> str:
     """A terrain tile URL with the version token that lets the tile be cached as immutable."""
@@ -112,8 +105,12 @@ def lidar_view(style: str, title: str, description: str) -> RasterView:
         group="lidar",
         tiles=[terrain_tiles(f"/tiles/lidar/{style}", style)],
         tile_size=TILE_SIZE,
-        minzoom=LIDAR_MINZOOM,
-        maxzoom=LIDAR_MAXZOOM,
+        # The zoom range the terrain service serves. Below zoom 13 the tiles
+        # are drawn from the 10 m national composite, from 13 to 16 from the
+        # 1 m mirror. Both are the Environment Agency's 2022 composite, so one
+        # attribution covers them.
+        minzoom=MINZOOM,
+        maxzoom=MAXZOOM,
         attribution=LIDAR_ATTRIBUTION,
         bounds=None,
         default=style == DEFAULT_VIEW,
@@ -148,8 +145,8 @@ DEM = DemSource(
     tiles=[terrain_tiles("/tiles/dem", DEM_KIND)],
     tile_size=TILE_SIZE,
     encoding="terrarium",
-    minzoom=LIDAR_MINZOOM,
-    maxzoom=LIDAR_MAXZOOM,
+    minzoom=MINZOOM,
+    maxzoom=MAXZOOM,
     attribution=LIDAR_ATTRIBUTION,
 )
 

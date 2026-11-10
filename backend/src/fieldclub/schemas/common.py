@@ -6,11 +6,11 @@ import base64
 import binascii
 import json
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from geoalchemy2 import WKBElement, WKTElement
 from geoalchemy2.shape import to_shape
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 from shapely.errors import ShapelyError
 from shapely.geometry import mapping, shape
 from shapely.geometry.base import BaseGeometry
@@ -24,6 +24,10 @@ if TYPE_CHECKING:
 
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
+MAX_CURSOR_CHARS = 512
+
+# A source's stored record count. A source that has never been ingested has none, which reads as 0.
+RecordCount = Annotated[int, BeforeValidator(lambda value: value or 0)]
 
 
 class ApiModel(BaseModel):
@@ -65,7 +69,7 @@ class PageParams(BaseModel):
     """Query parameters every list takes. Use as `Annotated[PageParams, Query()]`."""
 
     limit: int = Field(default=DEFAULT_LIMIT, ge=1, le=MAX_LIMIT)
-    cursor: str | None = Field(default=None, max_length=512)
+    cursor: str | None = Field(default=None, max_length=MAX_CURSOR_CHARS)
 
 
 class Page[T](BaseModel):
@@ -100,6 +104,14 @@ def decode_cursor(cursor: str, length: int | None = None) -> list[Any]:
     return values
 
 
+def int_from_cursor(cursor: str) -> int:
+    """The one non-negative whole number a cursor holds: a last id, or an offset."""
+    (value,) = decode_cursor(cursor, 1)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise InvalidCursorError()
+    return value
+
+
 def paginate[T](rows: Sequence[T], limit: int, key: Any) -> tuple[list[T], str | None]:
     """Turn `limit + 1` fetched rows into a page and the cursor for the next.
 
@@ -111,6 +123,47 @@ def paginate[T](rows: Sequence[T], limit: int, key: Any) -> tuple[list[T], str |
     items = list(rows[:limit])
     next_cursor = encode_cursor(key(items[-1])) if len(rows) > limit and items else None
     return items, next_cursor
+
+
+def offset_page[T](
+    rows: Sequence[T], offset: int, limit: int, *, max_offset: int | None = None
+) -> tuple[list[T], str | None]:
+    """Turn `limit + 1` rows fetched from `offset` into a page and the cursor for the next.
+
+    For lists whose order changes as people use them, where a keyset cursor
+    would skip rows. No next cursor is given past `max_offset`.
+    """
+    assert limit >= 1, "limit must be at least 1"
+    assert len(rows) <= limit + 1, "fetch at most limit + 1 rows"
+    following = offset + limit
+    more = len(rows) > limit and (max_offset is None or following <= max_offset)
+    return list(rows[:limit]), encode_cursor([following]) if more else None
+
+
+# --------------------------------------------------------------------------
+# Boxes
+# --------------------------------------------------------------------------
+
+# West, south, east, north in degrees.
+BBox = tuple[float, float, float, float]
+
+
+def split_bbox(text: str) -> BBox:
+    """`west,south,east,north` as four numbers. Raises `ValueError` when it isn't four numbers."""
+    west, south, east, north = (float(part) for part in text.split(","))
+    return west, south, east, north
+
+
+def is_bbox(bbox: BBox, *, allow_empty: bool = False) -> bool:
+    """Whether a box lies in degrees and runs west to east and south to north.
+
+    NaN and the infinities fail every comparison, so they are refused too.
+    With `allow_empty`, a box may have no width or no height.
+    """
+    west, south, east, north = bbox
+    if allow_empty:
+        return -180 <= west <= east <= 180 and -90 <= south <= north <= 90
+    return -180 <= west < east <= 180 and -90 <= south < north <= 90
 
 
 # --------------------------------------------------------------------------
@@ -201,6 +254,17 @@ def to_geojson(
         return None
     shapely_geometry = geometry if isinstance(geometry, BaseGeometry) else to_shape(geometry)
     return _round_coordinates(dict(mapping(shapely_geometry)), decimals)
+
+
+def geojson_geometry(geometry: WKBElement | WKTElement | BaseGeometry | None) -> GeoJSONGeometry | None:
+    """`to_geojson` as the response model."""
+    data = to_geojson(geometry)
+    return None if data is None else GeoJSONGeometry.model_validate(data)
+
+
+def geojson_point(lon: float, lat: float) -> GeoJSONGeometry:
+    """A GeoJSON point, rounded as `to_geojson` rounds."""
+    return GeoJSONGeometry(type="Point", coordinates=[round(lon, 6), round(lat, 6)])
 
 
 def _round_coordinates(value: Any, decimals: int) -> Any:

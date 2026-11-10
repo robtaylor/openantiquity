@@ -17,7 +17,6 @@ may see it (Decision 0005), never more exactly.
 from __future__ import annotations
 
 import logging
-import math
 import re
 from dataclasses import dataclass
 
@@ -116,7 +115,7 @@ def as_lat_lon(text: str) -> GeoHit | None:
         lon, lat = a, b
     else:
         lat, lon = a, b
-    if not (math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180):
+    if not gridref.is_lon_lat(lon, lat):
         return None
     return GeoHit(
         type="coordinates",
@@ -156,7 +155,8 @@ def as_finding(db: Session, text: str, viewer: User | None) -> GeoHit | None:
     except records.FindingNotFoundError:
         return None
     seen = sensitivity.visible_location(finding, viewer)
-    bbox = gridref.parse_gridref(seen.square).polygon().bounds if seen.square else None
+    square = seen.square_polygon()
+    bbox = square.bounds if square is not None else None
     saved_zoom = finding.view_state.get("zoom") if isinstance(finding.view_state, dict) else None
     exact_zoom = int(saved_zoom) if isinstance(saved_zoom, int | float) else 17
     zoom = 14 if seen.obscured else exact_zoom

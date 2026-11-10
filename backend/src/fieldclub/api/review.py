@@ -6,8 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, Response
 
-from fieldclub.api.deps import Db, OptionalUser, PageQuery
-from fieldclub.api.findings import private
+from fieldclub.api.deps import Db, OptionalUser, PageQuery, private
 from fieldclub.errors import BadRequestError
 from fieldclub.models import Finding, User
 from fieldclub.schemas.common import Page

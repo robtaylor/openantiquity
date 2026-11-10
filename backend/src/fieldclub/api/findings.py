@@ -7,15 +7,14 @@ viewer's exact positions to another.
 
 from __future__ import annotations
 
-import math
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from fieldclub.api.deps import Contributor, Db, OptionalUser, rate_limit
+from fieldclub.api.deps import Contributor, CursorQuery, Db, OptionalUser, private, rate_limit
 from fieldclub.errors import BadRequestError
 from fieldclub.models import Finding, User
-from fieldclub.schemas.common import MAX_LIMIT, Page, from_geojson
+from fieldclub.schemas.common import MAX_LIMIT, BBox, Page, from_geojson, is_bbox, split_bbox
 from fieldclub.schemas.findings import (
     FindingCreate,
     FindingDetail,
@@ -42,19 +41,16 @@ class InvalidBboxError(BadRequestError):
     message = "bbox must be west,south,east,north in degrees, running west to east and south to north."
 
 
-def parse_bbox(text: str | None) -> tuple[float, float, float, float] | None:
+def parse_bbox(text: str | None) -> BBox | None:
     if text is None:
         return None
     try:
-        west, south, east, north = (float(part) for part in text.split(","))
+        bbox = split_bbox(text)
     except ValueError:
         raise InvalidBboxError() from None
-    values = (west, south, east, north)
-    if not all(math.isfinite(value) for value in values):
+    if not is_bbox(bbox):
         raise InvalidBboxError()
-    if not (-180 <= west < east <= 180 and -90 <= south < north <= 90):
-        raise InvalidBboxError()
-    return values
+    return bbox
 
 
 # A repeated filter can name each value at most once, so no list is longer than its vocabulary.
@@ -82,13 +78,6 @@ def list_filters(
 
 
 Filters = Annotated[FindingFilters, Depends(list_filters)]
-Cursor = Annotated[str | None, Query(max_length=512)]
-
-
-def private(response: Response) -> None:
-    """What this response holds depends on the viewer, so no shared cache may keep it."""
-    response.headers["Cache-Control"] = "private, no-cache"
-    response.headers["Vary"] = "Cookie"
 
 
 def detail(db: Db, finding: Finding, viewer: User | None) -> FindingDetail:
@@ -108,7 +97,7 @@ def export_findings(
     filters: Filters,
     format: Literal["geojson", "csv"] = "geojson",
     limit: Annotated[int, Query(ge=1, le=exports.MAX_EXPORT)] = EXPORT_DEFAULT_LIMIT,
-    cursor: Cursor = None,
+    cursor: CursorQuery = None,
 ) -> Response:
     """A filtered set of findings as GeoJSON or HER-ready CSV. The next cursor is in `X-Next-Cursor`."""
     page = findings.list_findings(db, viewer, filters, limit=limit, cursor=cursor)
@@ -144,7 +133,7 @@ def list_findings(
     filters: Filters,
     format: Literal["json", "geojson"] = "json",
     limit: Annotated[int | None, Query(ge=1, le=GEOJSON_MAX_LIMIT)] = None,
-    cursor: Cursor = None,
+    cursor: CursorQuery = None,
 ) -> Page[FindingSummary] | FindingFeatureCollection:
     """Findings as this viewer may see them, as a page or as GeoJSON for the map.
 
@@ -164,8 +153,9 @@ def list_findings(
     if limit is not None and limit > MAX_LIMIT:
         raise BadRequestError(f"A page holds at most {MAX_LIMIT} findings.", code="limit_too_high")
     page = findings.list_findings(db, viewer, filters, limit=limit or PAGE_DEFAULT_LIMIT, cursor=cursor)
+    authors = findings.users_by_id(db, (f.author_id for f in page.findings))
     return Page[FindingSummary](
-        items=[FindingSummary.build(f, page.authors[f.author_id], viewer) for f in page.findings],
+        items=[FindingSummary.build(f, authors[f.author_id], viewer) for f in page.findings],
         next_cursor=page.next_cursor,
     )
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import subprocess
-import sys
+from tests.helpers import run_fresh
 
 
 def test_elevation_files_still_write_after_the_vector_reader_is_loaded() -> None:
@@ -13,5 +12,4 @@ def test_elevation_files_still_write_after_the_vector_reader_is_loaded() -> None
         "from fieldclub.terrain import cog\n"
         "assert cog.lerc_supported()\n"
     )
-    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
-    assert result.returncode == 0, result.stderr[-2000:]
+    run_fresh(code)

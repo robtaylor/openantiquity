@@ -174,8 +174,16 @@ def enforce(limiter: RateLimiter, request: Request, user: User | None) -> None:
     For a limit that depends on what the request asks for, which a dependency
     can't know. Does nothing when `FIELDCLUB_RATELIMIT_ENABLED` is false.
     """
+    enforce_key(limiter, caller_key(request, user))
+
+
+def enforce_key(limiter: RateLimiter, key: str) -> None:
+    """Spend one of `key`'s tokens, or raise `RateLimitedError`, for a budget that isn't the caller's.
+
+    Does nothing when `FIELDCLUB_RATELIMIT_ENABLED` is false.
+    """
     if get_settings().ratelimit_enabled:
-        limiter.hit(caller_key(request, user))
+        limiter.hit(key)
 
 
 def rate_limit(name: str, capacity: float, per_seconds: float) -> Callable[..., None]:

@@ -169,18 +169,20 @@ class TileRenderer:
         self.storage = storage
         self.editions = tuple(editions)
 
-    def edition(self, zoom: int) -> str:
-        edition = self._source_for_zoom(zoom).edition
-        assert edition in self.editions, f"{edition} isn't one of {self.editions}"
-        return edition
-
     def version(self, kind: str) -> str:
         return tile_version(kind, self.editions)
 
-    def elevation(self, z: int, x: int, y: int) -> tuple[np.ndarray | None, Window]:
-        """The tile's buffered elevation, None when it has no data, and the buffered window."""
+    def _source(self, z: int, x: int, y: int) -> ElevationSource:
+        """The source of a valid tile, resolved once per request."""
         check_tile(z, x, y, minzoom=MINZOOM, maxzoom=MAXZOOM)
         source = self._source_for_zoom(z)
+        assert source.edition in self.editions, f"{source.edition} isn't one of {self.editions}"
+        return source
+
+    def _elevation(
+        self, source: ElevationSource, z: int, x: int, y: int
+    ) -> tuple[np.ndarray | None, Window, int]:
+        """The tile's buffered elevation, None when it has no data, the buffered window and the buffer."""
         buffer = elevation_buffer(z)
         window = Window.tile(z, x, y, buffer)
         key = f"elevation/{ELEVATION_FORMAT}/{source.edition}/b{buffer}/{z}/{x}/{y}.npy.z"
@@ -194,36 +196,35 @@ class TileRenderer:
             empty = not np.isfinite(array).any()
             if source.cacheable:
                 self.storage.put(key, _EMPTY if empty else _encode_array(array), "application/octet-stream")
-            return (None if empty else array), window
+            return (None if empty else array), window, buffer
         if data == _EMPTY:
-            return None, window
+            return None, window, buffer
         array = _decode_array(data)
         assert array.shape == (window.height, window.width), f"cached {array.shape} for {window}"
-        return array, window
+        return array, window, buffer
 
     def lidar_png(self, style_id: str, z: int, x: int, y: int) -> RenderedTile:
         found = style(style_id)
-        check_tile(z, x, y, minzoom=MINZOOM, maxzoom=MAXZOOM)
-        key = f"lidar/{found.id}/v{found.version}/{ELEVATION_FORMAT}/{self.edition(z)}/{z}/{x}/{y}.png"
-        return self._cached(z, key, lambda: self._render_lidar(found, z, x, y))
+        source = self._source(z, x, y)
+        key = f"lidar/{found.id}/v{found.version}/{ELEVATION_FORMAT}/{source.edition}/{z}/{x}/{y}.png"
+        return self._cached(source, key, lambda: self._render_lidar(found, source, z, x, y))
 
-    def _render_lidar(self, found: Style, z: int, x: int, y: int) -> bytes:
-        elevation, window = self.elevation(z, x, y)
+    def _render_lidar(self, found: Style, source: ElevationSource, z: int, x: int, y: int) -> bytes:
+        elevation, window, buffer = self._elevation(source, z, x, y)
         if elevation is None:
             return transparent_png()
-        values = render_values(found, elevation, window, elevation_buffer(z))
+        values = render_values(found, elevation, window, buffer)
         if not np.isfinite(values).any():
             return transparent_png()
         return to_png(to_pixels(values))
 
     def dem_png(self, z: int, x: int, y: int) -> RenderedTile:
-        check_tile(z, x, y, minzoom=MINZOOM, maxzoom=MAXZOOM)
-        key = f"dem/v{DEM_VERSION}/{ELEVATION_FORMAT}/{self.edition(z)}/{z}/{x}/{y}.png"
-        return self._cached(z, key, lambda: self._render_dem(z, x, y))
+        source = self._source(z, x, y)
+        key = f"dem/v{DEM_VERSION}/{ELEVATION_FORMAT}/{source.edition}/{z}/{x}/{y}.png"
+        return self._cached(source, key, lambda: self._render_dem(source, z, x, y))
 
-    def _render_dem(self, z: int, x: int, y: int) -> bytes:
-        elevation, _ = self.elevation(z, x, y)
-        buffer = elevation_buffer(z)
+    def _render_dem(self, source: ElevationSource, z: int, x: int, y: int) -> bytes:
+        elevation, _, buffer = self._elevation(source, z, x, y)
         if elevation is None:
             elevation = np.full((TILE_SIZE, TILE_SIZE), np.nan, dtype=np.float32)
         else:
@@ -231,8 +232,8 @@ class TileRenderer:
             elevation = elevation[buffer : buffer + TILE_SIZE, buffer : buffer + TILE_SIZE]
         return to_png(terrarium_encode(elevation))
 
-    def _cached(self, zoom: int, key: str, make: Callable[[], bytes]) -> RenderedTile:
-        cacheable = self._source_for_zoom(zoom).cacheable
+    def _cached(self, source: ElevationSource, key: str, make: Callable[[], bytes]) -> RenderedTile:
+        cacheable = source.cacheable
         if cacheable:
             try:
                 return RenderedTile(self.storage.get(key), cacheable=True)

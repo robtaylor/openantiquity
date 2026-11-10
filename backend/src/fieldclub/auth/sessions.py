@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from fieldclub.auth.tokens import MAX_TOKEN_LENGTH, hash_ip, hash_presented, hash_token, new_token
+from fieldclub.auth.tokens import hash_ip, hash_presented, hash_token, new_token
 from fieldclub.config import get_settings
 from fieldclub.models import User, UserSession
 
@@ -81,13 +81,14 @@ def resolve_session(db: Session, token: str | None, *, now: datetime | None = No
     do is the caller's job. When the session is extended the change is
     flushed, and the caller commits.
     """
-    if not token or len(token) > MAX_TOKEN_LENGTH:
+    token_hash = hash_presented(token)
+    if token_hash is None:
         return None
     now = now or _now()
     row = db.execute(
         select(UserSession, User)
         .join(User, User.id == UserSession.user_id)
-        .where(UserSession.token_hash == hash_token(token))
+        .where(UserSession.token_hash == token_hash)
     ).first()
     if row is None:
         return None

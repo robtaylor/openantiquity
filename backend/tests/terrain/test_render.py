@@ -26,18 +26,8 @@ from fieldclub.terrain.render import (
     transparent_png,
 )
 from fieldclub.terrain.styles import SLRM, STYLES, elevation_buffer, local_relief_stretch
-from tests.terrain.fakes import FunctionSource, rolling_hills
-
-AVEBURY = (-1.8542, 51.4286)
-
-
-def decode(png: bytes) -> np.ndarray:
-    return np.asarray(Image.open(io.BytesIO(png)))
-
-
-def over(source: FunctionSource, storage: LocalStorage) -> TileRenderer:
-    """A renderer drawing every zoom from one source."""
-    return TileRenderer(lambda zoom: source, storage, editions=[source.edition])
+from tests.helpers import AVEBURY
+from tests.terrain.fakes import FunctionSource, decode_png, rolling_hills, single_source_renderer
 
 
 @pytest.fixture
@@ -47,7 +37,7 @@ def source() -> FunctionSource:
 
 @pytest.fixture
 def renderer(source: FunctionSource, tmp_path: Path) -> TileRenderer:
-    return over(source, LocalStorage(tmp_path / "tiles"))
+    return single_source_renderer(source, LocalStorage(tmp_path / "tiles"))
 
 
 # --------------------------------------------------------------------------
@@ -62,7 +52,7 @@ def test_adjacent_tiles_agree_with_one_window_across_their_edge(
 ) -> None:
     x, y = tile_at(*AVEBURY, zoom)
     tiles = {
-        (dx, dy): decode(renderer.lidar_png(style_id, zoom, x + dx, y + dy).png)
+        (dx, dy): decode_png(renderer.lidar_png(style_id, zoom, x + dx, y + dy).png)
         for dx in (0, 1)
         for dy in (0, 1)
     }
@@ -134,7 +124,9 @@ def test_dem_tiles_fill_the_edge_of_the_data_for_the_buffer_then_sea_level(tmp_p
     window = Window.tile(15, x, y)
     middle = window.x_centres()[256]
     half = FunctionSource(lambda xs, ys: np.where(xs < middle, 80.0, np.nan))
-    heights = terrarium_decode(decode(over(half, LocalStorage(tmp_path)).dem_png(15, x, y).png))
+    heights = terrarium_decode(
+        decode_png(single_source_renderer(half, LocalStorage(tmp_path)).dem_png(15, x, y).png)
+    )
     reach = elevation_buffer(15)
     assert (heights[:, : 256 + reach] == 80.0).all()
     assert (heights[:, 256 + reach + 1 :] == 0.0).all()
@@ -149,7 +141,7 @@ def test_dem_tiles_are_opaque_terrarium_of_the_tile_without_its_buffer(
     renderer: TileRenderer, source: FunctionSource
 ) -> None:
     x, y = tile_at(*AVEBURY, 15)
-    rgb = decode(renderer.dem_png(15, x, y).png)
+    rgb = decode_png(renderer.dem_png(15, x, y).png)
     assert rgb.shape == (TILE_SIZE, TILE_SIZE, 3)
     window = Window.tile(15, x, y)
     expected = source.read(window.bounds, TILE_SIZE, TILE_SIZE)
@@ -163,12 +155,12 @@ def test_dem_tiles_are_opaque_terrarium_of_the_tile_without_its_buffer(
 
 def test_a_tile_with_no_data_is_transparent(tmp_path: Path) -> None:
     empty = FunctionSource(lambda xs, ys: np.full(xs.shape, np.nan))
-    renderer = over(empty, LocalStorage(tmp_path))
+    renderer = single_source_renderer(empty, LocalStorage(tmp_path))
     assert renderer.lidar_png("composite", 14, 8100, 5400).png == transparent_png()
     image = Image.open(io.BytesIO(transparent_png()))
     assert image.size == (TILE_SIZE, TILE_SIZE)
     assert np.asarray(image)[..., -1].max() == 0
-    rgb = decode(renderer.dem_png(14, 8100, 5400).png)
+    rgb = decode_png(renderer.dem_png(14, 8100, 5400).png)
     assert (terrarium_decode(rgb) == 0).all()
 
 
@@ -177,9 +169,9 @@ def test_part_of_a_tile_with_no_data_is_transparent_and_the_rest_opaque(tmp_path
     window = Window.tile(15, x, y)
     middle = window.x_centres()[256]
     half = FunctionSource(lambda xs, ys: np.where(xs < middle, rolling_hills(xs, ys), np.nan))
-    renderer = over(half, LocalStorage(tmp_path))
+    renderer = single_source_renderer(half, LocalStorage(tmp_path))
     for style_id in STYLES:
-        pixels = decode(renderer.lidar_png(style_id, 15, x, y).png)
+        pixels = decode_png(renderer.lidar_png(style_id, 15, x, y).png)
         alpha = pixels[..., -1]
         assert (alpha[:, 260:] == 0).all(), style_id
         assert (alpha[:, :200] == 255).all(), style_id
@@ -205,7 +197,7 @@ def test_a_cached_tile_is_served_without_reading_elevation(
 ) -> None:
     x, y = tile_at(*AVEBURY, 14)
     first = renderer.lidar_png("slope", 14, x, y)
-    again = over(source, LocalStorage(tmp_path / "tiles"))
+    again = single_source_renderer(source, LocalStorage(tmp_path / "tiles"))
     assert again.lidar_png("slope", 14, x, y) == first
     assert len(source.reads) == 1
 
@@ -231,7 +223,7 @@ def test_nothing_is_cached_when_elevation_cannot_be_read(tmp_path: Path) -> None
             calls.append(bounds)
             raise ElevationUnavailableError()
 
-    renderer = over(Failing(rolling_hills), LocalStorage(tmp_path))
+    renderer = single_source_renderer(Failing(rolling_hills), LocalStorage(tmp_path))
     for _ in range(2):
         with pytest.raises(ElevationUnavailableError):
             renderer.lidar_png("composite", 14, 8100, 5400)
@@ -248,7 +240,7 @@ def test_a_tile_says_whether_its_source_may_be_cached(renderer: TileRenderer) ->
 
 def test_an_uncacheable_source_is_never_cached(source: FunctionSource, tmp_path: Path) -> None:
     source.cacheable = False
-    renderer = over(source, LocalStorage(tmp_path))
+    renderer = single_source_renderer(source, LocalStorage(tmp_path))
     assert not renderer.lidar_png("slope", 14, 8100, 5400).cacheable
     assert not renderer.dem_png(14, 8100, 5400).cacheable
     assert len(source.reads) == 2

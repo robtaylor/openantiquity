@@ -38,7 +38,6 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 from urllib.parse import urlencode
 
-import httpx
 from joserfc import jwt
 from joserfc.errors import JoseError
 from joserfc.jwk import ECKey
@@ -50,11 +49,10 @@ from fieldclub.auth.failures import (
     SignInCancelledError,
 )
 from fieldclub.auth.flow import Flow
-from fieldclub.auth.oidc import Discovery, OidcClient, fetch_json, get_oidc_client
+from fieldclub.auth.oidc import Discovery, OidcClient, get_oidc_client, request_json
 from fieldclub.auth.providers import register_provider
 from fieldclub.config import Settings
 from fieldclub.errors import ConfigError
-from fieldclub.http import get_client
 from fieldclub.vocab import SignInProvider
 
 logger = logging.getLogger(__name__)
@@ -96,8 +94,13 @@ class Callback:
     user: str | None = None
 
 
+def callback_path(provider: SignInProvider) -> str:
+    """The path a provider returns the browser to, which is also where its flow cookie is sent."""
+    return CALLBACK_PATH.format(provider=provider.value)
+
+
 def redirect_uri(settings: Settings, provider: SignInProvider) -> str:
-    return settings.public_url.rstrip("/") + CALLBACK_PATH.format(provider=provider.value)
+    return settings.public_url.rstrip("/") + callback_path(provider)
 
 
 def _secret(value: Any) -> str | None:
@@ -187,12 +190,7 @@ class OAuthProvider:
             "client_secret": self.client_secret(settings),
             "code_verifier": flow.verifier,
         }
-        try:
-            response = get_client().post(token_endpoint, data=data, headers={"Accept": "application/json"})
-        except httpx.HTTPError as exc:
-            logger.warning("%s token endpoint failed: %s", self.id.value, exc)
-            raise ProviderError() from exc
-        return fetch_json(response, f"The {self.id.value} token endpoint")
+        return request_json("POST", token_endpoint, f"The {self.id.value} token endpoint", data=data)
 
 
 def _with_query(endpoint: str, params: Mapping[str, str]) -> str:
@@ -469,16 +467,13 @@ class Facebook(OAuthProvider):
         # Proves the call comes from the app's server, not from a stolen token elsewhere.
         secret = self.client_secret(settings).encode()
         proof = hmac.new(secret, access_token.encode(), hashlib.sha256).hexdigest()
-        try:
-            response = get_client().get(
-                f"{graph}/me",
-                params={"fields": "id,name,email,picture.width(256).height(256)", "appsecret_proof": proof},
-                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
-            )
-        except httpx.HTTPError as exc:
-            logger.warning("Facebook profile call failed: %s", exc)
-            raise ProviderError() from exc
-        profile = fetch_json(response, "The Facebook profile call")
+        profile = request_json(
+            "GET",
+            f"{graph}/me",
+            "The Facebook profile call",
+            params={"fields": "id,name,email,picture.width(256).height(256)", "appsecret_proof": proof},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
         picture = profile.get("picture")
         data = picture.get("data") if isinstance(picture, dict) else None
         avatar = None
@@ -506,7 +501,7 @@ PROVIDERS: dict[SignInProvider, OAuthProvider] = {
 # Callback paths a provider reaches with a cross-site POST, which can't carry
 # the client header. fieldclub.main exempts exactly these, for POST only.
 FORM_POST_CALLBACK_PATHS: tuple[str, ...] = tuple(
-    CALLBACK_PATH.format(provider=provider.id.value) for provider in PROVIDERS.values() if provider.form_post
+    callback_path(provider.id) for provider in PROVIDERS.values() if provider.form_post
 )
 
 for _provider in PROVIDERS.values():

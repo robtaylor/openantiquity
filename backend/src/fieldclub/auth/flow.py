@@ -69,9 +69,12 @@ class Flow:
         return pkce_challenge(self.verifier)
 
 
+def _b64(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
 def pkce_challenge(verifier: str) -> str:
-    digest = hashlib.sha256(verifier.encode("ascii")).digest()
-    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+    return _b64(hashlib.sha256(verifier.encode("ascii")).digest())
 
 
 def new_flow(
@@ -99,8 +102,9 @@ def _key() -> bytes:
     return hmac.new(secret, _KEY_PURPOSE, hashlib.sha256).digest()
 
 
-def _b64(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+def _sign(body: str) -> str:
+    # A tampered cookie may hold any character; it then simply fails to match.
+    return _b64(hmac.new(_key(), body.encode("ascii", "replace"), hashlib.sha256).digest())
 
 
 def _unb64(text: str) -> bytes:
@@ -110,8 +114,7 @@ def _unb64(text: str) -> bytes:
 def seal(flow: Flow) -> str:
     """The cookie value: the flow as JSON, then its signature, both base64url."""
     body = _b64(json.dumps(asdict(flow), separators=(",", ":")).encode("utf-8"))
-    signature = _b64(hmac.new(_key(), body.encode("ascii"), hashlib.sha256).digest())
-    sealed = f"{body}.{signature}"
+    sealed = f"{body}.{_sign(body)}"
     assert len(sealed) <= MAX_COOKIE_LENGTH, "the flow cookie is too large; is `next` capped?"
     return sealed
 
@@ -121,8 +124,7 @@ def unseal(value: str | None, *, now: float | None = None) -> Flow | None:
     if not value or len(value) > MAX_COOKIE_LENGTH or value.count(".") != 1:
         return None
     body, signature = value.split(".")
-    expected = _b64(hmac.new(_key(), body.encode("ascii", "replace"), hashlib.sha256).digest())
-    if not hmac.compare_digest(signature.encode("utf-8"), expected.encode("ascii")):
+    if not hmac.compare_digest(signature.encode("utf-8"), _sign(body).encode("ascii")):
         return None
     try:
         data = json.loads(_unb64(body))

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Response, status
 
-from fieldclub.api.deps import Contributor, Db, OptionalUser, PageQuery, rate_limit
-from fieldclub.api.findings import detail, private
+from fieldclub.api.deps import Contributor, Db, OptionalUser, PageQuery, private, rate_limit
+from fieldclub.api.findings import detail
 from fieldclub.schemas.common import Page
 from fieldclub.schemas.findings import AnswerCounts, Comparison, ObservationIn, ObservationOut, Reveal
 from fieldclub.services import findings, review

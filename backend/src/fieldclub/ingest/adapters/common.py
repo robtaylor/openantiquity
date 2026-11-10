@@ -115,6 +115,16 @@ def _transformer(crs: str) -> Transformer | None:
     return Transformer.from_crs(source, WGS84, always_xy=True)
 
 
+@lru_cache(maxsize=32)
+def _from_wgs84(crs: str) -> Transformer:
+    return Transformer.from_crs(WGS84, crs, always_xy=True)
+
+
+def bbox_from_wgs84(bbox: tuple[float, float, float, float], crs: str) -> tuple[float, float, float, float]:
+    """A WGS84 box, longitude first, as the box that covers it in `crs`."""
+    return _from_wgs84(crs).transform_bounds(*bbox, densify_pts=21)
+
+
 def to_wgs84(geometry: BaseGeometry, crs: str) -> BaseGeometry:
     """`geometry` from `crs` (any form pyproj reads, such as `EPSG:27700`) into WGS84, x first."""
     transformer = _transformer(crs)
@@ -160,6 +170,14 @@ def plain_tree(value: Any) -> Any:
     if isinstance(value, list):
         return [plain_tree(item) for item in value]
     return plain(value)
+
+
+def json_body(response: httpx.Response, where: str) -> Any:
+    """The response parsed as JSON, or `UpstreamFormatError` naming `where`."""
+    try:
+        return response.json()
+    except ValueError:
+        raise UpstreamFormatError(f"{where} did not answer with JSON.") from None
 
 
 def json_ready(properties: dict[str, Any]) -> dict[str, Any]:

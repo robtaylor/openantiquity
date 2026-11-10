@@ -16,9 +16,11 @@ from fieldclub.services.confidence import (
     THRESHOLDS,
     Assessment,
     FindingInputs,
+    InvalidInputsError,
     ObservationInput,
     assess,
     load_assessment,
+    load_next_steps,
 )
 from fieldclub.vocab import (
     DESK_STRANDS,
@@ -249,6 +251,14 @@ def test_the_assessment_survives_a_trip_through_json() -> None:
     for seed, _, assessment in assessed():
         stored = json.loads(json.dumps(assessment.to_json()))
         assert load_assessment(stored) == assessment, f"seed {seed}"
+
+
+def test_the_next_steps_load_on_their_own_as_in_the_whole_assessment() -> None:
+    for seed, _, assessment in assessed():
+        stored = json.loads(json.dumps(assessment.to_json()))
+        assert load_next_steps(stored) == assessment.next_steps, f"seed {seed}"
+    with pytest.raises(InvalidInputsError):
+        load_next_steps({"version": 0, "next_steps": []})
 
 
 def test_an_empty_or_older_assessment_loads_as_none() -> None:

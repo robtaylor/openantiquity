@@ -7,13 +7,18 @@ O. Six characters give about a billion codes.
 
 from __future__ import annotations
 
+import logging
 import secrets
+from collections.abc import Callable
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, Session
 
+from fieldclub.db import constraint_name
 from fieldclub.errors import AppError
+
+logger = logging.getLogger(__name__)
 
 ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 LENGTH = 6
@@ -51,16 +56,24 @@ def normalise(text: str) -> str | None:
     return candidate
 
 
-def new_public_id(db: Session, model: type[HasPublicId]) -> str:
-    """A public id that no row of `model` has yet.
+def insert_with_public_id[T: HasPublicId](db: Session, build: Callable[[str], T], constraint: str) -> T:
+    """Add and flush the row `build(public_id)` makes, with a public id no other row has.
 
-    The unique constraint on `public_id` is the real guarantee. Checking first
-    just makes a clash something this function absorbs, where otherwise the
-    caller's insert would fail.
+    The unique constraint named `constraint` decides. Each attempt inserts
+    inside a savepoint, so a clash costs only that attempt and another id is
+    tried. Asking first and inserting second would let two requests take the
+    same id at the same moment. Any other integrity error is raised.
     """
     for _ in range(MAX_ATTEMPTS):
-        candidate = generate()
-        taken = db.scalar(select(model.public_id).where(model.public_id == candidate).limit(1))
-        if taken is None:
-            return candidate
+        row = build(generate())
+        try:
+            with db.begin_nested():
+                db.add(row)
+                db.flush()
+        except IntegrityError as exc:
+            if constraint_name(exc) != constraint:
+                raise
+            logger.info("public id %s was taken, trying another", row.public_id)
+            continue
+        return row
     raise IdGenerationError()

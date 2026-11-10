@@ -25,18 +25,18 @@ import io
 import logging
 import re
 from collections.abc import Iterator
-from typing import Any
 
 import httpx
-from pyproj import CRS, Transformer
+from pyproj import CRS
 
 from fieldclub.ingest.adapters import ogr
 from fieldclub.ingest.adapters.common import (
-    WGS84,
     Feature,
     Polite,
     Tally,
     UpstreamFormatError,
+    bbox_from_wgs84,
+    json_body,
     plain_tree,
 )
 from fieldclub.ingest.adapters.files import geojson_geometry, ogr_features, quiet_ogr
@@ -78,7 +78,6 @@ class WFSLayer:
         self.page_size = page_size
         self.output_format = output_format
         self.tolerance = tolerance
-        self._to_grid = Transformer.from_crs(WGS84, crs, always_xy=True)
 
     def _params(self, bbox: BBox | None) -> dict[str, str]:
         params = {
@@ -88,7 +87,7 @@ class WFSLayer:
             "typeNames": self.type_name,
         }
         if bbox is not None:
-            west, south, east, north = self._to_grid.transform_bounds(*bbox, densify_pts=21)
+            west, south, east, north = bbox_from_wgs84(bbox, self.srs_name)
             params["bbox"] = f"{west!r},{south!r},{east!r},{north!r},{self.srs_name}"
         return params
 
@@ -118,10 +117,7 @@ class WFSLayer:
         return self._from_ogr(response.content)
 
     def _from_geojson(self, response: httpx.Response) -> list[Feature]:
-        try:
-            body: Any = response.json()
-        except ValueError:
-            raise UpstreamFormatError(f"{self.url} did not answer with JSON.") from None
+        body = json_body(response, self.url)
         if not isinstance(body, dict) or not isinstance(body.get("features"), list):
             raise UpstreamFormatError(f"{self.url} did not answer with a FeatureCollection.")
         stated = ((body.get("crs") or {}).get("properties") or {}).get("name")

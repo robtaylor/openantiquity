@@ -51,11 +51,11 @@ class ScheduledMonuments(Connector):
 
     def fetch(self, *, bbox=None, limit=None):
         path = cache_dir(self.settings, self.source.key) / "scheduled-monuments.gpkg"
-        fetched = download(HUB_EXPORT, path, client=self.http, polite=Polite(), max_age=self.max_age)
+        fetched = download(HUB_EXPORT, path, client=self.http, max_age=self.max_age)
         self.obtained_at = fetched.fetched_at  # dates the attribution
         info = vector_info(path)
         ...  # check the fields and CRS you rely on
-        for feature in read_vector(path, bbox=bbox):
+        for feature in read_vector(path, bbox=bbox, info=info):
             yield to_record(feature)
 ```
 

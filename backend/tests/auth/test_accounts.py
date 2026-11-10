@@ -24,8 +24,8 @@ from fieldclub.auth.handles import (
     HANDLE_PATTERN,
     InvalidDisplayNameError,
     InvalidHandleError,
-    is_unique_violation,
 )
+from fieldclub.db import is_unique_violation
 from fieldclub.models import AuthIdentity, Follow, MagicLink, Notification, User, UserSession
 from fieldclub.services import activity
 from tests.helpers import MakeFinding, MakeUser, count

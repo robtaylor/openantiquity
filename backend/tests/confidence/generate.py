@@ -12,6 +12,7 @@ import random
 from collections.abc import Sequence
 
 from fieldclub.services.confidence import (
+    FIELD_STRANDS,
     EvidenceInput,
     FindingInputs,
     ObservationInput,
@@ -28,11 +29,10 @@ from fieldclub.vocab import (
     Relation,
     Role,
     Stance,
-    Strand,
     Visible,
 )
+from tests.confidence.builders import FINDER
 
-FINDER = 1
 CASES = 600
 
 _ROLES = (Role.MEMBER,) * 6 + (Role.TRUSTED,) * 2 + (Role.EXPERT, Role.MODERATOR, Role.ADMIN)
@@ -42,9 +42,7 @@ _CLASSES = (
     FeatureClass.ROUND_BARROW,
     FeatureClass.UNKNOWN,
 )
-_FIELD = frozenset(
-    kind for kind, strand in EVIDENCE_STRANDS.items() if strand in (Strand.GROUND, Strand.SURVEY)
-)
+_FIELD = frozenset(kind for kind, strand in EVIDENCE_STRANDS.items() if strand in FIELD_STRANDS)
 
 _DESK_KINDS = tuple(kind for kind, strand in EVIDENCE_STRANDS.items() if strand in DESK_STRANDS)
 

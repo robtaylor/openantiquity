@@ -36,10 +36,14 @@ def fixture_bytes(name: str) -> bytes:
 
 
 class NoWait(Polite):
-    """A `Polite` that records the sleeps it would have taken instead of taking them."""
+    """A `Polite` that records the sleeps it would have taken instead of taking them.
+
+    It leaves no gap between requests unless given a `delay_s`.
+    """
 
     def __init__(self, **kwargs: Any) -> None:
         self.slept: list[float] = []
+        kwargs.setdefault("delay_s", 0)
         super().__init__(sleep=self.slept.append, **kwargs)
 
 

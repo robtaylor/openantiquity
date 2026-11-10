@@ -46,7 +46,7 @@ def client() -> httpx.Client:
 def test_downloads_through_the_hub_redirect(tmp_path: Path) -> None:
     respx.get(HUB).mock(return_value=redirect())
     respx.get(FILE).mock(return_value=whole())
-    result = download(HUB, tmp_path / "sm.gpkg", client=client(), polite=NoWait(delay_s=0))
+    result = download(HUB, tmp_path / "sm.gpkg", client=client(), polite=NoWait())
 
     assert result.path.read_bytes() == BODY
     assert not result.from_cache
@@ -59,7 +59,7 @@ def test_downloads_through_the_hub_redirect(tmp_path: Path) -> None:
 def test_a_young_copy_is_reused_without_asking(tmp_path: Path) -> None:
     hub = respx.get(HUB).mock(return_value=redirect())
     respx.get(FILE).mock(return_value=whole())
-    polite = NoWait(delay_s=0)
+    polite = NoWait()
     download(HUB, tmp_path / "sm.gpkg", client=client(), polite=polite)
     again = download(HUB, tmp_path / "sm.gpkg", client=client(), polite=polite, max_age=timedelta(hours=1))
     assert again.from_cache
@@ -70,8 +70,8 @@ def test_a_young_copy_is_reused_without_asking(tmp_path: Path) -> None:
 def test_an_old_copy_is_fetched_again(tmp_path: Path) -> None:
     hub = respx.get(HUB).mock(return_value=redirect())
     respx.get(FILE).mock(return_value=whole())
-    download(HUB, tmp_path / "sm.gpkg", client=client(), polite=NoWait(delay_s=0))
-    later = NoWait(delay_s=0, now=lambda: datetime.now(UTC) + timedelta(days=2))
+    download(HUB, tmp_path / "sm.gpkg", client=client(), polite=NoWait())
+    later = NoWait(now=lambda: datetime.now(UTC) + timedelta(days=2))
     again = download(HUB, tmp_path / "sm.gpkg", client=client(), polite=later, max_age=timedelta(hours=20))
     assert not again.from_cache
     assert hub.call_count == 2
@@ -100,7 +100,7 @@ def test_a_dropped_connection_resumes_where_it_stopped(tmp_path: Path) -> None:
 
     respx.get(HUB).mock(return_value=redirect())
     respx.get(FILE).mock(side_effect=serve)
-    polite = NoWait(delay_s=0)
+    polite = NoWait()
     result = download(HUB, tmp_path / "sm.gpkg", client=client(), polite=polite)
 
     assert result.path.read_bytes() == BODY
@@ -122,7 +122,7 @@ def test_a_file_that_changed_meanwhile_starts_again(tmp_path: Path) -> None:
 
     respx.get(HUB).mock(return_value=redirect())
     respx.get(FILE).mock(side_effect=serve)
-    result = download(HUB, tmp_path / "sm.gpkg", client=client(), polite=NoWait(delay_s=0))
+    result = download(HUB, tmp_path / "sm.gpkg", client=client(), polite=NoWait())
     assert result.path.read_bytes() == changed
 
 
@@ -136,7 +136,7 @@ def test_waits_while_the_hub_prepares_an_export(tmp_path: Path) -> None:
         ]
     )
     respx.get(FILE).mock(return_value=whole())
-    polite = NoWait(delay_s=0)
+    polite = NoWait()
     result = download(HUB, tmp_path / "sm.gpkg", client=client(), polite=polite)
     assert result.path.read_bytes() == BODY
     assert polite.slept == [10.0, 20.0]
@@ -147,7 +147,7 @@ def test_a_long_export_wait_leaves_the_error_retries_alone(tmp_path: Path) -> No
     exporting = httpx.Response(202, json={"status": "ExportingData"})
     respx.get(HUB).mock(side_effect=[exporting] * 5 + [httpx.Response(502), redirect()])
     respx.get(FILE).mock(return_value=whole())
-    polite = NoWait(delay_s=0, backoff_s=2)
+    polite = NoWait(backoff_s=2)
     result = download(HUB, tmp_path / "sm.gpkg", client=client(), polite=polite)
     assert result.path.read_bytes() == BODY
     # Five export polls with growing gaps, then the first retry's backoff.
@@ -158,7 +158,7 @@ def test_a_long_export_wait_leaves_the_error_retries_alone(tmp_path: Path) -> No
 def test_gives_up_on_an_export_that_never_finishes(tmp_path: Path) -> None:
     respx.get(HUB).mock(return_value=httpx.Response(202, json={"status": "ExportingData"}))
     with pytest.raises(AdapterError, match="still preparing the export"):
-        download(HUB, tmp_path / "sm.gpkg", client=client(), polite=NoWait(delay_s=0), max_wait_s=100)
+        download(HUB, tmp_path / "sm.gpkg", client=client(), polite=NoWait(), max_wait_s=100)
 
 
 @respx.mock
@@ -171,7 +171,7 @@ def test_a_short_body_is_never_renamed_into_place(tmp_path: Path) -> None:
     )
     # No validator, so nothing can be resumed and every attempt starts again.
     with pytest.raises(AdapterError, match="kept failing"):
-        download(HUB, tmp_path / "sm.gpkg", client=client(), polite=NoWait(delay_s=0, retries=2))
+        download(HUB, tmp_path / "sm.gpkg", client=client(), polite=NoWait(retries=2))
     assert not (tmp_path / "sm.gpkg").exists()
 
 
@@ -179,4 +179,4 @@ def test_a_short_body_is_never_renamed_into_place(tmp_path: Path) -> None:
 def test_a_refusal_is_an_error(tmp_path: Path) -> None:
     respx.get(HUB).mock(return_value=httpx.Response(403, text="Forbidden"))
     with pytest.raises(AdapterError, match="answered 403"):
-        download(HUB, tmp_path / "sm.gpkg", client=client(), polite=NoWait(delay_s=0))
+        download(HUB, tmp_path / "sm.gpkg", client=client(), polite=NoWait())

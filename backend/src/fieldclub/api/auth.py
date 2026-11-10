@@ -21,7 +21,17 @@ from fastapi.responses import RedirectResponse
 
 from fieldclub import ratelimit
 from fieldclub.api.deps import AppSettings, CurrentUser, Db, rate_limit
-from fieldclub.auth import accounts, cookies, email_link, oauth, onboarding, profile, sessions, signin
+from fieldclub.auth import (
+    accounts,
+    cookies,
+    email_link,
+    oauth,
+    onboarding,
+    profile,
+    providers,
+    sessions,
+    signin,
+)
 from fieldclub.auth.deps import client_ip
 from fieldclub.auth.failures import FlowStateError, ProviderUnavailableError, SignInFailedError
 from fieldclub.auth.flow import FLOW_COOKIE, new_flow, seal, state_matches, unseal
@@ -177,10 +187,6 @@ def _failure(settings: Settings, target: str, code: str) -> RedirectResponse:
     return RedirectResponse(app_url(settings, target, signin_error=code), status.HTTP_303_SEE_OTHER)
 
 
-def _flow_cookie_path(provider: SignInProvider) -> str:
-    return oauth.CALLBACK_PATH.format(provider=provider.value)
-
-
 @router.get(
     "/oauth/{provider}/start",
     response_class=RedirectResponse,
@@ -208,9 +214,7 @@ def oauth_start(
         logger.info("Sign-in with %.40r couldn't start: %s", provider, exc.code)
         return _failure(settings, target, exc.code)
     response = RedirectResponse(url, status.HTTP_302_FOUND)
-    cookies.set_flow_cookie(
-        response, seal(flow), path=_flow_cookie_path(chosen.id), cross_site_post=chosen.form_post
-    )
+    cookies.set_flow_cookie(response, seal(flow), chosen)
     return response
 
 
@@ -219,11 +223,14 @@ def _finish_oauth(
 ) -> RedirectResponse:
     """Check the state, verify the person, sign them in and send them on. Every outcome is a redirect."""
     flow = unseal(request.cookies.get(FLOW_COOKIE))
-    target = flow.next if flow is not None and flow.provider == provider else DEFAULT_NEXT
+    # The flow must be for the provider this callback is for.
+    if flow is not None and flow.provider != provider:
+        flow = None
+    target = flow.next if flow is not None else DEFAULT_NEXT
     chosen: oauth.OAuthProvider | None = None
     try:
         chosen = oauth.get_provider(provider, settings)
-        if flow is None or flow.provider != chosen.id.value or not state_matches(flow, callback.state):
+        if flow is None or not state_matches(flow, callback.state):
             raise FlowStateError()
         identity = chosen.complete(settings, flow, callback)
         user = signin.user_for_identity(db, identity)
@@ -242,8 +249,7 @@ def _finish_oauth(
         cookies.set_session_cookie(response, token)
     if chosen is not None:
         # One flow, one callback, whatever the outcome.
-        path = _flow_cookie_path(chosen.id)
-        cookies.clear_flow_cookie(response, path=path, cross_site_post=chosen.form_post)
+        cookies.clear_flow_cookie(response, chosen)
     return response
 
 
@@ -295,6 +301,12 @@ def oauth_callback_post(
 # --------------------------------------------------------------------------
 
 
+def _require_email_link(settings: Settings) -> None:
+    """Refuse unless the emailed link is switched on, by the same rule `/meta` reports."""
+    if not providers.is_enabled(SignInProvider.EMAIL, settings):
+        raise ProviderUnavailableError()
+
+
 @router.post(
     "/email/start",
     response_model=EmailStarted,
@@ -306,11 +318,10 @@ def email_start(body: EmailStart, response: Response, db: Db, settings: AppSetti
 
     The answer is the same whether or not the address has an account.
     """
+    _require_email_link(settings)
     mailer = get_mailer(settings)
-    if mailer is None:
-        raise ProviderUnavailableError()
-    if settings.ratelimit_enabled:
-        _LINKS_PER_ADDRESS.hit(f"email:{hash_token(email_link.rate_key(body.email))}")
+    assert mailer is not None, "the emailed link is enabled only with a mail backend"
+    ratelimit.enforce_key(_LINKS_PER_ADDRESS, f"email:{hash_token(email_link.rate_key(body.email))}")
     browser = new_token()
     token = email_link.create_link(db, body.email, browser=browser)
     db.commit()
@@ -332,8 +343,7 @@ def email_verify(
     In a browser other than the one that asked for the link, this answers
     `confirmation_required` with the masked address until posted with `confirm`.
     """
-    if settings.mail_backend is None:
-        raise ProviderUnavailableError()
+    _require_email_link(settings)
     user = email_link.redeem(
         db, body.token, browser=request.cookies.get(email_link.LINK_COOKIE), confirmed=body.confirm
     )

@@ -55,7 +55,7 @@ class RecordedLayer:
 
 
 def make_layer(**kwargs: Any) -> ArcGISLayer:
-    return ArcGISLayer(LAYER, client=httpx.Client(), polite=NoWait(delay_s=0), **kwargs)
+    return ArcGISLayer(LAYER, client=httpx.Client(), polite=NoWait(), **kwargs)
 
 
 @respx.mock
@@ -261,7 +261,7 @@ def read_synthetic(layer: SyntheticLayer, **kwargs: Any) -> list[object]:
     url = "https://synthetic.example/arcgis/rest/services/Things/FeatureServer/0"
     with respx.mock:
         respx.route(host="synthetic.example").mock(side_effect=layer)
-        reader = ArcGISLayer(url, client=httpx.Client(), polite=NoWait(delay_s=0), **kwargs)
+        reader = ArcGISLayer(url, client=httpx.Client(), polite=NoWait(), **kwargs)
         return [feature.id for feature in reader.features()]
 
 

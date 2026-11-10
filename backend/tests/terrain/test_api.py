@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import io
-from collections.abc import Iterator
 from pathlib import Path
 
 import numpy as np
@@ -11,27 +10,21 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
-from pyproj import Transformer
-from shapely.geometry import MultiPolygon, box
 from sqlalchemy.orm import Session
 
-from fieldclub.layers import build_layers
-from fieldclub.models import AdminArea
-from fieldclub.models.common import to_db_geometry
+from fieldclub.layers import LIDAR_STYLES, build_layers
 from fieldclub.schemas.meta import RasterView
 from fieldclub.storage import LocalStorage
-from fieldclub.terrain.cog import to_cog
 from fieldclub.terrain.grid import tile_at
-from fieldclub.terrain.mirror import LocalMirrorStore, LocalSourceFetcher, Mirror
 from fieldclub.terrain.render import terrarium_decode
 from fieldclub.terrain.service import Terrain, build_terrain, get_terrain
-from fieldclub.terrain.sources import file_source
-from tests.helpers import error_code
-from tests.terrain.fakes import catalogue_of, write_source_tile
+from tests.helpers import admin_area, error_code
+from tests.terrain.fakes import TO_LONLAT, decode_png, local_mirror, local_terrain, write_source_tile
 
-TO_LONLAT = Transformer.from_crs(27700, 4326, always_xy=True)
 # The middle of SU16nw, by Avebury.
 INSIDE = TO_LONLAT.transform(412_505, 167_505)
+# The styles `/meta` offers.
+SERVED = [style_id for style_id, _, _ in LIDAR_STYLES]
 
 
 def plane(east: np.ndarray, north: np.ndarray) -> np.ndarray:
@@ -47,24 +40,15 @@ def mirror_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 @pytest.fixture
 def terrain(mirror_dir: Path, tmp_path: Path) -> Terrain:
-    catalogue = catalogue_of((mirror_dir / "src").glob("*.tif"), extra=["SU16ne"])
-    mirror = Mirror(
-        catalogue,
-        LocalMirrorStore(tmp_path / "cogs"),
-        [LocalSourceFetcher(mirror_dir / "src")],
-        tmp_path / "work",
-        convert=lambda src, dst: to_cog(src, dst, overview_count=1),
-    )
-    national = file_source("national", str(tmp_path / "none.tif"), exists=lambda: False)
-    return Terrain(mirror, national, LocalStorage(tmp_path / "tiles"), national_exists=lambda: False)
+    mirror = local_mirror(tmp_path, sources=mirror_dir / "src", extra=["SU16ne"])
+    return local_terrain(mirror, tmp_path / "tiles")
 
 
 @pytest.fixture
-def api(app: FastAPI, terrain: Terrain) -> Iterator[TestClient]:
+def api(app: FastAPI, client: TestClient, terrain: Terrain) -> TestClient:
+    # `client` wraps this test's own `app`, so the override ends with the test.
     app.dependency_overrides[get_terrain] = lambda: terrain
-    with TestClient(app, base_url="https://testserver", headers={"X-FieldClub-Client": "web"}) as client:
-        yield client
-    app.dependency_overrides.clear()
+    return client
 
 
 # --------------------------------------------------------------------------
@@ -91,7 +75,7 @@ def test_the_meta_tile_urls_carry_the_versions_the_served_tiles_have(tmp_path: P
     renderer = build_terrain(storage=LocalStorage(tmp_path)).renderer
     layers = build_layers()
     views = {view.id: view for view in layers.views if isinstance(view, RasterView)}
-    for style in ("composite", "local_relief", "sky_view", "multi_shade", "slope"):
+    for style in SERVED:
         tiles = views[style].tiles
         assert tiles == [f"/tiles/lidar/{style}/{{z}}/{{x}}/{{y}}.png?v={renderer.version(style)}"]
     assert layers.dem.tiles == [f"/tiles/dem/{{z}}/{{x}}/{{y}}.png?v={renderer.version('dem')}"]
@@ -116,7 +100,7 @@ def test_an_unchanged_tile_is_answered_not_modified(api: TestClient) -> None:
 
 def test_every_served_style_renders(api: TestClient) -> None:
     x, y = tile_at(*INSIDE, 16)
-    for style in ("composite", "local_relief", "sky_view", "multi_shade", "slope"):
+    for style in SERVED:
         assert api.get(f"/tiles/lidar/{style}/16/{x}/{y}.png").status_code == 200, style
 
 
@@ -125,7 +109,7 @@ def test_a_tile_with_no_data_is_transparent_and_fetches_nothing(api: TestClient,
     x, y = tile_at(2.5, 54.0, 14)
     response = api.get(f"/tiles/lidar/composite/14/{x}/{y}.png")
     assert response.status_code == 200
-    alpha = np.asarray(Image.open(io.BytesIO(response.content)))[..., -1]
+    alpha = decode_png(response.content)[..., -1]
     assert alpha.max() == 0
     assert terrain.mirror.store.names() in ([], ["SU16nw"])
 
@@ -186,7 +170,7 @@ def test_a_tile_on_the_far_side_of_the_world_is_transparent_and_fetches_nothing(
     x, y = tile_at(179.9, 0.0, 7)
     response = api.get(f"/tiles/lidar/composite/7/{x}/{y}.png")
     assert response.status_code == 200
-    assert np.asarray(Image.open(io.BytesIO(response.content)))[..., -1].max() == 0
+    assert decode_png(response.content)[..., -1].max() == 0
     assert terrain.mirror.store.names() == []
 
 
@@ -324,16 +308,8 @@ def test_the_whole_england_coverage_is_drawable() -> None:
 
 @pytest.fixture
 def wiltshire(db: Session) -> None:
-    shape = to_db_geometry(MultiPolygon([box(-2.4, 50.9, -1.4, 51.8)]))
-    db.add(
-        AdminArea(
-            kind="nation",
-            code="england",
-            name="England",
-            geom=to_db_geometry(MultiPolygon([box(-6, 49.8, 2, 56)])),
-        )
-    )
-    db.add(AdminArea(kind="county", code="E06000054", name="Wiltshire", geom=shape))
+    db.add(admin_area("nation", "england", "England", (-6, 49.8, 2, 56)))
+    db.add(admin_area("county", "E06000054", "Wiltshire", (-2.4, 50.9, -1.4, 51.8)))
     db.commit()
 
 

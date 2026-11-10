@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
-from fieldclub.schemas.common import ApiModel
+from fieldclub.schemas.common import ApiModel, RecordCount
 
 # --------------------------------------------------------------------------
 # Vocabularies
@@ -216,13 +216,7 @@ class SourceOut(ApiModel):
     attribution: str
     homepage: str | None
     category: str
-    record_count: int
-
-    @field_validator("record_count", mode="before")
-    @classmethod
-    def _no_count_yet_is_zero(cls, value: int | None) -> int:
-        # A source that has never been ingested has no count stored.
-        return value or 0
+    record_count: RecordCount
 
 
 class FieldVisitNotices(BaseModel):

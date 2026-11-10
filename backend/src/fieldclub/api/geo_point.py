@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
-from fieldclub.api.deps import Db
+from fieldclub.api.deps import Db, TerrainDep
 from fieldclub.gridref import GridRefError, to_gridref
 from fieldclub.services.geo import locate
-from fieldclub.terrain.service import Terrain, get_terrain
 
 router = APIRouter(prefix="/geo", tags=["geo"])
 
@@ -30,7 +29,7 @@ class GeoPointOut(BaseModel):
 @router.get("/point", response_model=GeoPointOut)
 def point(
     db: Db,
-    terrain: Annotated[Terrain, Depends(get_terrain)],
+    terrain: TerrainDep,
     lon: Annotated[float, Query(ge=-180, le=180)],
     lat: Annotated[float, Query(ge=-90, le=90)],
 ) -> GeoPointOut:

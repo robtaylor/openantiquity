@@ -40,7 +40,15 @@ class Source(Base):
     """An external dataset. Its licence and attribution are stored before any of its data is."""
 
     __tablename__ = "sources"
-    __table_args__ = (enum_check("access", SourceAccess), enum_check("reuse", SourceReuse))
+    __table_args__ = (
+        enum_check("access", SourceAccess),
+        enum_check("reuse", SourceReuse),
+        # A source is stored with its licence and attribution before any of its
+        # data (Decision 0007). NOT NULL lets an empty string through, so refuse blanks.
+        CheckConstraint(
+            "btrim(licence) <> '' AND btrim(attribution) <> ''", name="licence_and_attribution_given"
+        ),
+    )
 
     key: Mapped[str] = mapped_column(Text, primary_key=True)
     created_at: Mapped[CreatedAt]

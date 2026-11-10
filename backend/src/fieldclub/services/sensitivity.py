@@ -41,10 +41,13 @@ Things callers must not do:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from geoalchemy2.shape import to_shape
+from shapely.geometry import Polygon
 from shapely.geometry.base import BaseGeometry
+from sqlalchemy import ColumnElement, and_, false, func, not_, or_, true
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
@@ -97,14 +100,20 @@ class VisibleLocation:
     # The compact 1 km square, such as `SU1069`, when obscured. The frontend
     # draws this square in place of a marker.
     square: str | None
+    # The same square as a grid reference, when obscured.
+    square_ref: gridref.GridRef | None = field(default=None, compare=False, repr=False)
+
+    def square_polygon(self) -> Polygon | None:
+        """The obscuring 1 km square in WGS84, or None when the position is exact."""
+        return self.square_ref.polygon() if self.square_ref is not None else None
 
 
 def _exact_point(finding: Finding) -> tuple[float, float]:
     return point_lon_lat(finding.location, f"finding {finding.public_id}")
 
 
-def _active(viewer: User | None) -> User | None:
-    """The viewer, or None when they count as signed out."""
+def active_viewer(viewer: User | None) -> User | None:
+    """The viewer, or None when they count as signed out: a banned or deleted account does."""
     return viewer if viewer is not None and viewer.is_active else None
 
 
@@ -116,12 +125,54 @@ def sees_exact(finding: Finding, viewer: User | None) -> bool:
     level = Sensitivity(finding.sensitivity)
     if level is Sensitivity.OPEN:
         return True
-    active = _active(viewer)
+    active = active_viewer(viewer)
     if active is None:
         return False
     if active.has_id(finding.author_id) or Role(active.role) in EXACT_LOCATION_ROLES:
         return True
     return level is Sensitivity.PROTECTED
+
+
+def sees_exact_clause(viewer: User | None) -> ColumnElement[bool] | bool:
+    """SQL for `sees_exact(finding, viewer)`: where the viewer sees the exact position.
+
+    A plain True when a trusted viewer sees every position exactly. It has to
+    agree with `sees_exact` row for row, and a test checks every viewer
+    against every level.
+    """
+    active = active_viewer(viewer)
+    if active is None:
+        return Finding.sensitivity == Sensitivity.OPEN.value
+    if Role(active.role) in EXACT_LOCATION_ROLES:
+        return True
+    return or_(
+        Finding.sensitivity.in_([Sensitivity.OPEN.value, Sensitivity.PROTECTED.value]),
+        Finding.author_id == active.id,
+    )
+
+
+def as_sql(clause: ColumnElement[bool] | bool) -> ColumnElement[bool]:
+    if isinstance(clause, bool):
+        return true() if clause else false()
+    return clause
+
+
+def visible_position_clause(viewer: User | None, area: ColumnElement[Any]) -> ColumnElement[bool]:
+    """Findings whose position, as this viewer may see it, lies in `area`.
+
+    A signed-out visitor is matched on `location_public` alone, which is the
+    exact point for an open finding. Otherwise each branch tests one indexed
+    column, so the planner can use both spatial indexes.
+    """
+    in_public = func.ST_Intersects(Finding.location_public, area)
+    if active_viewer(viewer) is None:
+        return in_public
+    exact = sees_exact_clause(viewer)
+    in_exact = func.ST_Intersects(Finding.location, area)
+    if exact is True:
+        return in_exact
+    assert not isinstance(exact, bool), "only a trusted viewer sees every position exactly"
+    return or_(and_(exact, in_exact), and_(not_(exact), in_public))
 
 
 def _square(lon: float, lat: float, public_id: str | None) -> gridref.GridRef:
@@ -167,6 +218,7 @@ def visible_location(finding: Finding, viewer: User | None) -> VisibleLocation:
         outline=None,
         grid_ref=square.format(),
         square=square.format(compact=True),
+        square_ref=square,
     )
 
 
@@ -207,7 +259,7 @@ def starting_sensitivity(
     wanted = Sensitivity(requested)
     if sensitivity_rank(wanted) >= sensitivity_rank(floor):
         return wanted
-    active = _active(actor)
+    active = active_viewer(actor)
     if active is not None and Role(active.role) in MAY_LOWER_ROLES:
         return wanted
     return floor
@@ -238,7 +290,7 @@ def may_change_sensitivity(finding: Finding, actor: User | None, level: Sensitiv
     moderator may lower one. Setting the level it already has is allowed for
     anyone who may raise it.
     """
-    active = _active(actor)
+    active = active_viewer(actor)
     if active is None:
         return False
     role = Role(active.role)

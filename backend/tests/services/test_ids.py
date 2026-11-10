@@ -6,8 +6,9 @@ import pytest
 from sqlalchemy.orm import Session
 
 from fieldclub.models import Finding, Investigation
-from fieldclub.services import ids
-from tests.helpers import MakeFinding
+from fieldclub.models.common import db_point
+from fieldclub.services import findings, ids, investigations
+from tests.helpers import AVEBURY, MakeFinding, count
 
 
 def test_ids_are_six_characters_of_crockford_base32() -> None:
@@ -45,36 +46,63 @@ def test_normalise(typed: str, expected: str | None) -> None:
     assert ids.normalise(typed) == expected
 
 
-def test_new_public_id_is_free(db: Session, make_finding: MakeFinding) -> None:
+def _insert_finding(db: Session, author_id: int) -> Finding:
+    """A finding inserted with `insert_with_public_id`, as `create_finding` does."""
+    return ids.insert_with_public_id(
+        db,
+        lambda public_id: Finding(
+            public_id=public_id,
+            author_id=author_id,
+            title="Test",
+            feature_class="enclosure",
+            location=db_point(*AVEBURY),
+            view_state={},
+        ),
+        findings.PUBLIC_ID_CONSTRAINT,
+    )
+
+
+def _insert_investigation(db: Session, owner_id: int) -> Investigation:
+    return ids.insert_with_public_id(
+        db,
+        lambda public_id: Investigation(public_id=public_id, owner_id=owner_id, title="Test"),
+        investigations.PUBLIC_ID_CONSTRAINT,
+    )
+
+
+def test_an_inserted_public_id_is_free(db: Session, make_finding: MakeFinding) -> None:
     taken = {make_finding().public_id for _ in range(5)}
-    fresh = ids.new_public_id(db, Finding)
+    fresh = _insert_finding(db, make_finding().author_id).public_id
     assert fresh not in taken
     assert ids.normalise(fresh) == fresh
 
 
-def test_new_public_id_retries_past_a_clash(
+def test_insertion_retries_past_a_clash(
     db: Session, make_finding: MakeFinding, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     make_finding(public_id="AAAAAA")
-    make_finding(public_id="BBBBBB")
+    author_id = make_finding(public_id="BBBBBB").author_id
     offered = iter(["AAAAAA", "BBBBBB", "CCCCCC"])
     monkeypatch.setattr(ids, "generate", lambda: next(offered))
-    assert ids.new_public_id(db, Finding) == "CCCCCC"
+    assert _insert_finding(db, author_id).public_id == "CCCCCC"
+    assert count(db, Finding) == 3
 
 
 def test_ids_are_unique_per_table_not_across_tables(
     db: Session, make_finding: MakeFinding, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    make_finding(public_id="AAAAAA")
+    author_id = make_finding(public_id="AAAAAA").author_id
     monkeypatch.setattr(ids, "generate", lambda: "AAAAAA")
-    assert ids.new_public_id(db, Investigation) == "AAAAAA"
+    assert _insert_investigation(db, author_id).public_id == "AAAAAA"
 
 
 def test_gives_up_when_nothing_is_free(
     db: Session, make_finding: MakeFinding, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    make_finding(public_id="AAAAAA")
+    author_id = make_finding(public_id="AAAAAA").author_id
     monkeypatch.setattr(ids, "generate", lambda: "AAAAAA")
     with pytest.raises(ids.IdGenerationError) as caught:
-        ids.new_public_id(db, Finding)
+        _insert_finding(db, author_id)
     assert caught.value.code == "id_generation_failed"
+    # Each clash was rolled back to its savepoint, so the session is still usable.
+    assert count(db, Finding) == 1

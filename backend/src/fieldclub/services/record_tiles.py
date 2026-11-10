@@ -35,6 +35,7 @@ from sqlalchemy import TextClause, text
 from sqlalchemy.orm import Session
 
 from fieldclub.errors import BadRequestError, NotFoundError
+from fieldclub.terrain.grid import HALF_WORLD
 from fieldclub.vocab import RecordCategory
 
 MAX_ZOOM = 22
@@ -46,8 +47,6 @@ GRID = 32
 # A count tile at zoom z is a GRID by GRID block of the cells at level z + CELL_LEVELS.
 CELL_LEVELS = 5
 assert 2**CELL_LEVELS == GRID, "a count cell must be a tile some zooms further in"
-# Half the width of the Web Mercator square, in metres.
-MERCATOR_HALF = 20_037_508.342789244
 EXTENT = 4096
 # How far features reach past the tile edge, in tile units, so lines and
 # outlines join up across tiles.
@@ -64,10 +63,13 @@ class InvalidTileFilterError(BadRequestError):
     code = "invalid_tile_filter"
 
 
-_FILTER = """
+# Every record, or only those of the categories asked for. Format with the table alias.
+_CATEGORY = "(CAST(:categories AS text[]) IS NULL OR {alias}.category = ANY (CAST(:categories AS text[])))"
+
+_FILTER = f"""
     WHERE s.enabled
       AND r.geom && bounds.area
-      AND (CAST(:categories AS text[]) IS NULL OR r.category = ANY (CAST(:categories AS text[])))
+      AND {_CATEGORY.format(alias="r")}
 """
 
 _BUSY = text(
@@ -103,7 +105,7 @@ _FEATURES = text(
 )
 
 _COUNTS = text(
-    """
+    f"""
     WITH bounds AS (
         SELECT ST_TileEnvelope(:z, :x, :y) AS tile,
                ST_Transform(ST_TileEnvelope(:z, :x, :y), 4326) AS area
@@ -120,7 +122,7 @@ _COUNTS = text(
         CROSS JOIN grid
         WHERE s.enabled
           AND r.centroid && grid.area
-          AND (CAST(:categories AS text[]) IS NULL OR r.category = ANY (CAST(:categories AS text[])))
+          AND {_CATEGORY.format(alias="r")}
     ),
     cells AS (
         SELECT p.category,
@@ -152,7 +154,7 @@ _COUNTS = text(
 
 
 _STORED_COUNTS = text(
-    """
+    f"""
     WITH cells AS (
         SELECT c.cx, c.cy, c.category, sum(c.count) AS count,
                string_agg(DISTINCT c.source_key, ',' ORDER BY c.source_key) AS sources
@@ -162,7 +164,7 @@ _STORED_COUNTS = text(
           AND c.level = :level
           AND c.cx BETWEEN :cx0 AND :cx0 + :grid - 1
           AND c.cy BETWEEN :cy0 AND :cy0 + :grid - 1
-          AND (CAST(:categories AS text[]) IS NULL OR c.category = ANY (CAST(:categories AS text[])))
+          AND {_CATEGORY.format(alias="c")}
         GROUP BY c.cx, c.cy, c.category
     )
     SELECT ST_AsMVT(counted, 'record_counts', :extent, 'geom')
@@ -215,7 +217,7 @@ def refresh_counts(db: Session, source_key: str | None = None) -> None:
     """Rebuild the stored cell counts of one source, or of every source. Flushes, never commits."""
     params = {
         "source": source_key,
-        "half": MERCATOR_HALF,
+        "half": HALF_WORLD,
         "first_level": CELL_LEVELS,
         "last_level": FEATURES_FROM_ZOOM - 1 + CELL_LEVELS,
     }
@@ -228,12 +230,18 @@ def check_tile(z: int, x: int, y: int) -> None:
         raise TileOutOfRangeError(f"{z}/{x}/{y} is not a tile. Zoom runs from 0 to {MAX_ZOOM}.")
 
 
-def check_categories(categories: list[str] | None) -> list[str] | None:
+def check_categories(
+    categories: list[str] | None, error: type[BadRequestError] = InvalidTileFilterError
+) -> list[str] | None:
+    """The categories asked for, sorted and without repeats, or None for all.
+
+    An unknown category raises `error`, so each caller keeps its own error code.
+    """
     if not categories:
         return None
     unknown = [value for value in categories if value not in RecordCategory]
     if unknown:
-        raise InvalidTileFilterError(f"Unknown record categories: {', '.join(unknown)}.")
+        raise error(f"Unknown record categories: {', '.join(unknown)}.")
     return sorted(set(categories))
 
 
@@ -253,8 +261,8 @@ def tile_query(
     params["categories"] = check_categories(categories)
     if z < FEATURES_FROM_ZOOM:
         level = z + CELL_LEVELS
-        cells = {"level": level, "cx0": x * GRID, "cy0": y * GRID, "grid": GRID, "half": MERCATOR_HALF}
-        return _STORED_COUNTS, params | cells | {"cell": 2 * MERCATOR_HALF / 2**level}
+        cells = {"level": level, "cx0": x * GRID, "cy0": y * GRID, "grid": GRID, "half": HALF_WORLD}
+        return _STORED_COUNTS, params | cells | {"cell": 2 * HALF_WORLD / 2**level}
     if not is_busy(db, params):
         return _FEATURES, params | {"buffer": BUFFER, "margin": BUFFER / EXTENT}
     return _COUNTS, params | {"grid": GRID}

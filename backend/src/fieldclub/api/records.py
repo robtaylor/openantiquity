@@ -11,9 +11,9 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Path, Query
 from fastapi.responses import Response
 
-from fieldclub.api.deps import Db, OptionalUser
+from fieldclub.api.deps import Db, OptionalUser, PageQuery, split_list
 from fieldclub.schemas import records as schema
-from fieldclub.schemas.common import GeoJSONFeatureCollection
+from fieldclub.schemas.common import BBox, GeoJSONFeatureCollection, split_bbox
 from fieldclub.services import records
 from fieldclub.services.records import InvalidSearchError
 
@@ -26,24 +26,15 @@ ListParam = Annotated[
 ]
 
 
-def split_list(value: str | None) -> list[str] | None:
-    """`a,b, c` as `["a", "b", "c"]`, or None when empty."""
-    if value is None:
-        return None
-    items = [item.strip() for item in value.split(",") if item.strip()]
-    return items or None
-
-
-def parse_bbox(value: str | None) -> tuple[float, float, float, float] | None:
+def parse_bbox(value: str | None) -> BBox | None:
     """`west,south,east,north` in degrees."""
     if value is None:
         return None
-    parts = value.split(",")
     try:
-        west, south, east, north = (float(part) for part in parts)
+        bbox = split_bbox(value)
     except ValueError:
         raise InvalidSearchError("bbox is four numbers: west,south,east,north.") from None
-    return records.check_bbox((west, south, east, north))
+    return records.check_bbox(bbox)
 
 
 def _geojson(results: list[records.RecordResult]) -> Response:
@@ -54,12 +45,12 @@ def _geojson(results: list[records.RecordResult]) -> Response:
 @router.get("/records/search", response_model=schema.RecordPage)
 def search_records(
     db: Db,
+    *,
     q: Annotated[str | None, Query(max_length=records.MAX_QUERY_CHARS)] = None,
     source: ListParam = None,
     category: ListParam = None,
     bbox: Annotated[str | None, Query(max_length=200, description="west,south,east,north")] = None,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    cursor: Annotated[str | None, Query(max_length=512)] = None,
+    page: PageQuery,
     format: Format = "json",
 ) -> schema.RecordPage | Response:
     """Records by text, source, category and area, best match first."""
@@ -69,8 +60,8 @@ def search_records(
         sources=split_list(source),
         categories=split_list(category),
         bbox=parse_bbox(bbox),
-        limit=limit,
-        cursor=cursor,
+        limit=page.limit,
+        cursor=page.cursor,
     )
     if format == "geojson":
         return _geojson(found)
@@ -132,10 +123,5 @@ def suggested_records(
         origin=schema.Origin(
             lon=round(origin.lon, 6), lat=round(origin.lat, 6), obscured=origin.obscured, square=origin.square
         ),
-        items=[
-            schema.SuggestedRecord(
-                **schema.record_hit(item.result).model_dump(), type_fit=item.type_fit, score=item.score
-            )
-            for item in found.items
-        ],
+        items=[schema.record_suggestion(item) for item in found.items],
     )

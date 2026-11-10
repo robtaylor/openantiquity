@@ -14,7 +14,7 @@ import rasterio
 from fieldclub.config import DefraSftpSettings
 from fieldclub.errors import DataIntegrityError
 from fieldclub.terrain.catalogue import SourceTile
-from fieldclub.terrain.cog import check_cog, to_cog
+from fieldclub.terrain.cog import check_cog
 from fieldclub.terrain.errors import CredentialsMissingError, ElevationUnavailableError
 from fieldclub.terrain.mirror import (
     Fetched,
@@ -26,11 +26,7 @@ from fieldclub.terrain.mirror import (
     mirror_store,
 )
 from fieldclub.terrain.sftp import defra_connector
-from tests.terrain.fakes import FakeServer, catalogue_of, write_source_tile
-
-
-def small_cog(src: Path, dst: Path) -> None:
-    to_cog(src, dst, overview_count=1)
+from tests.terrain.fakes import FakeServer, catalogue_of, local_mirror, small_cog, write_source_tile
 
 
 @pytest.fixture(scope="module")
@@ -57,16 +53,8 @@ class SpyFetcher:
         return self.inner.fetch(tile, work_dir)
 
 
-def make_mirror(sources: Path, tmp_path: Path, fetchers: list[Any], **options: Any) -> Mirror:
-    catalogue = catalogue_of(sources.glob("*.tif"), extra=["SU17sw"])
-    return Mirror(
-        catalogue,
-        LocalMirrorStore(tmp_path / "mirror"),
-        fetchers,
-        tmp_path / "work",
-        convert=small_cog,
-        **options,
-    )
+def make_mirror(sources: Path, tmp_path: Path, fetchers: list[Any]) -> Mirror:
+    return local_mirror(tmp_path, sources=sources, extra=["SU17sw"], fetchers=fetchers)
 
 
 def test_a_local_source_tile_is_converted_into_the_mirror(sources: Path, tmp_path: Path) -> None:
@@ -74,7 +62,7 @@ def test_a_local_source_tile_is_converted_into_the_mirror(sources: Path, tmp_pat
     assert not mirror.has("SU16nw")
     path = mirror.ensure("su16NW")
     assert path is not None
-    assert path == str(tmp_path / "mirror" / "SU16nw.tif")
+    assert path == str(tmp_path / "cogs" / "SU16nw.tif")
     summary = check_cog(path)
     assert summary.overviews == [2]
     assert summary.compression in {"lerc_zstd", "zstd"}
@@ -109,7 +97,7 @@ def test_twenty_threads_asking_for_one_missing_tile_cause_one_fetch(sources: Pat
     for thread in threads:
         thread.join()
     assert spy.calls == ["SU16nw"]
-    assert results == [str(tmp_path / "mirror" / "SU16nw.tif")] * 20
+    assert results == [str(tmp_path / "cogs" / "SU16nw.tif")] * 20
 
 
 def test_a_failed_conversion_publishes_nothing_and_the_next_request_tries_again(
@@ -127,7 +115,7 @@ def test_a_failed_conversion_publishes_nothing_and_the_next_request_tries_again(
     assert not mirror.has("SU16nw")
     assert store.names() == []
     assert not list((tmp_path / "work").glob("*.tif"))
-    fixed = Mirror(catalogue, store, [LocalSourceFetcher(sources)], tmp_path / "work", convert=small_cog)
+    fixed = Mirror(catalogue, store, [LocalSourceFetcher(sources)], tmp_path / "work", convert=small_cog())
     assert fixed.ensure("SU16nw") is not None
 
 
@@ -153,7 +141,7 @@ def test_a_tile_is_fetched_from_the_bulk_supply_and_the_download_removed(
     sources: Path, tmp_path: Path
 ) -> None:
     source = sources / "SU16ne_DTM_1m.tif"
-    server = FakeServer({"composite/2022/GeoTiffs/1m/DTM/SU16ne_DTM_1m.tif": source.read_bytes()})
+    server = FakeServer({SourceTile("SU16ne", 0).remote_path: source.read_bytes()})
     mirror = make_mirror(sources, tmp_path, [SftpFetcher(lambda: server.connect, window=1024 * 1024)])
     path = mirror.ensure("SU16ne")
     assert path is not None
@@ -214,7 +202,7 @@ def test_an_unreadable_source_on_disk_is_set_aside_and_the_bulk_supply_tried(
 ) -> None:
     bad = corrupt_copy(sources, tmp_path / "local", "SU16ne")
     good = (sources / "SU16ne_DTM_1m.tif").read_bytes()
-    server = FakeServer({"composite/2022/GeoTiffs/1m/DTM/SU16ne_DTM_1m.tif": good})
+    server = FakeServer({SourceTile("SU16ne", 0).remote_path: good})
     fetchers = [LocalSourceFetcher(bad.parent), SftpFetcher(lambda: server.connect, window=1024 * 1024)]
     mirror = make_mirror(sources, tmp_path, fetchers)
     path = mirror.ensure("SU16ne")

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import subprocess
-import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -21,6 +19,7 @@ from fieldclub.storage import (
     check_key,
     get_storage,
 )
+from tests.helpers import run_fresh
 
 
 class FakeBlob:
@@ -187,8 +186,7 @@ def test_importing_fieldclub_does_not_load_the_google_client() -> None:
         "import sys; import fieldclub.storage, fieldclub.main; "
         "sys.exit(1 if any(name.startswith('google.cloud') for name in sys.modules) else 0)"
     )
-    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
-    assert result.returncode == 0, result.stderr
+    run_fresh(code)
 
 
 def test_get_storage_follows_settings(env: Callable[..., None], tmp_path: Path) -> None:

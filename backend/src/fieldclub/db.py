@@ -15,6 +15,7 @@ from collections.abc import Generator
 from importlib import resources
 
 from sqlalchemy import Engine, MetaData, create_engine, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from fieldclub.config import get_settings
@@ -38,6 +39,17 @@ NAMING_CONVENTION = {
 
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
+
+
+def constraint_name(exc: IntegrityError) -> str | None:
+    """The constraint an `IntegrityError` broke. Safe to log, unlike the message, which holds the values."""
+    diag = getattr(exc.orig, "diag", None)
+    return getattr(diag, "constraint_name", None)
+
+
+def is_unique_violation(exc: IntegrityError, constraint: str) -> bool:
+    """Whether an `IntegrityError` is the named unique constraint being broken."""
+    return constraint_name(exc) == constraint
 
 
 def _make_engine(url: str) -> Engine:

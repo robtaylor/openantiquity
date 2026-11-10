@@ -8,14 +8,14 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from starlette.responses import JSONResponse
 
+from fieldclub.api.deps import TerrainDep
 from fieldclub.errors import BadRequestError
 from fieldclub.ratelimit import rate_limit
+from fieldclub.schemas.common import BBox, is_bbox, split_bbox
 from fieldclub.terrain.coverage import coverage
-from fieldclub.terrain.service import MAX_PROFILE_SAMPLES, MAX_PROFILE_VERTICES, Terrain, get_terrain
+from fieldclub.terrain.service import MAX_PROFILE_SAMPLES, MAX_PROFILE_VERTICES
 
 router = APIRouter(prefix="/terrain", tags=["terrain"])
-
-TerrainDep = Annotated[Terrain, Depends(get_terrain)]
 
 Position = tuple[Annotated[float, Field(ge=-180, le=180)], Annotated[float, Field(ge=-90, le=90)]]
 
@@ -63,16 +63,16 @@ def profile(body: ProfileRequest, terrain: TerrainDep) -> ProfileOut:
     )
 
 
-def _parse_bbox(value: str | None) -> tuple[float, float, float, float] | None:
+def _parse_bbox(value: str | None) -> BBox | None:
     if value is None:
         return None
     try:
-        west, south, east, north = (float(part) for part in value.split(","))
+        bbox = split_bbox(value)
     except ValueError:
-        raise BadRequestError("bbox is west,south,east,north in degrees.", code="invalid_bbox") from None
-    if not (-180 <= west <= east <= 180 and -90 <= south <= north <= 90):
+        bbox = None
+    if bbox is None or not is_bbox(bbox, allow_empty=True):
         raise BadRequestError("bbox is west,south,east,north in degrees.", code="invalid_bbox")
-    return west, south, east, north
+    return bbox
 
 
 @router.get("/coverage")

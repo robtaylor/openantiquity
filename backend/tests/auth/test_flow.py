@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 from collections.abc import Callable
 
 import pytest
 
 from fieldclub.auth.flow import FLOW_LIFETIME_S, Flow, new_flow, pkce_challenge, seal, state_matches, unseal
 from fieldclub.auth.tokens import hash_token
+from tests.auth.fakes import resign
 
 NOW = 1_800_000_000.0
 
@@ -57,13 +57,6 @@ def test_an_expired_flow_is_refused() -> None:
     assert unseal(sealed, now=NOW + FLOW_LIFETIME_S) is None
 
 
-def _resign(sealed: str, change: Callable[[dict], None]) -> str:
-    body, signature = sealed.split(".")
-    data = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
-    change(data)
-    return base64.urlsafe_b64encode(json.dumps(data).encode()).rstrip(b"=").decode() + "." + signature
-
-
 @pytest.mark.parametrize(
     "change",
     [
@@ -75,7 +68,7 @@ def _resign(sealed: str, change: Callable[[dict], None]) -> str:
 )
 def test_an_edited_flow_is_refused(change: Callable[[dict], None]) -> None:
     sealed = seal(new_flow("google", "/", now=NOW))
-    assert unseal(_resign(sealed, change), now=NOW) is None
+    assert unseal(resign(sealed, change), now=NOW) is None
 
 
 @pytest.mark.parametrize(

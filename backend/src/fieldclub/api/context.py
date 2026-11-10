@@ -5,6 +5,7 @@ See Decision 0007. The server stores nothing from either.
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Annotated
 
 from fastapi import APIRouter, Query, Response
@@ -40,17 +41,4 @@ def links(
     """Links that open external viewers at this point, for the ones that cover it."""
     found = context.links_for(db, lon, lat, zoom)
     response.headers["Cache-Control"] = LINKS_CACHE
-    return ContextLinks(
-        grid_ref=found.grid_ref,
-        items=[
-            ContextLink(
-                key=link.key,
-                name=link.name,
-                url=link.url,
-                coverage=link.coverage,
-                verified=link.verified,
-                no_frame=link.no_frame,
-            )
-            for link in found.links
-        ],
-    )
+    return ContextLinks(grid_ref=found.grid_ref, items=[ContextLink(**asdict(link)) for link in found.links])

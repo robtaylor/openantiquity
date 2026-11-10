@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Response, status
 
-from fieldclub.api.deps import Contributor, Db, rate_limit
-from fieldclub.api.findings import detail, private
+from fieldclub.api.deps import Contributor, Db, private, rate_limit
+from fieldclub.api.findings import detail
 from fieldclub.schemas.findings import EvidenceIn, FindingDetail, VoteIn, VoteOut
 from fieldclub.services import findings
 
@@ -69,8 +69,7 @@ def vote(evidence_id: int, body: VoteIn, user: Contributor, db: Db) -> VoteOut:
 )
 def verify(evidence_id: int, user: Contributor, db: Db, response: Response) -> FindingDetail:
     """An archaeologist or moderator confirms an HER entry, designation or publication."""
-    findings.verify(db, evidence_id, user)
+    moved = findings.verify(db, evidence_id, user)
     db.commit()
-    _, finding = findings.get_evidence(db, evidence_id, user)
     private(response)
-    return detail(db, finding, user)
+    return detail(db, moved.finding, user)

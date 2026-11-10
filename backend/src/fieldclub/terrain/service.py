@@ -27,7 +27,7 @@ import numpy as np
 
 from fieldclub.config import Settings, get_defra_sftp_settings, get_settings
 from fieldclub.errors import BadRequestError
-from fieldclub.gridref import GridRefError, GridSystem, to_grid
+from fieldclub.gridref import GridRefError, GridSystem, to_grid, transformer
 from fieldclub.storage import Storage, get_storage
 from fieldclub.terrain import sftp
 from fieldclub.terrain.catalogue import ENGLAND_EDITION, Catalogue, england_catalogue
@@ -43,11 +43,10 @@ from fieldclub.terrain.mirror import (
 )
 from fieldclub.terrain.render import TileRenderer
 from fieldclub.terrain.sources import (
-    CogMosaicSource,
     ElevationSource,
+    NationalSource,
     file_source,
     mirror_source,
-    transformer,
 )
 from fieldclub.terrain.styles import FINE_MINZOOM
 
@@ -82,15 +81,7 @@ class Profile:
 
 
 class Terrain:
-    def __init__(
-        self,
-        mirror: Mirror,
-        national: CogMosaicSource,
-        storage: Storage,
-        *,
-        national_exists: Callable[[], bool],
-    ) -> None:
-        self._national_exists = national_exists
+    def __init__(self, mirror: Mirror, national: NationalSource, storage: Storage) -> None:
         self.mirror = mirror
         self.fine = mirror_source(mirror)
         self.fine_mirrored = mirror_source(mirror, fetch=False)
@@ -113,7 +104,7 @@ class Terrain:
         return self.fine_mirrored
 
     def national_available(self) -> bool:
-        return self._national_exists()
+        return self.national.available()
 
     def elevation_at(self, lon: float, lat: float) -> float | None:
         """Ground height in metres, or None where there is none. Never fetches."""
@@ -209,9 +200,7 @@ def build_terrain(settings: Settings | None = None, *, storage: Storage | None =
     settings = settings or get_settings()
     path, exists = national_location(settings)
     national = file_source(NATIONAL_EDITION, path, exists=exists)
-    terrain = Terrain(
-        build_mirror(settings), national, storage or get_storage("tiles"), national_exists=exists
-    )
+    terrain = Terrain(build_mirror(settings), national, storage or get_storage("tiles"))
     assert terrain.renderer.editions == TILE_EDITIONS, (
         f"the tiles are drawn from {terrain.renderer.editions}, but /meta versions them for {TILE_EDITIONS}"
     )

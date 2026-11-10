@@ -12,7 +12,7 @@ from collections.abc import Iterator
 from datetime import datetime, timedelta
 from typing import ClassVar
 
-from fieldclub.ingest.adapters import Polite, UpstreamFormatError, cache_dir
+from fieldclub.ingest.adapters import UpstreamFormatError, cache_dir
 from fieldclub.ingest.adapters.common import Feature, json_ready
 from fieldclub.ingest.adapters.download import download
 from fieldclub.ingest.adapters.files import read_vector, vector_info
@@ -58,15 +58,16 @@ class ScheduledMonuments(Connector):
 
     def fetch(self, *, bbox: BBox | None = None, limit: int | None = None) -> Iterator[RecordIn]:
         path = cache_dir(self.settings, self.source.key) / "scheduled-monuments.gpkg"
-        fetched = download(HUB_EXPORT, path, client=self.http, polite=Polite(), max_age=self.max_age)
+        fetched = download(HUB_EXPORT, path, client=self.http, max_age=self.max_age)
         self.obtained_at = fetched.fetched_at
         info = vector_info(path)
-        missing = [name for name in FIELDS if name not in list(info["fields"])]
+        fields = set(info["fields"])
+        missing = [name for name in FIELDS if name not in fields]
         if missing or info.get("crs") != "EPSG:27700":
             raise UpstreamFormatError(
                 f"The scheduled monuments export changed shape: crs {info.get('crs')}, missing {missing}."
             )
-        for feature in read_vector(path, bbox=bbox):
+        for feature in read_vector(path, bbox=bbox, info=info):
             yield to_record(feature)
 
 

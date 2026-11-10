@@ -48,7 +48,7 @@ class SourceTile:
 
     @property
     def remote_path(self) -> str:
-        return f"{REMOTE_DIR}/{self.name}_DTM_1m.tif"
+        return f"{REMOTE_DIR}/{self.source_filename}"
 
     @property
     def source_filename(self) -> str:

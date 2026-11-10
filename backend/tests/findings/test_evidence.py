@@ -9,13 +9,12 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fieldclub.models import Evidence, Follow, Media, Record, Source, User
-from fieldclub.models.common import db_point
+from fieldclub.models import Evidence, Follow, Media, Record, User
 from fieldclub.services import findings
 from fieldclub.services.findings import EvidenceFields, InvalidEvidenceError
 from fieldclub.vocab import EvidenceKind, Outcome, Relation, Stance
 from tests.findings.support import API, add_desk_evidence, create
-from tests.helpers import ClientAs, MakeUser, error_code
+from tests.helpers import ClientAs, MakeUser, add_record, add_source, error_code
 
 VISIT = date(2026, 10, 1)
 
@@ -30,29 +29,7 @@ def _media(db: Session, owner: User) -> Media:
 
 
 def _record(db: Session) -> Record:
-    db.add(
-        Source(
-            key="test-source",
-            name="Test",
-            publisher="Test",
-            licence="OGL",
-            attribution="Test",
-            reuse="open",
-            category="monument",
-            access="bulk",
-        )
-    )
-    db.flush()
-    record = Record(
-        source_key="test-source",
-        external_id="1",
-        name="Barrow",
-        category="monument",
-        geom=db_point(-1.85, 51.43),
-        centroid=db_point(-1.85, 51.43),
-        ingested_at=datetime.now(UTC),
-    )
-    db.add(record)
+    record = add_record(db, add_source(db, "test-source", category="monument"), "Barrow", -1.85, 51.43)
     db.commit()
     return record
 

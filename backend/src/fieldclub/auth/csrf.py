@@ -41,8 +41,8 @@ class ClientHeaderMiddleware:
         self.exempt = tuple(re.compile(pattern) for pattern in exempt)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http" and scope["method"].upper() in MUTATING_METHODS:
-            method = scope["method"].upper()
+        method = scope["method"].upper() if scope["type"] == "http" else ""
+        if method in MUTATING_METHODS:
             sent = Headers(scope=scope).get(CLIENT_HEADER)
             if sent != CLIENT_HEADER_VALUE and not (method == "POST" and self._is_exempt(scope["path"])):
                 # Outside the app's exception handlers, so answer directly.

@@ -37,8 +37,8 @@ from sqlalchemy.orm import Session
 
 from fieldclub.auth import accounts, sessions
 from fieldclub.auth.failures import AccountDeletedError, EmailUnavailableError
-from fieldclub.auth.handles import constraint_name, is_unique_violation
 from fieldclub.auth.oauth import ProviderIdentity
+from fieldclub.db import constraint_name, is_unique_violation
 from fieldclub.errors import BannedError
 from fieldclub.models import AuthIdentity, User
 from fieldclub.vocab import SignInProvider

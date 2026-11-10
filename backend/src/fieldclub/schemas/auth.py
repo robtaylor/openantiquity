@@ -9,7 +9,10 @@ from pydantic import EmailStr, Field
 
 from fieldclub.auth import onboarding
 from fieldclub.auth.handles import HANDLE_MAX_LENGTH, HANDLE_MIN_LENGTH, MAX_DISPLAY_NAME
+from fieldclub.auth.oauth import MAX_EMAIL
 from fieldclub.auth.profile import MAX_BIO
+from fieldclub.auth.redirects import MAX_NEXT_LENGTH
+from fieldclub.auth.tokens import MAX_TOKEN_LENGTH
 from fieldclub.models import User
 from fieldclub.schemas.common import ApiModel, RequestModel
 from fieldclub.vocab import AgeBand, Role
@@ -97,22 +100,23 @@ class DevLogin(RequestModel):
 class EmailStart(RequestModel):
     """Ask for a sign-in link. The answer is the same whether or not the address has an account."""
 
-    email: EmailStr = Field(max_length=320)
+    email: EmailStr = Field(max_length=MAX_EMAIL)
     # Where the link should land after sign-in. Anything but a relative path here becomes "/".
-    next: str | None = Field(default=None, max_length=2000)
+    next: str | None = Field(default=None, max_length=MAX_NEXT_LENGTH)
 
 
 class EmailStarted(ApiModel):
     """Always this, for any well-formed address."""
 
     status: Literal["sent"] = "sent"
+    # Says what email_link.LINK_LIFETIME is; a test keeps the two together.
     message: str = "Check your email for a link to sign in. It works once, for fifteen minutes."
 
 
 class EmailVerify(RequestModel):
     """The token from the emailed link's fragment."""
 
-    token: str = Field(min_length=1, max_length=128)
+    token: str = Field(min_length=1, max_length=MAX_TOKEN_LENGTH)
     # The person said yes to "Sign in as <masked address>?". Needed only when the
     # link is opened in a browser that didn't ask for it. Never sent unasked.
     confirm: bool = False

@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from fieldclub.errors import ForbiddenError
 from fieldclub.models import Media, User
+from fieldclub.services.sensitivity import active_viewer
 from fieldclub.vocab import MEDIA_APPROVER_ROLES, Role
 
 
@@ -29,16 +30,18 @@ def may_see_media(media: Media, viewer: User | None) -> bool:
     """Whether `viewer` may see `media`. `viewer` is None for the public."""
     if media.approved_at is not None:
         return True
-    if viewer is None or not viewer.is_active:
+    active = active_viewer(viewer)
+    if active is None:
         return False
-    return viewer.has_id(media.user_id) or Role(viewer.role) in MEDIA_APPROVER_ROLES
+    return active.has_id(media.user_id) or Role(active.role) in MEDIA_APPROVER_ROLES
 
 
 def may_approve_media(media: Media, approver: User | None) -> bool:
     """Whether `approver` may approve `media`. Nobody approves their own upload."""
-    if approver is None or not approver.is_active:
+    active = active_viewer(approver)
+    if active is None:
         return False
-    return Role(approver.role) in MEDIA_APPROVER_ROLES and not approver.has_id(media.user_id)
+    return Role(active.role) in MEDIA_APPROVER_ROLES and not active.has_id(media.user_id)
 
 
 def approve_media(db: Session, media: Media, approver: User, *, now: datetime | None = None) -> Media:

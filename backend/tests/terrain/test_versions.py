@@ -11,36 +11,30 @@ fingerprint without the version would serve old tiles from every cache.
 
 from __future__ import annotations
 
-import io
 from pathlib import Path
 
 import numpy as np
 import pytest
-from PIL import Image
-from pyproj import Transformer
 
 from fieldclub.storage import LocalStorage
-from fieldclub.terrain.cog import to_cog
 from fieldclub.terrain.grid import Window, tile_at
-from fieldclub.terrain.mirror import LocalMirrorStore, LocalSourceFetcher, Mirror
-from fieldclub.terrain.render import (
-    DEM_VERSION,
-    ELEVATION_FORMAT,
-    TileRenderer,
-    render_values,
-    terrarium_decode,
-)
+from fieldclub.terrain.mirror import Mirror
+from fieldclub.terrain.render import DEM_VERSION, ELEVATION_FORMAT, render_values, terrarium_decode
 from fieldclub.terrain.sources import mirror_source
 from fieldclub.terrain.styles import STYLES, elevation_buffer
+from tests.helpers import AVEBURY
 from tests.terrain.fakes import (
+    TO_LONLAT,
     FunctionSource,
-    catalogue_of,
+    decode_png,
     laplacian,
+    local_mirror,
     rolling_hills,
+    single_source_renderer,
+    small_cog,
     write_source_tile,
 )
 
-AVEBURY = (-1.8542, 51.4286)
 ZOOMS = (11, 13, 16)
 
 # Style id: (version, {zoom: (mean, standard deviation)} of its values over the landscape).
@@ -82,18 +76,11 @@ def curved(east: np.ndarray, north: np.ndarray) -> np.ndarray:
 def synthetic_mirror(tmp_path_factory: pytest.TempPathFactory) -> Mirror:
     root = tmp_path_factory.mktemp("versions")
     write_source_tile(root / "src", "SU16nw", res=2.0, formula=curved)
-    return Mirror(
-        catalogue_of((root / "src").glob("*.tif")),
-        LocalMirrorStore(root / "cogs"),
-        [LocalSourceFetcher(root / "src")],
-        root / "work",
-        convert=lambda src, dst: to_cog(src, dst, overview_count=2),
-    )
+    return local_mirror(root, convert=small_cog(overview_count=2))
 
 
 def elevation_fingerprint(mirror: Mirror, zoom: int) -> tuple[float, float]:
-    lon, lat = Transformer.from_crs(27700, 4326, always_xy=True).transform(412_500, 167_500)
-    x, y = tile_at(lon, lat, zoom)
+    x, y = tile_at(*TO_LONLAT.transform(412_500, 167_500), zoom)
     window = Window(zoom, x * 512 + 128, y * 512 + 128, 128, 128)
     z = mirror_source(mirror).read(window.bounds, window.width, window.height).astype(np.float64)
     return round(float(np.mean(z)), 4), round(float(np.mean(np.abs(laplacian(z)))), 5)
@@ -103,8 +90,8 @@ def dem_fingerprint(tmp_path: Path) -> tuple[float, float]:
     x, y = tile_at(*AVEBURY, 15)
     edge = Window.tile(15, x, y).x_centres()[300]
     source = FunctionSource(lambda xs, ys: np.where(xs < edge, rolling_hills(xs, ys), np.nan))
-    renderer = TileRenderer(lambda zoom: source, LocalStorage(tmp_path), editions=[source.edition])
-    rgb = np.asarray(Image.open(io.BytesIO(renderer.dem_png(15, x, y).png)))
+    renderer = single_source_renderer(source, LocalStorage(tmp_path))
+    rgb = decode_png(renderer.dem_png(15, x, y).png)
     heights = terrarium_decode(rgb)
     return round(float(heights.mean()), 4), round(float((heights == 0).mean()), 5)
 

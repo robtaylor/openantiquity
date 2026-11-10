@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-from shapely.geometry import Point
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -9,7 +8,8 @@ from sqlalchemy.orm import Session
 from fieldclub.models import Source
 from fieldclub.services import records
 from fieldclub.services.records import InvalidSearchError, RecordNotFoundError, SearchTimeoutError
-from tests.records.support import OVERTON, SILBURY, add_record, add_source
+from tests.helpers import AVEBURY, add_record, add_source
+from tests.records.support import OVERTON, SILBURY, SILBURY_MOUND, add_finds_source
 
 HOSTILE = [
     "'",
@@ -39,20 +39,20 @@ HOSTILE = [
 def index(db: Session) -> dict[str, int]:
     """A few monuments around Avebury from two sources, one disabled."""
     designations = add_source(db)
-    finds = add_source(db, "test-finds", name="Test finds", category="find", reuse="non_commercial")
+    finds = add_finds_source(db)
     hidden = add_source(db, "test-hidden", name="Hidden source", enabled=False)
     made = {
         "silbury": add_record(
             db,
             designations,
             "Silbury Hill: a monumental Neolithic mound",
-            geom=Point(*SILBURY).buffer(0.001),
+            geom=SILBURY_MOUND,
             record_type="Scheduled monument",
         ),
         "bowl": add_record(db, designations, "Bowl barrow on Overton Hill", *OVERTON),
         "long": add_record(db, designations, "West Kennet long barrow", -1.8507, 51.4085),
         "henge": add_record(
-            db, designations, "Avebury henge and stone circles", -1.8542, 51.4286, monument_types=["HENGE"]
+            db, designations, "Avebury henge and stone circles", *AVEBURY, monument_types=["HENGE"]
         ),
         "coin": add_record(
             db, finds, "Roman coin", -1.8570, 51.4150, summary="A worn coin found near Silbury"

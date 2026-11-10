@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
-from shapely.geometry import Point
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
@@ -14,8 +13,8 @@ from fieldclub.models import Place
 from fieldclub.models.common import db_point
 from fieldclub.services import records, search
 from fieldclub.vocab import FeatureClass
-from tests.helpers import ClientAs, MakeFinding, MakeUser
-from tests.records.support import SILBURY, add_record, add_source
+from tests.helpers import AVEBURY, ClientAs, MakeFinding, MakeUser, add_record, add_source
+from tests.records.support import SILBURY_MOUND
 
 
 def add_place(db: Session, name: str, lon: float, lat: float, kind: str = "Village", rank: int = 1) -> Place:
@@ -35,15 +34,13 @@ def add_place(db: Session, name: str, lon: float, lat: float, kind: str = "Villa
 
 @pytest.fixture
 def gazetteer(db: Session) -> None:
-    add_place(db, "Avebury", -1.8542, 51.4286, rank=3)
+    add_place(db, "Avebury", *AVEBURY, rank=3)
     add_place(db, "Avebury Trusloe", -1.8670, 51.4260)
     add_place(db, "Aveton Gifford", -3.8410, 50.3070)
     add_place(db, "Swindon", -1.7797, 51.5558, kind="Town", rank=8)
     source = add_source(db)
-    add_record(
-        db, source, "Silbury Hill", geom=Point(*SILBURY).buffer(0.001), record_type="Scheduled monument"
-    )
-    add_record(db, source, "Avebury henge and stone circles", -1.8542, 51.4286)
+    add_record(db, source, "Silbury Hill", geom=SILBURY_MOUND, record_type="Scheduled monument")
+    add_record(db, source, "Avebury henge and stone circles", *AVEBURY)
     db.commit()
 
 

@@ -63,6 +63,7 @@ from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo, fill_at
 from fieldclub.ingest.errors import IngestError
 from fieldclub.models import IngestRun, Record, Source
 from fieldclub.models.common import SRID
+from fieldclub.schemas.common import is_bbox
 from fieldclub.services import record_tiles
 from fieldclub.vocab import IngestStatus, Period, RecordCategory
 
@@ -153,7 +154,7 @@ def check_bbox(bbox: BBox) -> BBox:
     west, south, east, north = (float(value) for value in bbox)
     if not all(math.isfinite(value) for value in (west, south, east, north)):
         raise IngestError("A bbox must be four finite numbers.")
-    if not (-180 <= west < east <= 180 and -90 <= south < north <= 90):
+    if not is_bbox((west, south, east, north)):
         raise IngestError("A bbox is west,south,east,north in degrees, with west < east and south < north.")
     return west, south, east, north
 

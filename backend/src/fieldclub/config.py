@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     # can't tell a 16 year old from a 17 year old.
     min_age: int = Field(default=16, ge=16, le=18)
 
-    # --- Sign-in providers and the emailed link (track b1/accounts) ---------
+    # Sign-in providers and the emailed link.
     # A provider is offered only when all of its settings are present. See
     # fieldclub.auth.oauth and backend/.env.example for where each comes from.
     google_client_id: str | None = None
@@ -105,7 +105,6 @@ class Settings(BaseSettings):
     smtp_username: str | None = None
     smtp_password: SecretStr | None = None
     smtp_security: Literal["starttls", "ssl", "none"] = "starttls"
-    # --- end of sign-in settings ---------------------------------------------
 
     # Runtime data
     var_dir: Path = Path("var")
@@ -124,7 +123,7 @@ class Settings(BaseSettings):
     # before it refuses to delete them. See fieldclub.ingest.runner.
     ingest_max_shrink: float = Field(default=0.25, ge=0, le=1)
 
-    # --- Terrain (Decision 0006) -----------------------------------------
+    # Terrain (Decision 0006).
     # Elevation is read only from the mirror of cloud-optimised GeoTIFFs: a
     # local folder, or `gs://bucket/prefix` in production. Relative paths are
     # resolved against the repository root, where `var/lidar` lives.
@@ -173,8 +172,8 @@ class Settings(BaseSettings):
             )
         if self.storage_backend == "gcs" and not self.gcs_bucket:
             raise ConfigError("FIELDCLUB_GCS_BUCKET is required when FIELDCLUB_STORAGE_BACKEND is 'gcs'.")
-        # Sign-in (track b1/accounts): the log mailer writes working sign-in
-        # links to the log, so it must never run where other people sign in.
+        # The log mailer writes working sign-in links to the log, so it must
+        # never run where other people sign in.
         if is_prod and self.mail_backend == "log":
             raise ConfigError("FIELDCLUB_MAIL_BACKEND=log writes sign-in links to the log. Use smtp in prod.")
         if self.mail_backend == "smtp" and not (self.smtp_host and self.mail_from):

@@ -10,13 +10,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
-from fieldclub.schemas.common import ApiModel, GeoJSONFeature, GeoJSONGeometry, to_geojson
+from fieldclub.schemas.common import ApiModel, GeoJSONFeature, RecordCount, geojson_geometry, to_geojson
 
 if TYPE_CHECKING:
     from fieldclub.models import Source
-    from fieldclub.services.records import RecordResult
+    from fieldclub.services.records import RecordResult, Suggestion
 
 
 class SourceRef(ApiModel):
@@ -36,13 +36,8 @@ class SourceOut(SourceRef):
     coverage: str | None
     category: str
     access: str
-    record_count: int
+    record_count: RecordCount
     last_ingest_at: datetime | None
-
-    @field_validator("record_count", mode="before")
-    @classmethod
-    def _no_count_yet_is_zero(cls, value: int | None) -> int:
-        return value or 0
 
 
 class RecordSummary(BaseModel):
@@ -187,25 +182,44 @@ def source_ref(source: Source) -> SourceRef:
     return SourceRef.model_validate(source)
 
 
-def record_summary(result: RecordResult) -> RecordSummary:
+def _summary_fields(result: RecordResult) -> dict[str, Any]:
+    """The `RecordSummary` fields of a result, for it and every shape built on it."""
     record = result.record
-    return RecordSummary(
-        id=record.id,
-        source_key=record.source_key,
-        name=record.name,
-        category=record.category,
-        record_type=record.record_type,
-        lon=round(result.lon, 6),
-        lat=round(result.lat, 6),
-        precision_m=record.precision_m,
-        url=record.url,
-        source=source_ref(result.source),
-    )
+    return {
+        "id": record.id,
+        "source_key": record.source_key,
+        "name": record.name,
+        "category": record.category,
+        "record_type": record.record_type,
+        "lon": round(result.lon, 6),
+        "lat": round(result.lat, 6),
+        "precision_m": record.precision_m,
+        "url": record.url,
+        "source": source_ref(result.source),
+    }
+
+
+def _distance(result: RecordResult) -> float:
+    assert result.distance_m is not None, "a hit is measured from somewhere"
+    return round(result.distance_m, 1)
+
+
+def record_summary(result: RecordResult) -> RecordSummary:
+    return RecordSummary(**_summary_fields(result))
 
 
 def record_hit(result: RecordResult) -> RecordHit:
-    assert result.distance_m is not None, "a hit is measured from somewhere"
-    return RecordHit(**record_summary(result).model_dump(), distance_m=round(result.distance_m, 1))
+    return RecordHit(**_summary_fields(result), distance_m=_distance(result))
+
+
+def record_suggestion(suggestion: Suggestion) -> SuggestedRecord:
+    result = suggestion.result
+    return SuggestedRecord(
+        **_summary_fields(result),
+        distance_m=_distance(result),
+        type_fit=suggestion.type_fit,
+        score=suggestion.score,
+    )
 
 
 def record_out(result: RecordResult) -> RecordOut:
@@ -213,7 +227,7 @@ def record_out(result: RecordResult) -> RecordOut:
     geometry = to_geojson(record.geom)
     assert geometry is not None, "records.geom is NOT NULL"
     return RecordOut(
-        **record_summary(result).model_dump(),
+        **_summary_fields(result),
         external_id=record.external_id,
         summary=record.summary,
         monument_types=list(record.monument_types or []),
@@ -243,9 +257,4 @@ def record_feature(result: RecordResult) -> GeoJSONFeature:
     }
     if result.distance_m is not None:
         properties["distance_m"] = round(result.distance_m, 1)
-    geometry = to_geojson(record.geom)
-    return GeoJSONFeature(
-        id=record.id,
-        geometry=None if geometry is None else GeoJSONGeometry.model_validate(geometry),
-        properties=properties,
-    )
+    return GeoJSONFeature(id=record.id, geometry=geojson_geometry(record.geom), properties=properties)

@@ -1,22 +1,43 @@
-"""Test doubles for the terrain service: synthetic elevation, source tiles and an SFTP server."""
+"""Test doubles for the terrain service: synthetic elevation, source tiles, mirrors and an SFTP server."""
 
 from __future__ import annotations
 
+import io
 import threading
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import rasterio
+from PIL import Image
 from rasterio.transform import from_origin
 
+from fieldclub.gridref import transformer
+from fieldclub.storage import LocalStorage, Storage
 from fieldclub.terrain.catalogue import Catalogue, SourceTile, tile_origin
+from fieldclub.terrain.cog import to_cog
 from fieldclub.terrain.grid import window_for
+from fieldclub.terrain.mirror import Fetcher, LocalMirrorStore, LocalSourceFetcher, Mirror
+from fieldclub.terrain.render import TileRenderer
+from fieldclub.terrain.service import Terrain
+from fieldclub.terrain.sources import ElevationSource, file_source
 
 MIB = 1024 * 1024
 NODATA = -3.4028234663852886e38
+# British National Grid metres to longitude and latitude.
+TO_LONLAT = transformer(27700, 4326)
+
+
+def decode_png(png: bytes) -> np.ndarray:
+    return np.asarray(Image.open(io.BytesIO(png)))
+
+
+def single_source_renderer(source: ElevationSource, storage: Storage) -> TileRenderer:
+    """A renderer drawing every zoom from one source."""
+    return TileRenderer(lambda zoom: source, storage, editions=[source.edition])
 
 
 def ground(shape: tuple[int, int], res: float = 1.0) -> tuple[np.ndarray, np.ndarray]:
@@ -121,6 +142,43 @@ def catalogue_of(paths: Iterable[Path], *, extra: Iterable[str] = ()) -> Catalog
     }
     tiles.update({name: SourceTile(name, 1_000) for name in extra})
     return Catalogue("test-edition", tiles)
+
+
+def small_cog(overview_count: int = 1) -> Callable[[Path, Path], object]:
+    """A conversion to a COG with few overviews, quicker than the mirror's own."""
+    return lambda src, dst: to_cog(src, dst, overview_count=overview_count)
+
+
+def local_mirror(
+    root: Path,
+    *,
+    sources: Path | None = None,
+    extra: Iterable[str] = (),
+    fetchers: Sequence[Fetcher] | None = None,
+    convert: Callable[[Path, Path], object] | None = None,
+    **options: Any,
+) -> Mirror:
+    """A mirror at `root / "cogs"` of the source files in `sources` (`root / "src"` by default).
+
+    It catalogues those files plus `extra`, fetches from the folder unless
+    given `fetchers`, works in `root / "work"`, and converts with `small_cog()`
+    unless given `convert`.
+    """
+    sources = sources or root / "src"
+    return Mirror(
+        catalogue_of(sources.glob("*.tif"), extra=extra),
+        LocalMirrorStore(root / "cogs"),
+        [LocalSourceFetcher(sources)] if fetchers is None else fetchers,
+        root / "work",
+        convert=convert or small_cog(),
+        **options,
+    )
+
+
+def local_terrain(mirror: Mirror, tiles: Path) -> Terrain:
+    """The terrain service over a mirror, caching tiles in `tiles`, with no national composite."""
+    national = file_source("national", str(tiles / "national.tif"), exists=lambda: False)
+    return Terrain(mirror, national, LocalStorage(tiles))
 
 
 # --------------------------------------------------------------------------

@@ -13,22 +13,20 @@ work-lists by `tests/records/context_data.py`.
 from __future__ import annotations
 
 import json
-import math
 from dataclasses import dataclass
 from functools import cache
 from importlib import resources
 from typing import Any
 
-from pyproj import Transformer
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
 from fieldclub.services import geo
 from fieldclub.services.records import check_point
+from fieldclub.terrain.grid import lonlat_to_mercator
 from fieldclub.vocab import Nation
 
 DEFAULT_ZOOM = 15
-_TO_MERCATOR = Transformer.from_crs(4326, 3857, always_xy=True)
 
 # Which coverages show for a point in each nation. `wider` and `uk` show everywhere in the UK.
 _COVERAGES: dict[str | None, frozenset[str]] = {
@@ -104,7 +102,7 @@ def _fill(link: dict[str, Any], lon: float, lat: float, zoom: int, grid: Grid | 
             return None
         values |= {"easting": f"{grid[1]:.0f}", "northing": f"{grid[2]:.0f}"}
     elif crs == "EPSG:3857":
-        x, y = _TO_MERCATOR.transform(lon, lat)
+        x, y = lonlat_to_mercator(lon, lat)
         values |= {"easting": f"{x:.2f}", "northing": f"{y:.2f}"}
     url = link["template"]
     for name, value in values.items():
@@ -120,8 +118,7 @@ def _inside(bounds: list[float] | None, lon: float, lat: float) -> bool:
 def links_for(db: Session, lon: float, lat: float, zoom: int = DEFAULT_ZOOM) -> PointLinks:
     """Every deep link that opens an external viewer at this point and covers it."""
     check_point(lon, lat)
-    assert math.isfinite(zoom), "zoom must be a number"
-    zoom = max(1, min(int(zoom), 20))
+    assert 1 <= zoom <= 20, "zoom must be between 1 and 20"
     grid: Grid | None
     try:
         grid = gridref.to_grid(lon, lat)

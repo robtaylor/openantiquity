@@ -21,6 +21,8 @@ from fieldclub.models import Investigation, InvestigationMember, User
 from fieldclub.services import ids
 from fieldclub.vocab import InvestigationRole, Visibility
 
+PUBLIC_ID_CONSTRAINT = "uq_investigations_public_id"
+
 
 class PrivateInvestigationError(ConflictError):
     # The same text the database trigger raises, so either reads the same in a log.
@@ -37,15 +39,17 @@ def create_investigation(
     summary: str | None = None,
 ) -> Investigation:
     """A new investigation with its owner as the one member. The caller commits."""
-    investigation = Investigation(
-        public_id=ids.new_public_id(db, Investigation),
-        owner_id=owner.id,
-        title=title,
-        summary=summary,
-        visibility=Visibility(visibility).value,
+    investigation = ids.insert_with_public_id(
+        db,
+        lambda public_id: Investigation(
+            public_id=public_id,
+            owner_id=owner.id,
+            title=title,
+            summary=summary,
+            visibility=Visibility(visibility).value,
+        ),
+        PUBLIC_ID_CONSTRAINT,
     )
-    db.add(investigation)
-    db.flush()
     db.add(
         InvestigationMember(
             investigation_id=investigation.id, user_id=owner.id, role=InvestigationRole.OWNER.value

@@ -24,13 +24,19 @@ from pathlib import Path
 from typing import Any
 
 import shapely
-from pyproj import Transformer
 from shapely.errors import ShapelyError
 from shapely.geometry import Point, shape
 from shapely.geometry.base import BaseGeometry
 
 from fieldclub.ingest.adapters import ogr
-from fieldclub.ingest.adapters.common import WGS84, Feature, UpstreamFormatError, plain, plain_tree, to_wgs84
+from fieldclub.ingest.adapters.common import (
+    Feature,
+    UpstreamFormatError,
+    bbox_from_wgs84,
+    plain,
+    plain_tree,
+    to_wgs84,
+)
 from fieldclub.ingest.adapters.ogr import DataSourceError
 from fieldclub.ingest.base import BBox
 
@@ -57,8 +63,7 @@ def _bbox_in(crs: str | None, bbox: BBox) -> tuple[float, float, float, float]:
     """A WGS84 box as a box in `crs`, for pyogrio's prefilter."""
     if crs is None:
         return bbox
-    transformer = Transformer.from_crs(WGS84, crs, always_xy=True)
-    return transformer.transform_bounds(*bbox, densify_pts=21)
+    return bbox_from_wgs84(bbox, crs)
 
 
 def read_vector(
@@ -70,15 +75,19 @@ def read_vector(
     bbox: BBox | None = None,
     crs: str | None = None,
     chunk: int = DEFAULT_CHUNK,
+    info: dict[str, Any] | None = None,
 ) -> Iterator[Feature]:
     """Every feature of one layer, in WGS84.
 
     `crs` overrides the file's own, for a file that doesn't state one. `bbox`
     (WGS84) is a prefilter by envelope. The runner does the exact test.
+    `info` is what `vector_info` gave for this layer, for a caller that has
+    already read it.
     """
     assert chunk >= 1, "chunk must be at least 1"
     source = _vsi(path)
-    info = vector_info(path, layer)
+    if info is None:
+        info = vector_info(path, layer)
     crs = crs or info.get("crs")
     if crs is None:
         raise UpstreamFormatError(f"{Path(path).name} states no CRS. Pass crs= to say what it is.")

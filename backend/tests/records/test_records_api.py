@@ -2,26 +2,25 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
-from shapely.geometry import Point
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
 from fieldclub.services import records
 from fieldclub.vocab import FeatureClass
-from tests.helpers import ClientAs, MakeFinding, MakeUser, error_code
-from tests.records.support import OVERTON, SILBURY, add_record, add_source
+from tests.helpers import ClientAs, MakeFinding, MakeUser, add_record, add_source, error_code
+from tests.records.support import OVERTON, SILBURY, SILBURY_MOUND, add_finds_source
 
 
 @pytest.fixture
 def index(db: Session) -> dict[str, int]:
     designations = add_source(db)
-    finds = add_source(db, "test-finds", name="Test finds", category="find", reuse="non_commercial")
+    finds = add_finds_source(db)
     made = {
         "silbury": add_record(
             db,
             designations,
             "Silbury Hill: a monumental Neolithic mound",
-            geom=Point(*SILBURY).buffer(0.001),
+            geom=SILBURY_MOUND,
             record_type="Scheduled monument",
             url="https://historicengland.org.uk/listing/the-list/list-entry/1008445",
         ),

@@ -23,6 +23,7 @@ from fieldclub.auth.tokens import hash_token
 from fieldclub.config import SESSION_COOKIE
 from fieldclub.errors import ConfigError
 from fieldclub.models import MagicLink, User, UserSession
+from fieldclub.schemas.auth import EmailStarted
 from tests.auth.fakes import PUBLIC_URL
 from tests.helpers import ClientFor, MakeUser, count, error_code, settings
 
@@ -45,6 +46,13 @@ def token_from(message: Message) -> str:
     match = re.search(r"#token=([A-Za-z0-9_-]+)", message.body)
     assert match, message.body
     return match.group(1)
+
+
+def caller_at(app: FastAPI, client_for: ClientFor, ip: str) -> TestClient:
+    """A signed-out client calling from `ip`, for the rate-limit tests."""
+    caller = client_for(app)
+    caller.headers["X-Forwarded-For"] = ip
+    return caller
 
 
 def request_link(browser: TestClient, email: str, **body: Any) -> str:
@@ -178,6 +186,11 @@ def test_a_link_expires_after_fifteen_minutes(browser: TestClient, db: Session) 
         response = browser.post(VERIFY, json={"token": token})
     assert error_code(response) == "link_invalid"
     assert count(db, User) == 0
+
+
+def test_the_start_message_states_the_link_lifetime() -> None:
+    assert email_link.LINK_LIFETIME.total_seconds() == 15 * 60
+    assert "fifteen minutes" in EmailStarted().message
 
 
 def test_a_link_still_works_just_before_it_expires(browser: TestClient) -> None:
@@ -358,11 +371,9 @@ def test_an_address_gets_five_links_an_hour_whoever_asks(
     app: FastAPI, client_for: ClientFor, mail_on: None, limits_on: None
 ) -> None:
     for number in range(5):
-        caller = client_for(app)
-        caller.headers["X-Forwarded-For"] = f"203.0.113.{number}"
+        caller = caller_at(app, client_for, f"203.0.113.{number}")
         assert caller.post(START, json={"email": "ann@example.org"}).status_code == 202
-    sixth = client_for(app)
-    sixth.headers["X-Forwarded-For"] = "203.0.113.99"
+    sixth = caller_at(app, client_for, "203.0.113.99")
     refused = sixth.post(START, json={"email": "Ann@Example.org"})
     assert refused.status_code == 429
     assert "retry-after" in refused.headers
@@ -375,11 +386,9 @@ def test_plus_tags_share_their_mailboxs_budget(
     app: FastAPI, client_for: ClientFor, mail_on: None, limits_on: None
 ) -> None:
     for number in range(5):
-        caller = client_for(app)
-        caller.headers["X-Forwarded-For"] = f"203.0.113.{number}"
+        caller = caller_at(app, client_for, f"203.0.113.{number}")
         assert caller.post(START, json={"email": f"ann+{number}@example.org"}).status_code == 202
-    sixth = client_for(app)
-    sixth.headers["X-Forwarded-For"] = "203.0.113.99"
+    sixth = caller_at(app, client_for, "203.0.113.99")
     assert sixth.post(START, json={"email": "Ann+other@example.org"}).status_code == 429
     assert sixth.post(START, json={"email": "ann@example.org"}).status_code == 429
 
@@ -400,13 +409,11 @@ def test_the_rate_key_of_an_address_drops_its_plus_tag(email: str, key: str) -> 
 def test_a_caller_gets_ten_links_an_hour_whatever_the_address(
     app: FastAPI, client_for: ClientFor, mail_on: None, limits_on: None
 ) -> None:
-    caller = client_for(app)
-    caller.headers["X-Forwarded-For"] = "203.0.113.7"
+    caller = caller_at(app, client_for, "203.0.113.7")
     for number in range(10):
         assert caller.post(START, json={"email": f"p{number}@example.org"}).status_code == 202
     assert caller.post(START, json={"email": "p11@example.org"}).status_code == 429
-    other = client_for(app)
-    other.headers["X-Forwarded-For"] = "198.51.100.1"
+    other = caller_at(app, client_for, "198.51.100.1")
     assert other.post(START, json={"email": "p11@example.org"}).status_code == 202
 
 
@@ -418,9 +425,7 @@ def test_the_address_limit_answers_the_same_for_known_and_unknown_addresses(
     for email in ("known@example.org", "nobody@example.org"):
         last = None
         for number in range(6):
-            caller = client_for(app)
-            caller.headers["X-Forwarded-For"] = f"192.0.2.{number}"
-            last = caller.post(START, json={"email": email})
+            last = caller_at(app, client_for, f"192.0.2.{number}").post(START, json={"email": email})
         assert last is not None
         answers[email] = (last.status_code, last.json())
     assert answers["known@example.org"] == answers["nobody@example.org"]

@@ -6,24 +6,20 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
 import pytest
 import respx
 from shapely.geometry import Point
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
-from fieldclub.ingest.connectors.he_nhle_scheduled_monuments import HUB_EXPORT, ScheduledMonuments
+from fieldclub.ingest.connectors.he_nhle_scheduled_monuments import ScheduledMonuments
 from fieldclub.ingest.runner import run_connector
 from fieldclub.models import Record
 from fieldclub.models.common import point_lon_lat
 from fieldclub.services import records
 from fieldclub.vocab import FeatureClass, Sensitivity
-from tests.helpers import MakeFinding, MakeUser
-from tests.ingest.adapters.support import FIXTURES
-from tests.records.support import SILBURY, add_record, add_source
-
-EXPORT_FILE = "https://export.example/scheduled.gpkg"
+from tests.helpers import MakeFinding, MakeUser, add_record, add_source
+from tests.records.support import MONUMENTS_GPKG, SILBURY, serve_hub
 
 
 def at(record: Record) -> dict[str, float]:
@@ -155,9 +151,7 @@ def test_a_finding_on_silbury_hill_is_offered_its_scheduled_monument_first(
 ) -> None:
     """The exit criterion of WS5 in the v1 plan, against the recorded export."""
     env(VAR_DIR=str(tmp_path))
-    body = (FIXTURES / "scheduled_monuments.gpkg").read_bytes()
-    respx.get(HUB_EXPORT).mock(return_value=httpx.Response(302, headers={"Location": EXPORT_FILE}))
-    respx.get(EXPORT_FILE).mock(return_value=httpx.Response(200, content=body))
+    serve_hub(MONUMENTS_GPKG.read_bytes())
     run_connector(ScheduledMonuments())
 
     finder = make_user()

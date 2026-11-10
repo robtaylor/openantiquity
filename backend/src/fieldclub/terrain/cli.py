@@ -23,11 +23,11 @@ from pathlib import Path
 
 from fieldclub.config import get_settings
 from fieldclub.errors import AppError
+from fieldclub.gridref import transformer
 from fieldclub.terrain import national
 from fieldclub.terrain.catalogue import SourceTile
 from fieldclub.terrain.grid import tiles_in
 from fieldclub.terrain.service import Terrain, build_terrain, national_location
-from fieldclub.terrain.sources import transformer
 from fieldclub.terrain.styles import FINE_MINZOOM, MAXZOOM, MINZOOM, STYLES
 
 logger = logging.getLogger(__name__)
@@ -81,20 +81,26 @@ class Progress:
         sys.stderr.write("\n")
 
 
-def run_parallel(items: Iterable[str], work: Callable[[str], object], concurrency: int, label: str) -> int:
-    """Run `work` on each item with a pool, showing progress. Returns how many failed."""
-    names = list(items)
-    progress = Progress(len(names), label)
+def run_parallel[T](
+    items: Iterable[T],
+    work: Callable[[T], object],
+    concurrency: int,
+    label: str,
+    name: Callable[[T], str] = str,
+) -> int:
+    """Run `work` on each item with a pool, showing progress by `name`. Returns how many failed."""
+    jobs = list(items)
+    progress = Progress(len(jobs), label)
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
-        futures = {pool.submit(work, name): name for name in names}
+        futures = {pool.submit(work, job): name(job) for job in jobs}
         for future in as_completed(futures):
-            name = futures[future]
+            job_name = futures[future]
             try:
                 future.result()
-                progress.step(name)
+                progress.step(job_name)
             except (AppError, OSError) as exc:
-                progress.step(name, failed=True)
-                logger.error("%s failed: %s", name, exc)
+                progress.step(job_name, failed=True)
+                logger.error("%s failed: %s", job_name, exc)
     progress.finish()
     return progress.failed
 
@@ -128,13 +134,12 @@ def cmd_warm(terrain: Terrain, args: argparse.Namespace) -> int:
     jobs = [(z, x, y) for z in args.zooms for x, y in tiles_in(args.bbox, z)]
     print(f"{len(jobs)} map tiles in {len(styles)} styles plus elevation")
 
-    def warm(key: str) -> None:
-        z, x, y = (int(part) for part in key.split("/"))
-        terrain.renderer.dem_png(z, x, y)
+    def warm(tile: tuple[int, int, int]) -> None:
+        terrain.renderer.dem_png(*tile)
         for style in styles:
-            terrain.renderer.lidar_png(style, z, x, y)
+            terrain.renderer.lidar_png(style, *tile)
 
-    failed = run_parallel((f"{z}/{x}/{y}" for z, x, y in jobs), warm, args.concurrency, "warm")
+    failed = run_parallel(jobs, warm, args.concurrency, "warm", name=lambda tile: "/".join(map(str, tile)))
     return 1 if failed else 0
 
 
@@ -172,7 +177,8 @@ def cmd_national(terrain: Terrain, args: argparse.Namespace) -> int:
 def cmd_info(terrain: Terrain, args: argparse.Namespace) -> int:
     catalogue = terrain.catalogue
     held = [name for name in terrain.mirror.store.names() if name in catalogue]
-    held_bytes = sum(tile.size for tile in catalogue if tile.name in set(held))
+    held_names = set(held)
+    held_bytes = sum(tile.size for tile in catalogue if tile.name in held_names)
     print(f"edition      {terrain.mirror.edition}")
     print(f"mirror       {terrain.mirror.store!r}")
     print(f"catalogue    {len(catalogue)} tiles, {catalogue.total_bytes / 1e9:.1f} GB of source")

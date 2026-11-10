@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 from sqlalchemy import select
@@ -19,6 +20,19 @@ from tests.helpers import MakeUser, count
 
 NOW = datetime(2026, 11, 10, 12, tzinfo=UTC)
 VERIFIED_AT = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def miss_once(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
+    """Make `signin.<name>` find nothing the first time, as if another request hadn't committed yet."""
+    real = getattr(signin, name)
+    calls = 0
+
+    def find_missing_once(*args: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        return None if calls == 1 else real(*args)
+
+    monkeypatch.setattr(signin, name, find_missing_once)
 
 
 def google(subject: str = "g-1", email: str | None = "ann@example.org", *, verified: bool = True, **extra):
@@ -116,14 +130,7 @@ def test_an_identity_made_by_a_concurrent_sign_in_is_found_not_duplicated(
     """Two callbacks for the same new person at once: the second finds the first's identity."""
     winner = signin.user_for_identity(db, google(), now=NOW)
     db.commit()
-    real_find = signin._find_by_identity
-    calls = {"n": 0}
-
-    def find_missing_once(session: Session, identity: ProviderIdentity):
-        calls["n"] += 1
-        return None if calls["n"] == 1 else real_find(session, identity)
-
-    monkeypatch.setattr(signin, "_find_by_identity", find_missing_once)
+    miss_once(monkeypatch, "_find_by_identity")
     user = signin.user_for_identity(db, google(), now=NOW)
     assert user.id == winner.id
     assert count(db, AuthIdentity) == 1
@@ -213,14 +220,7 @@ def test_an_address_taken_by_a_concurrent_sign_in_links_instead_of_failing(
     """Two providers make an account for the same new verified address at once."""
     winner = signin.user_for_identity(db, google(), now=NOW)
     db.commit()
-    real_find = signin._find_by_email
-    calls = {"n": 0}
-
-    def find_missing_once(session: Session, email: str):
-        calls["n"] += 1
-        return None if calls["n"] == 1 else real_find(session, email)
-
-    monkeypatch.setattr(signin, "_find_by_email", find_missing_once)
+    miss_once(monkeypatch, "_find_by_email")
     apple = ProviderIdentity(SignInProvider.APPLE, "a-1", email="ann@example.org", email_verified=True)
     with caplog.at_level(logging.INFO, logger="fieldclub"):
         user = signin.user_for_identity(db, apple, now=NOW)
@@ -234,14 +234,7 @@ def test_an_account_made_by_a_concurrent_link_is_found_and_no_address_is_logged(
     db: Session, make_user: MakeUser, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     holder = make_user(email="ann@example.org", email_verified_at=VERIFIED_AT)
-    real_find = signin._find_by_email
-    calls = {"n": 0}
-
-    def find_missing_once(session: Session, email: str):
-        calls["n"] += 1
-        return None if calls["n"] == 1 else real_find(session, email)
-
-    monkeypatch.setattr(signin, "_find_by_email", find_missing_once)
+    miss_once(monkeypatch, "_find_by_email")
     with caplog.at_level(logging.INFO, logger="fieldclub"):
         user = signin.user_for_email(db, "ann@example.org", now=NOW)
     assert user.id == holder.id

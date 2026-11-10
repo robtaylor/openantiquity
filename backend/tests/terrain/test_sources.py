@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from pathlib import Path
 
 import numpy as np
 import pytest
-from pyproj import Transformer
 
 from fieldclub.terrain.catalogue import SourceTile, england_catalogue
 from fieldclub.terrain.cog import to_cog
@@ -20,9 +21,10 @@ from fieldclub.terrain.sources import (
     file_source,
     mirror_source,
     project_window,
+    transformer,
 )
 from fieldclub.terrain.styles import elevation_buffer
-from tests.terrain.fakes import FunctionSource, catalogue_of, laplacian, write_source_tile
+from tests.terrain.fakes import TO_LONLAT, FunctionSource, laplacian, local_mirror, write_source_tile
 
 
 def linear(east: np.ndarray | float, north: np.ndarray | float) -> np.ndarray:
@@ -34,14 +36,7 @@ def mirror(tmp_path_factory: pytest.TempPathFactory) -> Mirror:
     root = tmp_path_factory.mktemp("mirror")
     for name in ("SU16nw", "SU16ne", "SU16sw"):
         write_source_tile(root / "src", name, formula=linear)
-    catalogue = catalogue_of((root / "src").glob("*.tif"))
-    return Mirror(
-        catalogue,
-        LocalMirrorStore(root / "cogs"),
-        [LocalSourceFetcher(root / "src")],
-        root / "work",
-        convert=lambda src, dst: to_cog(src, dst, overview_count=1),
-    )
+    return local_mirror(root)
 
 
 def test_heights_are_continuous_across_the_edge_between_two_tiles(mirror: Mirror) -> None:
@@ -82,10 +77,7 @@ def test_reads_use_the_coarsest_level_no_coarser_than_asked(mirror: Mirror) -> N
 
 def test_without_fetching_only_mirrored_tiles_are_read(tmp_path: Path) -> None:
     write_source_tile(tmp_path / "src", "SU16nw", formula=linear)
-    catalogue = catalogue_of((tmp_path / "src").glob("*.tif"))
-    mirror = Mirror(
-        catalogue, LocalMirrorStore(tmp_path / "cogs"), [LocalSourceFetcher(tmp_path / "src")], tmp_path
-    )
+    mirror = local_mirror(tmp_path, convert=to_cog)
     looking = mirror_source(mirror, fetch=False)
     assert not looking.cacheable
     assert np.isnan(looking.sample(np.array([412_000.0]), np.array([167_000.0]), 4.0)[0])
@@ -93,9 +85,7 @@ def test_without_fetching_only_mirrored_tiles_are_read(tmp_path: Path) -> None:
 
 
 def test_a_mercator_window_reads_the_right_place(mirror: Mirror) -> None:
-    to_lonlat = Transformer.from_crs(27700, 4326, always_xy=True)
-    lon, lat = to_lonlat.transform(412_500, 167_500)
-    x, y = tile_at(lon, lat, 15)
+    x, y = tile_at(*TO_LONLAT.transform(412_500, 167_500), 15)
     window = Window.tile(15, x, y)
     heights = mirror_source(mirror).read(window.bounds, window.width, window.height)
     eastings, northings = project_window(window)
@@ -105,7 +95,7 @@ def test_a_mercator_window_reads_the_right_place(mirror: Mirror) -> None:
 
 
 def test_the_projection_lattice_matches_exact_projection() -> None:
-    to_bng = Transformer.from_crs(3857, 27700, always_xy=True)
+    to_bng = transformer(3857, 27700)
     for zoom in (10, 13, 16):
         x, y = tile_at(-1.85, 51.43, zoom)
         window = Window.tile(zoom, x, y, 30)
@@ -135,13 +125,7 @@ def test_a_mosaic_fills_the_first_source_gaps_from_the_next() -> None:
 def test_a_cropped_coastal_tile_sits_beside_a_whole_one(tmp_path: Path) -> None:
     write_source_tile(tmp_path / "src", "SU16nw", formula=linear)
     write_source_tile(tmp_path / "src", "SU16ne", formula=linear, width_m=1012)
-    mirror = Mirror(
-        catalogue_of((tmp_path / "src").glob("*.tif")),
-        LocalMirrorStore(tmp_path / "cogs"),
-        [LocalSourceFetcher(tmp_path / "src")],
-        tmp_path / "work",
-    )
-    source = mirror_source(mirror)
+    source = mirror_source(local_mirror(tmp_path, convert=to_cog))
     eastings = np.array([414_990.0, 415_010.0, 415_900.0, 416_100.0])
     northings = np.full_like(eastings, 167_500.0)
     for resolution in (4.0, 8.0, 40.0):
@@ -224,15 +208,8 @@ def white_noise(east: np.ndarray, north: np.ndarray) -> np.ndarray:
 
 def test_detail_does_not_depend_on_where_a_pixel_falls_against_the_cells(tmp_path: Path) -> None:
     write_source_tile(tmp_path / "src", "SU16nw", formula=white_noise)
-    mirror = Mirror(
-        catalogue_of((tmp_path / "src").glob("*.tif")),
-        LocalMirrorStore(tmp_path / "cogs"),
-        [LocalSourceFetcher(tmp_path / "src")],
-        tmp_path / "work",
-        convert=lambda src, dst: to_cog(src, dst, overview_count=1),
-    )
-    to_lonlat = Transformer.from_crs(27700, 4326, always_xy=True)
-    x, y = tile_at(*to_lonlat.transform(412_500, 167_500), 13)
+    mirror = local_mirror(tmp_path)
+    x, y = tile_at(*TO_LONLAT.transform(412_500, 167_500), 13)
     # Zoom 13 has 5.8 m pixels and reads the 4 m cells.
     window = Window(13, x * 512 + 100, y * 512 + 100, 300, 300)
     z = mirror_source(mirror).read(window.bounds, window.width, window.height)
@@ -246,3 +223,36 @@ def test_detail_does_not_depend_on_where_a_pixel_falls_against_the_cells(tmp_pat
     half_way = float(np.median(detail[(np.abs(fx - 0.5) < 0.15) & (np.abs(fy - 0.5) < 0.15)]))
     # White noise is the worst case: bilinear interpolation gave 1.8, the B-spline 1.23.
     assert on_centre / half_way < 1.4
+
+
+class OverlapFetcher:
+    """Hands out source files from a folder, counting how many fetches run at once."""
+
+    def __init__(self, folder: Path) -> None:
+        self.inner = LocalSourceFetcher(folder)
+        self.lock = threading.Lock()
+        self.running = 0
+        self.most = 0
+
+    def fetch(self, tile: SourceTile, work_dir: Path) -> Fetched | None:
+        with self.lock:
+            self.running += 1
+            self.most = max(self.most, self.running)
+        try:
+            time.sleep(0.2)
+            return self.inner.fetch(tile, work_dir)
+        finally:
+            with self.lock:
+                self.running -= 1
+
+
+def test_a_read_across_missing_tiles_fetches_them_side_by_side(tmp_path: Path) -> None:
+    for name in ("SU16nw", "SU16ne"):
+        write_source_tile(tmp_path / "src", name, formula=linear)
+    fetcher = OverlapFetcher(tmp_path / "src")
+    mirror = local_mirror(tmp_path, fetchers=[fetcher])
+    eastings = np.array([414_990.0, 415_010.0])
+    heights = mirror_source(mirror).sample(eastings, np.full_like(eastings, 167_500.0), 4.0)
+    assert np.isfinite(heights).all()
+    assert mirror.store.names() == ["SU16ne", "SU16nw"]
+    assert fetcher.most == 2

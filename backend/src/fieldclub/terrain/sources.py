@@ -32,20 +32,22 @@ zoom 10 and under 1 mm from zoom 13.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import math
-import threading
 from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Protocol
 
 import numpy as np
 import rasterio
-from pyproj import Transformer
 from rasterio.enums import Resampling
+from rasterio.io import DatasetReader
 from rasterio.windows import Window as RasterWindow
 
 from fieldclub.errors import DataIntegrityError
+from fieldclub.gridref import transformer
 from fieldclub.terrain.catalogue import Catalogue
 from fieldclub.terrain.errors import ElevationUnavailableError, ReadTooLargeError
 from fieldclub.terrain.grid import (
@@ -73,17 +75,6 @@ MAX_SPAN_FACTOR = 1.5
 # The most 5 km tiles one fetching read may touch. A buffered zoom 13 tile and
 # a 5 km profile each touch at most four.
 MAX_FETCHED_TILES = 9
-
-_local = threading.local()
-
-
-def transformer(source_epsg: int, target_epsg: int) -> Transformer:
-    """A transformer between two EPSG codes, one per thread: pyproj's aren't safe to share."""
-    cache: dict[tuple[int, int], Transformer] = _local.__dict__.setdefault("transformers", {})
-    key = (source_epsg, target_epsg)
-    if key not in cache:
-        cache[key] = Transformer.from_crs(source_epsg, target_epsg, always_xy=True)
-    return cache[key]
 
 
 def project_window(window: Window) -> tuple[np.ndarray, np.ndarray]:
@@ -246,21 +237,25 @@ class CogMosaicSource:
         paths = list(self._paths_for(bbox))
         if not paths:
             return None
-        with rasterio.open(paths[0]) as first:
+        # Each file is opened once: in production every open is a request for its header.
+        with contextlib.ExitStack() as stack:
+            datasets = [stack.enter_context(rasterio.open(path)) for path in paths]
+            first = datasets[0]
             base = float(first.res[0])
             origin_e, origin_n = float(first.transform.c), float(first.transform.f)
-        usable = [r for r in self._resolutions if r >= base * (1 - 1e-9)] or [base]
-        res = max((r for r in usable if r <= resolution * (1 + 1e-9)), default=usable[0])
-        west, south, east, north = bbox
-        # On the first file's grid, with a margin of two cells so the B-spline always has its 4 by 4 cells.
-        grid_west = origin_e + math.floor((west - origin_e) / res) * res - 2 * res
-        grid_north = origin_n + math.ceil((north - origin_n) / res) * res + 2 * res
-        cols = math.ceil((east - grid_west) / res) + 2
-        rows = math.ceil((grid_north - south) / res) + 2
-        assert rows * cols <= MAX_GRID_PIXELS, f"a {rows} by {cols} grid is too big to assemble"
-        data = np.full((rows, cols), np.nan, dtype=np.float32)
-        for path in paths:
-            _paste(path, res, data, grid_west, grid_north)
+            usable = [r for r in self._resolutions if r >= base * (1 - 1e-9)] or [base]
+            res = max((r for r in usable if r <= resolution * (1 + 1e-9)), default=usable[0])
+            west, south, east, north = bbox
+            # On the first file's grid, with a margin of two cells so the B-spline always has
+            # its 4 by 4 cells.
+            grid_west = origin_e + math.floor((west - origin_e) / res) * res - 2 * res
+            grid_north = origin_n + math.ceil((north - origin_n) / res) * res + 2 * res
+            cols = math.ceil((east - grid_west) / res) + 2
+            rows = math.ceil((grid_north - south) / res) + 2
+            assert rows * cols <= MAX_GRID_PIXELS, f"a {rows} by {cols} grid is too big to assemble"
+            data = np.full((rows, cols), np.nan, dtype=np.float32)
+            for ds in datasets:
+                _paste(ds, res, data, grid_west, grid_north)
         return Grid(data, grid_west, grid_north, res)
 
 
@@ -300,34 +295,33 @@ def _check_span(window: Window, eastings: np.ndarray, northings: np.ndarray) -> 
         raise ReadTooLargeError(f"{window} projects to a box {span:.0f} m across, more than {limit:.0f} m.")
 
 
-def _paste(path: str, res: float, data: np.ndarray, west: float, north: float) -> None:
+def _paste(ds: DatasetReader, res: float, data: np.ndarray, west: float, north: float) -> None:
     """Read the grid cells that lie wholly inside a file, averaging down to the grid's resolution."""
     rows, cols = data.shape
-    with rasterio.open(path) as ds:
-        base = float(ds.res[0])
-        f_west, f_north = float(ds.transform.c), float(ds.transform.f)
-        f_east, f_south = f_west + ds.width * base, f_north - ds.height * base
-        eps = 1e-6
-        c0 = max(0, math.ceil((f_west - west) / res - eps))
-        c1 = min(cols, math.floor((f_east - west) / res + eps))
-        r0 = max(0, math.ceil((north - f_north) / res - eps))
-        r1 = min(rows, math.floor((north - f_south) / res + eps))
-        if c1 <= c0 or r1 <= r0:
-            return
-        col_off = (west + c0 * res - f_west) / base
-        row_off = (f_north - (north - r0 * res)) / base
-        if abs(col_off - round(col_off)) > eps or abs(row_off - round(row_off)) > eps:
-            raise DataIntegrityError(f"{path} isn't on the mosaic's pixel grid.")
-        scale = res / base
-        window = RasterWindow.from_slices(
-            (round(row_off), round(row_off + (r1 - r0) * scale)),
-            (round(col_off), round(col_off + (c1 - c0) * scale)),
-        )
-        resampling = Resampling.average if scale > 1 else Resampling.nearest
-        block = ds.read(
-            indexes=1, window=window, out_shape=(r1 - r0, c1 - c0), resampling=resampling, masked=True
-        )
-        data[r0:r1, c0:c1] = block.filled(np.nan).astype(np.float32)
+    base = float(ds.res[0])
+    f_west, f_north = float(ds.transform.c), float(ds.transform.f)
+    f_east, f_south = f_west + ds.width * base, f_north - ds.height * base
+    eps = 1e-6
+    c0 = max(0, math.ceil((f_west - west) / res - eps))
+    c1 = min(cols, math.floor((f_east - west) / res + eps))
+    r0 = max(0, math.ceil((north - f_north) / res - eps))
+    r1 = min(rows, math.floor((north - f_south) / res + eps))
+    if c1 <= c0 or r1 <= r0:
+        return
+    col_off = (west + c0 * res - f_west) / base
+    row_off = (f_north - (north - r0 * res)) / base
+    if abs(col_off - round(col_off)) > eps or abs(row_off - round(row_off)) > eps:
+        raise DataIntegrityError(f"{ds.name} isn't on the mosaic's pixel grid.")
+    scale = res / base
+    window = RasterWindow.from_slices(
+        (round(row_off), round(row_off + (r1 - r0) * scale)),
+        (round(col_off), round(col_off + (c1 - c0) * scale)),
+    )
+    resampling = Resampling.average if scale > 1 else Resampling.nearest
+    block = ds.read(
+        indexes=1, window=window, out_shape=(r1 - r0, c1 - c0), resampling=resampling, masked=True
+    )
+    data[r0:r1, c0:c1] = block.filled(np.nan).astype(np.float32)
 
 
 # Metres. Each divides 5 km, so 5 km tiles never share a cell.
@@ -341,12 +335,16 @@ def mirror_source(mirror: Mirror, *, fetch: bool = True) -> CogMosaicSource:
     catalogue: Catalogue = mirror.catalogue
 
     def paths_for(bbox: tuple[float, float, float, float]) -> list[str]:
-        tiles = catalogue.covering(bbox)
-        if fetch and len(tiles) > MAX_FETCHED_TILES:
-            raise ReadTooLargeError(
-                f"A read of {bbox} would fetch {len(tiles)} tiles, more than {MAX_FETCHED_TILES}."
-            )
-        found = [mirror.ensure(tile.name) if fetch else mirror.path(tile.name) for tile in tiles]
+        names = [tile.name for tile in catalogue.covering(bbox)]
+        if fetch:
+            if len(names) > MAX_FETCHED_TILES:
+                raise ReadTooLargeError(
+                    f"A read of {bbox} would fetch {len(names)} tiles, more than {MAX_FETCHED_TILES}."
+                )
+            _fetch_missing(mirror, names)
+            found = [mirror.ensure(name) for name in names]
+        else:
+            found = [mirror.path(name) for name in names]
         return [path for path in found if path is not None]
 
     return CogMosaicSource(
@@ -354,17 +352,36 @@ def mirror_source(mirror: Mirror, *, fetch: bool = True) -> CogMosaicSource:
     )
 
 
-def file_source(edition: str, path: str, *, exists: Callable[[], bool]) -> CogMosaicSource:
+def _fetch_missing(mirror: Mirror, names: Sequence[str]) -> None:
+    """Add the tiles the mirror lacks side by side, within the mirror's own limit on fetches.
+
+    The first failure in `names` order is raised, as a read one tile at a time would.
+    """
+    missing = [name for name in names if not mirror.has(name)]
+    if len(missing) < 2:
+        return
+    with ThreadPoolExecutor(max_workers=len(missing), thread_name_prefix="mirror-fetch") as pool:
+        list(pool.map(mirror.ensure, missing))
+
+
+class NationalSource(CogMosaicSource):
+    """The national 10 m composite as one COG. Unavailable until `available()`, the file, exists."""
+
+    def __init__(self, edition: str, path: str, *, exists: Callable[[], bool]) -> None:
+        def paths_for(bbox: tuple[float, float, float, float]) -> list[str]:
+            if not exists():
+                # The path stays in the log: the message reaches the client.
+                logger.info("The national composite %s isn't at %s", edition, path)
+                raise ElevationUnavailableError(f"{edition} isn't built yet.")
+            return [path]
+
+        super().__init__(edition, paths_for, NATIONAL_RESOLUTIONS, extent=ENGLAND_WGS84)
+        self.available = exists
+
+
+def file_source(edition: str, path: str, *, exists: Callable[[], bool]) -> NationalSource:
     """The national 10 m composite as one COG. Unavailable until the file exists."""
-
-    def paths_for(bbox: tuple[float, float, float, float]) -> list[str]:
-        if not exists():
-            # The path stays in the log: the message reaches the client.
-            logger.info("The national composite %s isn't at %s", edition, path)
-            raise ElevationUnavailableError(f"{edition} isn't built yet.")
-        return [path]
-
-    return CogMosaicSource(edition, paths_for, NATIONAL_RESOLUTIONS, extent=ENGLAND_WGS84)
+    return NationalSource(edition, path, exists=exists)
 
 
 class Mosaic:

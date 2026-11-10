@@ -9,6 +9,7 @@ from starlette.responses import Response
 
 from fieldclub.auth.email_link import LINK_COOKIE, LINK_LIFETIME, VERIFY_PATH
 from fieldclub.auth.flow import FLOW_COOKIE, FLOW_LIFETIME_S
+from fieldclub.auth.oauth import OAuthProvider, callback_path
 from fieldclub.auth.sessions import session_lifetime
 from fieldclub.config import SESSION_COOKIE, get_settings
 
@@ -35,26 +36,25 @@ def clear_session_cookie(response: Response) -> None:
     )
 
 
-def _flow_cookie_attributes(path: str, cross_site_post: bool) -> dict[str, Any]:
-    """A provider that returns with a cross-site POST (Apple) needs SameSite=None
-    for the browser to send the cookie, and browsers take that only with Secure."""
+def _flow_cookie_attributes(provider: OAuthProvider) -> dict[str, Any]:
+    """Scoped to the provider's callback. A provider that returns with a cross-site
+    POST (Apple) needs SameSite=None for the browser to send the cookie, and
+    browsers take that only with Secure."""
     return {
-        "path": path,
+        "path": callback_path(provider.id),
         "httponly": True,
-        "samesite": "none" if cross_site_post else "lax",
-        "secure": True if cross_site_post else get_settings().session_cookie_secure,
+        "samesite": "none" if provider.form_post else "lax",
+        "secure": True if provider.form_post else get_settings().session_cookie_secure,
     }
 
 
-def set_flow_cookie(response: Response, value: str, *, path: str, cross_site_post: bool) -> None:
+def set_flow_cookie(response: Response, value: str, provider: OAuthProvider) -> None:
     """The signed `fieldclub_oauth` cookie for one sign-in flow, sent only to its callback."""
-    response.set_cookie(
-        FLOW_COOKIE, value, max_age=FLOW_LIFETIME_S, **_flow_cookie_attributes(path, cross_site_post)
-    )
+    response.set_cookie(FLOW_COOKIE, value, max_age=FLOW_LIFETIME_S, **_flow_cookie_attributes(provider))
 
 
-def clear_flow_cookie(response: Response, *, path: str, cross_site_post: bool) -> None:
-    response.delete_cookie(FLOW_COOKIE, **_flow_cookie_attributes(path, cross_site_post))
+def clear_flow_cookie(response: Response, provider: OAuthProvider) -> None:
+    response.delete_cookie(FLOW_COOKIE, **_flow_cookie_attributes(provider))
 
 
 def _link_cookie_attributes() -> dict[str, Any]:

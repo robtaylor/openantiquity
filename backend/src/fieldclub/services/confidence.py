@@ -185,8 +185,8 @@ _OUTCOME_DIRECTION: dict[Outcome, Stance] = {
     Outcome.CONTRADICTS: Stance.CONTRADICTS,
 }
 
-# States that offer nobody a next step.
-_CLOSED_STATES = frozenset({FindingState.RULED_OUT, FindingState.WITHDRAWN})
+# Closed states: they offer nobody a next step, and earn no reputation.
+CLOSED_STATES = frozenset({FindingState.RULED_OUT, FindingState.WITHDRAWN})
 
 
 def _ge(a: float, b: float) -> bool:
@@ -511,6 +511,15 @@ def load_assessment(data: Mapping[str, Any] | None) -> Assessment | None:
     return Assessment.from_json(data)
 
 
+def load_next_steps(data: Mapping[str, Any]) -> tuple[NextStep, ...]:
+    """Only the next steps of a stored assessment, without decoding the rest of it."""
+    if data.get("version") != ASSESSMENT_VERSION:
+        raise InvalidInputsError(f"assessment version {data.get('version')!r} is not {ASSESSMENT_VERSION}")
+    steps = _decode(tuple[NextStep, ...], data["next_steps"])
+    assert isinstance(steps, tuple)
+    return steps
+
+
 # --------------------------------------------------------------------------
 # The engine
 # --------------------------------------------------------------------------
@@ -646,7 +655,7 @@ def assess(inputs: FindingInputs, thresholds: Thresholds = THRESHOLDS) -> Assess
         score = TIER_BASE_SCORES[tier]
 
     steps: tuple[NextStep, ...] = ()
-    if next_tier is not None and state not in _CLOSED_STATES:
+    if next_tier is not None and state not in CLOSED_STATES:
         steps = _next_steps(
             next_tier,
             seen=seen,
@@ -973,6 +982,8 @@ _ANSWER_CREDITS: dict[Visible, CreditKind] = {
     Visible.NO: CreditKind.COULD_NOT_SEE,
     Visible.UNSURE: CreditKind.UNSURE,
 }
+# Every credit that says how someone answered, which a blind viewer mustn't see.
+ANSWER_CREDIT_KINDS: frozenset[CreditKind] = frozenset(_ANSWER_CREDITS.values()) | {CreditKind.EXPLAINED}
 
 
 def _credits(

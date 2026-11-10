@@ -1,38 +1,29 @@
 from __future__ import annotations
 
-import math
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from shapely.geometry import LineString, Point
+from shapely.geometry import LineString
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from fieldclub.ingest.runner import run_connector
 from fieldclub.models import Source
 from fieldclub.services import record_tiles
-from tests.helpers import error_code
+from tests.helpers import add_record, add_source, error_code
 from tests.ingest.fakes import FakeConnector, record
 from tests.records import mvt
-from tests.records.support import OVERTON, SILBURY, add_record, add_source
-
-
-def tile_of(lon: float, lat: float, z: int) -> tuple[int, int]:
-    """The Web Mercator tile holding a point."""
-    n = 2**z
-    x = int((lon + 180) / 360 * n)
-    y = int((1 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2 * n)
-    return x, y
+from tests.records.support import OVERTON, SILBURY, SILBURY_MOUND, add_finds_source, tile_of
 
 
 @pytest.fixture
 def index(db: Session) -> dict[str, int]:
     designations = add_source(db)
-    finds = add_source(db, "test-finds", name="Test finds", category="find", reuse="non_commercial")
+    finds = add_finds_source(db)
     hidden = add_source(db, "test-hidden", name="Hidden", enabled=False)
     made = {
-        "silbury": add_record(db, designations, "Silbury Hill", geom=Point(*SILBURY).buffer(0.001)),
+        "silbury": add_record(db, designations, "Silbury Hill", geom=SILBURY_MOUND),
         "bowl": add_record(db, designations, "Bowl barrow", *OVERTON),
         "coin": add_record(db, finds, "Roman coin", -1.8570, 51.4150),
         "dyke": add_record(db, designations, "Wansdyke", geom=LineString([(-1.95, 51.37), (-1.80, 51.38)])),

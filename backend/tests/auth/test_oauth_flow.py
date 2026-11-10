@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import json
 import time
 from datetime import UTC, datetime
@@ -21,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fieldclub.auth import accounts, signin
+from fieldclub.auth.flow import FLOW_COOKIE
 from fieldclub.auth.oidc import JWKS_MIN_REFRESH_S
 from fieldclub.auth.tokens import hash_token
 from fieldclub.config import SESSION_COOKIE
@@ -31,9 +31,13 @@ from tests.auth.fakes import (
     FakeFacebook,
     FakeIdP,
     Provider,
+    b64url_json,
     callback,
     flow_cookie_value,
     query_of,
+    resign,
+    set_cookie_header,
+    set_cookie_value,
     sign_in,
     signin_error,
     start,
@@ -41,6 +45,14 @@ from tests.auth.fakes import (
 from tests.helpers import ClientFor, MakeUser, count
 
 Idps = dict[str, Provider]
+
+
+def oidc_idp(idps: Idps, name: str) -> FakeIdP:
+    """The fake for an OpenID Connect provider, typed as one."""
+    idp = idps[name]
+    assert isinstance(idp, FakeIdP)
+    return idp
+
 
 # What each provider says about the same person, Ann.
 ANN: dict[str, dict[str, Any]] = {
@@ -87,17 +99,13 @@ def complete(browser: TestClient, idps: Idps, provider: str, claims: dict[str, A
     """Sign in with `provider` using Ann's details, or `claims`."""
     claims = ANN[provider] if claims is None else claims
     if provider == "apple":
-        kw.setdefault("method", "POST")
         kw.setdefault("user", APPLE_USER)
     return sign_in(browser, idps[provider], claims, **kw)
 
 
 def issued_session(response: httpx2.Response) -> str:
     """The session token a response sets."""
-    for header in response.headers.get_list("set-cookie"):
-        if header.startswith(f"{SESSION_COOKIE}="):
-            return header.split(";", 1)[0].split("=", 1)[1]
-    raise AssertionError("no session cookie was set")
+    return set_cookie_value(response, SESSION_COOKIE)
 
 
 def session_rows(db: Session) -> list[UserSession]:
@@ -187,7 +195,7 @@ def test_start_sends_state_and_a_pkce_challenge_and_sets_the_flow_cookie(
         assert query["response_mode"] == "form_post"
         assert query["scope"] == "name email"
 
-    cookie = next(h for h in response.headers.get_list("set-cookie") if h.startswith("fieldclub_oauth="))
+    cookie = set_cookie_header(response, FLOW_COOKIE)
     attributes = {part.strip().split("=", 1)[0].lower(): part for part in cookie.split(";")}
     assert "httponly" in attributes
     assert attributes["path"].strip() == f"Path=/api/v1/auth/oauth/{provider}/callback"
@@ -202,18 +210,16 @@ def test_start_sends_state_and_a_pkce_challenge_and_sets_the_flow_cookie(
 
 def test_the_flow_cookie_is_cleared_by_the_callback(browser: TestClient, idps: Idps) -> None:
     response = complete(browser, idps, "google")
-    cleared = [h for h in response.headers.get_list("set-cookie") if h.startswith("fieldclub_oauth=")]
+    cleared = [h for h in response.headers.get_list("set-cookie") if h.startswith(f"{FLOW_COOKIE}=")]
     assert len(cleared) == 1
-    assert "Max-Age=0" in cleared[0] or 'fieldclub_oauth=""' in cleared[0]
-    assert "fieldclub_oauth" not in browser.cookies
+    assert "Max-Age=0" in cleared[0] or f'{FLOW_COOKIE}=""' in cleared[0]
+    assert FLOW_COOKIE not in browser.cookies
 
 
 def test_the_redirect_address_and_the_session_cookie_are_right(browser: TestClient, idps: Idps) -> None:
     response = complete(browser, idps, "google")
     assert response.status_code == 303
-    session_cookie = next(
-        h for h in response.headers.get_list("set-cookie") if h.startswith(f"{SESSION_COOKIE}=")
-    )
+    session_cookie = set_cookie_header(response, SESSION_COOKIE)
     assert "HttpOnly" in session_cookie
     assert "SameSite=lax" in session_cookie or "samesite=lax" in session_cookie.lower()
 
@@ -234,8 +240,7 @@ def assert_nobody_signed_in(db: Session, browser: TestClient) -> None:
 def test_a_forged_state_is_refused(provider: str, browser: TestClient, idps: Idps, db: Session) -> None:
     started = start(browser, provider)
     code, _ = idps[provider].authorise(started.headers["location"], ANN[provider])
-    method = "POST" if provider == "apple" else "GET"
-    response = callback(browser, provider, method=method, code=code, state="forged-" + "x" * 40)
+    response = callback(browser, provider, code=code, state="forged-" + "x" * 40)
     assert signin_error(response) == "state_mismatch"
     assert_nobody_signed_in(db, browser)
     # The code was never spent: the state check comes before the exchange.
@@ -246,8 +251,8 @@ def test_a_forged_state_is_refused(provider: str, browser: TestClient, idps: Idp
 def test_a_missing_state_is_refused(provider: str, browser: TestClient, idps: Idps, db: Session) -> None:
     started = start(browser, provider)
     code, _ = idps[provider].authorise(started.headers["location"], ANN[provider])
-    assert signin_error(callback(browser, provider, code=code)) == "state_mismatch"
-    assert signin_error(callback(browser, provider, code=code, state="")) == "state_mismatch"
+    assert signin_error(callback(browser, provider, method="GET", code=code)) == "state_mismatch"
+    assert signin_error(callback(browser, provider, method="GET", code=code, state="")) == "state_mismatch"
     assert_nobody_signed_in(db, browser)
 
 
@@ -266,9 +271,7 @@ def test_a_flow_cookie_for_another_provider_is_refused(browser: TestClient, idps
     started = start(browser, "osm")
     code, state = idps["osm"].authorise(started.headers["location"], ANN["osm"])
     # Replay osm's cookie and state against google's callback.
-    browser.cookies.set(
-        "fieldclub_oauth", flow_cookie_value(started), path="/api/v1/auth/oauth/google/callback"
-    )
+    browser.cookies.set(FLOW_COOKIE, flow_cookie_value(started), path="/api/v1/auth/oauth/google/callback")
     assert signin_error(callback(browser, "google", code=code, state=state)) == "state_mismatch"
     assert_nobody_signed_in(db, browser)
 
@@ -276,13 +279,10 @@ def test_a_flow_cookie_for_another_provider_is_refused(browser: TestClient, idps
 def test_an_edited_flow_cookie_is_refused(browser: TestClient, idps: Idps, db: Session) -> None:
     started = start(browser, "google")
     code, state = idps["google"].authorise(started.headers["location"], ANN["google"])
-    body, signature = flow_cookie_value(started).split(".")
-    data = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
-    data["next"] = "//evil.example"
-    edited = base64.urlsafe_b64encode(json.dumps(data).encode()).rstrip(b"=").decode()
+    edited = resign(flow_cookie_value(started), lambda data: data.update(next="//evil.example"))
     path = "/api/v1/auth/oauth/google/callback"
     browser.cookies.clear()
-    browser.cookies.set("fieldclub_oauth", f"{edited}.{signature}", path=path)
+    browser.cookies.set(FLOW_COOKIE, edited, path=path)
     response = callback(browser, "google", code=code, state=state)
     assert signin_error(response) == "state_mismatch"
     assert response.headers["location"].startswith(f"{PUBLIC_URL}/?")
@@ -307,15 +307,14 @@ def test_a_replayed_code_is_refused(provider: str, browser: TestClient, idps: Id
     started = start(browser, provider)
     flow_cookie = flow_cookie_value(started)
     code, state = idps[provider].authorise(started.headers["location"], ANN[provider])
-    method = "POST" if provider == "apple" else "GET"
-    assert signin_error(callback(browser, provider, method=method, code=code, state=state)) is None
+    assert signin_error(callback(browser, provider, code=code, state=state)) is None
     sessions_after_first = len(session_rows(db))
 
     # The same cookie, code and state a second time, as an attacker who copied them would send.
     browser.cookies.clear()
     path = f"/api/v1/auth/oauth/{provider}/callback"
-    browser.cookies.set("fieldclub_oauth", flow_cookie, path=path)
-    replay = callback(browser, provider, method=method, code=code, state=state)
+    browser.cookies.set(FLOW_COOKIE, flow_cookie, path=path)
+    replay = callback(browser, provider, code=code, state=state)
     assert signin_error(replay) == "provider_error"
     assert len(session_rows(db)) == sessions_after_first
     assert SESSION_COOKIE not in browser.cookies
@@ -325,9 +324,7 @@ OIDC_PROVIDERS = ["google", "microsoft", "apple", "osm"]
 
 
 def oidc_sign_in(browser: TestClient, idp: FakeIdP, claims: dict[str, Any]) -> httpx2.Response:
-    provider = idp.provider
-    form = {"method": "POST"} if provider == "apple" else {}
-    return sign_in(browser, idp, {"sub": "s-1"} | claims, **form)
+    return sign_in(browser, idp, {"sub": "s-1"} | claims)
 
 
 @pytest.mark.parametrize("provider", OIDC_PROVIDERS)
@@ -347,8 +344,7 @@ def oidc_sign_in(browser: TestClient, idp: FakeIdP, claims: dict[str, Any]) -> h
 def test_identity_tokens_that_fail_a_check_are_refused(
     provider: str, claims: dict[str, Any], browser: TestClient, idps: Idps, db: Session
 ) -> None:
-    idp = idps[provider]
-    assert isinstance(idp, FakeIdP)
+    idp = oidc_idp(idps, provider)
     response = oidc_sign_in(browser, idp, claims)
     assert signin_error(response) == "invalid_token"
     assert_nobody_signed_in(db, browser)
@@ -357,8 +353,7 @@ def test_identity_tokens_that_fail_a_check_are_refused(
 def test_an_audience_list_needs_us_as_the_authorised_party(
     browser: TestClient, idps: Idps, db: Session
 ) -> None:
-    idp = idps["google"]
-    assert isinstance(idp, FakeIdP)
+    idp = oidc_idp(idps, "google")
     both = ["google-client", "other-client"]
     assert signin_error(oidc_sign_in(browser, idp, {"aud": both})) == "invalid_token"
     assert signin_error(oidc_sign_in(browser, idp, {"aud": both, "azp": "other-client"})) == "invalid_token"
@@ -369,20 +364,15 @@ def test_an_audience_list_needs_us_as_the_authorised_party(
     assert signin_error(oidc_sign_in(browser, idp, {"aud": both, "azp": "google-client"})) is None
 
 
-def b64(data: dict[str, Any]) -> str:
-    return base64.urlsafe_b64encode(json.dumps(data).encode()).rstrip(b"=").decode()
-
-
 def unsigned(claims: dict[str, Any]) -> str:
-    return f"{b64({'alg': 'none', 'typ': 'JWT'})}.{b64(claims)}."
+    return f"{b64url_json({'alg': 'none', 'typ': 'JWT'})}.{b64url_json(claims)}."
 
 
 @pytest.mark.parametrize("provider", OIDC_PROVIDERS)
 def test_an_unsigned_identity_token_is_refused(
     provider: str, browser: TestClient, idps: Idps, db: Session
 ) -> None:
-    idp = idps[provider]
-    assert isinstance(idp, FakeIdP)
+    idp = oidc_idp(idps, provider)
     idp.forge = unsigned
     assert signin_error(oidc_sign_in(browser, idp, {})) == "invalid_token"
     assert_nobody_signed_in(db, browser)
@@ -392,8 +382,7 @@ def test_a_token_signed_with_the_public_key_as_an_hmac_secret_is_refused(
     browser: TestClient, idps: Idps, db: Session, rsa_keys: list[RSAKey]
 ) -> None:
     """The classic confusion: HS256 keyed with the provider's published key."""
-    idp = idps["google"]
-    assert isinstance(idp, FakeIdP)
+    idp = oidc_idp(idps, "google")
     public = json.dumps(rsa_keys[0].as_dict(private=False)).encode()
     secret = OctKey.import_key(public)
 
@@ -408,8 +397,7 @@ def test_a_token_signed_with_the_public_key_as_an_hmac_secret_is_refused(
 def test_a_token_signed_with_an_algorithm_outside_the_allow_list_is_refused(
     browser: TestClient, idps: Idps, db: Session, rsa_keys: list[RSAKey]
 ) -> None:
-    idp = idps["google"]
-    assert isinstance(idp, FakeIdP)
+    idp = oidc_idp(idps, "google")
     # A real signature by the provider's own key, but with PS256, which we don't accept.
     idp.forge = lambda claims: idp.id_token(claims, alg="PS256")
     assert signin_error(oidc_sign_in(browser, idp, {})) == "invalid_token"
@@ -419,8 +407,7 @@ def test_a_token_signed_with_an_algorithm_outside_the_allow_list_is_refused(
 def test_a_token_signed_by_a_key_the_provider_never_published_is_refused(
     browser: TestClient, idps: Idps, db: Session, rsa_keys: list[RSAKey]
 ) -> None:
-    idp = idps["google"]
-    assert isinstance(idp, FakeIdP)
+    idp = oidc_idp(idps, "google")
     stranger = rsa_keys[2]
     idp.forge = lambda claims: idp.id_token(claims, key=stranger)
     assert signin_error(oidc_sign_in(browser, idp, {})) == "invalid_token"
@@ -435,8 +422,7 @@ def test_a_token_signed_by_a_key_the_provider_never_published_is_refused(
 def test_an_es256_token_from_a_provider_that_publishes_ec_keys_is_accepted(
     browser: TestClient, idps: Idps
 ) -> None:
-    idp = idps["osm"]
-    assert isinstance(idp, FakeIdP)
+    idp = oidc_idp(idps, "osm")
     idp.rotate(ECKey.generate_key("P-256", auto_kid=True))
     assert signin_error(oidc_sign_in(browser, idp, {})) is None
 
@@ -444,8 +430,7 @@ def test_an_es256_token_from_a_provider_that_publishes_ec_keys_is_accepted(
 def test_rotated_keys_are_fetched_again(
     app: FastAPI, client_for: ClientFor, idps: Idps, rsa_keys: list[RSAKey]
 ) -> None:
-    idp = idps["google"]
-    assert isinstance(idp, FakeIdP)
+    idp = oidc_idp(idps, "google")
     assert idp.jwks_route is not None
     assert signin_error(oidc_sign_in(client_for(app), idp, {"sub": "one"})) is None
     assert idp.jwks_route.call_count == 1
@@ -467,8 +452,7 @@ def test_rotated_keys_are_fetched_again(
 def test_unknown_key_ids_fetch_the_key_set_at_most_once_a_minute(
     app: FastAPI, client_for: ClientFor, idps: Idps, rsa_keys: list[RSAKey]
 ) -> None:
-    idp = idps["google"]
-    assert isinstance(idp, FakeIdP)
+    idp = oidc_idp(idps, "google")
     assert idp.jwks_route is not None
     stranger = rsa_keys[2]
     idp.forge = lambda claims: idp.id_token(claims, key=stranger)
@@ -503,8 +487,7 @@ def test_a_discovery_document_that_names_another_issuer_is_refused(
 def test_microsofts_issuer_must_carry_the_tokens_own_tenant(
     browser: TestClient, idps: Idps, db: Session
 ) -> None:
-    idp = idps["microsoft"]
-    assert isinstance(idp, FakeIdP)
+    idp = oidc_idp(idps, "microsoft")
     other = "72f988bf-86f1-41af-91ab-2d7cd011db47"
     # An issuer for one tenant on a token claiming another.
     assert signin_error(oidc_sign_in(browser, idp, {"tid": other})) == "invalid_token"
@@ -623,7 +606,7 @@ def test_apples_posted_form_is_still_guarded_by_state(
     attacker, victim = client_for(app), client_for(app, with_header=False)
     started = start(attacker, "apple")
     code, state = idps["apple"].authorise(started.headers["location"], ANN["apple"])
-    response = callback(victim, "apple", method="POST", code=code, state=state, user=APPLE_USER)
+    response = callback(victim, "apple", code=code, state=state, user=APPLE_USER)
     assert signin_error(response) == "state_mismatch"
     assert_nobody_signed_in(db, victim)
 
@@ -859,7 +842,7 @@ def test_apple_ends_the_session_the_browser_had_at_start_though_its_post_carries
     code, state = idps["apple"].authorise(started.headers["location"], ANN["apple"])
     # What the browser does on Apple's form post: the Lax session cookie stays home.
     browser.cookies.delete(SESSION_COOKIE)
-    response = callback(browser, "apple", method="POST", code=code, state=state, user=APPLE_USER)
+    response = callback(browser, "apple", code=code, state=state, user=APPLE_USER)
     assert signin_error(response) is None
     assert issued_session(response) != before
     assert db.scalars(select(UserSession).where(UserSession.token_hash == hash_token(before))).first() is None
@@ -884,7 +867,7 @@ def test_an_unknown_provider_redirects_with_a_code(provider: str, browser: TestC
     response = start(browser, provider, "/f/1")
     assert response.status_code == 303
     assert response.headers["location"] == f"{PUBLIC_URL}/f/1?signin_error=provider_unavailable"
-    assert "fieldclub_oauth" not in response.headers.get("set-cookie", "")
+    assert FLOW_COOKIE not in response.headers.get("set-cookie", "")
     assert signin_error(callback(browser, provider, code="c", state="s")) == "provider_unavailable"
 
 

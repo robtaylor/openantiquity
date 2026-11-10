@@ -18,11 +18,11 @@ from __future__ import annotations
 import hashlib
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Header, Query
 from starlette.responses import Response
 
+from fieldclub.api.deps import TerrainDep
 from fieldclub.terrain.render import DEM_KIND, RenderedTile
-from fieldclub.terrain.service import Terrain, get_terrain
 
 MOUNT_AT_ROOT = True
 
@@ -34,7 +34,6 @@ IMMUTABLE = "public, max-age=31536000, immutable"
 UNVERSIONED = "public, max-age=3600"
 CHANGING = "no-cache"
 
-TerrainDep = Annotated[Terrain, Depends(get_terrain)]
 VersionParam = Annotated[str | None, Query(alias="v")]
 IfNoneMatch = Annotated[str | None, Header()]
 

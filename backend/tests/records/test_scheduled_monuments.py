@@ -13,7 +13,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import httpx
 import pytest
 import respx
 import time_machine
@@ -25,18 +24,14 @@ from fieldclub.ingest import registry
 from fieldclub.ingest.base import SourceInfo
 from fieldclub.ingest.connectors.he_nhle_scheduled_monuments import (
     CURRENCY_STATEMENT,
-    HUB_EXPORT,
     ScheduledMonuments,
 )
 from fieldclub.ingest.runner import IngestFailedError, run_connector
 from fieldclub.models import Record, Source
 from fieldclub.models.common import point_lon_lat
-from tests.ingest.adapters.support import FIXTURES
+from tests.records.support import MONUMENTS_GPKG, SILBURY, serve_hub
 
-FIXTURE = FIXTURES / "scheduled_monuments.gpkg"
-EXPORT_FILE = "https://export.example/National_Heritage_List_for_England_NHLE_v02_VIEW_1.gpkg"
 WORKLIST = Path(__file__).parents[3] / "docs" / "sources" / "worklists" / "sources.json"
-SILBURY = Point(-1.8574, 51.4156)
 
 
 @pytest.fixture(autouse=True)
@@ -48,16 +43,6 @@ def own_var_dir(env: Callable[..., None], tmp_path: Path) -> None:
 def worklist_entry(key: str) -> dict[str, Any]:
     entries = json.loads(WORKLIST.read_text(encoding="utf-8"))["bulk"]
     return next(entry for entry in entries if entry["key"] == key)
-
-
-def serve_hub(body: bytes) -> respx.Route:
-    """The Hub's 302 to a short-lived export file, and the file."""
-    respx.get(EXPORT_FILE).mock(
-        return_value=httpx.Response(
-            200, content=body, headers={"ETag": '"0x1"', "Content-Length": str(len(body))}
-        )
-    )
-    return respx.get(HUB_EXPORT).mock(return_value=httpx.Response(302, headers={"Location": EXPORT_FILE}))
 
 
 def rows(db: Session) -> list[tuple[Any, ...]]:
@@ -100,7 +85,7 @@ def test_the_source_carries_the_work_list_licence() -> None:
 
 @respx.mock
 def test_the_stored_attribution_is_dated_from_the_download(db: Session) -> None:
-    serve_hub(FIXTURE.read_bytes())
+    serve_hub(MONUMENTS_GPKG.read_bytes())
     with time_machine.travel(datetime(2027, 1, 2, 9, tzinfo=UTC), tick=False):
         run_connector(ScheduledMonuments())
     # A day later the copy on disk is still young enough, so it was obtained on the 2nd.
@@ -118,7 +103,7 @@ def test_the_stored_attribution_is_dated_from_the_download(db: Session) -> None:
 
 @respx.mock
 def test_a_run_stores_every_monument_with_its_fields(db: Session) -> None:
-    serve_hub(FIXTURE.read_bytes())
+    serve_hub(MONUMENTS_GPKG.read_bytes())
     run = run_connector(ScheduledMonuments())
     assert run.status == "completed"
     assert run.stats is not None
@@ -133,7 +118,7 @@ def test_a_run_stores_every_monument_with_its_fields(db: Session) -> None:
     assert silbury.raw is not None
     assert silbury.raw["NGR"].startswith("SU ")
     lon, lat = point_lon_lat(silbury.centroid)
-    assert Point(lon, lat).distance(SILBURY) < 0.002
+    assert Point(lon, lat).distance(Point(*SILBURY)) < 0.002
 
     source = db.get(Source, "he-nhle-scheduled-monuments")
     assert source is not None
@@ -143,7 +128,7 @@ def test_a_run_stores_every_monument_with_its_fields(db: Session) -> None:
 
 @respx.mock
 def test_the_oddly_written_date_is_read(db: Session) -> None:
-    serve_hub(FIXTURE.read_bytes())
+    serve_hub(MONUMENTS_GPKG.read_bytes())
     run_connector(ScheduledMonuments())
     barrow = db.scalars(select(Record).where(Record.external_id == "1008099")).one()
     assert barrow.source_updated_at is not None
@@ -154,7 +139,7 @@ def test_the_oddly_written_date_is_read(db: Session) -> None:
 
 @respx.mock
 def test_running_twice_gives_the_same_rows(db: Session) -> None:
-    hub = serve_hub(FIXTURE.read_bytes())
+    hub = serve_hub(MONUMENTS_GPKG.read_bytes())
     first = run_connector(ScheduledMonuments())
     before = rows(db)
     second = run_connector(ScheduledMonuments())
@@ -171,7 +156,7 @@ def test_running_twice_gives_the_same_rows(db: Session) -> None:
 
 @respx.mock
 def test_a_partial_run_by_bbox(db: Session) -> None:
-    serve_hub(FIXTURE.read_bytes())
+    serve_hub(MONUMENTS_GPKG.read_bytes())
     run = run_connector(ScheduledMonuments(), bbox=(-1.90, 51.40, -1.82, 51.44))
     assert run.stats is not None
     assert not run.stats["full"]
@@ -183,7 +168,7 @@ def test_a_partial_run_by_bbox(db: Session) -> None:
 @respx.mock
 def test_an_export_that_changed_shape_fails_the_run(db: Session, tmp_path: Path) -> None:
     changed = tmp_path / "changed.gpkg"
-    changed.write_bytes(FIXTURE.read_bytes())
+    changed.write_bytes(MONUMENTS_GPKG.read_bytes())
     with sqlite3.connect(changed) as conn:
         conn.execute("ALTER TABLE Scheduled_Monuments RENAME COLUMN ListEntry TO ListEntryNumber")
     serve_hub(changed.read_bytes())

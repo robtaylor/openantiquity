@@ -81,9 +81,17 @@ def fetch_json(response: httpx.Response, what: str) -> dict[str, Any]:
     return body
 
 
-def _get_json(url: str, what: str) -> dict[str, Any]:
+def request_json(
+    method: str, url: str, what: str, *, headers: dict[str, str] | None = None, **kwargs: Any
+) -> dict[str, Any]:
+    """Call a provider and return the JSON object it answers with, or raise `ProviderError`.
+
+    `what` names the call in the log. Other keyword arguments go to httpx.
+    """
     try:
-        response = get_client().get(url, headers={"Accept": "application/json"})
+        response = get_client().request(
+            method, url, headers={"Accept": "application/json", **(headers or {})}, **kwargs
+        )
     except httpx.HTTPError as exc:
         logger.warning("%s at %s failed: %s", what, url, exc)
         raise ProviderError() from exc
@@ -133,7 +141,7 @@ class OidcClient:
             cached = self._discovery
             if cached.value is not None and time.time() - cached.fetched_at < DISCOVERY_TTL_S:
                 return cached.value
-        document = _get_json(self.discovery_url, "The provider's discovery document")
+        document = request_json("GET", self.discovery_url, "The provider's discovery document")
         issuer = document.get("issuer")
         if not isinstance(issuer, str) or not self._issuer_is_expected(issuer):
             logger.warning("Discovery at %s names issuer %r", self.discovery_url, issuer)
@@ -161,7 +169,7 @@ class OidcClient:
         fresh = cached is not None and now - fetched_at < JWKS_TTL_S
         if cached is not None and fresh and not (refresh and now - fetched_at >= JWKS_MIN_REFRESH_S):
             return cached
-        document = _get_json(self.discovery().jwks_uri, "The provider's key set")
+        document = request_json("GET", self.discovery().jwks_uri, "The provider's key set")
         keys = document.get("keys")
         if not isinstance(keys, list):
             raise ProviderError("The provider's key set has no keys.")

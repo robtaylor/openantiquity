@@ -21,7 +21,7 @@ import math
 import re
 from dataclasses import dataclass
 from enum import StrEnum
-from functools import lru_cache
+from functools import cache
 from typing import NamedTuple
 
 from pyproj import Transformer
@@ -74,14 +74,15 @@ _IRELAND = Polygon(
 _REF_PATTERN = re.compile(r"^\s*([A-Za-z]{1,2})\s*(\d+)(?:\s+(\d+))?\s*$")
 
 
-@lru_cache(maxsize=4)
-def _to_grid_transformer(system: GridSystem) -> Transformer:
-    return Transformer.from_crs(4326, _EPSG[system], always_xy=True)
+@cache
+def transformer(source_epsg: int, target_epsg: int) -> Transformer:
+    """A transformer between two EPSG codes, x before y. Shared: pyproj keeps its PROJ objects per thread."""
+    return Transformer.from_crs(source_epsg, target_epsg, always_xy=True)
 
 
-@lru_cache(maxsize=4)
-def _from_grid_transformer(system: GridSystem) -> Transformer:
-    return Transformer.from_crs(_EPSG[system], 4326, always_xy=True)
+def is_lon_lat(lon: float, lat: float) -> bool:
+    """Whether a longitude and latitude are a position on Earth. NaN and the infinities aren't."""
+    return -180 <= lon <= 180 and -90 <= lat <= 90
 
 
 def grid_system(lon: float, lat: float) -> GridSystem:
@@ -93,10 +94,10 @@ def grid_system(lon: float, lat: float) -> GridSystem:
 
 def to_grid(lon: float, lat: float) -> tuple[GridSystem, float, float]:
     """Easting and northing in metres on whichever grid covers the point."""
-    if not (math.isfinite(lon) and math.isfinite(lat) and -180 <= lon <= 180 and -90 <= lat <= 90):
+    if not is_lon_lat(lon, lat):
         raise GridRefError(f"Not a position on Earth: {lon}, {lat}.")
     system = grid_system(lon, lat)
-    easting, northing = _to_grid_transformer(system).transform(lon, lat)
+    easting, northing = transformer(4326, _EPSG[system]).transform(lon, lat)
     width, height = _EXTENT[system]
     if not (
         math.isfinite(easting) and math.isfinite(northing) and 0 <= easting < width and 0 <= northing < height
@@ -107,7 +108,7 @@ def to_grid(lon: float, lat: float) -> tuple[GridSystem, float, float]:
 
 def to_lonlat(system: GridSystem, easting: float, northing: float) -> tuple[float, float]:
     """Longitude and latitude (WGS84) of a grid position."""
-    lon, lat = _from_grid_transformer(system).transform(easting, northing)
+    lon, lat = transformer(_EPSG[system], 4326).transform(easting, northing)
     assert math.isfinite(lon), f"{system} {easting}, {northing} did not transform"
     assert math.isfinite(lat), f"{system} {easting}, {northing} did not transform"
     return lon, lat

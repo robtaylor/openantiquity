@@ -110,47 +110,6 @@ CREATE OR REPLACE TRIGGER findings_location_public_check
     BEFORE INSERT OR UPDATE OF sensitivity, location, location_public ON findings
     FOR EACH ROW EXECUTE FUNCTION fieldclub_check_location_public();
 
--- Accounts: an emailed link remembers the browser that asked for it
--- (fieldclub.auth.email_link). Added here too so that an existing
--- development database gains the column.
-ALTER TABLE magic_links ADD COLUMN IF NOT EXISTS browser_hash text;
-
--- Reputation awards are paid once per person, finding and reason
--- (fieldclub.services.reputation). The model declares this constraint for a
--- new database. This adds it to one built before the constraint existed.
-CREATE UNIQUE INDEX IF NOT EXISTS uq_reputation_events_user_id_finding_id_reason
-    ON reputation_events (user_id, finding_id, reason);
-
--- Findings queue columns (services.findings.reassess writes them). The model
--- declares both columns and both indexes for a new database. These add them
--- to one built before they existed.
-ALTER TABLE findings ADD COLUMN IF NOT EXISTS open_steps text[] NOT NULL DEFAULT '{}';
-
-ALTER TABLE findings ADD COLUMN IF NOT EXISTS answers_to_next smallint;
-
-CREATE INDEX IF NOT EXISTS ix_findings_open_steps ON findings USING GIN (open_steps);
-
-CREATE INDEX IF NOT EXISTS ix_findings_created_at_id ON findings (created_at, id);
-
--- Findings track: a second look taken back is kept, marked withdrawn, so it
--- can't be replaced by an answer given after the reveal. For a database built
--- before the column was added.
-ALTER TABLE observations ADD COLUMN IF NOT EXISTS withdrawn_at timestamptz;
-
--- ---- Record index (track b1/records) ------------------------------------
--- A source is stored with its licence and attribution before any of its data
--- (Decision 0007). NOT NULL lets an empty string through, so refuse blanks.
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'ck_sources_licence_and_attribution_given'
-    ) THEN
-        ALTER TABLE sources ADD CONSTRAINT ck_sources_licence_and_attribution_given
-            CHECK (btrim(licence) <> '' AND btrim(attribution) <> '');
-    END IF;
-END
-$$;
-
 -- Record tiles count records by the point they sit at, so the tile query
 -- filters on centroid and needs it indexed as geometry too.
 CREATE INDEX IF NOT EXISTS ix_records_centroid ON records USING GIST (centroid);

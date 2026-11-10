@@ -43,7 +43,7 @@ from fieldclub.auth import signin
 from fieldclub.auth.failures import LinkConfirmationRequiredError, LinkInvalidError
 from fieldclub.auth.mailer import Message
 from fieldclub.auth.providers import register_provider
-from fieldclub.auth.tokens import MAX_TOKEN_LENGTH, hash_presented, hash_token, new_token
+from fieldclub.auth.tokens import hash_presented, hash_token, new_token
 from fieldclub.config import Settings
 from fieldclub.models import MagicLink, User
 from fieldclub.vocab import SignInProvider
@@ -88,7 +88,7 @@ def create_link(db: Session, email: str, *, browser: str | None = None, now: dat
         MagicLink(
             email=email,
             token_hash=hash_token(token),
-            browser_hash=hash_token(browser) if browser else None,
+            browser_hash=hash_presented(browser),
             expires_at=now + LINK_LIFETIME,
         )
     )
@@ -127,11 +127,12 @@ def redeem(
     browser is spent only when `confirmed`, and otherwise raises
     `LinkConfirmationRequiredError` with the masked address.
     """
-    if not token or len(token) > MAX_TOKEN_LENGTH:
+    token_hash = hash_presented(token)
+    if token_hash is None:
         raise LinkInvalidError()
     now = now or datetime.now(UTC)
     live = (
-        MagicLink.token_hash == hash_token(token),
+        MagicLink.token_hash == token_hash,
         MagicLink.used_at.is_(None),
         MagicLink.expires_at > now,
     )

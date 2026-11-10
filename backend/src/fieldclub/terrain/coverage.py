@@ -9,8 +9,8 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any
 
+from fieldclub.gridref import transformer
 from fieldclub.terrain.catalogue import Catalogue, SourceTile
-from fieldclub.terrain.sources import transformer
 
 CAPTURE = "2022 composite"
 RESOLUTION_M = 1

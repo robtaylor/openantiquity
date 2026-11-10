@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Iterator
+from functools import lru_cache
 from typing import Any
 
 import httpx
@@ -54,10 +55,16 @@ def wkt_literal(value: str) -> BaseGeometry | None:
     # GeoSPARQL takes axis order from the CRS definition: latitude first for
     # EPSG:4326, easting first for the British grid. Read it that way, then
     # put longitude first.
-    transformer = Transformer.from_crs(CRS.from_user_input(uri), WGS84, always_xy=False)
+    transformer = _latlon_transformer(uri)
     result = shapely.transform(geometry, lambda xy: _swap(transformer.transform(xy[:, 0], xy[:, 1])))
     assert isinstance(result, BaseGeometry), "shapely.transform returns a geometry for a geometry"
     return result
+
+
+@lru_cache(maxsize=32)
+def _latlon_transformer(uri: str) -> Transformer:
+    """From the CRS a literal names to WGS84, in each CRS's own axis order."""
+    return Transformer.from_crs(CRS.from_user_input(uri), WGS84, always_xy=False)
 
 
 def _swap(latlon: tuple[Any, Any]) -> Any:

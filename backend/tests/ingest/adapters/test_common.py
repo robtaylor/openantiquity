@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import math
-import subprocess
-import sys
 from datetime import UTC, datetime
 
 import httpx
@@ -13,6 +11,7 @@ from shapely.geometry import Point
 
 from fieldclub import gridref
 from fieldclub.ingest.adapters.common import AdapterError, json_ready, plain, plain_tree, to_wgs84
+from tests.helpers import run_fresh
 from tests.ingest.adapters.support import NoWait, xy
 
 URL = "https://upstream.example/thing"
@@ -23,7 +22,7 @@ def test_a_server_error_is_retried_with_growing_gaps() -> None:
     route = respx.get(URL).mock(
         side_effect=[httpx.Response(503), httpx.Response(502), httpx.Response(200, json={"ok": True})]
     )
-    polite = NoWait(delay_s=0, backoff_s=2)
+    polite = NoWait(backoff_s=2)
     with httpx.Client() as client:
         response = polite.request(client, "GET", URL)
     assert response.json() == {"ok": True}
@@ -40,7 +39,7 @@ def test_retry_after_is_honoured_up_to_the_cap() -> None:
             httpx.Response(200),
         ]
     )
-    polite = NoWait(delay_s=0, max_backoff_s=60)
+    polite = NoWait(max_backoff_s=60)
     with httpx.Client() as client:
         polite.request(client, "GET", URL)
     assert polite.slept == [7, 60]
@@ -49,7 +48,7 @@ def test_retry_after_is_honoured_up_to_the_cap() -> None:
 @respx.mock
 def test_a_dropped_connection_is_retried() -> None:
     respx.get(URL).mock(side_effect=[httpx.ConnectError("reset"), httpx.Response(200)])
-    polite = NoWait(delay_s=0)
+    polite = NoWait()
     with httpx.Client() as client:
         assert polite.request(client, "GET", URL).status_code == 200
 
@@ -57,7 +56,7 @@ def test_a_dropped_connection_is_retried() -> None:
 @respx.mock
 def test_retries_run_out() -> None:
     route = respx.get(URL).mock(return_value=httpx.Response(500, text="broken"))
-    polite = NoWait(delay_s=0, retries=2)
+    polite = NoWait(retries=2)
     with httpx.Client() as client, pytest.raises(AdapterError, match="answered 500"):
         polite.request(client, "GET", URL)
     assert route.call_count == 3
@@ -133,4 +132,4 @@ def test_the_adapters_dont_import_the_database_layer() -> None:
         " if m in sys.modules]\n"
         "assert not loaded, loaded\n"
     )
-    subprocess.run([sys.executable, "-c", code], check=True)
+    run_fresh(code)

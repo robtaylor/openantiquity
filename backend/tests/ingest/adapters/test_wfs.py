@@ -34,7 +34,7 @@ class RecordedWfs:
 
 def make_layer(**kwargs: Any) -> WFSLayer:
     options = {"sort_by": "RecordNumber", "page_size": 2} | kwargs
-    return WFSLayer(URL, TYPE, client=httpx.Client(), polite=NoWait(delay_s=0), **options)
+    return WFSLayer(URL, TYPE, client=httpx.Client(), polite=NoWait(), **options)
 
 
 @respx.mock

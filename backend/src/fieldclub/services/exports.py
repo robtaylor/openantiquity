@@ -33,8 +33,8 @@ from fieldclub.models import Evidence, Finding, User
 from fieldclub.schemas.common import (
     GeoJSONFeature,
     GeoJSONFeatureCollection,
-    GeoJSONGeometry,
     PublicUser,
+    geojson_point,
     to_geojson,
 )
 from fieldclub.services import findings, sensitivity
@@ -65,9 +65,10 @@ def downloads_exact(finding: Finding, viewer: User | None) -> bool:
     """Whether a download for `viewer` may carry the exact position of `finding`."""
     if Sensitivity(finding.sensitivity) is Sensitivity.OPEN:
         return True
-    if viewer is None or not viewer.is_active:
+    active = sensitivity.active_viewer(viewer)
+    if active is None:
         return False
-    return viewer.has_id(finding.author_id) or Role(viewer.role) in TRUSTED_ROLES
+    return active.has_id(finding.author_id) or Role(active.role) in TRUSTED_ROLES
 
 
 def export_location(finding: Finding, viewer: User | None) -> sensitivity.VisibleLocation:
@@ -181,9 +182,7 @@ def to_feature_collection(rows: Sequence[Exported]) -> GeoJSONFeatureCollection:
         features=[
             GeoJSONFeature(
                 id=item.row.fieldclub_id,
-                geometry=GeoJSONGeometry(
-                    type="Point", coordinates=[round(item.location.lon, 6), round(item.location.lat, 6)]
-                ),
+                geometry=geojson_point(item.location.lon, item.location.lat),
                 properties={
                     **asdict(item.row),
                     "obscured": item.location.obscured,

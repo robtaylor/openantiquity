@@ -5,32 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from pyproj import Transformer
 
-from fieldclub.storage import LocalStorage
 from fieldclub.terrain import cli
-from fieldclub.terrain.cog import to_cog
-from fieldclub.terrain.mirror import LocalMirrorStore, LocalSourceFetcher, Mirror
 from fieldclub.terrain.service import Terrain
-from fieldclub.terrain.sources import file_source
-from tests.terrain.fakes import catalogue_of, write_source_tile
-
-TO_LONLAT = Transformer.from_crs(27700, 4326, always_xy=True)
+from tests.terrain.fakes import TO_LONLAT, local_mirror, local_terrain, write_source_tile
 
 
 @pytest.fixture
 def terrain(tmp_path: Path) -> Terrain:
     for name in ("SU16nw", "SU16ne"):
         write_source_tile(tmp_path / "src", name)
-    mirror = Mirror(
-        catalogue_of((tmp_path / "src").glob("*.tif")),
-        LocalMirrorStore(tmp_path / "cogs"),
-        [LocalSourceFetcher(tmp_path / "src")],
-        tmp_path / "work",
-        convert=lambda src, dst: to_cog(src, dst, overview_count=1),
-    )
-    national = file_source("national", str(tmp_path / "none.tif"), exists=lambda: False)
-    return Terrain(mirror, national, LocalStorage(tmp_path / "tiles"), national_exists=lambda: False)
+    return local_terrain(local_mirror(tmp_path), tmp_path / "tiles")
 
 
 def test_mirror_named_tiles_then_info(terrain: Terrain, capsys: pytest.CaptureFixture[str]) -> None:

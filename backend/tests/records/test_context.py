@@ -6,16 +6,13 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from fastapi.testclient import TestClient
 from pyproj import Transformer
-from shapely.geometry import MultiPolygon, box
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
-from fieldclub.models import AdminArea
-from fieldclub.models.common import to_db_geometry
 from fieldclub.services import context
+from tests.helpers import AVEBURY, admin_area
 from tests.records import context_data
 
-AVEBURY = (-1.8542, 51.4286)
 BELFAST = (-5.93, 54.597)
 PARIS = (2.35, 48.86)
 
@@ -109,14 +106,7 @@ def test_links_respect_a_viewers_bounds(db: Session) -> None:
 def test_links_follow_the_nation_once_boundaries_are_loaded(db: Session) -> None:
     # Without admin areas every British viewer is offered, trove.scot included.
     assert "trove-map-at-point" in by_key(context.links_for(db, *AVEBURY))
-    db.add(
-        AdminArea(
-            kind="nation",
-            code="england",
-            name="England",
-            geom=to_db_geometry(MultiPolygon([box(-6, 49.8, 2, 55.8)])),
-        )
-    )
+    db.add(admin_area("nation", "england", "England", (-6, 49.8, 2, 55.8)))
     db.commit()
     links = by_key(context.links_for(db, *AVEBURY))
     assert "trove-map-at-point" not in links

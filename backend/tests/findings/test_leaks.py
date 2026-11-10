@@ -323,9 +323,9 @@ def test_a_banned_account_sees_what_the_public_sees(world: World, db: Session) -
 
 
 def test_the_sql_visibility_clause_agrees_with_sees_exact(world: World, db: Session) -> None:
-    """`findings.exact_clause` restates `sensitivity.sees_exact` in SQL. They must agree on every row."""
+    """`sensitivity.sees_exact_clause` restates `sees_exact` in SQL. They must agree on every row."""
     for viewer in [None, *world.people.values()]:
-        clause = findings.as_sql(findings.exact_clause(viewer))
+        clause = sensitivity.as_sql(sensitivity.sees_exact_clause(viewer))
         in_sql = set(db.scalars(select(Finding.id).where(clause)))
         in_python = {f.id for f in world.findings.values() if sensitivity.sees_exact(f, viewer)}
         assert in_sql == in_python, f"viewer {viewer}"

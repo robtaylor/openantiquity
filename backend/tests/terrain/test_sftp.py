@@ -11,10 +11,11 @@ from pydantic import SecretStr
 from fieldclub.config import DefraSftpSettings, get_defra_sftp_settings
 from fieldclub.errors import ConfigError
 from fieldclub.terrain import sftp
+from fieldclub.terrain.catalogue import SourceTile
 from fieldclub.terrain.errors import CredentialsMissingError, FetchFailedError
 from tests.terrain.fakes import MIB, FakeServer
 
-REMOTE = "composite/2022/GeoTiffs/1m/DTM/SU16nw_DTM_1m.tif"
+REMOTE = SourceTile("SU16nw", 0).remote_path
 
 
 @pytest.fixture(scope="module")

@@ -3,18 +3,11 @@
 from __future__ import annotations
 
 import pytest
-from shapely.geometry import MultiPolygon, box
 from sqlalchemy.orm import Session
 
 from fieldclub.errors import DataIntegrityError
-from fieldclub.models import AdminArea
-from fieldclub.models.common import to_db_geometry
 from fieldclub.services.geo import Locality, locate
-
-
-def area(kind: str, code: str, name: str, *boxes: tuple[float, float, float, float]) -> AdminArea:
-    shape = MultiPolygon([box(*bounds) for bounds in boxes])
-    return AdminArea(kind=kind, code=code, name=name, geom=to_db_geometry(shape))
+from tests.helpers import admin_area
 
 
 @pytest.fixture
@@ -22,11 +15,11 @@ def areas(db: Session) -> None:
     db.add_all(
         [
             # Rough boxes. Good enough to tell the test points apart.
-            area("nation", "england", "England", (-5.75, 49.9, 1.8, 55.8)),
-            area("nation", "wales", "Wales", (-5.4, 51.3, -2.9, 53.5)),
-            area("nation", "scotland", "Scotland", (-7.7, 55.5, -0.7, 60.9)),
-            area("county", "E06000054", "Wiltshire", (-2.4, 50.9, -1.4, 51.7)),
-            area("county", "W06000023", "Powys", (-3.9, 51.7, -2.9, 52.9)),
+            admin_area("nation", "england", "England", (-5.75, 49.9, 1.8, 55.8)),
+            admin_area("nation", "wales", "Wales", (-5.4, 51.3, -2.9, 53.5)),
+            admin_area("nation", "scotland", "Scotland", (-7.7, 55.5, -0.7, 60.9)),
+            admin_area("county", "E06000054", "Wiltshire", (-2.4, 50.9, -1.4, 51.7)),
+            admin_area("county", "W06000023", "Powys", (-3.9, 51.7, -2.9, 52.9)),
         ]
     )
     db.commit()
@@ -63,15 +56,15 @@ def test_without_a_northern_ireland_boundary_nothing_is_guessed(db: Session, are
 
 
 def test_a_northern_ireland_boundary_is_used_when_there_is_one(db: Session, areas: None) -> None:
-    db.add(area("nation", "northern_ireland", "Northern Ireland", (-8.2, 54.0, -5.4, 55.4)))
-    db.add(area("county", "N09000003", "Belfast", (-6.1, 54.5, -5.8, 54.7)))
+    db.add(admin_area("nation", "northern_ireland", "Northern Ireland", (-8.2, 54.0, -5.4, 55.4)))
+    db.add(admin_area("county", "N09000003", "Belfast", (-6.1, 54.5, -5.8, 54.7)))
     db.commit()
     assert locate(db, *BELFAST) == Locality(nation="northern_ireland", county="Belfast")
     assert locate(db, *ENNISKILLEN) == Locality(nation="northern_ireland", county=None)
 
 
 def test_the_republic_of_ireland_is_never_called_northern_ireland(db: Session, areas: None) -> None:
-    db.add(area("nation", "northern_ireland", "Northern Ireland", (-8.2, 54.0, -5.4, 55.4)))
+    db.add(admin_area("nation", "northern_ireland", "Northern Ireland", (-8.2, 54.0, -5.4, 55.4)))
     db.commit()
     assert locate(db, *DUBLIN) == Locality(nation=None, county=None)
     assert locate(db, *CORK) == Locality(nation=None, county=None)
@@ -89,7 +82,7 @@ def test_with_no_boundaries_loaded_nowhere_has_a_nation(db: Session) -> None:
 
 
 def test_a_nation_row_with_an_unknown_code_is_reported(db: Session) -> None:
-    db.add(area("nation", "E92000001", "England", (-6.0, 49.9, 1.8, 55.8)))
+    db.add(admin_area("nation", "E92000001", "England", (-6.0, 49.9, 1.8, 55.8)))
     db.commit()
     with pytest.raises(DataIntegrityError, match="E92000001"):
         locate(db, -1.8542, 51.4286)

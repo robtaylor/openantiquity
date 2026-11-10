@@ -1,10 +1,11 @@
-"""Where a point is: which nation and county."""
+"""Where a point is (which nation and county), and boxes as SQL."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.orm import Session
 
 from fieldclub.errors import DataIntegrityError
@@ -50,3 +51,9 @@ def locate(db: Session, lon: float, lat: float) -> Locality:
         elif kind == AdminAreaKind.COUNTY and county is None:
             county = name
     return Locality(nation=nation, county=county)
+
+
+def envelope(bbox: tuple[float, float, float, float]) -> ColumnElement[Any]:
+    """A west, south, east, north box in degrees as a PostGIS polygon."""
+    west, south, east, north = bbox
+    return func.ST_MakeEnvelope(west, south, east, north, SRID)

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import secrets
 import time
 from collections.abc import Callable
@@ -28,12 +29,31 @@ from fastapi.testclient import TestClient
 from joserfc import jwt
 from joserfc.jwk import ECKey, RSAKey
 
+from fieldclub.auth.flow import FLOW_COOKIE
+
 PUBLIC_URL = "https://fieldclub.test"
 CALLBACK = PUBLIC_URL + "/api/v1/auth/oauth/{provider}/callback"
 
 
+def b64url(data: bytes) -> str:
+    """Unpadded base64url, as JWTs and the flow cookie use."""
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+def b64url_json(data: Any) -> str:
+    return b64url(json.dumps(data).encode())
+
+
 def challenge_for(verifier: str) -> str:
-    return base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    return b64url(hashlib.sha256(verifier.encode()).digest())
+
+
+def resign(sealed: str, change: Callable[[dict[str, Any]], None]) -> str:
+    """A flow cookie value with its body edited by `change` and its old signature kept."""
+    body, signature = sealed.split(".")
+    data = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+    change(data)
+    return f"{b64url_json(data)}.{signature}"
 
 
 def form_of(request: httpx.Request) -> dict[str, str]:
@@ -238,8 +258,13 @@ def start(client: TestClient, provider: str, next_path: str | None = None) -> ht
     return client.get(f"/api/v1/auth/oauth/{provider}/start", params=params, follow_redirects=False)
 
 
-def callback(client: TestClient, provider: str, *, method: str = "GET", **values: str) -> httpx2.Response:
+def callback(
+    client: TestClient, provider: str, *, method: str | None = None, **values: str
+) -> httpx2.Response:
+    """Return to the callback as the provider does: by POST for Apple, by GET otherwise."""
     path = f"/api/v1/auth/oauth/{provider}/callback"
+    if method is None:
+        method = "POST" if provider == "apple" else "GET"
     if method == "POST":
         return client.post(path, data=values, follow_redirects=False)
     return client.get(path, params=values, follow_redirects=False)
@@ -251,7 +276,7 @@ def sign_in(
     claims: dict[str, Any] | None = None,
     *,
     next_path: str | None = None,
-    method: str = "GET",
+    method: str | None = None,
     **form: str,
 ) -> httpx2.Response:
     """The whole flow: start, consent at the provider, callback. Returns the callback's response."""
@@ -267,8 +292,18 @@ def signin_error(response: httpx2.Response) -> str | None:
     return query_of(response.headers["location"]).get("signin_error")
 
 
-def flow_cookie_value(response: httpx2.Response) -> str:
+def set_cookie_header(response: httpx2.Response, name: str) -> str:
+    """The whole `Set-Cookie` header a response sends for cookie `name`."""
     for header in response.headers.get_list("set-cookie"):
-        if header.startswith("fieldclub_oauth="):
-            return header.split(";", 1)[0].split("=", 1)[1]
-    raise AssertionError("no flow cookie was set")
+        if header.startswith(f"{name}="):
+            return header
+    raise AssertionError(f"no {name} cookie was set")
+
+
+def set_cookie_value(response: httpx2.Response, name: str) -> str:
+    """The value a response sets cookie `name` to."""
+    return set_cookie_header(response, name).split(";", 1)[0].split("=", 1)[1]
+
+
+def flow_cookie_value(response: httpx2.Response) -> str:
+    return set_cookie_value(response, FLOW_COOKIE)

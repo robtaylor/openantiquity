@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from fieldclub.db import is_unique_violation
 from fieldclub.errors import ValidationFailedError
 
 if TYPE_CHECKING:
@@ -99,17 +100,6 @@ class InvalidDisplayNameError(ValidationFailedError):
     message = (
         f"A display name is 1 to {MAX_DISPLAY_NAME} characters on one line, with no invisible characters."
     )
-
-
-def constraint_name(exc: IntegrityError) -> str | None:
-    """The constraint an `IntegrityError` broke. Safe to log, unlike the message, which holds the values."""
-    diag = getattr(exc.orig, "diag", None)
-    return getattr(diag, "constraint_name", None)
-
-
-def is_unique_violation(exc: IntegrityError, constraint: str) -> bool:
-    """Whether an `IntegrityError` is the named unique constraint being broken."""
-    return constraint_name(exc) == constraint
 
 
 def claim_handle(db: Session, user: User, handle: str | None = None) -> bool:
