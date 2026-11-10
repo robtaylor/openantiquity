@@ -62,6 +62,18 @@ class Settings(BaseSettings):
     public_url: str = "http://localhost:5173"
     frontend_dist: Path = _REPO_ROOT / "frontend" / "dist"
     trusted_proxy_hops: int = Field(default=0, ge=0)
+    # How long `fieldclub-api` waits for open requests to finish when told to stop.
+    shutdown_grace_s: float = Field(default=5.0, ge=0)
+
+    # The live event stream, GET /events/stream (see fieldclub.services.events).
+    # Events a client may fall behind by before it is dropped.
+    events_queue_size: int = Field(default=64, ge=1, le=10_000)
+    # Streams open at once from one address, and in one process.
+    events_max_per_address: int = Field(default=4, ge=1)
+    events_max_streams: int = Field(default=1000, ge=1)
+    # Seconds between keep-alive comments, and the longest one stream lasts.
+    events_heartbeat_s: float = Field(default=15.0, gt=0)
+    events_max_stream_s: float = Field(default=1800.0, gt=0)
 
     # Database
     database_url: str = "postgresql+psycopg://fieldclub:fieldclub@localhost:54329/fieldclub"

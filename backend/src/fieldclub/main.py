@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import pkgutil
+import socket
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -29,6 +30,7 @@ from fieldclub.auth.oauth import FORM_POST_CALLBACK_PATHS
 from fieldclub.config import Settings, get_settings
 from fieldclub.db import create_schema
 from fieldclub.errors import install_error_handlers
+from fieldclub.services import events
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +125,7 @@ async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        await events.stop_hub()
         http.close_client()
 
 
@@ -273,9 +276,16 @@ def run() -> None:
     """`fieldclub-api`: serve the app with uvicorn."""
     import uvicorn
 
+    class Server(uvicorn.Server):
+        async def shutdown(self, sockets: list[socket.socket] | None = None) -> None:
+            # Uvicorn waits for open responses before the lifespan ends, and an
+            # event stream never finishes by itself, so end the streams first.
+            await events.stop_hub()
+            await super().shutdown(sockets)
+
     settings = get_settings()
     logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    uvicorn.run(
+    config = uvicorn.Config(
         "fieldclub.main:create_app",
         factory=True,
         host=settings.host,
@@ -285,10 +295,11 @@ def run() -> None:
         # (see fieldclub.auth.deps.client_ip), not uvicorn's.
         proxy_headers=False,
         # Without a limit uvicorn waits for every open connection after SIGTERM,
-        # so one long request (an event stream) would hold each shutdown until
-        # the platform kills the process.
-        timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_SECONDS,
+        # so one long request would hold each shutdown until the platform kills
+        # the process.
+        timeout_graceful_shutdown=int(settings.shutdown_grace_s),
     )
+    Server(config).run()
 
 
 def print_openapi() -> None:

@@ -555,7 +555,20 @@ def test_the_printed_schema_is_the_same_whatever_the_settings(dev_login: str) ->
 def test_run_starts_uvicorn_with_the_configured_host_and_port(monkeypatch: pytest.MonkeyPatch) -> None:
     started: dict = {}
     fake = types.ModuleType("uvicorn")
-    fake.run = lambda app, **options: started.update(app=app, **options)  # type: ignore[attr-defined]
+
+    class Config:
+        def __init__(self, app: str, **options: object) -> None:
+            started.update(app=app, **options)
+
+    class Server:
+        def __init__(self, config: Config) -> None:
+            self.config = config
+
+        def run(self) -> None:
+            started["ran"] = True
+
+    fake.Config = Config  # type: ignore[attr-defined]
+    fake.Server = Server  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "uvicorn", fake)
     monkeypatch.setattr(main.logging, "basicConfig", lambda **options: None)
     monkeypatch.setattr(
@@ -566,3 +579,4 @@ def test_run_starts_uvicorn_with_the_configured_host_and_port(monkeypatch: pytes
     assert (started["app"], started["factory"]) == ("fieldclub.main:create_app", True)
     assert (started["host"], started["port"]) == ("0.0.0.0", 8080)
     assert started["proxy_headers"] is False
+    assert started["ran"] is True

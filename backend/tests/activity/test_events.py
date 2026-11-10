@@ -1,0 +1,430 @@
+"""The event hub and GET /events/stream.
+
+The hub tests drive one `EventHub` on an event loop of their own, and record
+events through ordinary sessions in a worker thread, as the API does. The
+stream tests run the app under a real uvicorn server, because a test client
+waits for a response to finish and a stream never does.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import threading
+from collections.abc import Coroutine, Iterator
+from dataclasses import asdict
+from datetime import UTC, datetime
+from typing import Any
+
+import httpx
+import pytest
+import uvicorn
+from fastapi import FastAPI
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from fieldclub import db as fieldclub_db
+from fieldclub.models import Finding, User
+from fieldclub.services import events, findings, review, sensitivity
+from fieldclub.services.events import Announcement, EventHub, Signal, StreamFilter, TooManyStreamsError
+from fieldclub.vocab import Visible
+from tests.findings.support import create
+from tests.helpers import MakeUser
+
+TIMEOUT_S = 10.0
+
+
+def run[T](coroutine: Coroutine[Any, Any, T]) -> T:
+    async def bounded() -> T:
+        return await asyncio.wait_for(coroutine, TIMEOUT_S)
+
+    return asyncio.run(bounded())
+
+
+async def started_hub(**options: Any) -> EventHub:
+    settings: dict[str, Any] = {
+        "queue_size": 16,
+        "max_per_address": 4,
+        "max_streams": 20,
+        "retry_delays_s": (0.05,),
+    } | options
+    hub = EventHub(events.conninfo(), events.lookup_public, **settings)
+    hub.start()
+    await asyncio.wait_for(hub.connected.wait(), TIMEOUT_S)
+    return hub
+
+
+async def received(subscription: events.Subscription, timeout: float = 5.0) -> Announcement | Signal:
+    item = await subscription.next(timeout)
+    assert item is not None, "nothing arrived"
+    return item
+
+
+async def nothing_for(subscription: events.Subscription, seconds: float = 0.3) -> bool:
+    return await subscription.next(seconds) is None
+
+
+def _comment(finding_id: int, user_id: int) -> int:
+    """A comment from a session of its own, committed, as a request would make it."""
+    with fieldclub_db.SessionLocal() as session:
+        finding, user = session.get(Finding, finding_id), session.get(User, user_id)
+        assert finding is not None
+        assert user is not None
+        made = findings.add_comment(session, finding, user, "Seen it from the footpath.")
+        session.commit()
+        return made.id
+
+
+async def comment_elsewhere(finding: Finding, user: User) -> int:
+    return await asyncio.to_thread(_comment, finding.id, user.id)
+
+
+@pytest.fixture
+def scene(db: Session, make_user: MakeUser) -> dict[str, Any]:
+    finder = make_user(handle="Finder")
+    near = create(db, finder, title="Near")
+    far = create(db, finder, title="Far", lon=-2.5, lat=53.0)
+    return {"finder": finder, "near": near, "far": far, "talker": make_user(handle="Talker")}
+
+
+# --------------------------------------------------------------------------
+# The hub
+# --------------------------------------------------------------------------
+
+
+def test_two_clients_receive_an_event_recorded_in_another_session(scene: dict[str, Any]) -> None:
+    async def scenario() -> list[Announcement | Signal]:
+        hub = await started_hub()
+        first, second = hub.subscribe(StreamFilter(), "a"), hub.subscribe(StreamFilter(), "b")
+        await comment_elsewhere(scene["near"], scene["talker"])
+        got = [await received(first), await received(second)]
+        await hub.stop()
+        return got
+
+    got = run(scenario())
+    assert got[0] == got[1]
+    event = got[0]
+    assert isinstance(event, Announcement)
+    assert asdict(event) == {
+        "id": event.id,
+        "kind": "comment_added",
+        "finding": scene["near"].public_id,
+        "investigation": None,
+        "actor": "Talker",
+    }
+
+
+def test_filters_by_finding_and_by_square(scene: dict[str, Any]) -> None:
+    near, far = scene["near"], scene["far"]
+    centre = sensitivity.square_centre(near)
+    assert centre is not None
+    around = (centre[0] - 0.001, centre[1] - 0.001, centre[0] + 0.001, centre[1] + 0.001)
+
+    async def scenario() -> None:
+        hub = await started_hub()
+        on_far = hub.subscribe(StreamFilter(finding=far.public_id), "a")
+        in_box = hub.subscribe(StreamFilter(bbox=around), "a")
+        elsewhere = hub.subscribe(StreamFilter(bbox=(0.0, 0.0, 1.0, 1.0)), "a")
+        await comment_elsewhere(near, scene["talker"])
+        got = await received(in_box)
+        assert isinstance(got, Announcement)
+        assert got.finding == near.public_id
+        assert await nothing_for(on_far)
+        assert await nothing_for(elsewhere)
+        await comment_elsewhere(far, scene["talker"])
+        got = await received(on_far)
+        assert isinstance(got, Announcement)
+        assert got.finding == far.public_id
+        assert await nothing_for(in_box)
+        await hub.stop()
+
+    run(scenario())
+
+
+def test_events_the_public_feed_leaves_out_are_never_announced(db: Session, scene: dict[str, Any]) -> None:
+    near, far = scene["near"], scene["far"]
+    near.hidden_at = datetime.now(UTC)
+    db.commit()
+
+    async def scenario() -> None:
+        hub = await started_hub()
+        everything = hub.subscribe(StreamFilter(), "a")
+        await comment_elsewhere(near, scene["talker"])
+        await comment_elsewhere(far, scene["talker"])
+        got = await received(everything)
+        assert isinstance(got, Announcement)
+        assert got.finding == far.public_id
+        assert await nothing_for(everything)
+        await hub.stop()
+
+    run(scenario())
+
+
+def test_a_second_look_is_announced_with_no_actor(
+    db: Session, scene: dict[str, Any], make_user: MakeUser
+) -> None:
+    near, reviewer = scene["near"], make_user(handle="Reviewer")
+
+    def answer_elsewhere() -> None:
+        with fieldclub_db.SessionLocal() as session:
+            finding, user = session.get(Finding, near.id), session.get(User, reviewer.id)
+            assert finding is not None
+            assert user is not None
+            review.put_observation(session, finding, user, review.Answer(visible=Visible.NO))
+            session.commit()
+
+    async def scenario() -> Announcement | Signal:
+        hub = await started_hub()
+        everything = hub.subscribe(StreamFilter(), "a")
+        await asyncio.to_thread(answer_elsewhere)
+        got = await received(everything)
+        await hub.stop()
+        return got
+
+    got = run(scenario())
+    assert isinstance(got, Announcement)
+    assert (got.kind, got.actor) == ("observation_added", None)
+
+
+def test_a_slow_client_is_dropped_and_the_others_carry_on(scene: dict[str, Any]) -> None:
+    async def scenario() -> None:
+        hub = await started_hub(queue_size=2)
+        slow = hub.subscribe(StreamFilter(), "slow")
+        quick = hub.subscribe(StreamFilter(), "quick")
+        heard = []
+        for _ in range(4):
+            await comment_elsewhere(scene["near"], scene["talker"])
+            heard.append(await received(quick))
+        assert all(isinstance(item, Announcement) for item in heard)
+        assert len({item.id for item in heard if isinstance(item, Announcement)}) == 4
+        # The slow one fell three behind a queue of two: everything it held is
+        # gone, and all it will read is that it was dropped.
+        assert slow.ended
+        assert slow.queue.qsize() == 1
+        assert await received(slow) is Signal.DROPPED
+        assert hub.subscriptions == {quick}
+        await hub.stop()
+
+    run(scenario())
+
+
+def test_the_listener_reconnects_after_its_connection_is_killed(database: Any, scene: dict[str, Any]) -> None:
+    def kill(pid: int) -> None:
+        with database.connect() as conn:
+            assert conn.scalar(text("SELECT pg_terminate_backend(:pid)"), {"pid": pid}) is True
+
+    async def scenario() -> None:
+        hub = await started_hub(idle_check_s=0.2)
+        everything = hub.subscribe(StreamFilter(), "a")
+        before = hub.backend_pid
+        assert before is not None
+        await asyncio.to_thread(kill, before)
+        # Clients are told they may have missed something, once it is back.
+        assert await received(everything) is Signal.RESYNC
+        assert hub.connected.is_set()
+        assert hub.backend_pid not in (None, before)
+        await comment_elsewhere(scene["near"], scene["talker"])
+        got = await received(everything)
+        assert isinstance(got, Announcement)
+        assert got.kind == "comment_added"
+        await hub.stop()
+
+    run(scenario())
+
+
+def test_caps_per_address_and_per_process(db: Session) -> None:
+    async def scenario() -> None:
+        hub = await started_hub(max_per_address=2, max_streams=3)
+        first = hub.subscribe(StreamFilter(), "a")
+        hub.subscribe(StreamFilter(), "a")
+        with pytest.raises(TooManyStreamsError):
+            hub.subscribe(StreamFilter(), "a")
+        hub.subscribe(StreamFilter(), "b")
+        with pytest.raises(TooManyStreamsError):
+            hub.subscribe(StreamFilter(), "c")
+        hub.unsubscribe(first)
+        hub.unsubscribe(first)  # harmless twice
+        hub.subscribe(StreamFilter(), "a")
+        await hub.stop()
+
+    run(scenario())
+
+
+def test_stopping_ends_every_client_and_the_listener(db: Session) -> None:
+    async def scenario() -> None:
+        hub = await started_hub()
+        clients = [hub.subscribe(StreamFilter(), "a") for _ in range(3)]
+        await hub.stop()
+        for client in clients:
+            assert await received(client) is Signal.CLOSED
+        assert hub.subscriptions == frozenset()
+        assert not hub.connected.is_set()
+        await hub.stop()  # idempotent
+        with pytest.raises(AssertionError, match="stopped"):
+            hub.subscribe(StreamFilter(), "a")
+
+    run(scenario())
+
+
+def test_payloads_that_arent_events_are_ignored(db: Session) -> None:
+    async def scenario() -> None:
+        hub = await started_hub()
+        client = hub.subscribe(StreamFilter(), "a")
+        for payload in (
+            "not json",
+            "[]",
+            '{"id": 1}',
+            json.dumps(
+                {"id": "1", "kind": "x", "finding": None, "investigation": None, "actor": None, "lon": 1}
+            ),
+        ):
+            await hub.deliver(payload)
+        assert await nothing_for(client)
+        await hub.stop()
+
+    run(scenario())
+
+
+def test_the_process_has_one_hub_per_loop(db: Session) -> None:
+    async def scenario() -> EventHub:
+        hub = events.get_hub(queue_size=4, max_per_address=1, max_streams=1)
+        assert events.get_hub(queue_size=4, max_per_address=1, max_streams=1) is hub
+        await events.stop_hub()
+        assert events.get_hub(queue_size=4, max_per_address=1, max_streams=1) is not hub
+        await events.stop_hub()
+        return hub
+
+    first = run(scenario())
+    assert run(scenario()) is not first
+
+
+# --------------------------------------------------------------------------
+# Over HTTP, through a real server
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture
+def server(app: FastAPI) -> Iterator[str]:
+    """The app served by uvicorn on a free port. Close every stream before the test ends."""
+    config = uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning", lifespan="on", ws="none")
+    running = uvicorn.Server(config)
+    thread = threading.Thread(target=running.run, daemon=True)
+    thread.start()
+    for _ in range(200):
+        if running.started:
+            break
+        threading.Event().wait(0.05)
+    assert running.started, "uvicorn didn't start"
+    port = running.servers[0].sockets[0].getsockname()[1]
+    yield f"http://127.0.0.1:{port}"
+    running.should_exit = True
+    thread.join(timeout=TIMEOUT_S)
+    assert not thread.is_alive(), "uvicorn didn't stop"
+
+
+def read_event(lines: Iterator[str]) -> dict[str, str]:
+    """The next SSE event, as its fields. Comment lines come back as `comment`."""
+    fields: dict[str, str] = {}
+    for line in lines:
+        if line == "":
+            if fields:
+                return fields
+            continue
+        name, _, value = line.partition(":")
+        fields["comment" if name == "" else name] = value.strip()
+    raise AssertionError("the stream ended")
+
+
+def next_activity(lines: Iterator[str]) -> dict[str, Any]:
+    while True:
+        fields = read_event(lines)
+        if fields.get("event") == "activity":
+            return {"id": fields["id"], **json.loads(fields["data"])}
+
+
+def test_two_browsers_receive_an_event_over_http(server: str, scene: dict[str, Any]) -> None:
+    with (
+        httpx.Client(base_url=server, timeout=TIMEOUT_S) as one,
+        httpx.Client(base_url=server, timeout=TIMEOUT_S) as two,
+        one.stream("GET", "/api/v1/events/stream") as first,
+        two.stream("GET", "/api/v1/events/stream", params={"finding": scene["near"].public_id}) as second,
+    ):
+        assert first.status_code == second.status_code == 200
+        assert first.headers["content-type"].startswith("text/event-stream")
+        assert first.headers["cache-control"] == "no-cache"
+        first_lines, second_lines = first.iter_lines(), second.iter_lines()
+        assert read_event(first_lines) == {"comment": "connected", "retry": "3000"}
+        # Neither stream holds a database connection while it waits.
+        assert fieldclub_db.get_engine().pool.checkedout() == 0  # pyright: ignore[reportAttributeAccessIssue]
+        comment_id = _comment(scene["near"].id, scene["talker"].id)
+        got = [next_activity(first_lines), next_activity(second_lines)]
+    assert got[0] == got[1]
+    assert set(got[0]) == {"id", "kind", "finding", "investigation", "actor"}
+    assert (got[0]["kind"], got[0]["finding"], got[0]["actor"]) == (
+        "comment_added",
+        scene["near"].public_id,
+        "Talker",
+    )
+    assert comment_id
+
+
+def test_heartbeats_keep_an_idle_stream_open(server: str, env: Any, db: Session) -> None:
+    env(EVENTS_HEARTBEAT_S="0.1")
+    with (
+        httpx.Client(base_url=server, timeout=TIMEOUT_S) as browser,
+        browser.stream("GET", "/api/v1/events/stream") as stream,
+    ):
+        lines = stream.iter_lines()
+        comments = [read_event(lines).get("comment") for _ in range(3)]
+    assert comments[1:] == ["ping", "ping"]
+
+
+def test_a_stream_ends_after_its_longest_life(server: str, env: Any, db: Session) -> None:
+    env(EVENTS_MAX_STREAM_S="0.3", EVENTS_HEARTBEAT_S="0.1")
+    with (
+        httpx.Client(base_url=server, timeout=TIMEOUT_S) as browser,
+        browser.stream("GET", "/api/v1/events/stream") as stream,
+    ):
+        body = "".join(stream.iter_text())
+    assert body.startswith(": connected\nretry: 3000\n\n")
+    assert body.endswith(": ping\n\n")
+
+
+def test_one_address_may_hold_only_so_many_streams(server: str, env: Any, db: Session) -> None:
+    env(EVENTS_MAX_PER_ADDRESS="1")
+    with (
+        httpx.Client(base_url=server, timeout=TIMEOUT_S) as browser,
+        browser.stream("GET", "/api/v1/events/stream") as held,
+    ):
+        assert held.status_code == 200
+        refused = browser.get("/api/v1/events/stream")
+        assert refused.status_code == 429
+        assert refused.json()["error"]["code"] == "too_many_streams"
+    # Once the first is closed the address may open another.
+    with (
+        httpx.Client(base_url=server, timeout=TIMEOUT_S) as browser,
+        browser.stream("GET", "/api/v1/events/stream") as again,
+    ):
+        assert again.status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("params", "code"), [({"bbox": "1,2"}, "invalid_bbox"), ({"finding": "!!"}, "finding_not_found")]
+)
+def test_bad_filters_are_refused_before_streaming(server: str, db: Session, params: dict, code: str) -> None:
+    with httpx.Client(base_url=server, timeout=TIMEOUT_S) as browser:
+        response = browser.get("/api/v1/events/stream", params=params)
+    assert response.json()["error"]["code"] == code
+
+
+def test_shutting_down_closes_open_streams(server: str, db: Session) -> None:
+    with (
+        httpx.Client(base_url=server, timeout=TIMEOUT_S) as browser,
+        browser.stream("GET", "/api/v1/events/stream") as stream,
+    ):
+        lines = stream.iter_lines()
+        read_event(lines)
+        hub = events._hub
+        assert hub is not None
+        asyncio.run_coroutine_threadsafe(events.stop_hub(), hub.loop).result(TIMEOUT_S)
+        assert read_event(lines) == {"event": "closed", "data": "{}"}
