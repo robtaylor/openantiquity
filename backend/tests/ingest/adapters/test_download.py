@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -180,3 +181,19 @@ def test_a_refusal_is_an_error(tmp_path: Path) -> None:
     respx.get(HUB).mock(return_value=httpx.Response(403, text="Forbidden"))
     with pytest.raises(AdapterError, match="answered 403"):
         download(HUB, tmp_path / "sm.gpkg", client=client(), polite=NoWait())
+
+
+@respx.mock
+def test_a_compressed_body_is_saved_decompressed(tmp_path: Path) -> None:
+    """ArcGIS sends GeoJSON gzipped, with the compressed length, which can't be the file's length."""
+    packed = gzip.compress(BODY)
+    respx.get(FILE).mock(
+        return_value=httpx.Response(
+            200,
+            content=packed,
+            headers={"Content-Encoding": "gzip", "Content-Length": str(len(packed)), "ETag": ETAG},
+        )
+    )
+    result = download(FILE, tmp_path / "sm.gpkg", client=client(), polite=NoWait())
+    assert result.path.read_bytes() == BODY
+    assert result.size == len(BODY)

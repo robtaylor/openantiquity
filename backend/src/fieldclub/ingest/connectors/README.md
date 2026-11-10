@@ -19,6 +19,7 @@ Only `bulk` sources get a connector. A `live` source is queried by the browser a
 | `wfs` | `wfs` | `WFSLayer(url, type_name, client=self.http, sort_by="RecordNumber").features(bbox=bbox)` |
 | `sparql` | `sparql` | `SparqlQuery(endpoint, query, client=self.http, geometry="coord").features()` |
 | `csv` | `files` | `read_csv(path, x="Easting", y="Northing", crs="EPSG:27700", encoding="cp1252")` |
+| `csv` inside a zip | `files` | `read_csv(path, member="Data/SU06.csv", fieldnames=HEADINGS)`, for a CSV read straight from the zip, and one whose headings are elsewhere |
 | `ndjson` | `files` | `read_ndjson(path)` |
 | `rest_json` | `rest` | `RestJson(self.http, polite=...).items(url, params=..., items="data", total="meta.total", next_url="links.next", id_path="id")` for a paged answer (add `cache=cache_dir(...) / "pages"` to keep each page for a day), `.document(url, dest=..., max_age=...)` for one big answer kept under `var/` |
 

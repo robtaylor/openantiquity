@@ -3,6 +3,7 @@
     for feature in read_vector(path):                     # GeoPackage, shapefile, GeoJSON...
     for feature in read_vector("monuments.zip", layer="Mon_point"):   # a zipped shapefile
     for feature in read_csv(path, x="Easting", y="Northing", crs="EPSG:27700", encoding="cp1252"):
+    for feature in read_csv("names.zip", member="Data/SU16.csv", fieldnames=HEADINGS):
     for feature in read_ndjson(path):
 
 `read_vector` goes through pyogrio and reads in chunks of feature ids, so a
@@ -14,14 +15,16 @@ guessing types is how leading zeros in identifiers get lost.
 from __future__ import annotations
 
 import csv
+import io
 import json
 import logging
 import math
 import warnings
+import zipfile
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 import shapely
 from shapely.errors import ShapelyError
@@ -161,20 +164,48 @@ def read_csv(
     crs: str = "EPSG:4326",
     encoding: str = "utf-8-sig",
     delimiter: str = ",",
+    member: str | None = None,
+    fieldnames: Sequence[str] | None = None,
 ) -> Iterator[Feature]:
     """Rows of a CSV file as features. `x` and `y` name the coordinate columns, if it has any.
 
     A row with blank or unreadable coordinates gets no geometry. Values stay
     as text, with empty cells as None. The default encoding drops a UTF-8
-    byte-order mark. Lincolnshire's export, for one, is `cp1252`.
+    byte-order mark. Lincolnshire's export, for one, is `cp1252`, and the
+    GB1900 gazetteer is `utf-16`.
+
+    `member` reads one file inside the zip at `path` without unpacking it.
+    `fieldnames` gives the headings of a file that has none, such as each
+    tile of OS Open Names, whose headings are in a file of their own.
     """
     assert (x is None) == (y is None), "give both x and y, or neither"
-    with Path(path).open(encoding=encoding, newline="") as handle:
-        reader = csv.DictReader(handle, delimiter=delimiter)
+    name = member or Path(path).name
+    with _open_text(path, member, encoding) as handle:
+        reader = csv.DictReader(handle, fieldnames=fieldnames, delimiter=delimiter)
         try:
-            yield from _csv_rows(Path(path).name, reader, x, y, crs)
+            yield from _csv_rows(name, reader, x, y, crs)
         except UnicodeDecodeError as exc:
-            raise _not_encoded(path, encoding, exc) from None
+            raise _not_encoded(name, encoding, exc) from None
+
+
+@contextmanager
+def _open_text(path: Path | str, member: str | None, encoding: str) -> Iterator[TextIO]:
+    """A text handle on `path`, or on `member` inside the zip at `path`."""
+    if member is None:
+        with Path(path).open(encoding=encoding, newline="") as handle:
+            yield handle
+        return
+    try:
+        archive = zipfile.ZipFile(path)
+    except zipfile.BadZipFile:
+        raise UpstreamFormatError(f"{Path(path).name} is not a zip file.") from None
+    with archive:
+        try:
+            raw = archive.open(member)
+        except KeyError:
+            raise UpstreamFormatError(f"{Path(path).name} has no {member}.") from None
+        with io.TextIOWrapper(raw, encoding=encoding, newline="") as handle:
+            yield handle
 
 
 def _not_encoded(path: Path | str, encoding: str, exc: UnicodeDecodeError) -> UpstreamFormatError:

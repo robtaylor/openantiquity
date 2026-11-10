@@ -140,6 +140,55 @@ def test_csv_without_the_named_columns_is_an_error() -> None:
         list(read_csv(FIXTURES / "lincs.csv", x="X", y="Y", encoding="cp1252"))
 
 
+def test_reads_a_utf16_csv_inside_a_zip(tmp_path: Path) -> None:
+    """As the GB1900 gazetteer comes: one UTF-16 CSV in a zip, read without unpacking it."""
+    path = tmp_path / "labels.zip"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("labels/README.txt", "not a csv")
+        rows = (
+            "pin_id,final_text,longitude,latitude\r\na1,Tumulus,-1.85,51.41\r\na2,Dùn (Site of),-5.1,57.2\r\n"
+        )
+        archive.writestr("labels/labels.csv", rows.encode("utf-16"))
+    features = list(
+        read_csv(path, member="labels/labels.csv", encoding="utf-16", x="longitude", y="latitude")
+    )
+    assert [f.properties["final_text"] for f in features] == ["Tumulus", "D\u00f9n (Site of)"]
+    assert xy(features[0].geometry) == (-1.85, 51.41)
+
+
+def test_headings_can_be_given_for_a_csv_without_them(tmp_path: Path) -> None:
+    """As each tile of OS Open Names comes: no heading row, the headings in another file."""
+    path = tmp_path / "names.zip"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("Data/SU16.csv", "osgb1,Avebury,Village\nosgb2,Silbury Hill,Hill Or Mountain\n")
+    features = list(read_csv(path, member="Data/SU16.csv", fieldnames=["ID", "NAME1", "LOCAL_TYPE"]))
+    assert [f.properties for f in features] == [
+        {"ID": "osgb1", "NAME1": "Avebury", "LOCAL_TYPE": "Village"},
+        {"ID": "osgb2", "NAME1": "Silbury Hill", "LOCAL_TYPE": "Hill Or Mountain"},
+    ]
+    assert all(f.geometry is None for f in features)
+
+
+def test_a_missing_zip_member_or_a_file_that_isnt_a_zip_is_an_error(tmp_path: Path) -> None:
+    path = tmp_path / "names.zip"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("Data/SU16.csv", "a,b\n1,2\n")
+    with pytest.raises(UpstreamFormatError, match=r"names\.zip has no Data/SU17\.csv"):
+        list(read_csv(path, member="Data/SU17.csv"))
+    not_zip = tmp_path / "plain.zip"
+    not_zip.write_text("a,b\n1,2\n", encoding="utf-8")
+    with pytest.raises(UpstreamFormatError, match=r"plain\.zip is not a zip file"):
+        list(read_csv(not_zip, member="Data/SU16.csv"))
+
+
+def test_a_zip_member_in_the_wrong_encoding_is_named(tmp_path: Path) -> None:
+    path = tmp_path / "labels.zip"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("labels.csv", "a,b\n1,Caf\xe9\n".encode("cp1252"))
+    with pytest.raises(UpstreamFormatError, match=r"labels\.csv isn't utf-8-sig"):
+        list(read_csv(path, member="labels.csv"))
+
+
 # --------------------------------------------------------------------------
 # Newline-delimited JSON
 # --------------------------------------------------------------------------

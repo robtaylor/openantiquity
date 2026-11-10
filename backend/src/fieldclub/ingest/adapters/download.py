@@ -68,6 +68,11 @@ def _validator(response: httpx.Response) -> str | None:
     return response.headers.get("last-modified")
 
 
+def _encoded(response: httpx.Response) -> bool:
+    """Whether the body was sent compressed, as ArcGIS sends GeoJSON, and is decompressed as it is read."""
+    return response.headers.get("content-encoding", "identity").strip().lower() not in ("", "identity")
+
+
 def download(
     url: str,
     dest: Path,
@@ -191,6 +196,11 @@ def _fetch(
                 total = int(length) if length and length.isdigit() else None
                 part_meta.clear()
                 part_meta["validator"] = _validator(response)
+                if _encoded(response):
+                    # The length counts the compressed bytes, and the client writes them
+                    # decompressed, so neither the length nor a byte range applies to the file.
+                    total = None
+                    part_meta["validator"] = None
             if total is not None:
                 part_meta["total"] = total
             _write_meta(part, part_meta)
