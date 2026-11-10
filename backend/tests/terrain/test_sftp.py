@@ -147,7 +147,7 @@ def refused_settings(known_hosts: Path) -> DefraSftpSettings:
     )
 
 
-def test_a_connection_failure_names_only_the_file_and_logs_the_rest(
+def test_a_connection_failure_names_only_the_file_in_errors_and_logs(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     known_hosts = tmp_path / "known_hosts"
@@ -158,10 +158,10 @@ def test_a_connection_failure_names_only_the_file_and_logs_the_rest(
         sftp.download(connect, REMOTE, tmp_path / "a.tif", max_failures=2, sleep=lambda _: None)
     body = str(raised.value.to_body())
     assert "SU16nw_DTM_1m.tif" in body
-    for secret in ("127.0.0.1", "port 1", "composite/", "not-a-real-password"):
+    for secret in ("127.0.0.1", "port 1", "composite/", "not-a-real-password", "someone"):
         assert secret not in body, secret
-    assert "127.0.0.1" in caplog.text
-    assert "not-a-real-password" not in caplog.text
+        assert secret not in caplog.text, secret
+    assert "Reading SU16nw_DTM_1m.tif failed (NoValidConnectionsError" in caplog.text
 
 
 def test_a_missing_host_key_file_is_not_named_to_the_client(tmp_path: Path) -> None:
@@ -261,3 +261,23 @@ def test_a_refused_login_or_host_key_is_never_retried(
     assert len(FakeSshClient.instances) == 1
     assert FakeSshClient.instances[0].closed
     assert pauses == []
+
+
+def test_a_pool_signs_in_once_for_many_files(tmp_path: Path) -> None:
+    files = {f"{REMOTE}.{i}": bytes([i]) * 1000 for i in range(5)}
+    server = FakeServer(files)
+    pool = sftp.SessionPool(server.connect, 2)
+    for i, remote in enumerate(files):
+        sftp.download(pool.connect, remote, tmp_path / f"{i}.tif", expected_size=1000)
+    assert server.connections == 1
+    pool.close()
+
+
+def test_a_pool_drops_a_session_that_failed(big: bytes, tmp_path: Path) -> None:
+    server = FakeServer({REMOTE: big}, fail_at={10 * MIB})
+    pool = sftp.SessionPool(server.connect, 2)
+    sftp.download(pool.connect, REMOTE, tmp_path / "a.tif", expected_size=len(big), sleep=lambda _: None)
+    sftp.download(pool.connect, REMOTE, tmp_path / "b.tif", expected_size=len(big))
+    # The failed session was closed, its replacement kept and used again.
+    assert server.connections == 2
+    pool.close()

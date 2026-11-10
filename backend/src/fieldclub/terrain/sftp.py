@@ -7,21 +7,26 @@ the file handle reopened for each. And connections fail now and then, so a
 download writes to `<name>.part`, resumes from whatever that file holds, and
 is renamed into place only when its size matches.
 
+`SessionPool` keeps sessions open between downloads, so copying many tiles
+signs in once per connection, not once per tile.
+
 A failed attempt is retried after a pause that doubles each time, and every
 read gives up after `READ_TIMEOUT` seconds of silence, so a stalled server
 can't hold a fetch for ever. A refused login or a wrong host key is never
 retried: `SupplyRefusedError` says to stop asking.
 
 The host key is pinned: a host whose key isn't in the known-hosts file is
-refused. The password is never logged. An error's message reaches the client,
-so it names only the file being read. The host, port, remote folder and
-the transport's own text go to the log.
+refused. Neither the credentials nor the server's address reach a log line
+or an error: an error names only the file being read, and a log line the
+file, the kind of failure and its error number, because the transport's own
+text can carry the host and port.
 """
 
 from __future__ import annotations
 
 import contextlib
 import logging
+import threading
 import time
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -115,7 +120,7 @@ def download(
                         f"{file} is {size} bytes on the bulk supply, but the catalogue says {expected_size}."
                     )
                 if have > size:
-                    logger.warning("%s is longer than %s on the server; starting again", part, remote)
+                    logger.warning("%s is longer than %s on the server; starting again", part, file)
                     part.unlink()
                     have = 0
                 _copy_windows(session, remote, part, have, size, window, on_progress)
@@ -125,9 +130,13 @@ def download(
                 gained = (part.stat().st_size if part.is_file() else 0) > have
                 failures = 1 if gained else failures + 1
                 logger.warning(
-                    "Reading %s failed (%s: %s), attempt %d", remote, type(exc).__name__, exc, failures
+                    "Reading %s failed (%s, errno %s), attempt %d",
+                    file,
+                    type(exc).__name__,
+                    getattr(exc, "errno", None),
+                    failures,
                 )
-                _close(session)
+                _discard(session)
                 session = None
                 if failures >= max_failures:
                     raise FetchFailedError(f"Reading {file} failed {failures} times in a row.") from exc
@@ -179,6 +188,75 @@ def _close(session: SftpSession | None) -> None:
     if session is not None:
         with contextlib.suppress(Exception):
             session.close()
+
+
+def _discard(session: SftpSession | None) -> None:
+    """Close a session that failed, so a pool doesn't hand it out again."""
+    if session is None:
+        return
+    discard = getattr(session, "discard", None)
+    with contextlib.suppress(Exception):
+        discard() if discard is not None else session.close()
+
+
+class SessionPool:
+    """Sessions kept open between downloads: at most `size` idle, any number in use.
+
+    `connect` hands out an idle session or opens one. Closing it gives it
+    back. A download that fails discards it instead, and a session that died
+    while idle fails on first use, is discarded and replaced.
+    """
+
+    def __init__(self, connect: Connect, size: int) -> None:
+        assert size >= 1, "a pool keeps at least one session"
+        self._connect = connect
+        self._size = size
+        self._idle: list[SftpSession] = []
+        self._guard = threading.Lock()
+
+    def connect(self) -> SftpSession:
+        with self._guard:
+            raw = self._idle.pop() if self._idle else None
+        return _PooledSession(self, raw if raw is not None else self._connect())
+
+    def give_back(self, raw: SftpSession) -> None:
+        with self._guard:
+            if len(self._idle) < self._size:
+                self._idle.append(raw)
+                return
+        _close(raw)
+
+    def close(self) -> None:
+        with self._guard:
+            idle, self._idle = self._idle, []
+        for raw in idle:
+            _close(raw)
+
+
+class _PooledSession:
+    def __init__(self, pool: SessionPool, raw: SftpSession) -> None:
+        self._pool = pool
+        self._raw: SftpSession | None = raw
+
+    def _session(self) -> SftpSession:
+        if self._raw is None:
+            raise EOFError("the session has been given back")
+        return self._raw
+
+    def stat(self, path: str) -> Any:
+        return self._session().stat(path)
+
+    def open(self, path: str, mode: str = "r") -> RemoteFile:
+        return self._session().open(path, mode)
+
+    def close(self) -> None:
+        raw, self._raw = self._raw, None
+        if raw is not None:
+            self._pool.give_back(raw)
+
+    def discard(self) -> None:
+        raw, self._raw = self._raw, None
+        _close(raw)
 
 
 class _ParamikoSession:
@@ -253,7 +331,7 @@ def defra_connector(credentials: DefraSftpSettings) -> Connect:
             channel.settimeout(READ_TIMEOUT)
         except paramiko.AuthenticationException as exc:
             client.close()
-            logger.error("The bulk supply at %s refused the login", host)
+            logger.error("The bulk supply refused the login")
             raise SupplyRefusedError("Defra's bulk supply rejected the user name or password.") from exc
         except paramiko.BadHostKeyException as exc:
             client.close()
