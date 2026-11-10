@@ -21,7 +21,7 @@ from __future__ import annotations
 import csv
 import io
 from collections import Counter, defaultdict
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -158,6 +158,17 @@ def to_csv(rows: Sequence[Exported]) -> str:
     writer.writerow(COLUMNS)
     for item in rows:
         writer.writerow([_safe(value) if value is not None else "" for value in asdict(item.row).values()])
+    return buffer.getvalue()
+
+
+def csv_table(header: Sequence[str], rows: Iterable[Sequence[Any]]) -> str:
+    """Any table as `to_csv` writes one: a header row, blank for None, formulas escaped."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\r\n")
+    writer.writerow(header)
+    for row in rows:
+        assert len(row) == len(header), "a row has a different number of cells from the header"
+        writer.writerow([_safe(value) if value is not None else "" for value in row])
     return buffer.getvalue()
 
 

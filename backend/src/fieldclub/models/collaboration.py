@@ -81,7 +81,12 @@ class InvestigationItem(Base):
     """One entry in an investigation: a finding, a record, a saved view, a note and so on."""
 
     __tablename__ = "investigation_items"
-    __table_args__ = (enum_check("kind", InvestigationItemKind),)
+    __table_args__ = (
+        enum_check("kind", InvestigationItemKind),
+        # Two items never share a place. Checked at commit, so a reorder can
+        # renumber rows one at a time inside its transaction.
+        UniqueConstraint("investigation_id", "position", deferrable=True, initially="DEFERRED"),
+    )
 
     id: Mapped[IdPk]
     created_at: Mapped[CreatedAt]
