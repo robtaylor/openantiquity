@@ -123,6 +123,8 @@ class Activity(Base):
     __table_args__ = (
         enum_check("kind", ActivityKind),
         Index("ix_activity_created_at", text("created_at DESC")),
+        # The feed filtered by kind, newest first, for kinds however rare.
+        Index("ix_activity_kind_id", "kind", text("id DESC")),
     )
 
     id: Mapped[IdPk]
@@ -142,7 +144,11 @@ class Activity(Base):
 
 class Notification(Base):
     __tablename__ = "notifications"
-    __table_args__ = (Index("ix_notifications_user_id_read_at", "user_id", "read_at"),)
+    __table_args__ = (
+        Index("ix_notifications_user_id_read_at", "user_id", "read_at"),
+        # One person's notifications newest first, a page at a time.
+        Index("ix_notifications_user_id_id", "user_id", text("id DESC")),
+    )
 
     id: Mapped[IdPk]
     created_at: Mapped[CreatedAt]

@@ -265,9 +265,14 @@ def unread_count(db: Session, user: User) -> int:
     return db.scalar(query.where(Notification.read_at.is_(None))) or 0
 
 
+def notifications_query(user: User) -> Select[Notification, Finding, User]:
+    """The person's listed notifications, newest first, as (Notification, Finding, Actor) rows."""
+    return _my_notifications(select(Notification, Finding, Actor), user).order_by(Notification.id.desc())
+
+
 def list_notifications(db: Session, user: User, *, limit: int, cursor: str | None = None) -> NotificationPage:
     """The person's own notifications, newest first, and how many are unread."""
-    query = _my_notifications(select(Notification, Finding, Actor), user).order_by(Notification.id.desc())
+    query = notifications_query(user)
     if cursor is not None:
         query = query.where(Notification.id < int_from_cursor(cursor))
     rows: Sequence[Any] = db.execute(query.limit(limit + 1)).all()
