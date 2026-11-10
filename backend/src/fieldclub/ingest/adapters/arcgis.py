@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterator, Sequence
+from datetime import UTC, datetime
 from itertools import pairwise
 from typing import Any
 
@@ -261,6 +262,15 @@ class ArcGISLayer:
             tally.add(feature.id)
             yield feature
         tally.check()
+
+
+def esri_date(value: Any) -> datetime | None:
+    """An Esri date, which is milliseconds since 1970 in UTC, as an aware datetime. None when blank."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise UpstreamFormatError(f"An Esri date must be a number of milliseconds, not {value!r}.")
+    return datetime.fromtimestamp(value / 1000, tz=UTC)
 
 
 def _crs_of(reference: Any) -> str | None:

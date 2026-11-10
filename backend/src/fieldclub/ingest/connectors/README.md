@@ -99,6 +99,8 @@ external_id = hashlib.sha256(f"{props['NGR']}|{props['Name'].strip().lower()}".e
 
 Don't use `OBJECTID`, `FID`, a row number or `feature.id` unless the publisher states the value is stable. They're numbered afresh when a layer is republished, and then a full run upserts every record under a new id and deletes the old ones, with their links from evidence and investigations. Check that the key is unique in the data, and raise `UpstreamFormatError` when two features give the same one, because the runner would otherwise keep the first and count the rest as duplicates. Say in the connector's docstring which fields the key is built from.
 
+Where polygons share their upstream fields, as a monument's several drawn features do, add the geometry to the key. `FeatureKeys` in `adapters/common.py` builds it from the fields you name and the geometry rounded to a centimetre, and numbers an exact repeat (`-2`, `-3`) instead of losing it. `he_aim_detailed_mapping.py` is the example.
+
 ## 5. Record a fixture and test against it
 
 Tests never call the live service. Record a small fixture from it once, with a handful of requests and a second between them, and put it in `tests/ingest/adapters/fixtures/` or beside the connector's test. Write down where and how it was recorded, as `tests/ingest/adapters/support.py` does. Then mock the upstream with `respx` and run the connector through the real runner:

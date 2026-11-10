@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from email.utils import parsedate_to_datetime
@@ -180,10 +181,44 @@ def json_body(response: httpx.Response, where: str) -> Any:
         raise UpstreamFormatError(f"{where} did not answer with JSON.") from None
 
 
-def json_ready(properties: dict[str, Any]) -> dict[str, Any]:
-    """A copy of `properties` that `json.dumps` accepts: datetimes as ISO 8601 text."""
+class FeatureKeys:
+    """Stable external ids for a source that publishes none, built from what names each feature.
+
+    `key(parts, geometry)` hashes the text `parts` (upstream fields that name
+    the thing and survive a republish) with the geometry rounded to seven
+    decimal places of a degree, about a centimetre. The same feature gives
+    the same key in every run. Two features that agree in every part and in
+    their geometry are the same drawing entered twice, so the second gets
+    `-2` after its key, the third `-3`, in the order the source gives them.
+    Those repeats are counted in `repeats`, for the connector to report.
+    """
+
+    def __init__(self) -> None:
+        self._seen: dict[str, int] = {}
+        self.repeats = 0
+
+    def key(self, parts: Sequence[str | None], geometry: BaseGeometry | None) -> str:
+        wkt = "" if geometry is None else shapely.to_wkt(geometry, rounding_precision=7, trim=True)
+        text = "|".join((part or "").strip().lower() for part in parts) + "|" + wkt
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:20]
+        count = self._seen.get(digest, 0) + 1
+        self._seen[digest] = count
+        if count == 1:
+            return digest
+        self.repeats += 1
+        return f"{digest}-{count}"
+
+
+def json_ready(properties: dict[str, Any], *, drop_empty: bool = False) -> dict[str, Any]:
+    """A copy of `properties` that `json.dumps` accepts: datetimes as ISO 8601 text.
+
+    `drop_empty` leaves out values that are None or blank text, for a layer
+    that is mostly empty fields.
+    """
     return {
-        key: value.isoformat() if isinstance(value, datetime) else value for key, value in properties.items()
+        key: value.isoformat() if isinstance(value, datetime) else value
+        for key, value in properties.items()
+        if not (drop_empty and (value is None or (isinstance(value, str) and not value.strip())))
     }
 
 
