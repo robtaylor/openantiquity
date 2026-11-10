@@ -187,6 +187,11 @@ def _results(rows: Any, distance: bool = False) -> list[RecordResult]:
 # --------------------------------------------------------------------------
 
 
+def use_name_similarity(db: Session) -> None:
+    """Make `%>` match at `NAME_SIMILARITY` for the rest of this transaction."""
+    db.execute(select(func.set_config("pg_trgm.word_similarity_threshold", str(NAME_SIMILARITY), true())))
+
+
 def search(
     db: Session,
     q: str | None = None,
@@ -220,7 +225,7 @@ def search(
         similarity = func.strict_word_similarity(literal(phrase), Record.name)
         starts = func.starts_with(func.lower(Record.name), literal(phrase))
         rank = func.ts_rank_cd(Record.search, tsquery, 1) * 4 + similarity + cast(starts, Integer) * 2
-        db.execute(select(func.set_config("pg_trgm.word_similarity_threshold", str(NAME_SIMILARITY), true())))
+        use_name_similarity(db)
         statement = statement.where(
             or_(Record.search.op("@@")(tsquery), Record.name.op("%>")(literal(phrase)))
         )
@@ -435,4 +440,5 @@ __all__ = [
     "search",
     "suggest_for_finding",
     "type_fits",
+    "use_name_similarity",
 ]
