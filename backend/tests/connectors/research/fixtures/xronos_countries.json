@@ -1,0 +1,1683 @@
+{
+ "GB": [
+  {
+   "measurement": {
+    "id": 128709,
+    "labnr": "UB-6737",
+    "bp": 663,
+    "std": 33,
+    "cal_bp": null,
+    "cal_std": null,
+    "delta_c13": null,
+    "source_database": "",
+    "lab_name": "",
+    "material": "NA",
+    "species": null,
+    "feature": "NA",
+    "feature_type": "Court Tomb",
+    "site": "Tamnyrankin",
+    "country": "GB",
+    "lat": "54.933202",
+    "lng": "-6.699966",
+    "site_type": "Court Tomb",
+    "periods": [],
+    "typochronological_units": [],
+    "ecochronological_units": [],
+    "reference": [
+     {
+      "reference": "Schulting, Murphy, Jones & Warren 2011, 11"
+     },
+     {
+      "reference": "IRDD"
+     }
+    ]
+   }
+  },
+  {
+   "measurement": {
+    "id": 329711,
+    "labnr": "UB-6737",
+    "bp": 663,
+    "std": 33,
+    "cal_bp": null,
+    "cal_std": null,
+    "delta_c13": null,
+    "source_database": "",
+    "lab_name": "",
+    "material": "bone",
+    "species": null,
+    "feature": "NA",
+    "feature_type": "Court Tomb",
+    "site": "Tamnyrankin",
+    "country": "GB",
+    "lat": "54.933202",
+    "lng": "-6.699966",
+    "site_type": "Court Tomb",
+    "periods": [],
+    "typochronological_units": [],
+    "ecochronological_units": [],
+    "reference": [
+     {
+      "reference": "Bevan2017"
+     },
+     {
+      "reference": "p3k14c"
+     }
+    ]
+   }
+  },
+  {
+   "measurement": {
+    "id": 117206,
+    "labnr": "OxA-1870",
+    "bp": 3850,
+    "std": 70,
+    "cal_bp": null,
+    "cal_std": null,
+    "delta_c13": -26,
+    "source_database": "",
+    "lab_name": "",
+    "material": "charcoal",
+    "species": null,
+    "feature": "Pit 5, Layer 3",
+    "feature_type": null,
+    "site": "Ashton Farm",
+    "country": "GB",
+    "lat": null,
+    "lng": null,
+    "site_type": null,
+    "periods": [],
+    "typochronological_units": [],
+    "ecochronological_units": [],
+    "reference": []
+   }
+  },
+  {
+   "measurement": {
+    "id": 102867,
+    "labnr": "Q-707",
+    "bp": 8100,
+    "std": 150,
+    "cal_bp": null,
+    "cal_std": null,
+    "delta_c13": null,
+    "source_database": "",
+    "lab_name": "",
+    "material": "plant remains",
+    "species": "Corylus avellana",
+    "feature": "NA",
+    "feature_type": null,
+    "site": "Ickornshaw Moor",
+    "country": "GB",
+    "lat": "53.8614",
+    "lng": "-2.0623",
+    "site_type": null,
+    "periods": [
+     {
+      "periode": "UM"
+     }
+    ],
+    "typochronological_units": [
+     {
+      "typochronological_unit": "UM"
+     }
+    ],
+    "ecochronological_units": [
+     {
+      "ecochronological_unit": "UM"
+     }
+    ],
+    "reference": [
+     {
+      "reference": "RADON"
+     }
+    ]
+   }
+  },
+  {
+   "measurement": {
+    "id": 101233,
+    "labnr": "GrA-24506",
+    "bp": 4940,
+    "std": 50,
+    "cal_bp": null,
+    "cal_std": null,
+    "delta_c13": -21.7,
+    "source_database": "",
+    "lab_name": "",
+    "material": "collagen, bone",
+    "species": "Homo sapiens",
+    "feature": "bone is one of a cluster of disarticulated bones found in context (336) of the north chamber, attributed to a child, individual G",
+    "feature_type": "collective burial",
+    "site": "Hazleton North, Gloucestershire",
+    "country": "GB",
+    "lat": "51.868056",
+    "lng": "-1.893889",
+    "site_type": "collective burial",
+    "periods": [
+     {
+      "periode": "Early"
+     },
+     {
+      "periode": "Neolithikum"
+     }
+    ],
+    "typochronological_units": [
+     {
+      "typochronological_unit": "Early"
+     },
+     {
+      "typochronological_unit": "Neolithikum"
+     }
+    ],
+    "ecochronological_units": [
+     {
+      "ecochronological_unit": "Early"
+     },
+     {
+      "ecochronological_unit": "Neolithikum"
+     }
+    ],
+    "reference": [
+     {
+      "reference": "A. Bayliss et al. 2007; Meadows et al. 2007"
+     },
+     {
+      "reference": "RADON"
+     }
+    ]
+   }
+  }
+ ],
+ "England/Wales": [
+  {
+   "measurement": {
+    "id": 27327,
+    "labnr": "HAR-455",
+    "bp": 9130,
+    "std": 180,
+    "cal_bp": null,
+    "cal_std": null,
+    "delta_c13": -24.2,
+    "source_database": "",
+    "lab_name": "",
+    "material": "charcoal",
+    "species": "Pinus",
+    "feature": "NA",
+    "feature_type": "henges",
+    "site": "Stonehenge",
+    "country": "England/Wales",
+    "lat": "51.1788",
+    "lng": "-1.8262",
+    "site_type": "henges",
+    "periods": [
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Epipalaeolithic"
+     },
+     {
+      "periode": "Epipalaeolithic"
+     },
+     {
+      "periode": "Epipalaeolithic"
+     },
+     {
+      "periode": "Epipalaeolithic"
+     },
+     {
+      "periode": "Epipalaeolithic"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "LMEN"
+     },
+     {
+      "periode": "UM"
+     },
+     {
+      "periode": "UM"
+     },
+     {
+      "periode": "UM"
+     },
+     {
+      "periode": "UBA"
+     },
+     {
+      "periode": "UBA"
+     }
+    ],
+    "typochronological_units": [
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "typochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "typochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "typochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "typochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "LMEN"
+     },
+     {
+      "typochronological_unit": "UM"
+     },
+     {
+      "typochronological_unit": "UM"
+     },
+     {
+      "typochronological_unit": "UM"
+     },
+     {
+      "typochronological_unit": "UBA"
+     },
+     {
+      "typochronological_unit": "UBA"
+     }
+    ],
+    "ecochronological_units": [
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "ecochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "ecochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "ecochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "ecochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "LMEN"
+     },
+     {
+      "ecochronological_unit": "UM"
+     },
+     {
+      "ecochronological_unit": "UM"
+     },
+     {
+      "ecochronological_unit": "UM"
+     },
+     {
+      "ecochronological_unit": "UBA"
+     },
+     {
+      "ecochronological_unit": "UBA"
+     }
+    ],
+    "reference": [
+     {
+      "reference": "CBA Radiocarbon Index"
+     },
+     {
+      "reference": "CalPal2022"
+     }
+    ]
+   }
+  },
+  {
+   "measurement": {
+    "id": 26604,
+    "labnr": "OxA-10616",
+    "bp": 8760,
+    "std": 50,
+    "cal_bp": null,
+    "cal_std": null,
+    "delta_c13": -14.6,
+    "source_database": "",
+    "lab_name": "",
+    "material": "bone",
+    "species": "Homo sapiens",
+    "feature": "NA",
+    "feature_type": null,
+    "site": "Ogof-yr-ychen",
+    "country": "England/Wales",
+    "lat": "51.6333",
+    "lng": "-4.6667",
+    "site_type": null,
+    "periods": [
+     {
+      "periode": "Epipalaeolithic"
+     },
+     {
+      "periode": "Epipalaeolithic"
+     },
+     {
+      "periode": "Epipalaeolithic"
+     },
+     {
+      "periode": "Epipalaeolithic"
+     },
+     {
+      "periode": "Epipalaeolithic"
+     },
+     {
+      "periode": "Epipalaeolithic"
+     },
+     {
+      "periode": "Epipalaeolithic"
+     },
+     {
+      "periode": "UM"
+     },
+     {
+      "periode": "UM"
+     },
+     {
+      "periode": "UM"
+     },
+     {
+      "periode": "UM"
+     },
+     {
+      "periode": "UM"
+     },
+     {
+      "periode": "UM"
+     }
+    ],
+    "typochronological_units": [
+     {
+      "typochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "typochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "typochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "typochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "typochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "typochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "typochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "typochronological_unit": "UM"
+     },
+     {
+      "typochronological_unit": "UM"
+     },
+     {
+      "typochronological_unit": "UM"
+     },
+     {
+      "typochronological_unit": "UM"
+     },
+     {
+      "typochronological_unit": "UM"
+     },
+     {
+      "typochronological_unit": "UM"
+     }
+    ],
+    "ecochronological_units": [
+     {
+      "ecochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "ecochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "ecochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "ecochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "ecochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "ecochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "ecochronological_unit": "Epipalaeolithic"
+     },
+     {
+      "ecochronological_unit": "UM"
+     },
+     {
+      "ecochronological_unit": "UM"
+     },
+     {
+      "ecochronological_unit": "UM"
+     },
+     {
+      "ecochronological_unit": "UM"
+     },
+     {
+      "ecochronological_unit": "UM"
+     },
+     {
+      "ecochronological_unit": "UM"
+     }
+    ],
+    "reference": [
+     {
+      "reference": "Meiklejohn 2011"
+     },
+     {
+      "reference": "CalPal2022"
+     }
+    ]
+   }
+  },
+  {
+   "measurement": {
+    "id": 26848,
+    "labnr": "OxA-6405",
+    "bp": 5005,
+    "std": 50,
+    "cal_bp": null,
+    "cal_std": null,
+    "delta_c13": -26.5,
+    "source_database": "",
+    "lab_name": "",
+    "material": "wood",
+    "species": "Quercus",
+    "feature": "NA",
+    "feature_type": "b mou",
+    "site": "Raunds",
+    "country": "England/Wales",
+    "lat": "52.3339",
+    "lng": "-0.5749",
+    "site_type": "b mou",
+    "periods": [
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "Neolithic?"
+     }
+    ],
+    "typochronological_units": [
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "Neolithic?"
+     }
+    ],
+    "ecochronological_units": [
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "Neolithic?"
+     }
+    ],
+    "reference": [
+     {
+      "reference": "RADON"
+     },
+     {
+      "reference": "CalPal2022"
+     }
+    ]
+   }
+  }
+ ],
+ "Scotland": [
+  {
+   "measurement": {
+    "id": 107530,
+    "labnr": "OxA-9234",
+    "bp": 5085,
+    "std": 45,
+    "cal_bp": null,
+    "cal_std": null,
+    "delta_c13": null,
+    "source_database": "",
+    "lab_name": "",
+    "material": "plant remains",
+    "species": "Corylus avellana",
+    "feature": "NA",
+    "feature_type": null,
+    "site": "Chapelfield",
+    "country": "Scotland",
+    "lat": "56.0848",
+    "lng": "-3.8703",
+    "site_type": null,
+    "periods": [
+     {
+      "periode": "Neolithic"
+     }
+    ],
+    "typochronological_units": [
+     {
+      "typochronological_unit": "Neolithic"
+     }
+    ],
+    "ecochronological_units": [
+     {
+      "ecochronological_unit": "Neolithic"
+     }
+    ],
+    "reference": [
+     {
+      "reference": "RADON"
+     }
+    ]
+   }
+  },
+  {
+   "measurement": {
+    "id": 107597,
+    "labnr": "OxA-9158",
+    "bp": 4635,
+    "std": 60,
+    "cal_bp": null,
+    "cal_std": null,
+    "delta_c13": null,
+    "source_database": "",
+    "lab_name": "",
+    "material": "plant remains",
+    "species": "Hordeum",
+    "feature": "NA",
+    "feature_type": null,
+    "site": "Eilean",
+    "country": "Scotland",
+    "lat": "57.4677",
+    "lng": "-7.3492",
+    "site_type": null,
+    "periods": [
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "Neolithic"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     },
+     {
+      "periode": "UN"
+     }
+    ],
+    "typochronological_units": [
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "Neolithic"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     },
+     {
+      "typochronological_unit": "UN"
+     }
+    ],
+    "ecochronological_units": [
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "Neolithic"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     },
+     {
+      "ecochronological_unit": "UN"
+     }
+    ],
+    "reference": [
+     {
+      "reference": "RADON"
+     }
+    ]
+   }
+  }
+ ],
+ "IE": [
+  {
+   "measurement": {
+    "id": 133503,
+    "labnr": "UB-2171",
+    "bp": 8755,
+    "std": 135,
+    "cal_bp": null,
+    "cal_std": null,
+    "delta_c13": null,
+    "source_database": "",
+    "lab_name": "",
+    "material": "charcoal",
+    "species": null,
+    "feature": "habitat",
+    "feature_type": null,
+    "site": "Castle Roe",
+    "country": "IE",
+    "lat": "55.13",
+    "lng": "6.67",
+    "site_type": null,
+    "periods": [
+     {
+      "periode": "Mesolithic"
+     },
+     {
+      "periode": "Mesolithic"
+     },
+     {
+      "periode": "Mount Sandel group"
+     },
+     {
+      "periode": "Mount Sandel group"
+     }
+    ],
+    "typochronological_units": [
+     {
+      "typochronological_unit": "Mesolithic"
+     },
+     {
+      "typochronological_unit": "Mesolithic"
+     },
+     {
+      "typochronological_unit": "Mount Sandel group"
+     },
+     {
+      "typochronological_unit": "Mount Sandel group"
+     }
+    ],
+    "ecochronological_units": [
+     {
+      "ecochronological_unit": "Mesolithic"
+     },
+     {
+      "ecochronological_unit": "Mesolithic"
+     },
+     {
+      "ecochronological_unit": "Mount Sandel group"
+     },
+     {
+      "ecochronological_unit": "Mount Sandel group"
+     }
+    ],
+    "reference": [
+     {
+      "reference": "PACEA"
+     }
+    ]
+   }
+  },
+  {
+   "measurement": {
+    "id": 43779,
+    "labnr": "GrA-9269",
+    "bp": 2150,
+    "std": 50,
+    "cal_bp": null,
+    "cal_std": null,
+    "delta_c13": 0,
+    "source_database": "",
+    "lab_name": "",
+    "material": "bone",
+    "species": "Homo sapiens",
+    "feature": "NA",
+    "feature_type": "enclosure",
+    "site": "Rathdooney Beg",
+    "country": "IE",
+    "lat": "54.1136",
+    "lng": "-8.5191",
+    "site_type": "enclosure",
+    "periods": [
+     {
+      "periode": "Bronze Age"
+     },
+     {
+      "periode": "Bronze Age"
+     },
+     {
+      "periode": "Bronze Age"
+     },
+     {
+      "periode": "Iron Age"
+     },
+     {
+      "periode": "Iron Age"
+     },
+     {
+      "periode": "Iron Age"
+     }
+    ],
+    "typochronological_units": [
+     {
+      "typochronological_unit": "Bronze Age"
+     },
+     {
+      "typochronological_unit": "Bronze Age"
+     },
+     {
+      "typochronological_unit": "Bronze Age"
+     },
+     {
+      "typochronological_unit": "Iron Age"
+     },
+     {
+      "typochronological_unit": "Iron Age"
+     },
+     {
+      "typochronological_unit": "Iron Age"
+     }
+    ],
+    "ecochronological_units": [
+     {
+      "ecochronological_unit": "Bronze Age"
+     },
+     {
+      "ecochronological_unit": "Bronze Age"
+     },
+     {
+      "ecochronological_unit": "Bronze Age"
+     },
+     {
+      "ecochronological_unit": "Iron Age"
+     },
+     {
+      "ecochronological_unit": "Iron Age"
+     },
+     {
+      "ecochronological_unit": "Iron Age"
+     }
+    ],
+    "reference": [
+     {
+      "reference": "IRDD (CalPal)"
+     },
+     {
+      "reference": "CalPal2022"
+     }
+    ]
+   }
+  },
+  {
+   "measurement": {
+    "id": 44190,
+    "labnr": "GrA-13333",
+    "bp": 3520,
+    "std": 40,
+    "cal_bp": null,
+    "cal_std": null,
+    "delta_c13": 0,
+    "source_database": "",
+    "lab_name": "",
+    "material": "bone",
+    "species": "Homo sapiens",
+    "feature": "NA",
+    "feature_type": "Bronze Age burial w vase pottery",
+    "site": "Topped Mountain",
+    "country": "IE",
+    "lat": "54.3643",
+    "lng": "-7.5152",
+    "site_type": "Bronze Age burial w vase pottery",
+    "periods": [
+     {
+      "periode": "Bronze Age"
+     },
+     {
+      "periode": "Bronze Age ?"
+     },
+     {
+      "periode": "UBA"
+     }
+    ],
+    "typochronological_units": [
+     {
+      "typochronological_unit": "Bronze Age"
+     },
+     {
+      "typochronological_unit": "Bronze Age ?"
+     },
+     {
+      "typochronological_unit": "UBA"
+     }
+    ],
+    "ecochronological_units": [
+     {
+      "ecochronological_unit": "Bronze Age"
+     },
+     {
+      "ecochronological_unit": "Bronze Age ?"
+     },
+     {
+      "ecochronological_unit": "UBA"
+     }
+    ],
+    "reference": [
+     {
+      "reference": "IRDD (CalPal)"
+     },
+     {
+      "reference": "CalPal2022"
+     }
+    ]
+   }
+  }
+ ]
+}
