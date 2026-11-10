@@ -1,0 +1,111 @@
+# Writing a connector
+
+A connector reads one external source and yields `RecordIn` objects. The runner in `fieldclub/ingest/runner.py` does everything else: it stores the source's licence and attribution first, validates each record, upserts in batches, deletes what vanished upstream after a full run, and writes an `ingest_runs` row. A connector holds no credentials and never touches the database.
+
+Most connectors are a class with a `SourceInfo` and a `fetch()` of a few lines, because the reading is done by a shared adapter in `fieldclub/ingest/adapters/`. The reference connector is `he_nhle_scheduled_monuments.py`. Copy it.
+
+## 1. Find the source in the work-list
+
+Every storable source is an entry in `docs/sources/worklists/sources.json` under `bulk`. The entry gives the key, the address, the tested request, the licence, the attribution, the reuse class, the field names and the quirks. Read the quirks. They're the reason the research was done.
+
+Only `bulk` sources get a connector. A `live` source is queried by the browser and never stored (Decision 0007). Its definition goes in `fieldclub/data/live_sources.json` instead, and the frontend reads it from `GET /api/v1/context/live-sources`.
+
+## 2. Pick the adapter
+
+| `access_method` in the work-list | Adapter | Call |
+|---|---|---|
+| `file_download` | `download` then `files` | `download(url, cache_dir(settings, key) / name, client=self.http, max_age=...)`, then `read_vector(path)` |
+| `arcgis_feature` | `arcgis` | `ArcGISLayer(url, client=self.http).features(bbox=bbox)` |
+| `wfs` | `wfs` | `WFSLayer(url, type_name, client=self.http, sort_by="RecordNumber").features(bbox=bbox)` |
+| `sparql` | `sparql` | `SparqlQuery(endpoint, query, client=self.http, geometry="coord").features()` |
+| `csv` | `files` | `read_csv(path, x="Easting", y="Northing", crs="EPSG:27700", encoding="cp1252")` |
+| `ndjson` | `files` | `read_ndjson(path)` |
+
+Every adapter yields `Feature(properties, geometry, id)`. The properties are plain Python values with NaN turned into None. The geometry is shapely in WGS84, longitude first, whatever the source's own CRS. Requests go through `Polite`, which leaves a second between requests, retries 408, 429 and 5xx with backoff, and honours `Retry-After`. Pass a `Polite(delay_s=...)` of your own when a source's `robots.txt` or terms ask for a longer gap.
+
+The ArcGIS and WFS readers count first and raise `IncompleteReadError` when the pages come up short, so a truncated answer fails the run instead of deleting records.
+
+## 3. Write the class
+
+The reference connector, cut to its parts:
+
+```python
+@register
+class ScheduledMonuments(Connector):
+    source: ClassVar[SourceInfo] = SourceInfo(
+        key="he-nhle-scheduled-monuments",  # the work-list key
+        name="Scheduled monuments",
+        publisher="Historic England",
+        licence="Open Government Licence v3.0, via the Historic England Open Data Hub terms",
+        licence_url="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+        attribution="© Historic England 2026. Contains Ordnance Survey data © Crown copyright and database right 2026.",
+        category=RecordCategory.DESIGNATION,
+        access=SourceAccess.BULK,
+        reuse=SourceReuse.OPEN,  # from the work-list, never guessed
+        homepage="https://opendata-historicengland.hub.arcgis.com/",
+        coverage="England",
+    )
+    max_age: ClassVar[timedelta] = timedelta(hours=20)
+
+    def fetch(self, *, bbox=None, limit=None):
+        path = cache_dir(self.settings, self.source.key) / "scheduled-monuments.gpkg"
+        download(HUB_EXPORT, path, client=self.http, polite=Polite(), max_age=self.max_age)
+        info = vector_info(path)
+        ...  # check the fields and CRS you rely on
+        for feature in read_vector(path, bbox=bbox):
+            yield to_record(feature)
+```
+
+Rules for the class:
+
+- The file name is the key with hyphens as underscores. `registry.discover()` imports every module in this package, so the file is all it takes.
+- `SourceInfo` refuses a blank licence or attribution and an unknown reuse class, and the `sources` table has a check that does the same. Copy licence, attribution and reuse from the work-list. Fill in any `[year]` in an attribution.
+- Use `self.http`, the shared client with the project `User-Agent`. Don't build your own.
+- Keep downloads under `cache_dir(self.settings, key)`, which is `var/ingest/<key>/`. Set `max_age` to how often the source changes, so a second run the same day costs the publisher nothing.
+- Check the shape you rely on before reading: the field names, the CRS, the layer. Raise `UpstreamFormatError` when it changed. A wrong assumption must stop the run, not write bad rows.
+
+## 4. Map the fields
+
+`to_record` turns one `Feature` into one `RecordIn`:
+
+| `RecordIn` field | From |
+|---|---|
+| `external_id` | The work-list's `id_field`, as text. It must be stable across runs, because the runner upserts on it |
+| `name` | `name_field`, stripped |
+| `geom` | `feature.geometry`. The runner works out the centroid, repairs invalid shapes and refuses anything outside Britain and Ireland |
+| `category` | Leave it out to use the source's |
+| `record_type`, `monument_types` | `type_field`. Keep thesaurus terms as the source writes them |
+| `periods` | `period_field`, mapped onto `vocab.Period`. The runner refuses anything else |
+| `summary` | `summary_field` |
+| `url` | `record_url_template` filled from the feature |
+| `precision_m` | The work-list's `precision_m` |
+| `source_updated_at` | A timezone-aware datetime, if the source has one |
+| `raw` | `json_ready(feature.properties)`, so nothing is lost |
+
+## 5. Record a fixture and test against it
+
+Tests never call the live service. Record a small fixture from it once, with a handful of requests and a second between them, and put it in `tests/ingest/adapters/fixtures/` or beside the connector's test. Write down where and how it was recorded, as `tests/ingest/adapters/support.py` does. Then mock the upstream with `respx` and run the connector through the real runner:
+
+```python
+@respx.mock
+def test_running_twice_gives_the_same_rows(db):
+    serve_hub(FIXTURE.read_bytes())
+    run_connector(ScheduledMonuments())
+    before = rows(db)
+    run_connector(ScheduledMonuments())
+    assert rows(db) == before
+```
+
+`tests/records/test_scheduled_monuments.py` is the model: the field mapping, the licence against the work-list, two runs giving the same rows, a partial run by box, and an upstream that changed shape failing the run. Give each test its own `var/` with the `env` fixture, or the download cache leaks between tests.
+
+## 6. Run it for real
+
+From `backend/`, with `var/` pointing at the shared runtime directory:
+
+```
+uv run python -m fieldclub.db                                  # once, to apply any schema additions
+FIELDCLUB_VAR_DIR=../var uv run fieldclub-ingest run <key> --limit 50
+FIELDCLUB_VAR_DIR=../var uv run fieldclub-ingest run <key>
+```
+
+Compare the count with the work-list's `expected_count`. The scheduled monuments gave 20,006 on 2026-11-10, the same as the research recorded. A run that is more than a few percent out means a filter, a page limit or a CRS is wrong.

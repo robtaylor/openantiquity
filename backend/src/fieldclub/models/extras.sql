@@ -136,3 +136,21 @@ CREATE INDEX IF NOT EXISTS ix_findings_created_at_id ON findings (created_at, id
 -- can't be replaced by an answer given after the reveal. For a database built
 -- before the column was added.
 ALTER TABLE observations ADD COLUMN IF NOT EXISTS withdrawn_at timestamptz;
+
+-- ---- Record index (track b1/records) ------------------------------------
+-- A source is stored with its licence and attribution before any of its data
+-- (Decision 0007). NOT NULL lets an empty string through, so refuse blanks.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ck_sources_licence_and_attribution_given'
+    ) THEN
+        ALTER TABLE sources ADD CONSTRAINT ck_sources_licence_and_attribution_given
+            CHECK (btrim(licence) <> '' AND btrim(attribution) <> '');
+    END IF;
+END
+$$;
+
+-- Record tiles count records by the point they sit at, so the tile query
+-- filters on centroid and needs it indexed as geometry too.
+CREATE INDEX IF NOT EXISTS ix_records_centroid ON records USING GIST (centroid);

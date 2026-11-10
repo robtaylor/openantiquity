@@ -15,13 +15,16 @@ from tests.ingest.fakes import SOURCE, FakeConnector
 
 @pytest.fixture(autouse=True)
 def clean_registry() -> Iterator[None]:
+    """Each test starts with no connectors registered, and the real ones come back after it."""
+    registry.discover()
     saved = dict(registry._registry)
+    registry._registry.clear()
     yield
     registry._registry.clear()
     registry._registry.update(saved)
 
 
-def test_no_real_connectors_exist_yet() -> None:
+def test_an_emptied_registry_lists_nothing() -> None:
     assert registry.all_connectors() == []
 
 

@@ -44,6 +44,8 @@ def registered() -> Iterator[type[CliConnector]]:
 
 
 def test_list_with_no_connectors(capsys: pytest.CaptureFixture[str]) -> None:
+    # Discover first, so the real connectors can't register after the clear.
+    registry.discover()
     saved = dict(registry._registry)
     registry._registry.clear()
     try:
@@ -175,4 +177,4 @@ def test_the_console_script_is_installed(db: Session) -> None:
         ["fieldclub-ingest", "list"], capture_output=True, text=True, check=False, timeout=60
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "No connectors are registered yet."
+    assert result.stdout.split()[:5] == ["KEY", "CATEGORY", "ACCESS", "READY", "NAME"]
