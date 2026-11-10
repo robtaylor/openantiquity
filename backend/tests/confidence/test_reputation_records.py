@@ -1,4 +1,4 @@
-"""Writing reputation awards: each is paid once, and members are promoted at fifty points."""
+"""Writing reputation awards: each is paid once, and members become eligible for trusted at fifty points."""
 
 from __future__ import annotations
 
@@ -67,16 +67,25 @@ def test_the_same_reason_on_another_finding_is_paid(
     assert reload(db, finder).reputation == 4.0
 
 
-@pytest.mark.parametrize(("points", "role"), [(TRUSTED_AT - 1, Role.MEMBER), (TRUSTED_AT, Role.TRUSTED)])
-def test_a_member_is_promoted_at_fifty_points(
-    db: Session, make_user: MakeUser, make_finding: MakeFinding, points: float, role: Role
+@pytest.mark.parametrize(("points", "eligible"), [(TRUSTED_AT - 1, False), (TRUSTED_AT, True)])
+def test_a_member_becomes_eligible_at_fifty_points_but_is_not_promoted(
+    db: Session, make_user: MakeUser, make_finding: MakeFinding, points: float, eligible: bool
 ) -> None:
     member = make_user(reputation=points - 20)
     finding = make_finding(member)
     recorded = record_awards(db, finding.id, [Award(member.id, 20, "tier_ground_checked")])
     db.commit()
-    assert reload(db, member).role == role.value
-    assert recorded.promoted == ((member.id,) if role is Role.TRUSTED else ())
+    # Trusted users see restricted positions, so promotion is a moderator's call.
+    assert reload(db, member).role == Role.MEMBER.value
+    assert recorded.eligible == ((member.id,) if eligible else ())
+
+
+def test_a_member_already_over_fifty_is_not_reported_again(
+    db: Session, make_user: MakeUser, make_finding: MakeFinding
+) -> None:
+    member = make_user(reputation=TRUSTED_AT + 5)
+    recorded = record_awards(db, make_finding(member).id, [Award(member.id, 2, "tier_seen")])
+    assert (recorded.eligible, reload(db, member).role) == ((), Role.MEMBER.value)
 
 
 @pytest.mark.parametrize("role", [Role.EXPERT, Role.MODERATOR, Role.ADMIN, Role.TRUSTED])
@@ -87,19 +96,19 @@ def test_other_roles_are_left_alone(
     finding = make_finding(user)
     recorded = record_awards(db, finding.id, [Award(user.id, 30, "tier_confirmed")])
     db.commit()
-    assert (reload(db, user).role, recorded.promoted) == (role.value, ())
+    assert (reload(db, user).role, recorded.eligible) == (role.value, ())
 
 
-def test_a_banned_member_is_not_promoted(db: Session, make_user: MakeUser, make_finding: MakeFinding) -> None:
+def test_a_banned_member_is_not_eligible(db: Session, make_user: MakeUser, make_finding: MakeFinding) -> None:
     member = make_user(reputation=45.0, banned_at=datetime(2026, 11, 1, tzinfo=UTC))
     recorded = record_awards(db, make_finding().id, [Award(member.id, 10, "tier_probable")])
     db.commit()
-    assert (reload(db, member).role, reload(db, member).reputation, recorded.promoted) == ("member", 55.0, ())
+    assert (reload(db, member).role, reload(db, member).reputation, recorded.eligible) == ("member", 55.0, ())
 
 
 def test_nothing_to_record(db: Session, make_finding: MakeFinding) -> None:
     recorded = record_awards(db, make_finding().id, [])
-    assert (recorded.awards, recorded.promoted) == ((), ())
+    assert (recorded.awards, recorded.eligible) == ((), ())
 
 
 def test_a_repeated_award_in_one_call_is_a_bug(

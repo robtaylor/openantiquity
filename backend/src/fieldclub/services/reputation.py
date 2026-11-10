@@ -17,7 +17,16 @@ Interface
 `awards(old, new)` is pure. It reads who did what from the two assessments:
 the finder, the answers, the evidence and its endorsers. `record_awards`
 writes the awards, adds them to each person's `users.reputation`, and
-promotes a member to trusted at fifty points. It flushes and never commits.
+reports the members who have just reached fifty points. It flushes and
+never commits.
+
+Fifty points makes a member eligible for trusted. It doesn't promote them:
+a moderator does that. Trusted users see the exact position of restricted
+findings (Decision 0005), and points can be farmed. Three colluding
+accounts can take a finding to Checked on the ground (two answers, two desk
+items, one site report and one endorsement), which pays its finder 27
+points, so two such findings would cross fifty. Automatic promotion would
+hand restricted positions to anyone willing to run three accounts.
 
 Each award has a stable `reason`, and `reputation_events` is unique on
 (user, finding, reason). `record_awards` skips an award already written, so
@@ -40,8 +49,8 @@ Decisions where the contract is silent
 4. "Endorsed by two other people" counts the endorsers the engine counts:
    people other than the contributor and the finder, on an item that stands.
 5. Nothing is awarded on a withdrawn finding.
-6. Only an active member is promoted. Experts, moderators and admins keep
-   their role whatever their points.
+6. Only an active member becomes eligible. Experts, moderators, admins and
+   trusted users are never reported, and nobody's role changes here.
 """
 
 from __future__ import annotations
@@ -51,7 +60,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -99,7 +108,7 @@ class Award:
 @dataclass(frozen=True)
 class RecordedAwards:
     awards: tuple[Award, ...]  # the ones written now, without those already held
-    promoted: tuple[int, ...]  # user ids promoted to trusted
+    eligible: tuple[int, ...]  # members who have just reached `TRUSTED_AT`, for a moderator to promote
 
 
 def _earned_tiers(assessment: Assessment | None) -> frozenset[Tier]:
@@ -154,7 +163,7 @@ def awards(old: Assessment | None, new: Assessment) -> list[Award]:
 
 
 def record_awards(db: Session, finding_id: int, found: Iterable[Award]) -> RecordedAwards:
-    """Write awards not already held, add them to reputations, and promote members at fifty points.
+    """Write awards not already held, add them to reputations, and report members who reach fifty.
 
     Flushes and never commits. Rows are written in user order, so two
     transactions awarding the same people lock them in the same order.
@@ -180,28 +189,22 @@ def record_awards(db: Session, finding_id: int, found: Iterable[Award]) -> Recor
     for user_id, total in sorted(totals.items()):
         db.execute(update(User).where(User.id == user_id).values(reputation=User.reputation + total))
 
-    promoted: tuple[int, ...] = ()
+    eligible: tuple[int, ...] = ()
     if totals:
-        promoted = tuple(
-            sorted(
-                db.scalars(
-                    update(User)
-                    .where(
-                        User.id.in_(totals),
-                        User.role == Role.MEMBER.value,
-                        User.reputation >= TRUSTED_AT,
-                        User.banned_at.is_(None),
-                        User.deleted_at.is_(None),
-                    )
-                    .values(role=Role.TRUSTED.value)
-                    .returning(User.id)
-                ).all()
+        reached = db.execute(
+            select(User.id, User.reputation).where(
+                User.id.in_(totals),
+                User.role == Role.MEMBER.value,
+                User.reputation >= TRUSTED_AT,
+                User.banned_at.is_(None),
+                User.deleted_at.is_(None),
             )
-        )
-    for user_id in promoted:
-        logger.info("user %s reached %s points and is now trusted", user_id, TRUSTED_AT)
+        ).all()
+        eligible = tuple(sorted(uid for uid, points in reached if points - totals[uid] < TRUSTED_AT))
+    for user_id in eligible:
+        logger.info("user %s reached %s points and can be made trusted by a moderator", user_id, TRUSTED_AT)
     db.flush()
     return RecordedAwards(
         awards=tuple(Award(user_id, delta, reason) for user_id, delta, reason in written),
-        promoted=promoted,
+        eligible=eligible,
     )

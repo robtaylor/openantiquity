@@ -94,7 +94,7 @@ What happens on the ground is recorded the same way. A site visit, a geophysics 
 
 ## Credit and reputation
 
-People earn points when their findings climb, when their second looks match the eventual outcome, and when others endorse evidence they added. Every point is itemised. Points do one thing: at fifty, a member becomes "trusted", which gives their reviews more weight and lets them see restricted locations. There are no penalties for findings that get explained away, because marking doubtful things is how the doubtful things get checked.
+People earn points when their findings climb, when their second looks match the eventual outcome, and when others endorse evidence they added. Every point is itemised. Points do one thing: at fifty, a member can be made "trusted" by a moderator, which gives their reviews more weight and lets them see restricted locations. A moderator makes the call because a few accounts working together could otherwise earn their way to restricted locations. There are no penalties for findings that get explained away, because marking doubtful things is how the doubtful things get checked.
 
 There's no global leaderboard. Profiles show what someone has found and helped with.
 
