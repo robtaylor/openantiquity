@@ -12,6 +12,7 @@ import pytest
 import rasterio
 
 from fieldclub.config import DefraSftpSettings
+from fieldclub.errors import DataIntegrityError
 from fieldclub.terrain.catalogue import SourceTile
 from fieldclub.terrain.cog import check_cog, to_cog
 from fieldclub.terrain.errors import CredentialsMissingError, ElevationUnavailableError
@@ -197,3 +198,42 @@ def test_a_bucket_mirror_uploads_whole_files_under_its_prefix(tmp_path: Path) ->
     assert store.exists("SU16nw")
     assert store.names() == ["SU16nw"]
     assert not local.exists()
+
+
+def corrupt_copy(sources: Path, folder: Path, name: str) -> Path:
+    """A file of the real source's size that isn't a GeoTIFF."""
+    real = sources / f"{name}_DTM_1m.tif"
+    folder.mkdir(parents=True, exist_ok=True)
+    bad = folder / real.name
+    bad.write_bytes(b"\0" * real.stat().st_size)
+    return bad
+
+
+def test_an_unreadable_source_on_disk_is_set_aside_and_the_bulk_supply_tried(
+    sources: Path, tmp_path: Path
+) -> None:
+    bad = corrupt_copy(sources, tmp_path / "local", "SU16ne")
+    good = (sources / "SU16ne_DTM_1m.tif").read_bytes()
+    server = FakeServer({"composite/2022/GeoTiffs/1m/DTM/SU16ne_DTM_1m.tif": good})
+    fetchers = [LocalSourceFetcher(bad.parent), SftpFetcher(lambda: server.connect, window=1024 * 1024)]
+    mirror = make_mirror(sources, tmp_path, fetchers)
+    path = mirror.ensure("SU16ne")
+    assert path is not None
+    check_cog(path)
+    assert server.connections == 1
+    assert not bad.exists()
+    assert bad.with_name(bad.name + ".unreadable").is_file()
+
+
+def test_a_tile_whose_every_copy_is_unreadable_is_a_data_integrity_error(
+    sources: Path, tmp_path: Path
+) -> None:
+    bad = corrupt_copy(sources, tmp_path / "local", "SU16ne")
+    mirror = make_mirror(sources, tmp_path, [LocalSourceFetcher(bad.parent)])
+    with pytest.raises(DataIntegrityError) as raised:
+        mirror.ensure("SU16ne")
+    assert str(tmp_path) not in raised.value.message
+    assert not mirror.has("SU16ne")
+    # Set aside, so the next request doesn't convert it again.
+    with pytest.raises(ElevationUnavailableError):
+        mirror.ensure("SU16ne")

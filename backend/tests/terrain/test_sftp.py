@@ -6,8 +6,10 @@ import os
 from pathlib import Path
 
 import pytest
+from pydantic import SecretStr
 
 from fieldclub.config import DefraSftpSettings, get_defra_sftp_settings
+from fieldclub.errors import ConfigError
 from fieldclub.terrain import sftp
 from fieldclub.terrain.errors import CredentialsMissingError, FetchFailedError
 from tests.terrain.fakes import MIB, FakeServer
@@ -106,3 +108,37 @@ def test_credentials_come_from_the_environment_without_the_fieldclub_prefix(
     settings = get_defra_sftp_settings()
     assert settings.missing == []
     assert "not-a-real-password" not in repr(settings)
+
+
+def refused_settings(known_hosts: Path) -> DefraSftpSettings:
+    # Nothing listens on port 1 of the loopback address, so the connection is refused at once.
+    return DefraSftpSettings(
+        defra_sftp_host="127.0.0.1",
+        defra_sftp_port=1,
+        defra_sftp_user="someone",
+        defra_sftp_password=SecretStr("not-a-real-password"),
+        defra_sftp_known_hosts=known_hosts,
+    )
+
+
+def test_a_connection_failure_names_only_the_file_and_logs_the_rest(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    known_hosts = tmp_path / "known_hosts"
+    known_hosts.write_text("")
+    connect = sftp.defra_connector(refused_settings(known_hosts))
+    logged = caplog.at_level("WARNING", logger="fieldclub.terrain.sftp")
+    with logged, pytest.raises(FetchFailedError) as raised:
+        sftp.download(connect, REMOTE, tmp_path / "a.tif", max_failures=2)
+    body = str(raised.value.to_body())
+    assert "SU16nw_DTM_1m.tif" in body
+    for secret in ("127.0.0.1", "port 1", "composite/", "not-a-real-password"):
+        assert secret not in body, secret
+    assert "127.0.0.1" in caplog.text
+    assert "not-a-real-password" not in caplog.text
+
+
+def test_a_missing_host_key_file_is_not_named_to_the_client(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError) as raised:
+        sftp.defra_connector(refused_settings(tmp_path / "nowhere" / "known_hosts"))
+    assert "nowhere" not in str(raised.value.to_body())

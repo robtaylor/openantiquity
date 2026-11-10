@@ -13,7 +13,9 @@ checking it and publishing it under its final name. So:
   and the rest wait for it, through a lock per tile in this process and a file
   lock in the work directory across processes;
 - a partial download or conversion is never published, because only a
-  complete, checked COG is moved or uploaded to the final name.
+  complete, checked COG is moved or uploaded to the final name;
+- a source file GDAL can't read is set aside (a local one renamed with
+  `UNREADABLE_SUFFIX`, a download deleted) and the next fetcher is tried.
 """
 
 from __future__ import annotations
@@ -28,6 +30,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from rasterio.errors import RasterioError
+
+from fieldclub.errors import DataIntegrityError
 from fieldclub.terrain import sftp
 from fieldclub.terrain.catalogue import Catalogue, SourceTile, normalise_name
 from fieldclub.terrain.cog import COG_FORMAT, to_cog
@@ -191,6 +196,19 @@ class SftpFetcher:
         return Fetched(path, temporary=True)
 
 
+# Added to the name of a source file on disk that GDAL couldn't read, so it isn't offered again.
+UNREADABLE_SUFFIX = ".unreadable"
+
+
+def _set_aside(fetched: Fetched) -> None:
+    if fetched.temporary:
+        fetched.path.unlink(missing_ok=True)
+        return
+    aside = fetched.path.with_name(fetched.path.name + UNREADABLE_SUFFIX)
+    fetched.path.replace(aside)
+    logger.warning("Moved the unreadable %s aside to %s", fetched.path, aside)
+
+
 class Mirror:
     def __init__(
         self,
@@ -249,26 +267,35 @@ class Mirror:
         return self.store.gdal_path(tile.name)
 
     def _add(self, tile: SourceTile) -> None:
+        """Convert and publish the tile from the first source that has a readable copy."""
         self.work_dir.mkdir(parents=True, exist_ok=True)
-        with self._fetch_slots:
-            fetched = self._fetch(tile)
-        started = time.perf_counter()
         staged = self.work_dir / f"{tile.name}.cog.tif"
-        try:
-            self._convert(fetched.path, staged)
-            self.store.publish(staged, tile.name)
-        finally:
-            staged.unlink(missing_ok=True)
-            if fetched.temporary:
-                fetched.path.unlink(missing_ok=True)
-        self._present.add(tile.name)
-        logger.info("Added %s to the mirror in %.1f s", tile.name, time.perf_counter() - started)
-
-    def _fetch(self, tile: SourceTile) -> Fetched:
+        unreadable = 0
         for fetcher in self.fetchers:
-            fetched = fetcher.fetch(tile, self.work_dir)
-            if fetched is not None:
-                return fetched
+            with self._fetch_slots:
+                fetched = fetcher.fetch(tile, self.work_dir)
+            if fetched is None:
+                continue
+            started = time.perf_counter()
+            try:
+                try:
+                    self._convert(fetched.path, staged)
+                except (RasterioError, DataIntegrityError) as exc:
+                    # The right size but not a raster GDAL can read: try the next source.
+                    logger.warning("%s from %s can't be read (%s)", tile.name, fetched.path, exc)
+                    unreadable += 1
+                    _set_aside(fetched)
+                    continue
+                self.store.publish(staged, tile.name)
+            finally:
+                staged.unlink(missing_ok=True)
+                if fetched.temporary:
+                    fetched.path.unlink(missing_ok=True)
+            self._present.add(tile.name)
+            logger.info("Added %s to the mirror in %.1f s", tile.name, time.perf_counter() - started)
+            return
+        if unreadable:
+            raise DataIntegrityError(f"Every copy of {tile.name} that could be found was unreadable.")
         raise ElevationUnavailableError(f"No source could provide {tile.name}.")
 
     @contextlib.contextmanager

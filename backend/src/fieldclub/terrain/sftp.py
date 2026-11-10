@@ -8,7 +8,9 @@ download writes to `<name>.part`, resumes from whatever that file holds, and
 is renamed into place only when its size matches.
 
 The host key is pinned: a host whose key isn't in the known-hosts file is
-refused. The password is never logged.
+refused. The password is never logged. An error's message reaches the client,
+so it names only the file being read. The host, port, remote folder and
+the transport's own text go to the log.
 """
 
 from __future__ import annotations
@@ -74,6 +76,8 @@ def download(
     left at `dest`.
     """
     assert window > 0, "the window must hold at least one byte"
+    # What error messages call the file: never the host or the folder.
+    file = Path(remote).name
     if dest.is_file() and (expected_size is None or dest.stat().st_size == expected_size):
         return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -91,7 +95,7 @@ def download(
                 assert isinstance(size, int), f"the server gave no size for {remote}"
                 if expected_size is not None and size != expected_size:
                     raise FetchFailedError(
-                        f"{remote} is {size} bytes on the server, but the catalogue says {expected_size}."
+                        f"{file} is {size} bytes on the bulk supply, but the catalogue says {expected_size}."
                     )
                 if have > size:
                     logger.warning("%s is longer than %s on the server; starting again", part, remote)
@@ -99,7 +103,7 @@ def download(
                     have = 0
                 _copy_windows(session, remote, part, have, size, window, on_progress)
             except FileNotFoundError as exc:
-                raise FetchFailedError(f"{remote} isn't on the bulk supply.") from exc
+                raise FetchFailedError(f"{file} isn't on the bulk supply.") from exc
             except transient as exc:
                 gained = (part.stat().st_size if part.is_file() else 0) > have
                 failures = 1 if gained else failures + 1
@@ -109,11 +113,11 @@ def download(
                 _close(session)
                 session = None
                 if failures >= max_failures:
-                    raise FetchFailedError(f"{remote} failed {failures} times in a row: {exc}") from exc
+                    raise FetchFailedError(f"Reading {file} failed {failures} times in a row.") from exc
                 continue
             got = part.stat().st_size
             if got != size:
-                raise FetchFailedError(f"{remote}: got {got} bytes, expected {size}.")
+                raise FetchFailedError(f"{file}: got {got} bytes, expected {size}.")
             part.replace(dest)
             return dest
     finally:
@@ -192,7 +196,8 @@ def defra_connector(credentials: DefraSftpSettings) -> Connect:
         )
     known_hosts = credentials.defra_sftp_known_hosts
     if not known_hosts.is_file():
-        raise ConfigError(f"The pinned host key file {known_hosts} doesn't exist.")
+        logger.error("The pinned host key file %s doesn't exist", known_hosts)
+        raise ConfigError("The bulk supply's pinned host key file doesn't exist.")
     host, user, password = (
         credentials.defra_sftp_host,
         credentials.defra_sftp_user,
@@ -225,8 +230,9 @@ def defra_connector(credentials: DefraSftpSettings) -> Connect:
             raise FetchFailedError("Defra's bulk supply rejected the user name or password.") from exc
         except paramiko.BadHostKeyException as exc:
             client.close()
+            logger.error("The bulk supply's host key isn't the one pinned in %s", known_hosts)
             raise FetchFailedError(
-                f"Defra's bulk supply presented a host key that isn't the one in {known_hosts}."
+                "Defra's bulk supply presented a host key that isn't the pinned one."
             ) from exc
         except BaseException:
             client.close()
