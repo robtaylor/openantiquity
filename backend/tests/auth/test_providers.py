@@ -14,6 +14,9 @@ from fieldclub.vocab import SignInProvider, SignInProviderInfo
 
 @pytest.fixture(autouse=True)
 def clean_registry() -> Iterator[None]:
+    # Load the built-in providers first, so that putting the registry back
+    # afterwards keeps them for the tests that follow.
+    providers._load_builtin()
     saved = dict(providers._providers)
     providers._providers.clear()
     yield

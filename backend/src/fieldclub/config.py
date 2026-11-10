@@ -74,6 +74,39 @@ class Settings(BaseSettings):
     # can't tell a 16 year old from a 17 year old.
     min_age: int = Field(default=16, ge=16, le=18)
 
+    # --- Sign-in providers and the emailed link (track b1/accounts) ---------
+    # A provider is offered only when all of its settings are present. See
+    # fieldclub.auth.oauth and backend/.env.example for where each comes from.
+    google_client_id: str | None = None
+    google_client_secret: SecretStr | None = None
+    microsoft_client_id: str | None = None
+    microsoft_client_secret: SecretStr | None = None
+    # common, organizations, consumers, or one directory's tenant id.
+    microsoft_tenant: str = Field(
+        default="common",
+        pattern=r"^(common|organizations|consumers|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+    )
+    apple_client_id: str | None = None
+    apple_team_id: str | None = None
+    apple_key_id: str | None = None
+    apple_private_key: SecretStr | None = None
+    facebook_app_id: str | None = None
+    facebook_app_secret: SecretStr | None = None
+    facebook_graph_version: str = Field(default="v23.0", pattern=r"^v\d+\.\d+$")
+    osm_client_id: str | None = None
+    osm_client_secret: SecretStr | None = None
+    osm_url: str = "https://www.openstreetmap.org"
+    # Unset switches the emailed link off. `log` writes the link to the log and
+    # is refused in production. `smtp` sends through the server below.
+    mail_backend: Literal["log", "smtp"] | None = None
+    mail_from: str | None = None
+    smtp_host: str | None = None
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+    smtp_security: Literal["starttls", "ssl", "none"] = "starttls"
+    # --- end of sign-in settings ---------------------------------------------
+
     # Runtime data
     var_dir: Path = Path("var")
     storage_backend: Literal["local", "gcs"] = "local"
@@ -140,6 +173,12 @@ class Settings(BaseSettings):
             )
         if self.storage_backend == "gcs" and not self.gcs_bucket:
             raise ConfigError("FIELDCLUB_GCS_BUCKET is required when FIELDCLUB_STORAGE_BACKEND is 'gcs'.")
+        # Sign-in (track b1/accounts): the log mailer writes working sign-in
+        # links to the log, so it must never run where other people sign in.
+        if is_prod and self.mail_backend == "log":
+            raise ConfigError("FIELDCLUB_MAIL_BACKEND=log writes sign-in links to the log. Use smtp in prod.")
+        if self.mail_backend == "smtp" and not (self.smtp_host and self.mail_from):
+            raise ConfigError("FIELDCLUB_MAIL_BACKEND=smtp needs FIELDCLUB_SMTP_HOST and FIELDCLUB_MAIL_FROM")
         return self
 
     @property
