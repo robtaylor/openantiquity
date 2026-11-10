@@ -87,7 +87,7 @@ Columns marked with `*` are required. Every table has `id BIGINT` and `created_a
 
 | Table | Columns |
 |-------|---------|
-| `findings` | `public_id*` unique, `author_id*`, `title*`, `description`, `feature_class*`, `community_class`, `period*`, `location*` Point, `location_public*` Point, `outline` Geometry, `sensitivity*` (open, protected, restricted), `view_state*` jsonb, `nation`, `grid_ref`, `tier*`, `state*`, `state_reason`, `confidence*` smallint, `assessment*` jsonb, `observation_count*`, `evidence_count*`, `comment_count*`, `mention_count*`, `updated_at*`, `tier_changed_at`, `hidden_at` |
+| `findings` | `public_id*` unique, `author_id*`, `title*`, `description`, `feature_class*`, `community_class`, `period*`, `location*` Point, `location_public*` Point, `outline` Geometry, `sensitivity*` (open, protected, restricted), `view_state*` jsonb, `nation`, `grid_ref`, `tier*`, `state*`, `state_reason`, `confidence*` smallint, `assessment*` jsonb, `observation_count*`, `evidence_count*`, `comment_count*`, `mention_count*`, `updated_at*`, `tier_changed_at`, `hidden_at`, `open_steps*` text[] (the next steps' codes, for the help-wanted queue), `answers_to_next` (second looks that would move it up, for the review queue) |
 | `observations` | `finding_id*`, `user_id*`, `visible*` (yes, unsure, no), `feature_class`, `period`, `explanation` (modern, natural, artefact), `not_modern` bool, `not_natural` bool, `not_artefact` bool, `note`, `updated_at*`. Unique on finding and user |
 | `evidence` | `finding_id*`, `user_id*`, `kind*`, `stance*` (supports, neutral, contradicts), `title`, `note`, `url`, `record_id`, `relation` (same_as, part_of, related), `media_id`, `occurred_on` date, `organisation`, `reference`, `outcome` (supports, inconclusive, contradicts), `data` jsonb, `verified_by`, `verified_at`, `deleted_at` |
 | `evidence_votes` | `evidence_id*`, `user_id*`, `value*` (+1 or -1). Primary key on both |
@@ -192,7 +192,7 @@ All paths are under `/api/v1`. Bodies are JSON. The session is a `fieldclub_sess
 |------|-----------|
 | Meta | `GET /meta` returns vocabularies, tier definitions, the layer catalogue, every sign-in provider marked enabled or not, and source attributions |
 | Auth | `GET /auth/me`, `PATCH /auth/me`, `DELETE /auth/me`, `POST /auth/welcome`, `POST /auth/logout`, `GET /auth/oauth/{provider}/start`, `GET` and `POST /auth/oauth/{provider}/callback`, `POST /auth/email/start`, `POST /auth/email/verify`, `GET /auth/handle-suggestion`, `POST /auth/dev-login` (development and test only) |
-| Findings | `GET /findings` (filters: `bbox`, `tier`, `state`, `feature_class`, `author`, `q`, `sort`; `format=geojson` for the map), `POST /findings`, `GET /findings/{public_id}`, `PATCH /findings/{public_id}`, `POST /findings/{public_id}/withdraw` |
+| Findings | `GET /findings` (filters: `bbox`, `tier`, `state`, `feature_class`, `author`, `q`, `sort`; `format=geojson` for the map), `POST /findings`, `GET /findings/{public_id}`, `PATCH /findings/{public_id}`, `POST /findings/{public_id}/withdraw`, `PUT /findings/{public_id}/sensitivity` (finder, trusted or moderator raises; moderator lowers) |
 | Observations | `PUT /findings/{public_id}/observation`, `DELETE /findings/{public_id}/observation`, `GET /findings/{public_id}/observations` |
 | Evidence | `POST /findings/{public_id}/evidence`, `DELETE /evidence/{id}`, `PUT /evidence/{id}/vote`, `POST /evidence/{id}/verify` |
 | Discussion | `GET` and `POST /findings/{public_id}/comments`, `DELETE /comments/{id}`, `PUT` and `DELETE /findings/{public_id}/follow` |
@@ -204,7 +204,7 @@ All paths are under `/api/v1`. Bodies are JSON. The session is a `fieldclub_sess
 | Geo | `GET /geo/search?q=` (grid reference, coordinates, place, record or finding id), `GET /geo/point?lon=&lat=` (grid reference, nation, elevation) |
 | Terrain | `POST /terrain/profile` (elevation along a line), `GET /terrain/coverage?bbox=` (the 5 km tiles that have 1 m elevation, as GeoJSON) |
 | Investigations | `GET` and `POST /investigations`, `GET`, `PATCH` and `DELETE /investigations/{public_id}`, items and members sub-resources, `GET /investigations/{public_id}/export?format=` |
-| Exports | `GET /findings/{public_id}/export?format=geojson|csv` |
+| Exports | `GET /findings/{public_id}/export?format=geojson|csv`, `GET /findings/export` (the list's filters, a filtered set) |
 | People | `GET /users/{handle}`, `GET /users/{handle}/findings`, `GET /users/{handle}/contributions` |
 | Activity | `GET /activity`, `GET /events/stream` (server-sent events), `GET /notifications`, `POST /notifications/read` |
 | Media | `POST /media`, `GET /media/{id}` |
