@@ -4,7 +4,12 @@ Work-list key `wikimedia-wikidata-heritage-items`. Wikidata links one thing to
 the identifiers that different national records give it, so an item here says
 that Canmore's record, Coflein's and the Atlas of Hillforts' entry are the same
 place, and where its Wikipedia and Commons pages are. Use it to join records,
-not as a record in its own right.
+not as a record in its own right: every item duplicates a record another
+source holds. The source is therefore declared `enabled=False`, which keeps
+its rows out of the map, the tiles, search and the attribution list while the
+items stay in `records` for joining (Decision 0011). A `sources` row that
+already exists keeps the `enabled` it has, so one made before that decision is
+switched off by hand.
 
 One SPARQL query is asked per identifier property (the work-list says so: a
 query for all of them at once times out), and the answers are merged by item in
@@ -17,28 +22,42 @@ item has one). The NHLE number is asked for only alongside another identifier,
 because 400,000 of Wikidata's items have one and nearly all are listed
 buildings, which the Historic England connectors already cover.
 
+Wikidata writes the Atlas number of Cissbury Ring as `3749` but pads others
+(`0095` where the Atlas's own file has `95`), so a number made only of digits
+is stored without its leading zeros, which is how the other sources write it.
+`raw["published"]` keeps the forms that changed.
+
 Each property's rows are counted first and the read fails when fewer arrive,
 which costs one more request. Wikidata allowed one request a minute on
 2026-11-10 and answered a second request inside the minute with 429 and a
 `Retry-After` of 1,000 seconds, so requests here are a minute apart and the
-wait it asks for is honoured. A full run takes about twenty minutes. A partial
-run (`--limit`) reads only the first property's first rows, so it has no merge
-to do. The id is the item's Q number, which never changes. Items with no
-English label, or with a position outside Britain and Ireland, are left out.
+wait it asks for is honoured. A full run takes about twenty minutes. Wikimedia
+asks for a contact in the `User-Agent`, so the source is skipped unless
+`FIELDCLUB_CONTACT` (or `FIELDCLUB_USER_AGENT`) is set. Each property's
+rows are kept under `var/ingest/` for a day once the read has passed its
+count, so a run that fails at the twentieth request starts again at that
+property, not the first. A partial run (`--limit`) reads only the first
+property's first rows, so it has no merge to do and keeps nothing. The id is
+the item's Q number, which never changes. Items with no English label, or with
+a position outside Britain and Ireland, are left out.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import ClassVar
 
 from shapely.geometry.base import BaseGeometry
 
-from fieldclub.ingest.adapters.common import Feature, Polite, Tally, UpstreamFormatError
-from fieldclub.ingest.adapters.sparql import SparqlQuery
-from fieldclub.ingest.base import BRITISH_ISLES, BBox, Connector, RecordIn, SourceInfo, point_in_bbox
+from fieldclub.ingest.adapters.common import Feature, Polite, Tally, UpstreamFormatError, cache_dir
+from fieldclub.ingest.adapters.sparql import SparqlQuery, wkt_literal
+from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo, in_britain_and_ireland
 from fieldclub.ingest.registry import register
 from fieldclub.vocab import RecordCategory, SourceAccess, SourceReuse
 
@@ -73,6 +92,8 @@ class Item:
     label: str | None = None
     geometry: BaseGeometry | None = None
     identifiers: dict[str, set[str]] = field(default_factory=dict)
+    # Identifiers whose published form had leading zeros, as `{property: {normalised: published}}`.
+    published: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 @register
@@ -88,7 +109,14 @@ class WikidataHeritageItems(Connector):
         reuse=SourceReuse.OPEN,
         homepage="https://www.wikidata.org/",
         coverage="UK and Ireland, items with a heritage identifier and a position",
+        # A cross-walk, not a map record (Decision 0011).
+        enabled=False,
     )
+    max_age: ClassVar[timedelta] = timedelta(hours=20)
+
+    def is_configured(self) -> bool:
+        """Wikimedia asks for a contact in the `User-Agent` and answers a client without one with 429."""
+        return bool(self.settings.contact or self.settings.user_agent)
 
     def fetch(self, *, bbox: BBox | None = None, limit: int | None = None) -> Iterator[RecordIn]:
         polite = Polite(delay_s=DELAY_S, retries=2, max_backoff_s=1800.0)
@@ -106,30 +134,63 @@ class WikidataHeritageItems(Connector):
             logger.info("Wikidata: %d items had no English label or a position outside the isles", skipped)
 
     def _read_property(self, prop: str, polite: Polite, items: dict[str, Item], limit: int | None) -> None:
-        query = SELECT.format(prop=prop)
         if limit:
+            query = f"{SELECT.format(prop=prop)}\nLIMIT {limit}"
             reader = SparqlQuery(
-                ENDPOINT, f"{query}\nLIMIT {limit}", client=self.http, polite=polite,
-                geometry="coord", timeout=QUERY_TIMEOUT_S,
-            )  # fmt: skip
-            tally = None
-        else:
-            reader = SparqlQuery(
-                ENDPOINT, query, client=self.http, polite=polite, geometry="coord",
-                page_size=PAGE_SIZE, timeout=QUERY_TIMEOUT_S,
-            )  # fmt: skip
-            counter = SparqlQuery(
-                ENDPOINT, COUNT.format(prop=prop), client=self.http, polite=polite, timeout=QUERY_TIMEOUT_S
+                ENDPOINT, query, client=self.http, polite=polite, geometry="coord", timeout=QUERY_TIMEOUT_S
             )
-            tally = Tally(f"Wikidata {prop}", expected_rows(counter), TOLERANCE, what="rows")
-        for feature in reader.features():
-            if tally is not None:
-                p = feature.properties
-                tally.add((p.get("item"), p.get("id"), p.get("nhle"), p.get("coord")))
-            merge(items, prop, feature)
-        if tally is not None:
-            tally.check()
-            logger.info("Wikidata %s: %d rows", prop, tally.distinct)
+            for feature in reader.features():
+                merge(items, prop, feature)
+            return
+        path = cache_dir(self.settings, self.source.key) / f"{prop}.json"
+        cached = read_cached_rows(path, self.max_age)
+        if cached is not None:
+            rows, obtained = cached
+            logger.info("Wikidata %s: %d rows from the copy on disk", prop, len(rows))
+        else:
+            rows, obtained = self._ask_rows(prop, polite), datetime.now(UTC)
+            write_cached_rows(path, rows)
+        self.obtained_at = obtained if self.obtained_at is None else min(self.obtained_at, obtained)
+        for row in rows:
+            merge(items, prop, Feature(row, wkt_literal(row["coord"]) if "coord" in row else None))
+
+    def _ask_rows(self, prop: str, polite: Polite) -> list[dict[str, str]]:
+        """Every row of one property, once the count agrees."""
+        reader = SparqlQuery(
+            ENDPOINT, SELECT.format(prop=prop), client=self.http, polite=polite,
+            page_size=PAGE_SIZE, timeout=QUERY_TIMEOUT_S,
+        )  # fmt: skip
+        counter = SparqlQuery(
+            ENDPOINT, COUNT.format(prop=prop), client=self.http, polite=polite, timeout=QUERY_TIMEOUT_S
+        )
+        tally = Tally(f"Wikidata {prop}", expected_rows(counter), TOLERANCE, what="rows")
+        rows = list(reader.rows())
+        for row in rows:
+            tally.add((row.get("item"), row.get("id"), row.get("nhle"), row.get("coord")))
+        tally.check()
+        logger.info("Wikidata %s: %d rows", prop, tally.distinct)
+        return rows
+
+
+def read_cached_rows(path: Path, max_age: timedelta) -> tuple[list[dict[str, str]], datetime] | None:
+    """A property's rows from an earlier run and when they were read, or None if missing, old or unusable."""
+    try:
+        stat = path.stat()
+        if time.time() - stat.st_mtime > max_age.total_seconds():
+            return None
+        rows = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+        return None
+    return rows, datetime.fromtimestamp(stat.st_mtime, UTC)
+
+
+def write_cached_rows(path: Path, rows: list[dict[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    part = path.with_name(path.name + ".part")
+    part.write_text(json.dumps(rows), encoding="utf-8")
+    part.replace(path)
 
 
 def expected_rows(counter: SparqlQuery) -> int:
@@ -155,9 +216,19 @@ def merge(items: dict[str, Item], prop: str, feature: Feature) -> None:
     item = items.setdefault(qid_of(p["item"]), Item())
     item.label = item.label or p.get("itemLabel")
     item.geometry = item.geometry or feature.geometry
-    item.identifiers.setdefault(prop, set()).add(p["id"])
-    if "nhle" in p:
-        item.identifiers.setdefault(NHLE, set()).add(p["nhle"])
+    for key, value in ((prop, p["id"]), (NHLE, p.get("nhle"))):
+        if value is None:
+            continue
+        normalised = normalise_identifier(value)
+        item.identifiers.setdefault(key, set()).add(normalised)
+        if normalised != value:
+            item.published.setdefault(key, {})[normalised] = value
+
+
+def normalise_identifier(value: str) -> str:
+    """The identifier without leading zeros when it is only digits: `0095` is the Atlas's `95`."""
+    value = value.strip()
+    return (value.lstrip("0") or "0") if value.isdigit() else value
 
 
 def to_record(qid: str, item: Item) -> RecordIn | None:
@@ -165,7 +236,7 @@ def to_record(qid: str, item: Item) -> RecordIn | None:
     if not item.label or item.geometry is None:
         return None
     x, y = item.geometry.bounds[0], item.geometry.bounds[1]
-    if not point_in_bbox(BRITISH_ISLES, x, y):
+    if not in_britain_and_ireland(x, y):
         return None
     return RecordIn(
         external_id=qid,
@@ -176,5 +247,8 @@ def to_record(qid: str, item: Item) -> RecordIn | None:
         raw={
             "item": qid,
             "identifiers": {prop: sorted(ids) for prop, ids in sorted(item.identifiers.items())},
+            "published": {
+                prop: dict(sorted(forms.items())) for prop, forms in sorted(item.published.items())
+            },
         },
     )

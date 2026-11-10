@@ -15,7 +15,15 @@ position is taken as written when that falls in Britain and Ireland, and the
 other way round when only that does, which can't be mistaken because the two
 ranges don't overlap. `raw["axes_swapped"]` says when it happened. A box wider
 or taller than `MAX_BOX_DEGREES` is a region, not a site, and is left out, as is
-any position outside Britain and Ireland.
+any position outside Britain and Ireland (the Continent's coast is outside it).
+Some upstream points are simply wrong, such as 10.5284/1078539 for Smallhythe in
+Kent at 2.12 E, 51.00 N, which DataCite itself gives. The connector does not
+repair them. A point that lands on the Continent is left out, and one that
+lands in the sea is stored where DataCite has it.
+
+DataCite's answer pages are kept under `var/ingest/` for a day as they arrive
+(about 15 requests), so a second run costs the publisher nothing and a run that
+fails part way starts again at the page it stopped on.
 """
 
 from __future__ import annotations
@@ -28,9 +36,9 @@ from typing import Any, ClassVar
 from shapely.geometry import MultiPoint, Point, box
 from shapely.geometry.base import BaseGeometry
 
-from fieldclub.ingest.adapters.common import Polite, UpstreamFormatError
+from fieldclub.ingest.adapters.common import Polite, UpstreamFormatError, cache_dir
 from fieldclub.ingest.adapters.rest import RestJson, dig
-from fieldclub.ingest.base import BRITISH_ISLES, BBox, Connector, RecordIn, SourceInfo, point_in_bbox
+from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo, in_britain_and_ireland
 from fieldclub.ingest.registry import register
 from fieldclub.vocab import RecordCategory, SourceAccess, SourceReuse
 
@@ -78,8 +86,9 @@ class AdsDois(Connector):
         }
         skipped = 0
         for item in pages.items(
-            DOIS_URL, params=params, items="data", total="meta.total", next_url="links.next", id_path="id"
-        ):
+            DOIS_URL, params=params, items="data", total="meta.total", next_url="links.next", id_path="id",
+            cache=cache_dir(self.settings, self.source.key) / "pages",
+        ):  # fmt: skip
             record = to_record(item)
             if record is None:
                 skipped += 1
@@ -104,9 +113,9 @@ def _number(value: Any) -> float | None:
 
 def _oriented(first: float, second: float) -> tuple[float, float, bool] | None:
     """Longitude and latitude from a latitude and longitude as written, whichever way round they are right."""
-    if point_in_bbox(BRITISH_ISLES, second, first):
+    if in_britain_and_ireland(second, first):
         return second, first, False
-    if point_in_bbox(BRITISH_ISLES, first, second):
+    if in_britain_and_ireland(first, second):
         return first, second, True
     return None
 

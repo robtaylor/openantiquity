@@ -13,6 +13,7 @@ the next link is a placeholder.
 from __future__ import annotations
 
 import copy
+import shutil
 from typing import Any
 
 import httpx
@@ -23,7 +24,9 @@ from shapely.geometry import Point
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from fieldclub.config import get_settings
 from fieldclub.ingest import registry
+from fieldclub.ingest.adapters.common import cache_dir
 from fieldclub.ingest.connectors.datacite_ads_dois import DOIS_URL, AdsDois, position, to_record
 from fieldclub.ingest.runner import IngestFailedError, run_connector
 from fieldclub.models import Record, Source
@@ -162,6 +165,25 @@ def test_running_twice_gives_the_same_rows(db: Session) -> None:
 
 
 @respx.mock
+def test_a_second_run_the_same_day_asks_datacite_for_nothing(db: Session) -> None:
+    serve(pages())
+    run_connector(AdsDois())
+    asked = respx.calls.call_count
+    assert asked == 2
+    run_connector(AdsDois())
+    assert respx.calls.call_count == asked
+
+
+def test_a_point_on_the_continent_is_not_stored() -> None:
+    def point(lat: object, lon: object) -> list[dict[str, Any]]:
+        return [{"geoLocationPoint": {"pointLatitude": lat, "pointLongitude": lon}}]
+
+    assert position(point(50.996, 2.123)) is None  # Smallhythe, Kent, as DataCite has it: near Dunkirk
+    assert position(point(49.4, 1.1)) is None  # Rouen
+    assert position(point(51.1, 1.3)) is not None  # Dover
+
+
+@respx.mock
 def test_a_partial_run_by_bbox(db: Session) -> None:
     serve(pages())
     run = run_connector(AdsDois(), bbox=(-0.8, 51.7, -0.7, 51.8))
@@ -188,6 +210,7 @@ def test_a_truncated_answer_fails_the_run_and_deletes_nothing(db: Session) -> No
     truncated = pages()
     truncated["page2"]["data"] = truncated["page2"]["data"][:2]
     serve(truncated)
+    shutil.rmtree(cache_dir(get_settings(), KEY))  # the pages of the first run are a day old
     with pytest.raises(IngestFailedError, match="said it had 14 items"):
         run_connector(AdsDois())
     assert len(rows(db, KEY)) == 13

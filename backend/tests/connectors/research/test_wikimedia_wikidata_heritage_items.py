@@ -20,6 +20,10 @@ count answers are used only to check that a count is read.
 from __future__ import annotations
 
 import copy
+import os
+import time
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -29,8 +33,9 @@ from shapely.geometry import Point
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from fieldclub.config import get_settings
 from fieldclub.ingest import registry
-from fieldclub.ingest.adapters.common import Feature, UpstreamFormatError
+from fieldclub.ingest.adapters.common import Feature, UpstreamFormatError, cache_dir
 from fieldclub.ingest.adapters.sparql import SparqlQuery
 from fieldclub.ingest.connectors import wikimedia_wikidata_heritage_items as wikidata
 from fieldclub.ingest.connectors.wikimedia_wikidata_heritage_items import (
@@ -39,12 +44,14 @@ from fieldclub.ingest.connectors.wikimedia_wikidata_heritage_items import (
     WikidataHeritageItems,
     expected_rows,
     merge,
+    normalise_identifier,
     qid_of,
     to_record,
 )
-from fieldclub.ingest.runner import IngestFailedError, run_connector
-from fieldclub.models import Record
+from fieldclub.ingest.runner import ConnectorNotConfiguredError, IngestFailedError, run_connector
+from fieldclub.models import Record, Source
 from fieldclub.models.common import point_lon_lat
+from fieldclub.services import records as record_service
 from tests.connectors.research.support import assert_source_matches_worklist, fixture_json, rows
 from tests.ingest.adapters.support import NoWait
 
@@ -52,9 +59,19 @@ KEY = "wikimedia-wikidata-heritage-items"
 HILLFORTS = {"Q1015054", "Q1025082", "Q1027253", "Q1049577", "Q1088007", "Q1091047"}
 
 
+def wikidata_directory() -> Path:
+    return cache_dir(get_settings(), KEY)
+
+
 @pytest.fixture(autouse=True)
 def two_properties(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(wikidata, "PROPERTIES", ("P4102", "P718"))
+
+
+@pytest.fixture(autouse=True)
+def with_contact(env: Callable[..., None]) -> None:
+    """Wikimedia wants a contact in the `User-Agent`, and the connector won't run without one."""
+    env(CONTACT="research@example.org", USER_AGENT="")
 
 
 def count_answer(rows_: int) -> dict[str, Any]:
@@ -123,12 +140,90 @@ def test_items_known_under_two_identifiers_become_one_record_with_both(db: Sessi
 
 
 @respx.mock
-def test_an_identifier_with_a_leading_zero_keeps_it(db: Session) -> None:
+def test_an_identifier_with_a_leading_zero_is_stored_as_the_other_sources_write_it(db: Session) -> None:
     serve()
     run_connector(WikidataHeritageItems())
     chun = db.scalars(select(Record).where(Record.external_id == "Q1091047")).one()
     assert chun.raw is not None
-    assert chun.raw["identifiers"]["P4102"] == ["0617"]
+    assert chun.raw["identifiers"]["P4102"] == ["617"]
+    assert chun.raw["published"] == {"P4102": {"617": "0617"}}
+    cadbury = db.scalars(select(Record).where(Record.external_id == "Q1025082")).one()
+    assert cadbury.raw is not None
+    assert cadbury.raw["published"] == {}
+
+
+def test_normalising_an_identifier() -> None:
+    assert normalise_identifier("0095") == "95"
+    assert normalise_identifier("000") == "0"
+    assert normalise_identifier("3749") == "3749"
+    assert normalise_identifier("ANT 001:001") == "ANT 001:001"
+    assert normalise_identifier("0A1") == "0A1"
+
+
+@respx.mock
+def test_the_items_are_stored_but_never_shown_on_the_map_or_in_search(db: Session) -> None:
+    serve()
+    run_connector(WikidataHeritageItems())
+    assert db.scalars(select(Source.enabled).where(Source.key == KEY)).one() is False
+    assert len(db.scalars(select(Record).where(Record.source_key == KEY)).all()) == len(HILLFORTS)
+    found, _ = record_service.search(db, "Cadbury Castle")
+    assert found == []
+    assert [source.key for source in record_service.list_sources(db)] == []
+
+
+def test_the_source_is_skipped_without_a_contact(env: Callable[..., None]) -> None:
+    assert WikidataHeritageItems().is_configured()
+    env(CONTACT="", USER_AGENT="")
+    assert not WikidataHeritageItems().is_configured()
+    with pytest.raises(ConnectorNotConfiguredError):
+        run_connector(WikidataHeritageItems())
+    env(CONTACT="", USER_AGENT="FieldClub-test/1 (+https://example.org)")
+    assert WikidataHeritageItems().is_configured()
+
+
+@respx.mock
+def test_a_second_run_the_same_day_asks_wikidata_for_nothing(db: Session) -> None:
+    route = serve()
+    run_connector(WikidataHeritageItems())
+    asked = route.call_count
+    assert asked > 0
+    before = rows(db, KEY)
+    run_connector(WikidataHeritageItems())
+    assert route.call_count == asked
+    assert rows(db, KEY) == before
+
+
+@respx.mock
+def test_a_run_that_failed_part_way_starts_again_at_the_property_it_failed_on(db: Session) -> None:
+    answers = {
+        "P4102": fixture_json("wikidata_P4102_rows.json"),
+        "P718": fixture_json("wikidata_P718_rows.json"),
+    }
+    route = serve(answers=answers, counts={"P4102": 6, "P718": 600})
+    with pytest.raises(IngestFailedError, match="said it had 600 rows"):
+        run_connector(WikidataHeritageItems())
+    properties_asked = {
+        "P4102" if "wdt:P4102" in c.request.url.params["query"] else "P718" for c in route.calls
+    }
+    assert properties_asked == {"P4102", "P718"}
+    route.reset()
+    route = serve(answers=answers)
+    run_connector(WikidataHeritageItems())
+    queries = [call.request.url.params["query"] for call in route.calls]
+    assert queries
+    assert all("wdt:P718" in query for query in queries)
+
+
+@respx.mock
+def test_a_copy_older_than_a_day_is_asked_for_again(db: Session) -> None:
+    route = serve()
+    run_connector(WikidataHeritageItems())
+    asked = route.call_count
+    for path in (Path(wikidata_directory()) / name for name in ("P4102.json", "P718.json")):
+        old = time.time() - 2 * 86_400
+        os.utime(path, (old, old))
+    run_connector(WikidataHeritageItems())
+    assert route.call_count == 2 * asked
 
 
 @respx.mock

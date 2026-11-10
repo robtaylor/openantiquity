@@ -48,6 +48,7 @@ Write all three in the same present tense and a reader can't tell *why we did it
 | [0008](0008-second-looks-are-blind.md) | Second looks are blind | Proposed |
 | [0009](0009-contributors-are-16-or-over-and-there-is-no-private-messaging.md) | Contributors are 16 or over and there is no private messaging | Proposed |
 | [0010](0010-people-who-answered-are-named-only-to-those-who-may-see-answers.md) | People who answered are named only to those who may see answers | Proposed |
+| [0011](0011-the-wikidata-cross-walk-is-stored-but-kept-off-the-map.md) | The Wikidata cross-walk is stored but kept off the map | Proposed |
 
 (`new decision` appends rows for you. `uv run docs/scripts/doctool.py lint` checks this table against the files.)
 

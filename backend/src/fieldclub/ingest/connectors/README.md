@@ -20,7 +20,7 @@ Only `bulk` sources get a connector. A `live` source is queried by the browser a
 | `sparql` | `sparql` | `SparqlQuery(endpoint, query, client=self.http, geometry="coord").features()` |
 | `csv` | `files` | `read_csv(path, x="Easting", y="Northing", crs="EPSG:27700", encoding="cp1252")` |
 | `ndjson` | `files` | `read_ndjson(path)` |
-| `rest_json` | `rest` | `RestJson(self.http, polite=...).items(url, params=..., items="data", total="meta.total", next_url="links.next", id_path="id")` for a paged answer, `.document(url, dest=..., max_age=...)` for one big answer kept under `var/` |
+| `rest_json` | `rest` | `RestJson(self.http, polite=...).items(url, params=..., items="data", total="meta.total", next_url="links.next", id_path="id")` for a paged answer (add `cache=cache_dir(...) / "pages"` to keep each page for a day), `.document(url, dest=..., max_age=...)` for one big answer kept under `var/` |
 
 Every adapter yields `Feature(properties, geometry, id)`. The properties are plain Python values with NaN turned into None. The geometry is shapely in WGS84, longitude first, whatever the source's own CRS. Requests go through `Polite`, which leaves a second between requests, retries 408, 429 and 5xx with backoff, and honours `Retry-After`. Pass a `Polite(delay_s=...)` of your own when a source's `robots.txt` or terms ask for a longer gap.
 
@@ -78,7 +78,7 @@ Rules for the class:
 |---|---|
 | `external_id` | The work-list's `id_field`, as text. It must be stable across runs, because the runner upserts on it. When `id_field` is null, see below |
 | `name` | `name_field`, stripped |
-| `geom` | `feature.geometry`. The runner works out the centroid, repairs invalid shapes and refuses anything outside Britain and Ireland |
+| `geom` | `feature.geometry`. The runner works out the centroid, repairs invalid shapes and refuses anything outside the isles' box, which also holds Normandy and Picardy. A source that reaches abroad filters with `in_britain_and_ireland(lon, lat)` or `geometry_in_britain_and_ireland(geometry)` from `ingest.base` |
 | `category` | Leave it out to use the source's |
 | `record_type`, `monument_types` | `type_field`. Keep thesaurus terms as the source writes them |
 | `periods` | `period_field`, mapped onto `vocab.Period`. The runner refuses anything else |

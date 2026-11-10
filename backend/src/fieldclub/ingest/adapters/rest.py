@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import Generator
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -121,8 +122,16 @@ class RestJson:
         cursor: str | None = None,
         cursor_param: str | None = None,
         id_path: str | None = None,
+        cache: Path | None = None,
+        max_age: timedelta | None = None,
     ) -> Generator[Any]:
-        """Every item of every page, in order. See the module docstring for what the arguments name."""
+        """Every item of every page, in order. See the module docstring for what the arguments name.
+
+        With `cache`, a directory, each page is kept there as it arrives and
+        read from there for `max_age` (a day by default), so a run that stops
+        part way, or a second run the same day, asks the service only for the
+        pages it has not got. A kept page counts only for the same address and parameters.
+        """
         assert not (next_url and cursor), "name the next page by its address or by a cursor, not both"
         assert (cursor is None) == (cursor_param is None), "a cursor path needs a cursor parameter and back"
         params = dict(params or {})
@@ -131,7 +140,10 @@ class RestJson:
         request_url: str | None = url
         for page_number in range(1, MAX_PAGES + 1):
             assert request_url is not None
-            body = self.get(request_url, params or None)
+            if cache is None:
+                body = self.get(request_url, params or None)
+            else:
+                body = self._kept_page(cache / f"page-{page_number:05d}.json", request_url, params, max_age)
             page = dig(body, items)
             if not isinstance(page, list):
                 raise UpstreamFormatError(f"{self.where} gave no list at {items!r} on page {page_number}.")
@@ -160,6 +172,24 @@ class RestJson:
             raise UpstreamFormatError(f"{self.where} was still paging after {MAX_PAGES} pages.")
         if tally is not None:
             tally.check()
+
+    def _kept_page(self, path: Path, url: str, params: dict[str, str], max_age: timedelta | None) -> Any:
+        """A page from `path` when kept for this request and young enough, else asked for and kept."""
+        wanted = {"url": url, "params": params}
+        limit = (max_age or timedelta(days=1)).total_seconds()
+        try:
+            if time.time() - path.stat().st_mtime <= limit:
+                kept = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(kept, dict) and kept.get("request") == wanted and "body" in kept:
+                    return kept["body"]
+        except (OSError, ValueError):
+            pass
+        body = self.get(url, params or None)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        part = path.with_name(path.name + ".part")
+        part.write_text(json.dumps({"request": wanted, "body": body}), encoding="utf-8")
+        part.replace(path)
+        return body
 
     @staticmethod
     def _following(body: Any, next_url: str | None, cursor: str | None) -> str | None:

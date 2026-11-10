@@ -8,7 +8,7 @@ import httpx
 import pytest
 import respx
 
-from fieldclub.ingest.adapters.common import IncompleteReadError, UpstreamFormatError
+from fieldclub.ingest.adapters.common import AdapterError, IncompleteReadError, UpstreamFormatError
 from fieldclub.ingest.adapters.rest import RestJson, dig
 from tests.ingest.adapters.support import NoWait
 
@@ -160,3 +160,59 @@ def test_a_document_that_is_not_json_is_an_error(tmp_path: Path) -> None:
     respx.get(URL).mock(return_value=httpx.Response(200, text="not json at all"))
     with pytest.raises(UpstreamFormatError, match="did not answer with JSON"):
         make().document(URL, dest=tmp_path / "x.json")
+
+
+@respx.mock
+def test_kept_pages_are_not_asked_for_again_and_a_stopped_read_resumes(tmp_path: Path) -> None:
+    first = respx.get(URL, params={"size": "2"}).mock(return_value=linked(["a", "b"], f"{URL}?cursor=2", 3))
+    second = respx.get(URL, params={"cursor": "2"}).mock(return_value=httpx.Response(503))
+
+    def read() -> list[str]:
+        reader = RestJson(httpx.Client(), polite=NoWait(retries=0), where="Example")
+        return [
+            item["id"]
+            for item in reader.items(
+                URL,
+                params={"size": "2"},
+                items="data",
+                total="meta.total",
+                next_url="links.next",
+                id_path="id",
+                cache=tmp_path / "pages",
+            )
+        ]
+
+    with pytest.raises(AdapterError):
+        read()
+    assert (first.call_count, second.call_count) == (1, 1)
+    second.mock(return_value=linked(["c"], None, 3))
+    assert read() == ["a", "b", "c"]
+    # The first page came from disk, the second was asked for.
+    assert (first.call_count, second.call_count) == (1, 2)
+    assert read() == ["a", "b", "c"]
+    assert (first.call_count, second.call_count) == (1, 2)
+
+
+@respx.mock
+def test_a_kept_page_for_another_request_or_an_old_one_is_asked_for_again(tmp_path: Path) -> None:
+    route = respx.get(URL).mock(return_value=linked(["a"], None, 1))
+
+    def read(size: str, max_age: timedelta) -> None:
+        list(
+            make().items(
+                URL,
+                params={"size": size},
+                items="data",
+                next_url="links.next",
+                cache=tmp_path,
+                max_age=max_age,
+            )
+        )
+
+    read("1", timedelta(days=1))
+    read("1", timedelta(days=1))
+    assert route.call_count == 1
+    read("2", timedelta(days=1))
+    assert route.call_count == 2
+    read("2", timedelta(seconds=-1))
+    assert route.call_count == 3
