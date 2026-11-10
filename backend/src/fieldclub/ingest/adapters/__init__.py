@@ -12,6 +12,7 @@ are a few lines on top of one of these:
 | `files` | GeoPackage, shapefile and other OGR formats through pyogrio, CSV and newline-delimited JSON |
 | `wfs` | OGC Web Feature Service 2.0, paged with `count` and `startIndex` |
 | `sparql` | SPARQL endpoints, paged with `LIMIT` and `OFFSET`, with WKT literals parsed |
+| `rest` | Paged JSON (cursor or next-link paging) and single JSON documents, with a completeness check |
 
 Requests go through `Polite`, which spaces them out, retries what is worth
 retrying and honours `Retry-After`. See `ingest/connectors/README.md` for how
