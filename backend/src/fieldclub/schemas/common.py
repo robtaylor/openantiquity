@@ -148,18 +148,20 @@ def paginate[T](rows: Sequence[T], limit: int, key: Any) -> tuple[list[T], str |
 
 
 def offset_page[T](
-    rows: Sequence[T], offset: int, limit: int, *, max_offset: int = MAX_OFFSET
+    rows: Sequence[T], offset: int, limit: int, *, max_offset: int | None = None
 ) -> tuple[list[T], str | None]:
     """Turn `limit + 1` rows fetched from `offset` into a page and the cursor for the next.
 
     For lists whose order changes as people use them, where a keyset cursor
     would skip rows. Read the offset back with `offset_from_cursor`. No next
-    cursor is given past `max_offset`, which is never more than `MAX_OFFSET`,
-    and an offset past it is refused as `InvalidCursorError`.
+    cursor is given past `max_offset`, and an offset past it is refused as
+    `InvalidCursorError`. Every list shares `MAX_OFFSET` as its furthest
+    offset, so None or a larger `max_offset` means `MAX_OFFSET`.
     """
     assert limit >= 1, "limit must be at least 1"
     assert len(rows) <= limit + 1, "fetch at most limit + 1 rows"
-    assert 0 <= max_offset <= MAX_OFFSET, "every list shares MAX_OFFSET as its furthest offset"
+    max_offset = MAX_OFFSET if max_offset is None else min(max_offset, MAX_OFFSET)
+    assert max_offset >= 0, "the furthest offset can't be negative"
     if not 0 <= offset <= max_offset:
         raise InvalidCursorError()
     following = offset + limit

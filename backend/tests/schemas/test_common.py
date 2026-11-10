@@ -16,7 +16,9 @@ from fieldclub.errors import ValidationFailedError
 from fieldclub.models import Finding, User
 from fieldclub.schemas.common import (
     DEFAULT_LIMIT,
+    MAX_CURSOR_CHARS,
     MAX_LIMIT,
+    MAX_OFFSET,
     GeoJSONFeature,
     GeoJSONFeatureCollection,
     GeoJSONGeometry,
@@ -28,6 +30,7 @@ from fieldclub.schemas.common import (
     decode_cursor,
     encode_cursor,
     from_geojson,
+    offset_page,
     paginate,
     to_db_geometry,
     to_geojson,
@@ -57,6 +60,31 @@ def test_page_params_defaults_and_limits() -> None:
     # A long cursor is refused where every other bad cursor is, with the same code.
     with pytest.raises(InvalidCursorError):
         decode_cursor("x" * 600)
+
+
+def test_a_well_formed_cursor_that_is_too_long_is_refused_before_it_is_decoded() -> None:
+    """The length check is all that bounds a cursor, now that the query parameters have no maximum."""
+    longest = encode_cursor(["a" * 300])
+    assert len(longest) <= MAX_CURSOR_CHARS
+    assert decode_cursor(longest) == ["a" * 300]
+    too_long = encode_cursor(["a" * 400])
+    assert len(too_long) > MAX_CURSOR_CHARS
+    with pytest.raises(InvalidCursorError):
+        decode_cursor(too_long)
+
+
+def test_offset_pages_never_go_past_the_shared_limit_whatever_a_caller_asks() -> None:
+    """Callers older than `MAX_OFFSET` may pass None or a larger `max_offset`: both mean the shared limit."""
+    rows = list(range(11))
+    for max_offset in (None, MAX_OFFSET, MAX_OFFSET * 10):
+        page, cursor = offset_page(rows, 0, 10, max_offset=max_offset)
+        assert (page, cursor) == (rows[:10], encode_cursor([10]))
+        assert offset_page(rows, MAX_OFFSET - 10, 10, max_offset=max_offset)[1] == encode_cursor([MAX_OFFSET])
+        assert offset_page(rows, MAX_OFFSET, 10, max_offset=max_offset)[1] is None
+        with pytest.raises(InvalidCursorError):
+            offset_page(rows, MAX_OFFSET + 1, 10, max_offset=max_offset)
+    # A smaller limit of a list's own still holds.
+    assert offset_page(rows, 0, 10, max_offset=5)[1] is None
 
 
 def test_cursor_round_trip() -> None:

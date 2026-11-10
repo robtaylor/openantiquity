@@ -23,17 +23,20 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi import FastAPI
 from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute, iter_route_contexts
+from fastapi.staticfiles import StaticFiles
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
+from starlette.routing import Mount, Route, WebSocketRoute
 
 from fieldclub.auth.deps import current_contributor
-from fieldclub.main import create_app
+from fieldclub.main import create_app, mount_frontend
 from fieldclub.services import record_tiles
 from tests.findings import test_leaks
 from tests.findings.support import create
@@ -142,16 +145,53 @@ ROUTES: dict[tuple[str, str], Expect] = {
 }
 
 
+def framework_paths(app: FastAPI) -> set[str]:
+    """The pages FastAPI adds for itself: the schema and the interactive docs."""
+    paths = {app.openapi_url, app.docs_url, app.redoc_url, app.swagger_ui_oauth2_redirect_url}
+    return {path for path in paths if path is not None}
+
+
 def app_routes(app: FastAPI) -> Iterator[tuple[str, str, APIRoute]]:
-    """Every method and path the app routes to a FastAPI endpoint, wherever its router is mounted."""
+    """Every method and path the app routes to a FastAPI endpoint, wherever its router is mounted.
+
+    Anything else the app routes to fails the walk, so a plain Starlette route,
+    a mount or a WebSocket can't slip past `ROUTES`. The exceptions are
+    FastAPI's own pages and the built frontend's static files.
+    """
+    allowed = framework_paths(app)
     for context in iter_route_contexts(app.routes):
         route = context.original_route
         if not isinstance(route, APIRoute):
+            path = getattr(route, "path", None)
+            known_page = type(route) is Route and path in allowed
+            static = isinstance(route, Mount) and isinstance(route.app, StaticFiles)
+            kind = type(route).__name__
+            assert known_page or static, f"{kind} {path} isn't a FastAPI route, so ROUTES can't check it"
             continue
         assert context.path is not None, f"{route.name} has no path"
         assert context.methods, f"{route.name} has no methods"
         for method in sorted(context.methods - {"HEAD"}):
             yield method, context.path, route
+
+
+def test_the_walk_refuses_a_route_it_cannot_check(tmp_path: Path) -> None:
+    async def stream(request: Any) -> Any:
+        raise AssertionError("never called")
+
+    for add in (
+        lambda app: app.add_route("/api/v1/events/stream", stream),
+        lambda app: app.router.routes.append(WebSocketRoute("/api/v1/live", stream)),
+        lambda app: app.mount("/elsewhere", create_app()),
+    ):
+        app = create_app()
+        add(app)
+        with pytest.raises(AssertionError, match="isn't a FastAPI route"):
+            list(app_routes(app))
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "index.html").write_text("<!doctype html>")
+    built = create_app()
+    assert mount_frontend(built, tmp_path)
+    assert {path for _, path, _ in app_routes(built)} == {path for _, path, _ in app_routes(create_app())}
 
 
 @pytest.fixture(scope="module")
@@ -268,4 +308,5 @@ def test_nothing_that_depends_on_the_viewer_is_publicly_cacheable(
     else:
         assert policy.startswith(("private", "no-cache", "no-store")), f"{path}: {policy}"
         for response in (signed_out, member):
-            assert "Cookie" in response.headers.get("vary", ""), f"{path} doesn't vary by cookie"
+            vary = [token.strip() for line in response.headers.get_list("vary") for token in line.split(",")]
+            assert vary.count("Cookie") == 1, f"{path} varies by {vary}, not once by cookie"

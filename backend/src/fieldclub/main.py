@@ -45,6 +45,12 @@ RESERVED_ROOTS = frozenset({"api", "tiles", "healthz", "assets"})
 CLIENT_HEADER_EXEMPT: frozenset[str] = frozenset(FORM_POST_CALLBACK_PATHS)
 
 
+def _varies_by_cookie(headers: MutableHeaders) -> bool:
+    """Whether `Vary` already names `Cookie`, as `deps.private` sets it, so it isn't added twice."""
+    names = (name.strip().lower() for line in headers.getlist("vary") for name in line.split(","))
+    return "cookie" in names
+
+
 class PrivateByDefaultMiddleware:
     """Send a response that says nothing about caching as `private, no-cache`, varying by cookie.
 
@@ -68,7 +74,7 @@ class PrivateByDefaultMiddleware:
             if message["type"] == "http.response.start":
                 headers = MutableHeaders(scope=message)
                 headers.setdefault("Cache-Control", PRIVATE_CACHE)
-                if headers["Cache-Control"].startswith("private"):
+                if headers["Cache-Control"].startswith("private") and not _varies_by_cookie(headers):
                     headers.add_vary_header("Cookie")
             await send(message)
 

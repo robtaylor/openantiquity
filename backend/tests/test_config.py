@@ -12,6 +12,7 @@ from fieldclub.errors import ConfigError
 from tests.helpers import settings
 
 ENV_EXAMPLE = Path(__file__).resolve().parents[1] / ".env.example"
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture
@@ -40,7 +41,7 @@ def test_defaults_suit_local_development(clean_env: pytest.MonkeyPatch) -> None:
     assert config.database_url == "postgresql+psycopg://fieldclub:fieldclub@localhost:54329/fieldclub"
     assert (config.host, config.port) == ("127.0.0.1", 8000)
     assert config.storage_backend == "local"
-    assert config.var_dir == Path("var")
+    assert config.var_dir == REPO_ROOT / "var"
     assert config.session_cookie_secure is False
     assert config.should_create_schema is True
     assert config.ratelimit_enabled is True
@@ -257,10 +258,11 @@ def test_env_example_documents_every_bulk_supply_setting() -> None:
 def test_terrain_folders_follow_the_var_dir(clean_env: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Like every other runtime path, unless one is set for itself."""
     default = settings()
-    assert default.terrain_mirror == "var/lidar/england/mirror"
-    assert default.terrain_source_dir == "var/lidar/england/dtm-2022"
-    assert default.terrain_national == "var/lidar/england/dtm-2022-10m/england-dtm-2022-10m-cog.tif"
-    assert default.terrain_work_dir == "var/lidar/england/work"
+    var = REPO_ROOT / "var"
+    assert default.terrain_mirror == str(var / "lidar/england/mirror")
+    assert default.terrain_source_dir == str(var / "lidar/england/dtm-2022")
+    assert default.terrain_national == str(var / "lidar/england/dtm-2022-10m/england-dtm-2022-10m-cog.tif")
+    assert default.terrain_work_dir == str(var / "lidar/england/work")
     moved = settings(var_dir=tmp_path)
     assert moved.terrain_mirror == str(tmp_path / "lidar" / "england" / "mirror")
     assert moved.terrain_work_dir == str(tmp_path / "lidar" / "england" / "work")
@@ -299,3 +301,20 @@ def test_min_age_must_be_between_16_and_18(clean_env: pytest.MonkeyPatch, value:
     clean_env.setenv("FIELDCLUB_MIN_AGE", value)
     with pytest.raises(ValueError, match="min_age"):
         settings()
+
+
+def test_a_relative_var_dir_is_the_same_folder_from_any_working_directory(
+    clean_env: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Storage, ingest caches and terrain all read `var_dir`, so they must agree on where it is."""
+    from fieldclub.ingest.adapters.common import cache_dir
+    from fieldclub.storage import LocalStorage
+
+    clean_env.chdir(tmp_path)
+    config = settings(var_dir="runtime")
+    expected = REPO_ROOT / "runtime"
+    assert config.var_dir == expected
+    assert LocalStorage(config.var_dir / "tiles").root == expected / "tiles"
+    assert config.terrain_path(config.terrain_mirror) == str(expected / "lidar" / "england" / "mirror")
+    clean_env.setattr(Path, "mkdir", lambda *args, **kwargs: None)
+    assert cache_dir(config, "nhle") == expected / "ingest" / "nhle"

@@ -13,7 +13,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import AliasChoices, Field, SecretStr, model_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from fieldclub import __version__
@@ -115,7 +115,8 @@ class Settings(BaseSettings):
     smtp_password: SecretStr | None = None
     smtp_security: Literal["starttls", "ssl", "none"] = "starttls"
 
-    # Runtime data
+    # Runtime data. A relative path is resolved against the repository root,
+    # so storage, ingest caches and terrain agree whatever the working directory.
     var_dir: Path = Path("var")
     storage_backend: Literal["local", "gcs"] = "local"
     gcs_bucket: str | None = None
@@ -152,6 +153,11 @@ class Settings(BaseSettings):
         if not value or "://" in value or Path(value).is_absolute():
             return value
         return str(_REPO_ROOT / value)
+
+    @field_validator("var_dir")
+    @classmethod
+    def _var_dir_from_repo_root(cls, value: Path) -> Path:
+        return value if value.is_absolute() else _REPO_ROOT / value
 
     @model_validator(mode="after")
     def _terrain_under_var_dir(self) -> Self:

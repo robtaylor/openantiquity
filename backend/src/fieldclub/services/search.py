@@ -10,11 +10,12 @@
 6. record names from the record index.
 
 The first four give at most one result each and come first. Places and
-records follow, best match first, under one time limit
-(`records.SEARCH_TIMEOUT_MS`): a slow half gives no results, not an error.
-A finding is placed where this viewer may see it (Decision 0005), never
-more exactly. A finding is found as `GET /findings` finds it: a hidden one
-only by those who may see it, and a withdrawn one not at all.
+records follow, best match first. Each of their queries is cut off at
+`records.SEARCH_TIMEOUT_MS`, and a query that runs out of time leaves the
+names out, not an error. The limit holds for each statement, not for the
+names as a whole. A finding is placed where this viewer may see
+it (Decision 0005), never more exactly. A hidden finding is found only by
+those who may see it, as on `GET /findings`, and a withdrawn one never.
 """
 
 from __future__ import annotations
