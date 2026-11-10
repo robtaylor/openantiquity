@@ -516,18 +516,23 @@ export function isOwnDraft(draft: Draft, account: string): boolean {
 
 /**
  * `account` has just signed in: the drafts made signed out in this epoch are
- * theirs, and a new epoch starts. Returns how many were taken over.
+ * theirs, and a new epoch starts. Returns how many were taken over. Nothing
+ * is written when there is nothing to take over, as when another tab got
+ * there first.
  */
 export function adoptSignedOutDrafts(account: string): number {
+  const isCurrent = (draft: Draft): boolean =>
+    draft.owner !== null && "signedOut" in draft.owner && draft.owner.signedOut === epoch;
+  if (!readFreshDrafts().some(isCurrent)) return 0;
   let adopted = 0;
   updateDrafts((drafts) => {
-    const current = epoch;
-    epoch = newId();
-    return drafts.map((draft) => {
-      if (draft.owner === null || !("signedOut" in draft.owner) || draft.owner.signedOut !== current) return draft;
+    const taken = drafts.map((draft) => {
+      if (!isCurrent(draft)) return draft;
       adopted += 1;
       return { ...draft, owner: { account } };
     });
+    epoch = newId();
+    return taken;
   });
   return adopted;
 }

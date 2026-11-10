@@ -67,6 +67,14 @@ describe("putDraft and listDrafts", () => {
     expect(listDrafts().map((draft) => draft.owner)).toEqual([{ account: "account-a" }, { account: "account-b" }]);
   });
 
+  it("writes nothing when there is nothing to take over, so it can't write over another tab's claim", () => {
+    putDraft("finding", {});
+    adoptSignedOutDrafts("account-a");
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+    expect(adoptSignedOutDrafts("account-a")).toBe(0);
+    expect(setItem).not.toHaveBeenCalled();
+  });
+
   it("replaces a draft given its id, keeping when it was made", () => {
     const first = putDraft("finding", { n: 1 });
     const second = putDraft("finding", { n: 2 }, first.id);

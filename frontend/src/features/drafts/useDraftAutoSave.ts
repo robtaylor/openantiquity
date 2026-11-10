@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { toast } from "../../ui/toastStore.js";
-import { isDue, onDraftsSaved, saveWaitingDrafts, useSaversVersion } from "./savers.js";
+import { isDue, onDraftsSaved, saveWaitingDrafts, useSaversVersion, withDraftsLock } from "./savers.js";
 import { adoptSignedOutDrafts, setDraftsViewer, useDrafts } from "./store.js";
 import { useDraftsUi } from "./uiStore.js";
 
@@ -28,7 +28,7 @@ export function useDraftAutoSave(account: string | null, ready: boolean): void {
 
   useEffect(() => {
     setDraftsViewer(account);
-    if (account !== null) adoptSignedOutDrafts(account);
+    if (account !== null) void withDraftsLock(async () => adoptSignedOutDrafts(account));
   }, [account]);
 
   useEffect(

@@ -231,14 +231,20 @@ function finish(id: string, outcome: { saved: string } | "release" | DraftFailur
   );
 }
 
-async function withLock<T>(task: () => Promise<T>): Promise<T> {
+/**
+ * Run `task` holding the lock every tab takes before writing drafts on its
+ * own account (saving, or taking over drafts at sign-in). Tabs don't see
+ * each other's writes at once, so without it one tab could write over
+ * another's claim.
+ */
+export async function withDraftsLock<T>(task: () => Promise<T>): Promise<T> {
   const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
   if (locks && typeof locks.request === "function") return locks.request(LOCK_NAME, task);
   return task();
 }
 
 async function run(account: string): Promise<SaveReport> {
-  return withLock(async () => {
+  return withDraftsLock(async () => {
     const report: SaveReport = { saved: 0, failed: 0, stopped: null };
     // Each version of a draft is tried once a run. A draft changed after it was sent is a new version.
     const tried = new Set<string>();
