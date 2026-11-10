@@ -112,6 +112,7 @@ def test_the_eligible_list_shows_where_points_came_from_and_who_else_was_there(
 ) -> None:
     farmer = make_user(handle="Farmer")
     friend_a, friend_b = make_user(handle="FriendA"), make_user(handle="FriendB")
+    helper = make_user(handle="Helper")
     make_user(handle="Poor", reputation=10.0)
     make_user(Role.TRUSTED, handle="AlreadyTrusted", reputation=200.0)
     first = create(db, farmer)
@@ -119,6 +120,7 @@ def test_the_eligible_list_shows_where_points_came_from_and_who_else_was_there(
     for finding in (first, second):
         answer(db, finding, friend_a)
         answer(db, finding, friend_b)
+        add_desk_evidence(db, finding, helper)
     db.refresh(farmer)
     assert farmer.reputation == 2 * reputation.TIER_POINTS[Tier.SEEN]
     # Top the farmer up to fifty with a hand-written award not tied to a finding.
@@ -126,23 +128,87 @@ def test_the_eligible_list_shows_where_points_came_from_and_who_else_was_there(
     farmer.reputation = 50.0
     db.commit()
 
-    response = client_as(make_user(Role.MODERATOR)).get(f"{API}/mod/users/eligible")
-    assert response.status_code == 200
-    (item,) = response.json()["items"]
-    assert item["user"]["handle"] == "Farmer"
-    assert item["user"]["reputation"] == 50.0
-    sources = item["sources"]
-    assert sources[0]["finding"] is None
-    assert sources[0]["points"] == 46.0
-    by_finding = {s["finding"]["public_id"]: s for s in sources if s["finding"] is not None}
-    assert set(by_finding) == {first.public_id, second.public_id}
-    for source in by_finding.values():
-        assert source["points"] == 2.0
-        assert source["reasons"] == ["tier_seen"]
-        assert sorted(p["handle"] for p in source["others"]) == ["FriendA", "FriendB"]
-    assert [(a["user"]["handle"], a["shared_findings"]) for a in item["associates"]] == [
-        ("FriendA", 2),
-        ("FriendB", 2),
+    def listed(moderator):
+        response = client_as(moderator).get(f"{API}/mod/users/eligible")
+        assert response.status_code == 200
+        (item,) = response.json()["items"]
+        assert item["user"]["handle"] == "Farmer"
+        assert item["user"]["reputation"] == 50.0
+        assert item["sources"][0]["finding"] is None
+        assert item["sources"][0]["points"] == 46.0
+        by_finding = {s["finding"]["public_id"]: s for s in item["sources"] if s["finding"] is not None}
+        assert set(by_finding) == {first.public_id, second.public_id}
+        for source in by_finding.values():
+            assert source["points"] == 2.0
+            assert source["reasons"] == ["tier_seen"]
+        others = {pid: sorted(p["handle"] for p in s["others"]) for pid, s in by_finding.items()}
+        associates = [(a["user"]["handle"], a["shared_findings"]) for a in item["associates"]]
+        return others, associates
+
+    # A moderator who hasn't answered either finding isn't told who answered them (Decision 0008).
+    others, associates = listed(make_user(Role.MODERATOR))
+    assert others == {first.public_id: ["Helper"], second.public_id: ["Helper"]}
+    assert associates == [("Helper", 2)]
+
+    # One who answered the first is, for that finding.
+    answered = make_user(Role.MODERATOR, handle="Answered")
+    answer(db, first, answered)
+    others, associates = listed(answered)
+    assert others == {
+        first.public_id: ["Answered", "FriendA", "FriendB", "Helper"],
+        second.public_id: ["Helper"],
+    }
+    assert associates == [("Helper", 2), ("FriendA", 1), ("FriendB", 1), ("Answered", 1)]
+
+
+def test_the_eligible_list_does_not_say_how_someone_answered(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    finding = create(db, make_user(handle="Finder"))
+    looker = make_user(handle="Looker", reputation=50.0)
+    db.add_all(
+        [
+            ReputationEvent(user_id=looker.id, delta=48.0, reason="test_bonus", finding_id=None),
+            ReputationEvent(
+                user_id=looker.id, delta=1.0, reason=reputation.OBSERVATION_RULED_OUT, finding_id=finding.id
+            ),
+            ReputationEvent(
+                user_id=looker.id,
+                delta=1.0,
+                reason=reputation.OBSERVATION_CORROBORATED,
+                finding_id=create(db, make_user()).id,
+            ),
+        ]
+    )
+    db.commit()
+
+    def sources(moderator):
+        (item,) = client_as(moderator).get(f"{API}/mod/users/eligible").json()["items"]
+        assert item["user"]["handle"] == "Looker"
+        return [
+            (s["finding"]["public_id"] if s["finding"] else None, s["points"], s["reasons"])
+            for s in item["sources"]
+        ], item
+
+    # The answer points are added up with no finding, so nothing says which was ruled out by whom.
+    blind, item = sources(make_user(Role.MODERATOR))
+    assert blind == [(None, 48.0, ["test_bonus"]), (None, 2.0, ["second_looks"])]
+    assert finding.public_id not in str(item)
+    assert "observation_" not in str(item)
+    # The finder may see every answer on their own finding, so a moderator who found it is told.
+    finder_moderator = make_user(Role.MODERATOR, handle="ModFinder")
+    own = create(db, finder_moderator)
+    db.add(
+        ReputationEvent(
+            user_id=looker.id, delta=1.0, reason=reputation.OBSERVATION_RULED_OUT, finding_id=own.id
+        )
+    )
+    db.commit()
+    seen, _ = sources(finder_moderator)
+    assert seen == [
+        (None, 48.0, ["test_bonus"]),
+        (None, 2.0, ["second_looks"]),
+        (own.public_id, 1.0, [reputation.OBSERVATION_RULED_OUT]),
     ]
 
 
@@ -259,3 +325,29 @@ def test_a_banned_account_is_not_in_the_eligible_list(client_as: ClientAs, make_
     make_user(handle="Gone", reputation=90.0, deleted_at=datetime(2026, 11, 1, tzinfo=UTC))
     items = client_as(make_user(Role.MODERATOR)).get(f"{API}/mod/users/eligible").json()["items"]
     assert items == []
+
+
+def test_a_banned_verifier_is_not_named_while_the_ban_lasts(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    finding = create(db, make_user())
+    expert = make_user(Role.EXPERT, handle="BadExpert")
+    helper = client_as(make_user())
+    path = f"{API}/findings/{finding.public_id}"
+    added = helper.post(f"{path}/evidence", json={"kind": "her_record", "reference": "MWI1"}).json()
+    entry_id = next(e["id"] for e in added["evidence"] if e["kind"] == "her_record")
+    assert client_as(expert).post(f"{API}/evidence/{entry_id}/verify").json()["tier"] == "confirmed"
+    viewer = client_as(make_user())
+
+    def verified_by() -> tuple[str, object]:
+        page = viewer.get(path).json()
+        (entry,) = (e for e in page["evidence"] if e["id"] == entry_id)
+        return page["tier"], entry["verified_by"] and entry["verified_by"]["handle"]
+
+    assert verified_by() == ("confirmed", "BadExpert")
+    moderator = client_as(make_user(Role.MODERATOR))
+    assert moderator.post(f"{API}/mod/users/BadExpert/ban", json=REASON).status_code == 200
+    assert verified_by() == ("spotted", None)
+    assert "BadExpert" not in viewer.get(path).text
+    assert moderator.post(f"{API}/mod/users/BadExpert/unban", json=REASON).status_code == 200
+    assert verified_by() == ("confirmed", "BadExpert")

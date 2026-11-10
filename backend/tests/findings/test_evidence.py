@@ -222,10 +222,10 @@ def test_deleting_evidence_reassesses(db: Session, make_user: MakeUser) -> None:
     assert finding.evidence_count == 0
     with pytest.raises(findings.EvidenceNotFoundError):
         findings.delete_evidence(db, evidence.id, helper)
+    # A moderator hides someone else's evidence instead, which is logged.
     other, _ = add_desk_evidence(db, finding, helper)
-    findings.delete_evidence(db, other.id, make_user("moderator"))
-    db.commit()
-    assert finding.evidence_count == 0
+    with pytest.raises(findings.EvidenceForbiddenError):
+        findings.delete_evidence(db, other.id, make_user("moderator"))
 
 
 def test_no_evidence_on_a_withdrawn_finding(db: Session, make_user: MakeUser) -> None:

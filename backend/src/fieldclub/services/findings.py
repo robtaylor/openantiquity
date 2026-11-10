@@ -147,7 +147,7 @@ class InvalidEvidenceError(ValidationFailedError):
 
 class EvidenceForbiddenError(ForbiddenError):
     code = "evidence_forbidden"
-    message = "Only the person who added this evidence, or a moderator, can remove it."
+    message = "Only the person who added this evidence can remove it. A moderator hides it instead."
 
 
 class VoteNotAllowedError(ForbiddenError):
@@ -170,7 +170,7 @@ class CommentNotFoundError(NotFoundError):
 
 class CommentForbiddenError(ForbiddenError):
     code = "comment_forbidden"
-    message = "Only the person who wrote this comment, or a moderator, can remove it."
+    message = "Only the person who wrote this comment can remove it. A moderator hides it instead."
 
 
 # --------------------------------------------------------------------------
@@ -962,9 +962,13 @@ def _locked_evidence(db: Session, evidence_id: int, user: User) -> tuple[Evidenc
 
 
 def delete_evidence(db: Session, evidence_id: int, user: User) -> Reassessment:
-    """Remove evidence, by its contributor or a moderator. It is kept, marked deleted."""
+    """Remove evidence, by its contributor. It is kept, marked deleted.
+
+    A moderator removes someone else's evidence by hiding it
+    (`services.moderation.set_hidden`), which needs a reason and is logged.
+    """
     evidence, finding = _locked_evidence(db, evidence_id, user)
-    if not (user.has_id(evidence.user_id) or is_moderator(user)):
+    if not user.has_id(evidence.user_id):
         raise EvidenceForbiddenError()
     evidence.deleted_at = datetime.now(UTC)
     db.flush()
@@ -1022,6 +1026,11 @@ def verify(db: Session, evidence_id: int, user: User) -> Reassessment:
     return reassess(db, finding, user)
 
 
+def _standing_verifier(people: Mapping[int, User], user_id: int | None) -> User | None:
+    verifier = people.get(user_id) if user_id is not None else None
+    return verifier if verifier is not None and not verifier.is_banned else None
+
+
 @dataclass(frozen=True)
 class EvidenceView:
     evidence: Evidence
@@ -1037,7 +1046,8 @@ def evidence_for(
     """A finding's standing evidence, oldest first, with what a response needs.
 
     `known` holds users already loaded, such as those named in the credits,
-    so only the rest are fetched.
+    so only the rest are fetched. A banned verifier isn't named, because
+    their check stops counting while the ban lasts (`gather_inputs`).
     """
     items = db.scalars(
         select(Evidence)
@@ -1062,7 +1072,7 @@ def evidence_for(
         EvidenceView(
             evidence=e,
             contributor=people[e.user_id],
-            verifier=people.get(e.verified_by) if e.verified_by is not None else None,
+            verifier=_standing_verifier(people, e.verified_by),
             media=media.get(e.media_id) if e.media_id is not None else None,
             my_vote=mine.get(e.id),
         )
@@ -1096,7 +1106,11 @@ def add_comment(
 
 
 def delete_comment(db: Session, comment_id: int, user: User) -> Comment:
-    """Remove a comment, by its author or a moderator. Replies keep their place."""
+    """Remove a comment, by its author. Replies keep their place.
+
+    A moderator removes someone else's comment by hiding it
+    (`services.moderation.set_hidden`), which needs a reason and is logged.
+    """
     comment = db.get(Comment, comment_id)
     if comment is None or comment.deleted_at is not None:
         raise CommentNotFoundError()
@@ -1106,7 +1120,7 @@ def delete_comment(db: Session, comment_id: int, user: User) -> Comment:
         raise CommentNotFoundError()
     if comment.hidden_at is not None and not may_see_hidden_comment(comment, user):
         raise CommentNotFoundError()
-    if not (user.has_id(comment.user_id) or is_moderator(user)):
+    if not user.has_id(comment.user_id):
         raise CommentForbiddenError()
     comment.deleted_at = datetime.now(UTC)
     if comment.hidden_at is None:

@@ -280,7 +280,14 @@ def test_level_changes_follow_decision_0005(db: Session, client_as: ClientAs, ma
     assert error_code(client_as(make_user("trusted")).put(path, json={"level": "protected"})) == (
         "sensitivity_change_forbidden"
     )
-    assert client_as(make_user("moderator")).put(path, json={"level": "open"}).json()["sensitivity"] == "open"
+    # A moderator lowers a level only through the moderation route, which logs it with a reason.
+    moderator = client_as(make_user("moderator"))
+    refused = moderator.put(path, json={"level": "open"})
+    assert (refused.status_code, error_code(refused)) == (403, "lower_through_moderation")
+    lowered = moderator.put(
+        f"{API}/mod{path.removeprefix(API)}", json={"level": "open", "reason": "Not a barrow."}
+    )
+    assert lowered.json()["sensitivity"] == "open"
     db.expire_all()
     assert Sensitivity(finding.sensitivity) is Sensitivity.OPEN
     assert lon_lat(finding.location_public) == pytest.approx((LON, LAT))

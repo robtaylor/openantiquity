@@ -71,7 +71,7 @@ def report_queue(
     `reason=intimate_image` to see those first.
     """
     queued, next_cursor = moderation.report_queue(
-        db, status=status, reason=reason, limit=page.limit, cursor=page.cursor
+        db, moderator, status=status, reason=reason, limit=page.limit, cursor=page.cursor
     )
     return Page[ReportOut](items=[ReportOut.build(item) for item in queued], next_cursor=next_cursor)
 
@@ -162,7 +162,7 @@ def eligible_members(
     cursor: CursorQuery = None,
 ) -> Page[EligibleOut]:
     """Members with fifty points who aren't trusted yet, where the points came from and who else was there."""
-    found, next_cursor = moderation.eligible_members(db, limit=limit, cursor=cursor)
+    found, next_cursor = moderation.eligible_members(db, moderator, limit=limit, cursor=cursor)
     return Page[EligibleOut](items=[EligibleOut.build(item) for item in found], next_cursor=next_cursor)
 
 

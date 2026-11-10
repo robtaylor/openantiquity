@@ -46,7 +46,11 @@ because other people's work sits on them; a moderator hides any that need
 it. Lifting the ban restores everything and reassesses again. Points already
 paid stay paid, because there are no penalties: the eligible list shows where
 each person's points came from, so a moderator can see points that a ring of
-accounts handed one another.
+accounts handed one another. Second looks are blind for moderators too
+(Decision 0008): the list names the people who answered a finding, and says a
+point came from an answer on it, only when the moderator reading it found or
+answered that finding. Otherwise points earned by answering are added up in
+one source with no finding, `second_looks`.
 
 Roles
 =====
@@ -62,7 +66,22 @@ The log
 =======
 
 Every action here, and every photo approved or refused, writes one
-`moderation_actions` row: who, what, which target, when and why.
+`moderation_actions` row: who, what, which target, when and why. The log
+can't be skipped: the routes members use refuse a moderator what only a
+moderator could do there. Lowering a level through
+`PUT /findings/{public_id}/sensitivity` is `lower_through_moderation`
+(`sensitivity.raise_sensitivity`), and only its author deletes a comment or
+evidence (`findings.delete_comment`, `findings.delete_evidence`), so a
+moderator hides someone else's instead.
+
+Nobody moderates their own work. A moderator can't hide, show again or set
+the level of what they posted (`own_content`), resolve a report they made or
+one about them or their work (`own_report`), and doesn't see those reports
+in the queue.
+
+A reporter whose report was dismissed can't report the same thing again for
+`REPORT_COOLING_OFF` (`recently_dismissed`), so a few accounts can't keep one
+target at the top of the queue.
 
 Reports carry a note only moderators read. Nothing here sends free text to
 any one member (Decision 0009): a report's outcome and the moderator's
@@ -81,7 +100,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, select, union, update
+from sqlalchemy import ColumnElement, func, or_, select, union, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -103,7 +122,7 @@ from fieldclub.models import (
 )
 from fieldclub.schemas.common import int_from_cursor, paginate
 from fieldclub.services import findings, ids, media, sensitivity
-from fieldclub.services.reputation import TRUSTED_AT
+from fieldclub.services.reputation import OBSERVATION_CORROBORATED, OBSERVATION_RULED_OUT, TRUSTED_AT
 from fieldclub.vocab import (
     MODERATOR_ROLES,
     REPORT_DUE_HOURS,
@@ -131,6 +150,13 @@ HIDEABLE = frozenset(
 MODERATOR_MANAGED_ROLES = frozenset({Role.MEMBER, Role.TRUSTED, Role.EXPERT})
 
 _NUMERIC_REF = re.compile(r"[1-9][0-9]{0,17}")
+
+# How long after a dismissal the same person can't report the same target again.
+REPORT_COOLING_OFF = timedelta(hours=24)
+# Reputation reasons that say how the person answered a finding (Decision 0008).
+ANSWER_REASONS = frozenset({OBSERVATION_CORROBORATED, OBSERVATION_RULED_OUT})
+# The reason on the one source that adds up answer points from findings the reader can't see answers on.
+SECOND_LOOKS = "second_looks"
 
 
 # --------------------------------------------------------------------------
@@ -166,6 +192,16 @@ class ReportResolvedError(ConflictError):
 class OwnReportError(ForbiddenError):
     code = "own_report"
     message = "Another moderator has to deal with a report you made, or one about you or your work."
+
+
+class RecentlyDismissedError(ConflictError):
+    code = "recently_dismissed"
+    message = "A moderator has just looked at your report on this. You can report it again tomorrow."
+
+
+class OwnContentError(ForbiddenError):
+    code = "own_content"
+    message = "Another moderator has to deal with something you posted."
 
 
 class NotHideableError(ValidationFailedError):
@@ -247,6 +283,17 @@ _MODELS: dict[ReportTarget, type[Any]] = {
 assert set(_MODELS) == set(ReportTarget), "every target kind has a table"
 
 TargetRow = Finding | Comment | Evidence | Mention | Media | User
+
+# Who posted each kind of target, as a column: see `owner_of`.
+_OWNER_COLUMNS: dict[ReportTarget, Any] = {
+    ReportTarget.FINDING: Finding.author_id,
+    ReportTarget.COMMENT: Comment.user_id,
+    ReportTarget.EVIDENCE: Evidence.user_id,
+    ReportTarget.MENTION: Mention.user_id,
+    ReportTarget.PHOTO: Media.user_id,
+    ReportTarget.USER: User.id,
+}
+assert set(_OWNER_COLUMNS) == set(ReportTarget), "every target kind has an owner"
 
 
 @dataclass(frozen=True)
@@ -513,12 +560,36 @@ def list_actions(
 
 
 def create_report(
-    db: Session, reporter: User, kind: ReportTarget, ref: str, reason: ReportReason, note: str | None
+    db: Session,
+    reporter: User,
+    kind: ReportTarget,
+    ref: str,
+    reason: ReportReason,
+    note: str | None,
+    *,
+    now: datetime | None = None,
 ) -> Report:
-    """Report something the reporter can see. One open report per reporter and target."""
+    """Report something the reporter can see.
+
+    One open report per reporter and target, and none for `REPORT_COOLING_OFF`
+    after one of theirs on it was dismissed.
+    """
     target = load_target(db, kind, ref, reporter)
     if target.kind is ReportTarget.USER and reporter.has_id(target.id):
         raise CannotReportSelfError()
+    dismissed = db.scalar(
+        select(Report.id)
+        .where(
+            Report.reporter_id == reporter.id,
+            Report.target_kind == target.kind.value,
+            Report.target_id == target.id,
+            Report.status == ReportStatus.DISMISSED.value,
+            Report.resolved_at > (now or _now()) - REPORT_COOLING_OFF,
+        )
+        .limit(1)
+    )
+    if dismissed is not None:
+        raise RecentlyDismissedError()
     report = Report(
         reporter_id=reporter.id,
         target_kind=target.kind.value,
@@ -556,16 +627,34 @@ class QueuedReport:
     resolver: User | None
 
 
+def _involves(moderator: User) -> ColumnElement[bool]:
+    """Reports `moderator` made, or about them or something they posted."""
+    return or_(
+        Report.reporter_id == moderator.id,
+        *(
+            (Report.target_kind == kind.value)
+            & Report.target_id.in_(select(_MODELS[kind].id).where(owner == moderator.id))
+            for kind, owner in _OWNER_COLUMNS.items()
+        ),
+    )
+
+
 def report_queue(
     db: Session,
+    moderator: User,
     *,
     status: ReportStatus = ReportStatus.OPEN,
     reason: ReportReason | None = None,
     limit: int,
     cursor: str | None = None,
 ) -> tuple[list[QueuedReport], str | None]:
-    """Reports in one state, oldest first, each with a summary of its target."""
-    query = select(Report).where(Report.status == status.value).order_by(Report.id)
+    """Reports in one state, oldest first, each with a summary of its target.
+
+    Leaves out the reports `moderator` may not resolve: those they made, and
+    those about them or their work.
+    """
+    _require_moderator(moderator)
+    query = select(Report).where(Report.status == status.value, ~_involves(moderator)).order_by(Report.id)
     if reason is not None:
         query = query.where(Report.reason == reason.value)
     if cursor is not None:
@@ -704,6 +793,8 @@ def set_hidden(
     if kind not in HIDEABLE:
         raise NotHideableError()
     target = load_target(db, kind, ref, moderator)
+    if moderator.has_id(target.owner_id):
+        raise OwnContentError()
     row, finding = target.row, target.finding
     assert not isinstance(row, User)
     if finding is not None:
@@ -741,6 +832,8 @@ def set_sensitivity(db: Session, public_id: str, moderator: User, level: Sensiti
     """A moderator sets a finding's level, lower as well as higher (Decision 0005)."""
     _require_moderator(moderator)
     finding = findings.lock_finding(db, public_id, moderator)
+    if moderator.has_id(finding.author_id):
+        raise OwnContentError()
     before = finding.sensitivity
     sensitivity.change_sensitivity(db, finding, moderator, level)
     if finding.sensitivity != before:
@@ -940,13 +1033,27 @@ class EligibleMember:
     associates: list[Associate]
 
 
-def _people_on(db: Session, finding_ids: set[int]) -> dict[int, set[int]]:
-    """Everyone who worked on each finding, by finding id."""
+def _answers_seen(db: Session, found: Iterable[Finding], viewer: User) -> set[int]:
+    """The findings whose answers `viewer` may see: those they found or answered (Decision 0008)."""
+    found = list(found)
+    answered = set(
+        db.scalars(
+            select(Observation.finding_id).where(
+                Observation.user_id == viewer.id, Observation.finding_id.in_([f.id for f in found])
+            )
+        )
+    )
+    return {f.id for f in found if findings.answers_visible(f, viewer, f.id in answered)}
+
+
+def _people_on(db: Session, finding_ids: set[int], answers_seen: set[int]) -> dict[int, set[int]]:
+    """Everyone who worked on each finding, by finding id. Answerers only on `answers_seen`."""
     if not finding_ids:
         return {}
+    assert answers_seen <= finding_ids
     rows = union(
         select(Finding.id, Finding.author_id).where(Finding.id.in_(finding_ids)),
-        select(Observation.finding_id, Observation.user_id).where(Observation.finding_id.in_(finding_ids)),
+        select(Observation.finding_id, Observation.user_id).where(Observation.finding_id.in_(answers_seen)),
         select(Evidence.finding_id, Evidence.user_id).where(Evidence.finding_id.in_(finding_ids)),
         select(Evidence.finding_id, Evidence.verified_by).where(
             Evidence.finding_id.in_(finding_ids), Evidence.verified_by.is_not(None)
@@ -962,15 +1069,18 @@ def _people_on(db: Session, finding_ids: set[int]) -> dict[int, set[int]]:
 
 
 def eligible_members(
-    db: Session, *, limit: int, cursor: str | None = None
+    db: Session, moderator: User, *, limit: int, cursor: str | None = None
 ) -> tuple[list[EligibleMember], str | None]:
     """Active members with fifty points or more, in the order they joined, with where the points came from.
 
     Points can be farmed by a few accounts working together, which is why a
     moderator decides (Decision 0005). Each member comes with the findings
     their points came from, the other people on each, and those people
-    counted across all of them, most often first.
+    counted across all of them, most often first. Who answered a finding, and
+    the points someone earned by answering it, are shown only when
+    `moderator` found or answered it (see the module docstring).
     """
+    _require_moderator(moderator)
     query = (
         select(User)
         .where(
@@ -997,15 +1107,24 @@ def eligible_members(
         if finding_ids
         else {}
     )
-    people_on = _people_on(db, finding_ids)
+    answers_seen = _answers_seen(db, loaded.values(), moderator)
+    people_on = _people_on(db, finding_ids, answers_seen)
     people = findings.users_by_id(db, {uid for uids in people_on.values() for uid in uids})
 
     by_member: dict[int, dict[int | None, list[ReputationEvent]]] = defaultdict(lambda: defaultdict(list))
+    blind: dict[int, float] = defaultdict(float)
     for event in events:
-        by_member[event.user_id][event.finding_id].append(event)
+        if event.reason in ANSWER_REASONS and event.finding_id not in answers_seen:
+            blind[event.user_id] += event.delta
+        else:
+            by_member[event.user_id][event.finding_id].append(event)
     result = []
     for member in members:
         sources: list[PointSource] = []
+        if member.id in blind:
+            sources.append(
+                PointSource(finding=None, points=blind[member.id], reasons=[SECOND_LOOKS], others=[])
+            )
         shared: dict[int, int] = defaultdict(int)
         for finding_id, earned in by_member[member.id].items():
             others = sorted(people_on.get(finding_id, set()) - {member.id}) if finding_id is not None else []

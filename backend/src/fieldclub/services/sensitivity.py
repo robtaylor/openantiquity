@@ -88,6 +88,11 @@ class SensitivityChangeForbiddenError(ForbiddenError):
     )
 
 
+class LowerThroughModerationError(ForbiddenError):
+    code = "lower_through_moderation"
+    message = "A moderator lowers a level from the moderation tools, with a reason for the log."
+
+
 @dataclass(frozen=True)
 class VisibleLocation:
     """A finding's position as one particular viewer may see it."""
@@ -346,3 +351,22 @@ def change_sensitivity(db: Session, finding: Finding, actor: User, level: Sensit
         finding.sensitivity = level.value
         db.flush()
     return finding
+
+
+def raise_sensitivity(db: Session, finding: Finding, actor: User, level: Sensitivity | str) -> Finding:
+    """Raise a finding's level, or keep it: what `PUT /findings/{public_id}/sensitivity` does.
+
+    Lowering a level is a moderator's decision, so it goes through
+    `services.moderation.set_sensitivity`, which logs it with a reason. A
+    moderator who asks for a lower level here gets `LowerThroughModerationError`,
+    anyone else `SensitivityChangeForbiddenError`. The caller commits.
+    """
+    level = Sensitivity(level)
+    active = active_viewer(actor)
+    if (
+        active is not None
+        and Role(active.role) in MAY_LOWER_ROLES
+        and sensitivity_rank(level) < sensitivity_rank(finding.sensitivity)
+    ):
+        raise LowerThroughModerationError()
+    return change_sensitivity(db, finding, actor, level)

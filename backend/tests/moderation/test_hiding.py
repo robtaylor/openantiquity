@@ -256,16 +256,17 @@ def test_a_hidden_photo_is_served_only_to_moderators_and_its_uploader(
         assert clients[name].get(f"{API}/media/{shown.id}").status_code == status, name
 
 
-@pytest.mark.parametrize(
-    ("segment", "make"),
-    [
-        ("findings", lambda db, f, u: f.public_id),
-        ("comments", lambda db, f, u: comment(db, f, u).id),
-        ("evidence", lambda db, f, u: add_desk_evidence(db, f, u)[0].id),
-        ("mentions", lambda db, f, u: mention(db, f, u).id),
-        ("media", lambda db, f, u: photo(db, u).id),
-    ],
-)
+# Each kind of hideable target, by its route segment, and how to make one on a finding by a person.
+TARGET_MAKERS: list[tuple[str, Callable[[Session, Finding, User], object]]] = [
+    ("findings", lambda db, f, u: f.public_id),
+    ("comments", lambda db, f, u: comment(db, f, u).id),
+    ("evidence", lambda db, f, u: add_desk_evidence(db, f, u)[0].id),
+    ("mentions", lambda db, f, u: mention(db, f, u).id),
+    ("media", lambda db, f, u: photo(db, u).id),
+]
+
+
+@pytest.mark.parametrize(("segment", "make"), TARGET_MAKERS)
 def test_hide_twice_unhide_twice_and_unknown_targets(
     segment: str,
     make: Callable[[Session, Finding, User], object],
@@ -286,3 +287,39 @@ def test_hide_twice_unhide_twice_and_unknown_targets(
     assert (missing.status_code, error_code(missing)) == (404, "target_not_found")
     no_reason = client.post(f"{API}/mod/{segment}/{ref}/hide", json={"reason": ""})
     assert no_reason.status_code == 422
+
+
+@pytest.mark.parametrize(("segment", "make"), TARGET_MAKERS)
+def test_a_moderator_does_not_hide_or_show_their_own_work(
+    segment: str,
+    make: Callable[[Session, Finding, User], object],
+    db: Session,
+    client_as: ClientAs,
+    make_user: MakeUser,
+) -> None:
+    mine = make_user(Role.MODERATOR, handle="Mine")
+    finding = create(db, mine)
+    ref = make(db, finding, mine)
+    someone_else = make_user(Role.MODERATOR, handle="Other")
+    me, other = client_as(mine), client_as(someone_else)
+    hidden = me.post(f"{API}/mod/{segment}/{ref}/hide", json=REASON)
+    assert (hidden.status_code, error_code(hidden)) == (403, "own_content")
+    # Another moderator hides it, and its author can't undo that.
+    assert other.post(f"{API}/mod/{segment}/{ref}/hide", json=REASON).status_code == 200
+    shown = me.post(f"{API}/mod/{segment}/{ref}/unhide", json=REASON)
+    assert (shown.status_code, error_code(shown)) == (403, "own_content")
+    assert [(e.action, e.actor_id) for e in log_entries(db)] == [("hide", someone_else.id)]
+
+
+def test_a_moderator_does_not_set_the_level_of_their_own_finding(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    mine = make_user(Role.MODERATOR)
+    barrow = create(db, mine, feature_class="round_barrow")
+    response = client_as(mine).put(
+        f"{API}/mod/findings/{barrow.public_id}/sensitivity", json={"level": "open", **REASON}
+    )
+    assert (response.status_code, error_code(response)) == (403, "own_content")
+    db.refresh(barrow)
+    assert barrow.sensitivity == "protected"
+    assert log_entries(db) == []

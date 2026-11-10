@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+from dataclasses import dataclass
 from typing import Any
 
 from PIL import Image
@@ -15,6 +16,21 @@ from fieldclub.vocab import MentionKind
 
 API = "/api/v1"
 REASON = {"reason": "Breaks the contributor terms."}
+
+# Who may call a route, by the names `test_permissions.caller` gives callers.
+MODERATORS = {"moderator", "admin"}
+APPROVERS = {"trusted", "expert", "moderator", "admin"}
+CONTRIBUTORS = {"member", "trusted", "expert", "moderator", "admin"}
+
+
+@dataclass(frozen=True)
+class Route:
+    """A request to make, relative to `API`, and who may make it."""
+
+    method: str
+    path: str
+    body: dict[str, Any] | None
+    allowed: set[str]
 
 
 def comment(db: Session, finding: Finding, user: User, body: str = "A plain comment.") -> Comment:

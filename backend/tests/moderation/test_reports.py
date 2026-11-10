@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fieldclub import vocab
@@ -55,13 +56,41 @@ def test_one_open_report_per_reporter_and_target(
     assert report(client, "finding", finding.public_id).status_code == 201
     again = report(client, "finding", finding.public_id, reason="spam")
     assert (again.status_code, error_code(again)) == (409, "already_reported")
-    # Someone else may report it too, and once it is resolved the first reporter may again.
+    # Someone else may report it too, and once it is upheld the first reporter may again at once.
     assert report(client_as(make_user()), "finding", finding.public_id).status_code == 201
     first = db.query(Report).order_by(Report.id).first()
     assert first is not None
-    moderation.resolve_report(db, first.id, make_user(Role.MODERATOR), ReportStatus.DISMISSED, "Fine.")
+    moderation.resolve_report(db, first.id, make_user(Role.MODERATOR), ReportStatus.UPHELD, "Hidden.")
     db.commit()
     assert report(client, "finding", finding.public_id).status_code == 201
+
+
+def test_a_dismissed_report_is_not_made_again_for_a_day(
+    client_as: ClientAs, make_user: MakeUser, make_finding: MakeFinding, db: Session
+) -> None:
+    finding = make_finding()
+    reporter = make_user()
+    client = client_as(reporter)
+    moderator = make_user(Role.MODERATOR)
+
+    assert report(client, "finding", finding.public_id).status_code == 201
+    first = db.scalar(select(Report))
+    assert first is not None
+    moderation.resolve_report(db, first.id, moderator, ReportStatus.DISMISSED, "Fine.")
+    db.commit()
+    for reason in ("abuse", "spam"):
+        again = report(client, "finding", finding.public_id, reason=reason)
+        assert (again.status_code, error_code(again)) == (409, "recently_dismissed")
+    # Somebody else still can, and so can the same person about something else.
+    assert report(client_as(make_user()), "finding", finding.public_id).status_code == 201
+    assert report(client, "finding", make_finding().public_id).status_code == 201
+    assert count(db, Report) == 3
+
+    # A day after the dismissal they may report it again.
+    a_day_on = datetime.now(UTC) + moderation.REPORT_COOLING_OFF + timedelta(minutes=1)
+    moderation.create_report(
+        db, reporter, ReportTarget.FINDING, finding.public_id, ReportReason.ABUSE, None, now=a_day_on
+    )
 
 
 def test_nobody_reports_what_they_cannot_see(
@@ -203,25 +232,36 @@ def test_resolving_closes_every_open_report_on_the_target_and_is_logged(
     assert entry.data == {"outcome": "upheld", "reports": sorted(r["id"] for r in upheld)}
 
 
-@pytest.mark.parametrize("whose", ["reported_by_them", "about_their_work", "about_them"])
+@pytest.mark.parametrize(
+    "whose",
+    ["reported_by_them", "about_their_work", "about_their_comment", "about_their_photo", "about_them"],
+)
 def test_a_moderator_does_not_resolve_a_report_on_themselves(
-    whose: str, client_as: ClientAs, make_user: MakeUser, make_finding: MakeFinding
+    whose: str, db: Session, client_as: ClientAs, make_user: MakeUser, make_finding: MakeFinding
 ) -> None:
     moderator = make_user(Role.MODERATOR, handle="Mod")
     client = client_as(moderator)
+    # Someone else's report on someone else's comment stays in their queue.
+    report(client_as(make_user()), "comment", comment(db, make_finding(), make_user()).id)
     if whose == "reported_by_them":
         report(client, "finding", make_finding().public_id)
     elif whose == "about_their_work":
         report(client_as(make_user()), "finding", make_finding(moderator).public_id)
+    elif whose == "about_their_comment":
+        report(client_as(make_user()), "comment", comment(db, make_finding(), moderator).id)
+    elif whose == "about_their_photo":
+        report(client_as(make_user()), "photo", photo(db, moderator, approved_by=make_user(Role.ADMIN)).id)
     else:
         report(client_as(make_user()), "user", "Mod")
-    (item,) = client.get(f"{API}/mod/reports").json()["items"]
+    # The queue leaves it out for them, with its reporter and note, and resolving it is refused.
+    assert [i["target"]["kind"] for i in client.get(f"{API}/mod/reports").json()["items"]] == ["comment"]
+    other = client_as(make_user(Role.ADMIN))
+    _, item = other.get(f"{API}/mod/reports").json()["items"]
     response = client.post(
         f"{API}/mod/reports/{item['id']}/resolve", json={"outcome": "dismissed", "note": "x"}
     )
     assert (response.status_code, error_code(response)) == (403, "own_report")
     # Another moderator can.
-    other = client_as(make_user(Role.ADMIN))
     resolved = other.post(
         f"{API}/mod/reports/{item['id']}/resolve", json={"outcome": "dismissed", "note": "x"}
     )

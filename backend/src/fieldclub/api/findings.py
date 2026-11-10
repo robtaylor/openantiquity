@@ -229,9 +229,12 @@ def withdraw_finding(public_id: str, user: Contributor, db: Db, response: Respon
 def change_sensitivity(
     public_id: str, body: SensitivityChange, user: Contributor, db: Db, response: Response
 ) -> FindingDetail:
-    """Raise a finding's level (its finder, a trusted member or a moderator), or lower it (a moderator)."""
+    """Raise a finding's level: its finder, a trusted member or a moderator.
+
+    A moderator lowers a level with `PUT /mod/findings/{public_id}/sensitivity`, which logs it.
+    """
     finding = findings.lock_finding(db, public_id, user)
-    sensitivity.change_sensitivity(db, finding, user, body.level)
+    sensitivity.raise_sensitivity(db, finding, user, body.level)
     db.commit()
     private(response)
     return detail(db, finding, user)
