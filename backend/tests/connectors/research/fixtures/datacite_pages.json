@@ -1,0 +1,1658 @@
+{
+ "page1": {
+  "data": [
+   {
+    "id": "10.5284/1058996",
+    "type": "dois",
+    "attributes": {
+     "doi": "10.5284/1058996",
+     "identifiers": [
+      {
+       "identifier": "65105",
+       "identifierType": "ADS Grey Lit ID"
+      },
+      {
+       "identifier": "englishh4-303986",
+       "identifierType": "OASIS ID"
+      }
+     ],
+     "creators": [
+      {
+       "affiliation": [],
+       "name": "English Heritage Geophysics Team",
+       "nameIdentifiers": []
+      }
+     ],
+     "titles": [
+      {
+       "title": "Elsecar, Barnsley, Report on Geophysical Survey, May 2017"
+      }
+     ],
+     "publisher": "Archaeology Data Service",
+     "container": {
+      "identifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+      "identifierType": "URL",
+      "type": "Series"
+     },
+     "publicationYear": 2017,
+     "subjects": [
+      {
+       "subject": "Archaeology"
+      },
+      {
+       "subject": "Grey Literature"
+      }
+     ],
+     "contributors": [],
+     "dates": [
+      {
+       "date": "2017",
+       "dateType": "Issued"
+      }
+     ],
+     "language": "en",
+     "types": {
+      "schemaOrg": "ScholarlyArticle",
+      "resourceTypeGeneral": "Text",
+      "citeproc": "report",
+      "bibtex": "article",
+      "ris": "RPRT",
+      "resourceType": "Report"
+     },
+     "relatedIdentifiers": [
+      {
+       "relationType": "IsPartOf",
+       "relatedIdentifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+       "relatedIdentifierType": "URL"
+      }
+     ],
+     "relatedItems": [],
+     "sizes": [
+      "1 pdf file"
+     ],
+     "formats": [
+      "PDF"
+     ],
+     "version": null,
+     "rightsList": [
+      {
+       "rightsUri": "http://archaeologydataservice.ac.uk/advice/termsOfUseAndAccess",
+       "rights": "ADS Terms and Conditions of reuse apply"
+      }
+     ],
+     "descriptions": [
+      {
+       "descriptionType": "Other",
+       "description": "A4 format bound report with 15 pages and 24 figures. Report also available online as a PDF download."
+      }
+     ],
+     "geoLocations": [
+      {
+       "geoLocationBox": {
+        "northBoundLatitude": "53.497018",
+        "southBoundLatitude": "51.844796",
+        "eastBoundLongitude": "0.851205",
+        "westBoundLongitude": "-1.434299"
+       },
+       "geoLocationPlace": "Site of Milton Ironworks"
+      }
+     ],
+     "fundingReferences": [],
+     "url": "http://archaeologydataservice.ac.uk/archives/view/greylit/details.cfm?id=65105",
+     "contentUrl": null,
+     "metadataVersion": 0,
+     "schemaVersion": null,
+     "source": "mds",
+     "isActive": true,
+     "state": "findable",
+     "reason": null,
+     "viewCount": 0,
+     "downloadCount": 0,
+     "referenceCount": 0,
+     "citationCount": 0,
+     "partCount": 0,
+     "partOfCount": 0,
+     "versionCount": 0,
+     "versionOfCount": 0,
+     "created": "2020-01-29T13:04:46Z",
+     "registered": "2020-01-29T13:04:46Z",
+     "published": null,
+     "updated": "2020-07-30T21:50:38Z"
+    }
+   },
+   {
+    "id": "10.5284/1059004",
+    "type": "dois",
+    "attributes": {
+     "doi": "10.5284/1059004",
+     "identifiers": [
+      {
+       "identifier": "65108",
+       "identifierType": "ADS Grey Lit ID"
+      },
+      {
+       "identifier": "englishh4-361641",
+       "identifierType": "OASIS ID"
+      }
+     ],
+     "creators": [
+      {
+       "affiliation": [],
+       "name": "English Heritage Geophysics Team",
+       "nameIdentifiers": []
+      }
+     ],
+     "titles": [
+      {
+       "title": "Framlingham Castle, Framlingham, Suffolk. Report on Geophysical Surveys, May 2019"
+      }
+     ],
+     "publisher": "Archaeology Data Service",
+     "container": {
+      "identifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+      "identifierType": "URL",
+      "type": "Series"
+     },
+     "publicationYear": 2019,
+     "subjects": [
+      {
+       "subject": "Archaeology"
+      },
+      {
+       "subject": "Grey Literature"
+      }
+     ],
+     "contributors": [],
+     "dates": [
+      {
+       "date": "2019",
+       "dateType": "Issued"
+      }
+     ],
+     "language": "en",
+     "types": {
+      "schemaOrg": "ScholarlyArticle",
+      "resourceTypeGeneral": "Text",
+      "citeproc": "report",
+      "bibtex": "article",
+      "ris": "RPRT",
+      "resourceType": "Report"
+     },
+     "relatedIdentifiers": [
+      {
+       "relationType": "IsPartOf",
+       "relatedIdentifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+       "relatedIdentifierType": "URL"
+      }
+     ],
+     "relatedItems": [],
+     "sizes": [
+      "1 pdf file"
+     ],
+     "formats": [
+      "PDF"
+     ],
+     "version": null,
+     "rightsList": [
+      {
+       "rightsUri": "http://archaeologydataservice.ac.uk/advice/termsOfUseAndAccess",
+       "rights": "ADS Terms and Conditions of reuse apply"
+      }
+     ],
+     "descriptions": [
+      {
+       "descriptionType": "Other",
+       "description": "Bound A4 size report, 13 pages and 15 figures. Also available online in digital format as a downloadable PDF document."
+      }
+     ],
+     "geoLocations": [
+      {
+       "geoLocationPoint": {
+        "pointLatitude": "1.346643",
+        "pointLongitude": "52.223938"
+       },
+       "geoLocationPlace": "Framlingham Castle"
+      }
+     ],
+     "fundingReferences": [],
+     "url": "http://archaeologydataservice.ac.uk/archives/view/greylit/details.cfm?id=65108",
+     "contentUrl": null,
+     "metadataVersion": 0,
+     "schemaVersion": null,
+     "source": "mds",
+     "isActive": true,
+     "state": "findable",
+     "reason": null,
+     "viewCount": 0,
+     "downloadCount": 0,
+     "referenceCount": 0,
+     "citationCount": 0,
+     "partCount": 0,
+     "partOfCount": 0,
+     "versionCount": 0,
+     "versionOfCount": 0,
+     "created": "2020-02-03T16:57:17Z",
+     "registered": "2020-02-04T05:04:51Z",
+     "published": null,
+     "updated": "2020-07-30T22:03:35Z"
+    }
+   },
+   {
+    "id": "10.5284/1074905",
+    "type": "dois",
+    "attributes": {
+     "doi": "10.5284/1074905",
+     "identifiers": [
+      {
+       "identifier": "65134",
+       "identifierType": "ADS Grey Lit ID"
+      },
+      {
+       "identifier": "archaeol6-102477",
+       "identifierType": "OASIS ID"
+      }
+     ],
+     "creators": [
+      {
+       "affiliation": [],
+       "name": "Archaeology South East",
+       "nameIdentifiers": []
+      }
+     ],
+     "titles": [
+      {
+       "title": "Detailed Magnetometer Survey at Former Ford Airfield, Ford, West Sussex"
+      }
+     ],
+     "publisher": "Archaeology Data Service",
+     "container": {
+      "identifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+      "identifierType": "URL",
+      "type": "Series"
+     },
+     "publicationYear": 2011,
+     "subjects": [
+      {
+       "subject": "Archaeology"
+      },
+      {
+       "subject": "Grey Literature"
+      }
+     ],
+     "contributors": [],
+     "dates": [
+      {
+       "date": "2011",
+       "dateType": "Issued"
+      }
+     ],
+     "language": "en",
+     "types": {
+      "schemaOrg": "ScholarlyArticle",
+      "resourceTypeGeneral": "Text",
+      "citeproc": "report",
+      "bibtex": "article",
+      "ris": "RPRT",
+      "resourceType": "Report"
+     },
+     "relatedIdentifiers": [
+      {
+       "relationType": "IsPartOf",
+       "relatedIdentifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+       "relatedIdentifierType": "URL"
+      }
+     ],
+     "relatedItems": [],
+     "sizes": [
+      "1 pdf file"
+     ],
+     "formats": [
+      "PDF"
+     ],
+     "version": null,
+     "rightsList": [
+      {
+       "rightsUri": "http://archaeologydataservice.ac.uk/advice/termsOfUseAndAccess",
+       "rights": "ADS Terms and Conditions of reuse apply"
+      }
+     ],
+     "descriptions": [
+      {
+       "descriptionType": "Other",
+       "description": "A4 report"
+      }
+     ],
+     "geoLocations": [
+      {
+       "geoLocationPoint": {
+        "pointLatitude": "-0.586804",
+        "pointLongitude": "50.819904"
+       },
+       "geoLocationPlace": "Former Ford Airfield"
+      }
+     ],
+     "fundingReferences": [],
+     "url": "http://archaeologydataservice.ac.uk/archives/view/greylit/details.cfm?id=65134",
+     "contentUrl": null,
+     "metadataVersion": 0,
+     "schemaVersion": null,
+     "source": "mds",
+     "isActive": true,
+     "state": "findable",
+     "reason": null,
+     "viewCount": 0,
+     "downloadCount": 0,
+     "referenceCount": 0,
+     "citationCount": 0,
+     "partCount": 0,
+     "partOfCount": 0,
+     "versionCount": 0,
+     "versionOfCount": 0,
+     "created": "2020-04-05T20:09:20Z",
+     "registered": "2020-04-05T20:09:21Z",
+     "published": null,
+     "updated": "2020-08-01T13:02:04Z"
+    }
+   },
+   {
+    "id": "10.5284/1074906",
+    "type": "dois",
+    "attributes": {
+     "doi": "10.5284/1074906",
+     "identifiers": [
+      {
+       "identifier": "65135",
+       "identifierType": "ADS Grey Lit ID"
+      },
+      {
+       "identifier": "archaeol6-105306",
+       "identifierType": "OASIS ID"
+      }
+     ],
+     "creators": [
+      {
+       "affiliation": [],
+       "name": "Archaeology South East",
+       "nameIdentifiers": []
+      }
+     ],
+     "titles": [
+      {
+       "title": "An archaeological watching Brief at Trafalgar Gate Link Road, Portsmouth, Hampshire"
+      }
+     ],
+     "publisher": "Archaeology Data Service",
+     "container": {
+      "identifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+      "identifierType": "URL",
+      "type": "Series"
+     },
+     "publicationYear": 2011,
+     "subjects": [
+      {
+       "subject": "Archaeology"
+      },
+      {
+       "subject": "Grey Literature"
+      }
+     ],
+     "contributors": [],
+     "dates": [
+      {
+       "date": "2011",
+       "dateType": "Issued"
+      }
+     ],
+     "language": "en",
+     "types": {
+      "schemaOrg": "ScholarlyArticle",
+      "resourceTypeGeneral": "Text",
+      "citeproc": "report",
+      "bibtex": "article",
+      "ris": "RPRT",
+      "resourceType": "Report"
+     },
+     "relatedIdentifiers": [
+      {
+       "relationType": "IsPartOf",
+       "relatedIdentifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+       "relatedIdentifierType": "URL"
+      }
+     ],
+     "relatedItems": [],
+     "sizes": [
+      "1 pdf file"
+     ],
+     "formats": [
+      "PDF"
+     ],
+     "version": null,
+     "rightsList": [
+      {
+       "rightsUri": "http://archaeologydataservice.ac.uk/advice/termsOfUseAndAccess",
+       "rights": "ADS Terms and Conditions of reuse apply"
+      }
+     ],
+     "descriptions": [
+      {
+       "descriptionType": "Other",
+       "description": "A4 bound and PDF versions"
+      }
+     ],
+     "geoLocations": [
+      {
+       "geoLocationPoint": {
+        "pointLatitude": "-1.089065",
+        "pointLongitude": "50.808058"
+       },
+       "geoLocationPlace": "Trafalgar Gate Link Road"
+      }
+     ],
+     "fundingReferences": [],
+     "url": "http://archaeologydataservice.ac.uk/archives/view/greylit/details.cfm?id=65135",
+     "contentUrl": null,
+     "metadataVersion": 0,
+     "schemaVersion": null,
+     "source": "mds",
+     "isActive": true,
+     "state": "findable",
+     "reason": null,
+     "viewCount": 0,
+     "downloadCount": 0,
+     "referenceCount": 0,
+     "citationCount": 0,
+     "partCount": 0,
+     "partOfCount": 0,
+     "versionCount": 0,
+     "versionOfCount": 0,
+     "created": "2020-04-05T20:09:22Z",
+     "registered": "2020-04-05T20:09:24Z",
+     "published": null,
+     "updated": "2020-08-01T13:02:04Z"
+    }
+   },
+   {
+    "id": "10.5284/1074907",
+    "type": "dois",
+    "attributes": {
+     "doi": "10.5284/1074907",
+     "identifiers": [
+      {
+       "identifier": "65136",
+       "identifierType": "ADS Grey Lit ID"
+      },
+      {
+       "identifier": "archaeol6-105429",
+       "identifierType": "OASIS ID"
+      }
+     ],
+     "creators": [
+      {
+       "affiliation": [],
+       "name": "Archaeology South East",
+       "nameIdentifiers": []
+      }
+     ],
+     "titles": [
+      {
+       "title": "Earth Resistance Survey at Dominican Friary Ruins, Arundel. W Sussex"
+      }
+     ],
+     "publisher": "Archaeology Data Service",
+     "container": {
+      "identifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+      "identifierType": "URL",
+      "type": "Series"
+     },
+     "publicationYear": 2011,
+     "subjects": [
+      {
+       "subject": "Archaeology"
+      },
+      {
+       "subject": "Grey Literature"
+      }
+     ],
+     "contributors": [],
+     "dates": [
+      {
+       "date": "2011",
+       "dateType": "Issued"
+      }
+     ],
+     "language": "en",
+     "types": {
+      "schemaOrg": "ScholarlyArticle",
+      "resourceTypeGeneral": "Text",
+      "citeproc": "report",
+      "bibtex": "article",
+      "ris": "RPRT",
+      "resourceType": "Report"
+     },
+     "relatedIdentifiers": [
+      {
+       "relationType": "IsPartOf",
+       "relatedIdentifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+       "relatedIdentifierType": "URL"
+      }
+     ],
+     "relatedItems": [],
+     "sizes": [
+      "1 pdf file"
+     ],
+     "formats": [
+      "PDF"
+     ],
+     "version": null,
+     "rightsList": [
+      {
+       "rightsUri": "http://archaeologydataservice.ac.uk/advice/termsOfUseAndAccess",
+       "rights": "ADS Terms and Conditions of reuse apply"
+      }
+     ],
+     "descriptions": [
+      {
+       "descriptionType": "Other",
+       "description": "grey lit bound report, A4"
+      }
+     ],
+     "geoLocations": [
+      {
+       "geoLocationPoint": {
+        "pointLatitude": "-0.552702",
+        "pointLongitude": "50.854379"
+       },
+       "geoLocationPlace": "Dominican Friary Ruins"
+      }
+     ],
+     "fundingReferences": [],
+     "url": "http://archaeologydataservice.ac.uk/archives/view/greylit/details.cfm?id=65136",
+     "contentUrl": null,
+     "metadataVersion": 0,
+     "schemaVersion": null,
+     "source": "mds",
+     "isActive": true,
+     "state": "findable",
+     "reason": null,
+     "viewCount": 0,
+     "downloadCount": 0,
+     "referenceCount": 0,
+     "citationCount": 0,
+     "partCount": 0,
+     "partOfCount": 0,
+     "versionCount": 0,
+     "versionOfCount": 0,
+     "created": "2020-04-05T20:09:26Z",
+     "registered": "2020-04-05T20:09:28Z",
+     "published": null,
+     "updated": "2020-08-01T13:02:04Z"
+    }
+   }
+  ],
+  "meta": {
+   "total": 14,
+   "totalPages": 2
+  },
+  "links": {
+   "next": "https://api.datacite.org/dois?client-id=bl.ads&page%5Bcursor%5D=NEXT"
+  }
+ },
+ "page2": {
+  "data": [
+   {
+    "id": "10.5284/1074908",
+    "type": "dois",
+    "attributes": {
+     "doi": "10.5284/1074908",
+     "identifiers": [
+      {
+       "identifier": "65137",
+       "identifierType": "ADS Grey Lit ID"
+      },
+      {
+       "identifier": "archaeol6-105637",
+       "identifierType": "OASIS ID"
+      }
+     ],
+     "creators": [
+      {
+       "affiliation": [],
+       "name": "Archaeology South East",
+       "nameIdentifiers": []
+      }
+     ],
+     "titles": [
+      {
+       "title": "An Archaeological Watching Brief at White Meadows Primary School, Whitelea Road, Wick, Littlehampton, West Sussex"
+      }
+     ],
+     "publisher": "Archaeology Data Service",
+     "container": {
+      "identifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+      "identifierType": "URL",
+      "type": "Series"
+     },
+     "publicationYear": 2011,
+     "subjects": [
+      {
+       "subject": "Archaeology"
+      },
+      {
+       "subject": "Grey Literature"
+      }
+     ],
+     "contributors": [],
+     "dates": [
+      {
+       "date": "2011",
+       "dateType": "Issued"
+      }
+     ],
+     "language": "en",
+     "types": {
+      "schemaOrg": "ScholarlyArticle",
+      "resourceTypeGeneral": "Text",
+      "citeproc": "report",
+      "bibtex": "article",
+      "ris": "RPRT",
+      "resourceType": "Report"
+     },
+     "relatedIdentifiers": [
+      {
+       "relationType": "IsPartOf",
+       "relatedIdentifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+       "relatedIdentifierType": "URL"
+      }
+     ],
+     "relatedItems": [],
+     "sizes": [
+      "1 pdf file"
+     ],
+     "formats": [
+      "PDF"
+     ],
+     "version": null,
+     "rightsList": [
+      {
+       "rightsUri": "http://archaeologydataservice.ac.uk/advice/termsOfUseAndAccess",
+       "rights": "ADS Terms and Conditions of reuse apply"
+      }
+     ],
+     "descriptions": [
+      {
+       "descriptionType": "Other",
+       "description": "Standard ASE Client Report A4-sized with cover logos."
+      }
+     ],
+     "geoLocations": [
+      {
+       "geoLocationPoint": {
+        "pointLatitude": "-0.545768",
+        "pointLongitude": "50.816935"
+       },
+       "geoLocationPlace": "White Meadows Primary School, Wick"
+      }
+     ],
+     "fundingReferences": [],
+     "url": "http://archaeologydataservice.ac.uk/archives/view/greylit/details.cfm?id=65137",
+     "contentUrl": null,
+     "metadataVersion": 0,
+     "schemaVersion": null,
+     "source": "mds",
+     "isActive": true,
+     "state": "findable",
+     "reason": null,
+     "viewCount": 0,
+     "downloadCount": 0,
+     "referenceCount": 0,
+     "citationCount": 0,
+     "partCount": 0,
+     "partOfCount": 0,
+     "versionCount": 0,
+     "versionOfCount": 0,
+     "created": "2020-04-05T20:09:30Z",
+     "registered": "2020-04-05T20:09:30Z",
+     "published": null,
+     "updated": "2020-08-01T13:02:04Z"
+    }
+   },
+   {
+    "id": "10.5284/1074909",
+    "type": "dois",
+    "attributes": {
+     "doi": "10.5284/1074909",
+     "identifiers": [
+      {
+       "identifier": "65138",
+       "identifierType": "ADS Grey Lit ID"
+      },
+      {
+       "identifier": "archaeol6-106224",
+       "identifierType": "OASIS ID"
+      }
+     ],
+     "creators": [
+      {
+       "affiliation": [],
+       "name": "Archaeology South East",
+       "nameIdentifiers": []
+      }
+     ],
+     "titles": [
+      {
+       "title": "An archaeological watching brief at Mid Sussex Special School, Burgess Hill, West Sussex"
+      }
+     ],
+     "publisher": "Archaeology Data Service",
+     "container": {
+      "identifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+      "identifierType": "URL",
+      "type": "Series"
+     },
+     "publicationYear": 2011,
+     "subjects": [
+      {
+       "subject": "Archaeology"
+      },
+      {
+       "subject": "Grey Literature"
+      }
+     ],
+     "contributors": [],
+     "dates": [
+      {
+       "date": "2011",
+       "dateType": "Issued"
+      }
+     ],
+     "language": "en",
+     "types": {
+      "schemaOrg": "ScholarlyArticle",
+      "resourceTypeGeneral": "Text",
+      "citeproc": "report",
+      "bibtex": "article",
+      "ris": "RPRT",
+      "resourceType": "Report"
+     },
+     "relatedIdentifiers": [
+      {
+       "relationType": "IsPartOf",
+       "relatedIdentifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+       "relatedIdentifierType": "URL"
+      }
+     ],
+     "relatedItems": [],
+     "sizes": [
+      "1 pdf file"
+     ],
+     "formats": [
+      "PDF"
+     ],
+     "version": null,
+     "rightsList": [
+      {
+       "rightsUri": "http://archaeologydataservice.ac.uk/advice/termsOfUseAndAccess",
+       "rights": "ADS Terms and Conditions of reuse apply"
+      }
+     ],
+     "descriptions": [
+      {
+       "descriptionType": "Other",
+       "description": "A4 bound and pdf versions"
+      }
+     ],
+     "geoLocations": [
+      {
+       "geoLocationPoint": {
+        "pointLatitude": "-0.13299",
+        "pointLongitude": "50.950897"
+       },
+       "geoLocationPlace": "Mid Sussex Special School"
+      }
+     ],
+     "fundingReferences": [],
+     "url": "http://archaeologydataservice.ac.uk/archives/view/greylit/details.cfm?id=65138",
+     "contentUrl": null,
+     "metadataVersion": 0,
+     "schemaVersion": null,
+     "source": "mds",
+     "isActive": true,
+     "state": "findable",
+     "reason": null,
+     "viewCount": 0,
+     "downloadCount": 0,
+     "referenceCount": 0,
+     "citationCount": 0,
+     "partCount": 0,
+     "partOfCount": 0,
+     "versionCount": 0,
+     "versionOfCount": 0,
+     "created": "2020-04-05T20:09:32Z",
+     "registered": "2020-04-05T20:09:33Z",
+     "published": null,
+     "updated": "2020-08-01T13:02:04Z"
+    }
+   },
+   {
+    "id": "10.5284/1074910",
+    "type": "dois",
+    "attributes": {
+     "doi": "10.5284/1074910",
+     "identifiers": [
+      {
+       "identifier": "65139",
+       "identifierType": "ADS Grey Lit ID"
+      },
+      {
+       "identifier": "archaeol6-112332",
+       "identifierType": "OASIS ID"
+      }
+     ],
+     "creators": [
+      {
+       "affiliation": [],
+       "name": "Archaeology South East",
+       "nameIdentifiers": []
+      }
+     ],
+     "titles": [
+      {
+       "title": "Archaeological Investigations at Overton Wastewater Treatment Works, Overton, Hampshire A Post-Excavtion Assessment and Revised Project Design"
+      }
+     ],
+     "publisher": "Archaeology Data Service",
+     "container": {
+      "identifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+      "identifierType": "URL",
+      "type": "Series"
+     },
+     "publicationYear": 2011,
+     "subjects": [
+      {
+       "subject": "Archaeology"
+      },
+      {
+       "subject": "Grey Literature"
+      }
+     ],
+     "contributors": [],
+     "dates": [
+      {
+       "date": "2011",
+       "dateType": "Issued"
+      }
+     ],
+     "language": "en",
+     "types": {
+      "schemaOrg": "ScholarlyArticle",
+      "resourceTypeGeneral": "Text",
+      "citeproc": "report",
+      "bibtex": "article",
+      "ris": "RPRT",
+      "resourceType": "Report"
+     },
+     "relatedIdentifiers": [
+      {
+       "relationType": "IsPartOf",
+       "relatedIdentifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+       "relatedIdentifierType": "URL"
+      }
+     ],
+     "relatedItems": [],
+     "sizes": [
+      "1 pdf file"
+     ],
+     "formats": [
+      "PDF"
+     ],
+     "version": null,
+     "rightsList": [
+      {
+       "rightsUri": "http://archaeologydataservice.ac.uk/advice/termsOfUseAndAccess",
+       "rights": "ADS Terms and Conditions of reuse apply"
+      }
+     ],
+     "descriptions": [
+      {
+       "descriptionType": "Other",
+       "description": "ASE standard PXA format."
+      }
+     ],
+     "geoLocations": [
+      {
+       "geoLocationPoint": {
+        "pointLatitude": "-1.278696",
+        "pointLongitude": "51.248031"
+       },
+       "geoLocationPlace": "Overton Wastewater Treatment Works"
+      }
+     ],
+     "fundingReferences": [],
+     "url": "http://archaeologydataservice.ac.uk/archives/view/greylit/details.cfm?id=65139",
+     "contentUrl": null,
+     "metadataVersion": 0,
+     "schemaVersion": null,
+     "source": "mds",
+     "isActive": true,
+     "state": "findable",
+     "reason": null,
+     "viewCount": 0,
+     "downloadCount": 0,
+     "referenceCount": 0,
+     "citationCount": 0,
+     "partCount": 0,
+     "partOfCount": 0,
+     "versionCount": 0,
+     "versionOfCount": 0,
+     "created": "2020-04-05T20:09:35Z",
+     "registered": "2020-04-05T20:09:35Z",
+     "published": null,
+     "updated": "2020-08-01T13:02:05Z"
+    }
+   },
+   {
+    "id": "10.5284/1074911",
+    "type": "dois",
+    "attributes": {
+     "doi": "10.5284/1074911",
+     "identifiers": [
+      {
+       "identifier": "65140",
+       "identifierType": "ADS Grey Lit ID"
+      },
+      {
+       "identifier": "archaeol6-112840",
+       "identifierType": "OASIS ID"
+      }
+     ],
+     "creators": [
+      {
+       "affiliation": [],
+       "name": "Archaeology South East",
+       "nameIdentifiers": []
+      }
+     ],
+     "titles": [
+      {
+       "title": "Archaeological Watching Brief Report Becket's Barn, Church Farm Holiday Village Pagham, West Sussex"
+      }
+     ],
+     "publisher": "Archaeology Data Service",
+     "container": {
+      "identifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+      "identifierType": "URL",
+      "type": "Series"
+     },
+     "publicationYear": 2012,
+     "subjects": [
+      {
+       "subject": "Archaeology"
+      },
+      {
+       "subject": "Grey Literature"
+      }
+     ],
+     "contributors": [],
+     "dates": [
+      {
+       "date": "2012",
+       "dateType": "Issued"
+      }
+     ],
+     "language": "en",
+     "types": {
+      "schemaOrg": "ScholarlyArticle",
+      "resourceTypeGeneral": "Text",
+      "citeproc": "report",
+      "bibtex": "article",
+      "ris": "RPRT",
+      "resourceType": "Report"
+     },
+     "relatedIdentifiers": [
+      {
+       "relationType": "IsPartOf",
+       "relatedIdentifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+       "relatedIdentifierType": "URL"
+      }
+     ],
+     "relatedItems": [],
+     "sizes": [
+      "1 pdf file"
+     ],
+     "formats": [
+      "PDF"
+     ],
+     "version": null,
+     "rightsList": [
+      {
+       "rightsUri": "http://archaeologydataservice.ac.uk/advice/termsOfUseAndAccess",
+       "rights": "ADS Terms and Conditions of reuse apply"
+      }
+     ],
+     "descriptions": [
+      {
+       "descriptionType": "Other",
+       "description": "A4 Report"
+      }
+     ],
+     "geoLocations": [
+      {
+       "geoLocationPoint": {
+        "pointLatitude": "-0.747455",
+        "pointLongitude": "50.76942"
+       },
+       "geoLocationPlace": "Church Farm Holiday Village"
+      }
+     ],
+     "fundingReferences": [],
+     "url": "http://archaeologydataservice.ac.uk/archives/view/greylit/details.cfm?id=65140",
+     "contentUrl": null,
+     "metadataVersion": 0,
+     "schemaVersion": null,
+     "source": "mds",
+     "isActive": true,
+     "state": "findable",
+     "reason": null,
+     "viewCount": 0,
+     "downloadCount": 0,
+     "referenceCount": 0,
+     "citationCount": 0,
+     "partCount": 0,
+     "partOfCount": 0,
+     "versionCount": 0,
+     "versionOfCount": 0,
+     "created": "2020-04-05T20:09:36Z",
+     "registered": "2020-04-05T20:09:37Z",
+     "published": null,
+     "updated": "2020-08-01T13:02:05Z"
+    }
+   },
+   {
+    "id": "10.5284/1074912",
+    "type": "dois",
+    "attributes": {
+     "doi": "10.5284/1074912",
+     "identifiers": [
+      {
+       "identifier": "65141",
+       "identifierType": "ADS Grey Lit ID"
+      },
+      {
+       "identifier": "archaeol6-113243",
+       "identifierType": "OASIS ID"
+      }
+     ],
+     "creators": [
+      {
+       "affiliation": [],
+       "name": "Archaeology South East",
+       "nameIdentifiers": []
+      }
+     ],
+     "titles": [
+      {
+       "title": "An archaeological watching brief during construction works at Lydd Wastewater Treatment Works, Jury's Gap Road, Lydd, Kent"
+      }
+     ],
+     "publisher": "Archaeology Data Service",
+     "container": {
+      "identifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+      "identifierType": "URL",
+      "type": "Series"
+     },
+     "publicationYear": 2011,
+     "subjects": [
+      {
+       "subject": "Archaeology"
+      },
+      {
+       "subject": "Grey Literature"
+      }
+     ],
+     "contributors": [],
+     "dates": [
+      {
+       "date": "2011",
+       "dateType": "Issued"
+      }
+     ],
+     "language": "en",
+     "types": {
+      "schemaOrg": "ScholarlyArticle",
+      "resourceTypeGeneral": "Text",
+      "citeproc": "report",
+      "bibtex": "article",
+      "ris": "RPRT",
+      "resourceType": "Report"
+     },
+     "relatedIdentifiers": [
+      {
+       "relationType": "IsPartOf",
+       "relatedIdentifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+       "relatedIdentifierType": "URL"
+      }
+     ],
+     "relatedItems": [],
+     "sizes": [
+      "1 pdf file"
+     ],
+     "formats": [
+      "PDF"
+     ],
+     "version": null,
+     "rightsList": [
+      {
+       "rightsUri": "http://archaeologydataservice.ac.uk/advice/termsOfUseAndAccess",
+       "rights": "ADS Terms and Conditions of reuse apply"
+      }
+     ],
+     "descriptions": [
+      {
+       "descriptionType": "Other",
+       "description": "Booklet"
+      }
+     ],
+     "geoLocations": [
+      {
+       "geoLocationPoint": {
+        "pointLatitude": "0.887106",
+        "pointLongitude": "50.947234"
+       },
+       "geoLocationPlace": "Lydd WWTW, Jury's Gap Road"
+      }
+     ],
+     "fundingReferences": [],
+     "url": "http://archaeologydataservice.ac.uk/archives/view/greylit/details.cfm?id=65141",
+     "contentUrl": null,
+     "metadataVersion": 0,
+     "schemaVersion": null,
+     "source": "mds",
+     "isActive": true,
+     "state": "findable",
+     "reason": null,
+     "viewCount": 0,
+     "downloadCount": 0,
+     "referenceCount": 0,
+     "citationCount": 0,
+     "partCount": 0,
+     "partOfCount": 0,
+     "versionCount": 0,
+     "versionOfCount": 0,
+     "created": "2020-04-05T20:09:39Z",
+     "registered": "2020-04-05T20:09:39Z",
+     "published": null,
+     "updated": "2020-08-01T13:02:05Z"
+    }
+   },
+   {
+    "id": "10.5284/1147323",
+    "type": "dois",
+    "attributes": {
+     "doi": "10.5284/1147323",
+     "identifiers": [
+      {
+       "identifier": "hs2infra1-412184",
+       "identifierType": "OASIS ID"
+      }
+     ],
+     "creators": [
+      {
+       "nameType": "Personal",
+       "affiliation": [
+        "High Speed Two Ltd."
+       ],
+       "givenName": "Jacqui",
+       "familyName": "Hutton",
+       "name": "Hutton, Jacqui",
+       "nameIdentifiers": []
+      },
+      {
+       "nameType": "Personal",
+       "affiliation": [
+        "High Speed Two Ltd."
+       ],
+       "givenName": "Vix",
+       "familyName": "Hughes",
+       "name": "Hughes, Vix",
+       "nameIdentifiers": []
+      },
+      {
+       "nameType": "Personal",
+       "affiliation": [
+        "High Speed Two Ltd."
+       ],
+       "givenName": "Ciaran",
+       "familyName": "Feeney",
+       "name": "Feeney, Ciaran",
+       "nameIdentifiers": []
+      }
+     ],
+     "titles": [
+      {
+       "title": "PXA Report for Archaeological Recording at Rocky Lane and Grove Farm, Small Dean Embankment, Buckinghamshire - AC210"
+      }
+     ],
+     "publisher": "Archaeology Data Service",
+     "container": {},
+     "publicationYear": 2021,
+     "subjects": [
+      {
+       "subject": "Archaeology"
+      },
+      {
+       "subject": "Grey Literature"
+      }
+     ],
+     "contributors": [],
+     "dates": [],
+     "language": "en",
+     "types": {
+      "schemaOrg": "Report",
+      "resourceTypeGeneral": "Text",
+      "citeproc": "report",
+      "bibtex": "techreport",
+      "ris": "RPRT",
+      "resourceType": "Report"
+     },
+     "relatedIdentifiers": [],
+     "relatedItems": [],
+     "sizes": [
+      "1"
+     ],
+     "formats": [
+      "PDF"
+     ],
+     "version": null,
+     "rightsList": [
+      {
+       "rightsUri": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+       "rights": "Open Government Licence"
+      }
+     ],
+     "descriptions": [
+      {
+       "descriptionType": "Abstract",
+       "description": "Archaeological mitigation was undertaken in two locations; on land at Rocky Lane and Grove Farm near Wendover, Buckinghamshire. No archaeological remains were uncovered at Rocky Lane, only varying geology was recorded. Archaeological features were uncovered at the Grove Farm North (C21033), these included Neolithic pits and disarticulated human remains, the date of which is uncertain and C14 dating would be required to ascertain a time frame. Additionally, Iron Age bell-shaped storage pits were recorded with cremations dating to the Roman period. Several undated features were also recorded that comprised pits and ditches. The Grove Farm West (C21034) area revealed a low density of features, which included an undated cremation, undated small discrete pits and post-medieval agricultural remains in the form furrows and a large pit ."
+      }
+     ],
+     "geoLocations": [
+      {
+       "geoLocationPoint": {
+        "pointLatitude": 51.7458371249826,
+        "pointLongitude": -0.731125835888679
+       },
+       "geoLocationPlace": "Wendover, Aylesbury Vale, Buckinghamshire, England"
+      }
+     ],
+     "fundingReferences": [],
+     "url": "https://archaeologydataservice.ac.uk/library/browse/issue.xhtml?recordId=1257652",
+     "contentUrl": null,
+     "metadataVersion": 0,
+     "schemaVersion": "http://datacite.org/schema/kernel-4",
+     "source": "mds",
+     "isActive": true,
+     "state": "findable",
+     "reason": null,
+     "viewCount": 0,
+     "downloadCount": 0,
+     "referenceCount": 0,
+     "citationCount": 0,
+     "partCount": 0,
+     "partOfCount": 0,
+     "versionCount": 0,
+     "versionOfCount": 0,
+     "created": "2026-11-10T10:14:42Z",
+     "registered": "2026-11-10T10:14:42Z",
+     "published": null,
+     "updated": "2026-11-10T10:14:42Z"
+    }
+   },
+   {
+    "id": "10.5284/1147322",
+    "type": "dois",
+    "attributes": {
+     "doi": "10.5284/1147322",
+     "identifiers": [
+      {
+       "identifier": "hs2infra1-506610",
+       "identifierType": "OASIS ID"
+      }
+     ],
+     "creators": [
+      {
+       "nameType": "Personal",
+       "affiliation": [
+        "High Speed Two Ltd."
+       ],
+       "givenName": "Jacqui",
+       "familyName": "Hutton",
+       "name": "Hutton, Jacqui",
+       "nameIdentifiers": []
+      }
+     ],
+     "titles": [
+      {
+       "title": "Post-Excavation Assessment Report for Archaeological Recording at Waddesdon C24018 and C24019 - Site Code 1C20WADAR"
+      }
+     ],
+     "publisher": "Archaeology Data Service",
+     "container": {},
+     "publicationYear": 2022,
+     "subjects": [
+      {
+       "subject": "Archaeology"
+      },
+      {
+       "subject": "Grey Literature"
+      }
+     ],
+     "contributors": [],
+     "dates": [],
+     "language": "en",
+     "types": {
+      "schemaOrg": "Report",
+      "resourceTypeGeneral": "Text",
+      "citeproc": "report",
+      "bibtex": "techreport",
+      "ris": "RPRT",
+      "resourceType": "Report"
+     },
+     "relatedIdentifiers": [],
+     "relatedItems": [],
+     "sizes": [
+      "1"
+     ],
+     "formats": [
+      "PDF"
+     ],
+     "version": null,
+     "rightsList": [
+      {
+       "rightsUri": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+       "rights": "Open Government Licence"
+      }
+     ],
+     "descriptions": [
+      {
+       "descriptionType": "Abstract",
+       "description": "Open area excavation carried out in two land parcels A moderate density of archaeology was uncovered during the excavation, dated primarily to the Romano British period with elements of post medieval detritus in the form of brick and roof tile fragments. Most notable were two corn dryers and a small stone floored structure. An isolated crouched inhumation possibly dating to the prehistoric period was recovered in Land Parcel C240108. The majority of the archaeological features pertain to field systems in both areas of investigation. In Land Parcel C24018, three circular paddocks, two with controlled entrances with the other more open. One sub-circular enclosure has no evidence of openings which suggests modifications or a different form of entrance. These potentially represent stock control rather than agricultural activities and likely relate to the linear features recorded in the western area. Additional curvilinear features were recorded in the northern part of the excavation area. A similar field system was recorded in Land Parcel C24019. The linear features in the central part suggest one phase whereas the linear features to the west of the area appear to have been re-cut to re-establish the boundaries or to aid with drainage. A corn dryer and small square structure with a stone flagged floor was recorded at the eastern end of the area."
+      }
+     ],
+     "geoLocations": [
+      {
+       "geoLocationPoint": {
+        "pointLatitude": 51.8555293522938,
+        "pointLongitude": -0.919853986504473
+       },
+       "geoLocationPlace": "Waddesdon, Aylesbury Vale, Buckinghamshire, England"
+      }
+     ],
+     "fundingReferences": [],
+     "url": "https://archaeologydataservice.ac.uk/library/browse/issue.xhtml?recordId=1257651",
+     "contentUrl": null,
+     "metadataVersion": 0,
+     "schemaVersion": "http://datacite.org/schema/kernel-4",
+     "source": "mds",
+     "isActive": true,
+     "state": "findable",
+     "reason": null,
+     "viewCount": 0,
+     "downloadCount": 0,
+     "referenceCount": 0,
+     "citationCount": 0,
+     "partCount": 0,
+     "partOfCount": 0,
+     "versionCount": 0,
+     "versionOfCount": 0,
+     "created": "2026-11-10T10:14:40Z",
+     "registered": "2026-11-10T10:14:41Z",
+     "published": null,
+     "updated": "2026-11-10T10:14:41Z"
+    }
+   },
+   {
+    "id": "10.5284/1074966",
+    "type": "dois",
+    "attributes": {
+     "doi": "10.5284/1074966",
+     "identifiers": [
+      {
+       "identifier": "65195",
+       "identifierType": "ADS Grey Lit ID"
+      },
+      {
+       "identifier": "archaeol6-18704",
+       "identifierType": "OASIS ID"
+      }
+     ],
+     "creators": [
+      {
+       "affiliation": [],
+       "name": "Archaeology South East",
+       "nameIdentifiers": []
+      }
+     ],
+     "titles": [
+      {
+       "title": "An Archaeological Watching Brief at Twyford Water Pipeline, Hampshire"
+      }
+     ],
+     "publisher": "Archaeology Data Service",
+     "container": {
+      "identifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+      "identifierType": "URL",
+      "type": "Series"
+     },
+     "publicationYear": 2006,
+     "subjects": [
+      {
+       "subject": "Archaeology"
+      },
+      {
+       "subject": "Grey Literature"
+      }
+     ],
+     "contributors": [],
+     "dates": [
+      {
+       "date": "2006",
+       "dateType": "Issued"
+      }
+     ],
+     "language": "en",
+     "types": {
+      "schemaOrg": "ScholarlyArticle",
+      "resourceTypeGeneral": "Text",
+      "citeproc": "report",
+      "bibtex": "article",
+      "ris": "RPRT",
+      "resourceType": "Report"
+     },
+     "relatedIdentifiers": [
+      {
+       "relationType": "IsPartOf",
+       "relatedIdentifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+       "relatedIdentifierType": "URL"
+      }
+     ],
+     "relatedItems": [],
+     "sizes": [
+      "1 pdf file"
+     ],
+     "formats": [
+      "PDF"
+     ],
+     "version": null,
+     "rightsList": [
+      {
+       "rightsUri": "http://archaeologydataservice.ac.uk/advice/termsOfUseAndAccess",
+       "rights": "ADS Terms and Conditions of reuse apply"
+      }
+     ],
+     "descriptions": [
+      {
+       "descriptionType": "Other",
+       "description": "Grey literature Report"
+      }
+     ],
+     "geoLocations": [
+      {
+       "geoLocationBox": {
+        "northBoundLatitude": "51.014356",
+        "southBoundLatitude": "51.012668",
+        "eastBoundLongitude": "-1.29872",
+        "westBoundLongitude": "-1.317419"
+       },
+       "geoLocationPlace": "Twyford Down Water Pipeline"
+      }
+     ],
+     "fundingReferences": [],
+     "url": "http://archaeologydataservice.ac.uk/archives/view/greylit/details.cfm?id=65195",
+     "contentUrl": null,
+     "metadataVersion": 0,
+     "schemaVersion": null,
+     "source": "mds",
+     "isActive": true,
+     "state": "findable",
+     "reason": null,
+     "viewCount": 0,
+     "downloadCount": 0,
+     "referenceCount": 0,
+     "citationCount": 0,
+     "partCount": 0,
+     "partOfCount": 0,
+     "versionCount": 0,
+     "versionOfCount": 0,
+     "created": "2020-04-05T20:12:03Z",
+     "registered": "2020-04-05T20:12:03Z",
+     "published": null,
+     "updated": "2020-08-01T13:02:11Z"
+    }
+   },
+   {
+    "id": "10.5284/1074974",
+    "type": "dois",
+    "attributes": {
+     "doi": "10.5284/1074974",
+     "identifiers": [
+      {
+       "identifier": "65203",
+       "identifierType": "ADS Grey Lit ID"
+      },
+      {
+       "identifier": "archaeol6-190677",
+       "identifierType": "OASIS ID"
+      }
+     ],
+     "creators": [
+      {
+       "affiliation": [],
+       "name": "Archaeology South East",
+       "nameIdentifiers": []
+      }
+     ],
+     "titles": [
+      {
+       "title": "An Archaeological Evaluation at Land at Nackington, near Canterbury, Kent"
+      }
+     ],
+     "publisher": "Archaeology Data Service",
+     "container": {
+      "identifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+      "identifierType": "URL",
+      "type": "Series"
+     },
+     "publicationYear": 2014,
+     "subjects": [
+      {
+       "subject": "Archaeology"
+      },
+      {
+       "subject": "Grey Literature"
+      }
+     ],
+     "contributors": [],
+     "dates": [
+      {
+       "date": "2014",
+       "dateType": "Issued"
+      }
+     ],
+     "language": "en",
+     "types": {
+      "schemaOrg": "ScholarlyArticle",
+      "resourceTypeGeneral": "Text",
+      "citeproc": "report",
+      "bibtex": "article",
+      "ris": "RPRT",
+      "resourceType": "Report"
+     },
+     "relatedIdentifiers": [
+      {
+       "relationType": "IsPartOf",
+       "relatedIdentifier": "http://archaeologydataservice.ac.uk/archives/view/greylit/",
+       "relatedIdentifierType": "URL"
+      }
+     ],
+     "relatedItems": [],
+     "sizes": [
+      "1 pdf file"
+     ],
+     "formats": [
+      "PDF"
+     ],
+     "version": null,
+     "rightsList": [
+      {
+       "rightsUri": "http://archaeologydataservice.ac.uk/advice/termsOfUseAndAccess",
+       "rights": "ADS Terms and Conditions of reuse apply"
+      }
+     ],
+     "descriptions": [
+      {
+       "descriptionType": "Other",
+       "description": "A4 Report"
+      }
+     ],
+     "geoLocations": [
+      {
+       "geoLocationBox": {
+        "northBoundLatitude": "51.249197",
+        "southBoundLatitude": "51.248363",
+        "eastBoundLongitude": "1.104002",
+        "westBoundLongitude": "1.079406"
+       },
+       "geoLocationPlace": "Land at Nackington"
+      }
+     ],
+     "fundingReferences": [],
+     "url": "http://archaeologydataservice.ac.uk/archives/view/greylit/details.cfm?id=65203",
+     "contentUrl": null,
+     "metadataVersion": 0,
+     "schemaVersion": null,
+     "source": "mds",
+     "isActive": true,
+     "state": "findable",
+     "reason": null,
+     "viewCount": 0,
+     "downloadCount": 0,
+     "referenceCount": 0,
+     "citationCount": 0,
+     "partCount": 0,
+     "partOfCount": 0,
+     "versionCount": 0,
+     "versionOfCount": 0,
+     "created": "2020-04-05T20:12:24Z",
+     "registered": "2020-04-05T20:12:25Z",
+     "published": null,
+     "updated": "2020-08-01T13:02:12Z"
+    }
+   }
+  ],
+  "meta": {
+   "total": 14,
+   "totalPages": 2
+  },
+  "links": {}
+ }
+}
