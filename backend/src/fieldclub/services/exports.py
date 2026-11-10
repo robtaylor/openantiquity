@@ -112,7 +112,7 @@ def export_rows(db: Session, chosen: Sequence[Finding], viewer: User | None) -> 
     if ids:
         for item in db.scalars(
             select(Evidence)
-            .where(Evidence.finding_id.in_(ids), Evidence.deleted_at.is_(None))
+            .where(Evidence.finding_id.in_(ids), findings.standing_evidence_clause())
             .order_by(Evidence.id)
         ):
             evidence[item.finding_id].append(item)

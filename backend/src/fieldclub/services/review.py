@@ -253,7 +253,13 @@ def list_observations(
         raise AnswerFirstError()
     query = (
         select(Observation)
-        .where(Observation.finding_id == finding.id, Observation.withdrawn_at.is_(None))
+        .join(User, User.id == Observation.user_id)
+        # A banned person's answers stop counting, so they aren't listed either.
+        .where(
+            Observation.finding_id == finding.id,
+            Observation.withdrawn_at.is_(None),
+            User.banned_at.is_(None),
+        )
         .order_by(Observation.id)
     )
     if cursor is not None:

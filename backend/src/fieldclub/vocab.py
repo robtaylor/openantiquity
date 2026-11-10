@@ -884,6 +884,112 @@ class ReportStatus(StrEnum):
     DISMISSED = "dismissed"
 
 
+class ReportTarget(StrEnum):
+    """What a report, or a moderator's action, can be about. See `services.moderation`."""
+
+    FINDING = "finding"
+    COMMENT = "comment"
+    EVIDENCE = "evidence"
+    MENTION = "mention"
+    PHOTO = "photo"
+    USER = "user"
+
+
+class ReportReason(StrEnum):
+    LOCATION_RISK = "location_risk"
+    ILLEGAL = "illegal"
+    INTIMATE_IMAGE = "intimate_image"
+    PRIVACY = "privacy"
+    DEFAMATION = "defamation"
+    ABUSE = "abuse"
+    UNDER_AGE = "under_age"
+    SPAM = "spam"
+    MISLEADING = "misleading"
+    OTHER = "other"
+
+
+@dataclass(frozen=True)
+class ReportReasonInfo:
+    id: ReportReason
+    label: str
+    hint: str
+    # Hours within which a report for this reason must be dealt with, or None
+    # when the law sets no time. See the platform-duties spike.
+    due_hours: int | None = None
+
+
+# What the report button offers. The two with a deadline follow the law the
+# research read: the Online Safety Act s.10(3A) takes down a reported intimate
+# image within 48 hours, and the Defamation (Operators of Websites)
+# Regulations 2013 give an operator 48 hours to act on a notice of complaint.
+REPORT_REASONS: tuple[ReportReasonInfo, ...] = (
+    ReportReasonInfo(
+        ReportReason.LOCATION_RISK,
+        "Puts a site at risk",
+        "It could lead someone to damage a site or dig or detect there.",
+    ),
+    ReportReasonInfo(
+        ReportReason.ILLEGAL,
+        "Illegal",
+        "It encourages a crime, such as metal detecting on a scheduled monument.",
+    ),
+    ReportReasonInfo(
+        ReportReason.INTIMATE_IMAGE,
+        "Intimate image",
+        "A sexual or intimate image of someone shared without their consent.",
+        due_hours=48,
+    ),
+    ReportReasonInfo(
+        ReportReason.PRIVACY,
+        "Reveals personal details",
+        "It identifies a person, a home or a private garden, or says who owns the land.",
+    ),
+    ReportReasonInfo(
+        ReportReason.DEFAMATION,
+        "Untrue about a person",
+        "It says something untrue that harms a person's or an organisation's reputation.",
+        due_hours=48,
+    ),
+    ReportReasonInfo(
+        ReportReason.ABUSE,
+        "Abusive",
+        "Harassment, threats, hate or bullying of anyone.",
+    ),
+    ReportReasonInfo(
+        ReportReason.UNDER_AGE,
+        "Under 16",
+        "The person behind this account seems to be younger than 16.",
+    ),
+    ReportReasonInfo(
+        ReportReason.SPAM, "Spam", "Advertising, or posts that have nothing to do with the map."
+    ),
+    ReportReasonInfo(
+        ReportReason.MISLEADING,
+        "Deliberately false",
+        "Made up on purpose, such as a fake finding or a doctored picture.",
+    ),
+    ReportReasonInfo(ReportReason.OTHER, "Something else", "Tell the moderators what is wrong in the note."),
+)
+
+REPORT_DUE_HOURS: dict[ReportReason, int] = {
+    info.id: info.due_hours for info in REPORT_REASONS if info.due_hours is not None
+}
+
+
+class ModerationActionKind(StrEnum):
+    """What a moderator, or a trusted member approving photos, did. One row each in `moderation_actions`."""
+
+    HIDE = "hide"
+    UNHIDE = "unhide"
+    RESOLVE_REPORT = "resolve_report"
+    CHANGE_ROLE = "change_role"
+    BAN = "ban"
+    UNBAN = "unban"
+    CHANGE_SENSITIVITY = "change_sensitivity"
+    APPROVE_PHOTO = "approve_photo"
+    REJECT_PHOTO = "reject_photo"
+
+
 class ActivityKind(StrEnum):
     FINDING_CREATED = "finding_created"
     TIER_CHANGED = "tier_changed"

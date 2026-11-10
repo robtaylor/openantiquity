@@ -21,7 +21,9 @@ def list_comments(
     finding = findings.get_finding(db, public_id, viewer)
     found = findings.list_comments(db, finding, limit=page.limit, cursor=page.cursor)
     return Page[CommentOut](
-        items=[CommentOut.build(comment, found.authors[comment.user_id]) for comment in found.comments],
+        items=[
+            CommentOut.build(comment, found.authors[comment.user_id], viewer) for comment in found.comments
+        ],
         next_cursor=found.next_cursor,
     )
 

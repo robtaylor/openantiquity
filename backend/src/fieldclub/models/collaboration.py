@@ -37,7 +37,9 @@ from fieldclub.vocab import (
     ActivityKind,
     InvestigationItemKind,
     InvestigationRole,
+    ReportReason,
     ReportStatus,
+    ReportTarget,
     SurveyResult,
     Visibility,
 )
@@ -173,12 +175,27 @@ class Notification(Base):
 
 
 class Report(Base):
-    """A report of a finding, comment or piece of evidence, for moderators."""
+    """A report of a finding, comment, piece of evidence, mention, photo or person, for moderators.
+
+    `target_id` is the target's own `id`, whatever its kind. See `services.moderation`.
+    """
 
     __tablename__ = "reports"
     __table_args__ = (
         enum_check("status", ReportStatus),
+        enum_check("target_kind", ReportTarget),
+        enum_check("reason", ReportReason),
         Index("ix_reports_status_created_at", "status", "created_at"),
+        # One open report per reporter and target. `services.moderation` relies on it.
+        Index(
+            "uq_reports_open_per_reporter",
+            "reporter_id",
+            "target_kind",
+            "target_id",
+            unique=True,
+            postgresql_where=text("status = 'open'"),
+        ),
+        Index("ix_reports_target_kind_target_id", "target_kind", "target_id"),
     )
 
     id: Mapped[IdPk]

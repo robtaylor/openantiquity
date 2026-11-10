@@ -237,6 +237,9 @@ class Evidence(Base):
     verified_by: Mapped[int | None] = fk("users.id")
     verified_at: Mapped[datetime | None] = mapped_column(TimestampTz)
     deleted_at: Mapped[datetime | None] = mapped_column(TimestampTz)
+    # Set by a moderator. Hidden evidence stops counting and leaves every
+    # page, list and export (`services.moderation`).
+    hidden_at: Mapped[datetime | None] = mapped_column(TimestampTz)
 
 
 class EvidenceVote(Base):
@@ -264,6 +267,9 @@ class Comment(Base):
     parent_id: Mapped[int | None] = fk("comments.id", ondelete="CASCADE")
     edited_at: Mapped[datetime | None] = mapped_column(TimestampTz)
     deleted_at: Mapped[datetime | None] = mapped_column(TimestampTz)
+    # Set by a moderator. Everyone but moderators and the author sees a
+    # hidden comment as removed (`services.moderation`).
+    hidden_at: Mapped[datetime | None] = mapped_column(TimestampTz)
 
 
 # The mentions that hold their address on a finding: every live one, and a
@@ -315,6 +321,8 @@ class Mention(Base):
     # scan found, so neither a member nor the scan can add that address again.
     # A person removing their own mention blocks nothing.
     blocks_readding: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # Set by a moderator. A hidden mention is left out of every list and feed.
+    hidden_at: Mapped[datetime | None] = mapped_column(TimestampTz)
 
 
 class Follow(Base):
@@ -335,6 +343,9 @@ class Media(Base):
     """An uploaded file. The bytes live in `Storage` under `storage_key`."""
 
     __tablename__ = "media"
+    __table_args__ = (
+        CheckConstraint("approved_at IS NULL OR rejected_at IS NULL", name="approved_or_rejected"),
+    )
 
     id: Mapped[IdPk]
     created_at: Mapped[CreatedAt]
@@ -349,6 +360,12 @@ class Media(Base):
     # approves it (Decision 0009). See `services.media`.
     approved_at: Mapped[datetime | None] = mapped_column(TimestampTz)
     approved_by: Mapped[int | None] = fk("users.id", ondelete="SET NULL")
+    # Refused from the approval queue. The stored bytes are deleted, the row
+    # stays so that an identical upload can be refused (`services.media`).
+    rejected_at: Mapped[datetime | None] = mapped_column(TimestampTz)
+    rejected_by: Mapped[int | None] = fk("users.id", ondelete="SET NULL")
+    # Set by a moderator on an approved photo. Only moderators and the uploader see it.
+    hidden_at: Mapped[datetime | None] = mapped_column(TimestampTz)
 
 
 __all__ = ["Comment", "Evidence", "EvidenceVote", "Finding", "Follow", "Media", "Mention", "Observation"]

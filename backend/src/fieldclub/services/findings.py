@@ -258,6 +258,23 @@ def may_see_hidden(finding: Finding, viewer: User | None) -> bool:
     return active is not None and (active.has_id(finding.author_id) or is_moderator(active))
 
 
+def may_see_hidden_comment(comment: Comment, viewer: User | None) -> bool:
+    """A comment hidden by a moderator is seen only by moderators and its author."""
+    active = sensitivity.active_viewer(viewer)
+    return active is not None and (active.has_id(comment.user_id) or is_moderator(active))
+
+
+def standing_evidence_clause() -> ColumnElement[bool]:
+    """Evidence that is shown and counted: not deleted, not hidden, and not by a banned account.
+
+    A banned person's answers, evidence and votes stop counting while the ban
+    lasts, and their evidence leaves finding pages and exports. Lifting the
+    ban restores them. See `services.moderation`.
+    """
+    banned = select(User.id).where(User.banned_at.is_not(None))
+    return Evidence.deleted_at.is_(None) & Evidence.hidden_at.is_(None) & Evidence.user_id.not_in(banned)
+
+
 def normalise_public_id(public_id: str) -> str:
     """A finding's public id as `services.ids` writes it, or `FindingNotFoundError` for one it can't be."""
     normalised = ids.normalise(public_id)
@@ -389,22 +406,33 @@ def gather_inputs(db: Session, finding: Finding, state: FindingState | None = No
         for obs, role in db.execute(
             select(Observation, User.role)
             .join(User, User.id == Observation.user_id)
-            .where(Observation.finding_id == finding.id, Observation.withdrawn_at.is_(None))
+            .where(
+                Observation.finding_id == finding.id,
+                Observation.withdrawn_at.is_(None),
+                User.banned_at.is_(None),
+            )
         ).all()
     )
     verifier = aliased(User)
     rows = db.execute(
         select(Evidence, User.role, verifier.role)
         .join(User, User.id == Evidence.user_id)
-        .outerjoin(verifier, verifier.id == Evidence.verified_by)
+        .outerjoin(verifier, (verifier.id == Evidence.verified_by) & verifier.banned_at.is_(None))
         .where(Evidence.finding_id == finding.id)
     ).all()
+    # Passed to the engine as deleted, so it neither counts nor credits them.
+    gone = set(
+        db.scalars(select(Evidence.id).where(Evidence.finding_id == finding.id, ~standing_evidence_clause()))
+    )
     votes: dict[int, list[VoteInput]] = {}
     if rows:
         for evidence_id, user_id, value, role in db.execute(
             select(EvidenceVote.evidence_id, EvidenceVote.user_id, EvidenceVote.value, User.role)
             .join(User, User.id == EvidenceVote.user_id)
-            .where(EvidenceVote.evidence_id.in_([item.id for item, _, _ in rows]))
+            .where(
+                EvidenceVote.evidence_id.in_([item.id for item, _, _ in rows]),
+                User.banned_at.is_(None),
+            )
         ).all():
             votes.setdefault(evidence_id, []).append(VoteInput(user_id=user_id, role=Role(role), value=value))
     evidence = tuple(
@@ -416,8 +444,9 @@ def gather_inputs(db: Session, finding: Finding, state: FindingState | None = No
             stance=item.stance,  # pyright: ignore[reportArgumentType]
             outcome=item.outcome,  # pyright: ignore[reportArgumentType]
             relation=item.relation,  # pyright: ignore[reportArgumentType]
-            deleted=item.deleted_at is not None,
-            verified_by=item.verified_by,
+            deleted=item.id in gone,
+            # A banned verifier's check stops counting with the rest of their work.
+            verified_by=item.verified_by if verifier_role is not None else None,
             verifier_role=Role(verifier_role) if verifier_role is not None else None,
             votes=tuple(votes.get(item.id, ())),
         )
@@ -915,6 +944,11 @@ def get_evidence(db: Session, evidence_id: int, viewer: User | None) -> tuple[Ev
     assert finding is not None, "evidence always belongs to a finding"
     if finding.hidden_at is not None and not may_see_hidden(finding, viewer):
         raise EvidenceNotFoundError()
+    if not is_moderator(viewer) and not db.scalar(
+        select(standing_evidence_clause()).where(Evidence.id == evidence.id)
+    ):
+        # Hidden, or by a banned account: gone for everyone but moderators.
+        raise EvidenceNotFoundError()
     return evidence, finding
 
 
@@ -1007,7 +1041,7 @@ def evidence_for(
     """
     items = db.scalars(
         select(Evidence)
-        .where(Evidence.finding_id == finding.id, Evidence.deleted_at.is_(None))
+        .where(Evidence.finding_id == finding.id, standing_evidence_clause())
         .order_by(Evidence.created_at, Evidence.id)
     ).all()
     people = dict(known or {})
@@ -1070,14 +1104,18 @@ def delete_comment(db: Session, comment_id: int, user: User) -> Comment:
     assert finding is not None, "a comment always belongs to a finding"
     if finding.hidden_at is not None and not may_see_hidden(finding, user):
         raise CommentNotFoundError()
+    if comment.hidden_at is not None and not may_see_hidden_comment(comment, user):
+        raise CommentNotFoundError()
     if not (user.has_id(comment.user_id) or is_moderator(user)):
         raise CommentForbiddenError()
     comment.deleted_at = datetime.now(UTC)
-    db.execute(
-        update(Finding)
-        .where(Finding.id == finding.id)
-        .values(comment_count=func.greatest(Finding.comment_count - 1, 0))
-    )
+    if comment.hidden_at is None:
+        # Hiding already took a hidden comment out of the count.
+        db.execute(
+            update(Finding)
+            .where(Finding.id == finding.id)
+            .values(comment_count=func.greatest(Finding.comment_count - 1, 0))
+        )
     db.flush()
     return comment
 
@@ -1090,7 +1128,11 @@ class CommentPage:
 
 
 def list_comments(db: Session, finding: Finding, *, limit: int, cursor: str | None = None) -> CommentPage:
-    """A finding's comments, oldest first. Deleted ones stay as placeholders, so threads keep their shape."""
+    """A finding's comments, oldest first. Deleted ones stay as placeholders, so threads keep their shape.
+
+    So do hidden ones: `CommentOut.build` shows a hidden comment as removed to
+    everyone but moderators and its author.
+    """
     query = select(Comment).where(Comment.finding_id == finding.id).order_by(Comment.id)
     if cursor is not None:
         query = query.where(Comment.id > int_from_cursor(cursor))

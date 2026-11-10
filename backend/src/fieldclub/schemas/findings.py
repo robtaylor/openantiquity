@@ -38,7 +38,7 @@ from fieldclub.services.confidence import (
     EvidenceStatus,
     NextStep,
 )
-from fieldclub.services.findings import EvidenceView, FindingView
+from fieldclub.services.findings import EvidenceView, FindingView, may_see_hidden_comment
 from fieldclub.services.media import may_see_media
 from fieldclub.vocab import (
     CHECK_EXPLANATIONS,
@@ -692,20 +692,27 @@ class CommentOut(ApiModel):
     body: str | None
     created_at: datetime
     edited_at: datetime | None
+    # True once deleted, and for a comment a moderator hid, to everyone who may not see it.
     deleted: bool
+    # True only for the moderators and the author who still see a hidden comment.
+    hidden: bool = False
 
     @classmethod
-    def build(cls, comment: Comment, author: User) -> CommentOut:
+    def build(cls, comment: Comment, author: User, viewer: User | None = None) -> CommentOut:
+        """The comment as `viewer` may see it. A hidden one reads as deleted unless they may see it."""
         assert author.has_id(comment.user_id), "the author passed did not write this comment"
-        deleted = comment.deleted_at is not None
+        hidden = comment.hidden_at is not None
+        shows_hidden = hidden and may_see_hidden_comment(comment, viewer)
+        removed = comment.deleted_at is not None or (hidden and not shows_hidden)
         return cls(
             id=comment.id,
             parent_id=comment.parent_id,
-            author=None if deleted else PublicUser.from_user(author),
-            body=None if deleted else comment.body,
+            author=None if removed else PublicUser.from_user(author),
+            body=None if removed else comment.body,
             created_at=comment.created_at,
             edited_at=comment.edited_at,
-            deleted=deleted,
+            deleted=removed,
+            hidden=shows_hidden and comment.deleted_at is None,
         )
 
 

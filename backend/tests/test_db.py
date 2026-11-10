@@ -25,6 +25,7 @@ EXPECTED_TABLES = {
     "mentions",
     "follows",
     "media",
+    "moderation_actions",
     "sources",
     "records",
     "record_cell_counts",

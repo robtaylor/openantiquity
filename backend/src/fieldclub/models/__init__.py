@@ -20,6 +20,7 @@ from fieldclub.models.findings import (
     Mention,
     Observation,
 )
+from fieldclub.models.moderation import ModerationAction
 from fieldclub.models.people import AuthIdentity, MagicLink, ReputationEvent, User, UserSession
 from fieldclub.models.records import AdminArea, IngestRun, Place, Record, RecordCellCount, Source
 
@@ -39,6 +40,7 @@ __all__ = [
     "MagicLink",
     "Media",
     "Mention",
+    "ModerationAction",
     "Notification",
     "Observation",
     "Place",
