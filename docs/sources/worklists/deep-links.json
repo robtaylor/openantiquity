@@ -1,0 +1,682 @@
+[
+  {
+    "key": "he-nhle-list-entry",
+    "name": "NHLE list entry",
+    "template": "https://historicengland.org.uk/listing/the-list/list-entry/{id}?section=official-list-entry",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "not_tested",
+    "no_frame": true,
+    "notes": "{id} = ListEntry. 200 in Wayback 2026-10-27 for 1000040. ?section=comments-and-photos also exists. Historic England site terms: 'no page... may be framed' and HE 'reserves the right at its discretion to prohibit any link'. Live pages return a Cloudflare 403 to scripts; validate via the unchallenged redirect hosts."
+  },
+  {
+    "key": "he-nhle-legacy-list",
+    "name": "NHLE legacy list host (redirect)",
+    "template": "https://list.historicengland.org.uk/resultsingle.aspx?uid={id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "redirect_only",
+    "no_frame": true,
+    "notes": "301 to the list-entry page, unchallenged; use for server-side link checks."
+  },
+  {
+    "key": "he-aerial-photo-record",
+    "name": "Historic England Archive aerial photo record",
+    "template": "https://historicengland.org.uk/images-books/archive/collections/aerial-photos/record/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "not_tested",
+    "no_frame": true,
+    "notes": "{id} = Filename (raf_{sortie}_{v}_{frame}, EPW{n}, oblique {film}_{frame}). 200 in Wayback for raf_58_206_v_5044, EPW022538, 20400_015; 23786_011 has no capture. 'Please do not copy images directly from our website.'"
+  },
+  {
+    "key": "he-apex-viewer",
+    "name": "Historic England Aerial Photo Explorer at a point",
+    "template": "https://historicengland.maps.arcgis.com/apps/webappviewer/index.html?id=2626ed0c37484d96b8954dd33187084e&center={lon},{lat}&level={zoom}",
+    "coverage": "england",
+    "placeholders_crs": "EPSG:4326",
+    "verified": "not_tested",
+    "no_frame": false,
+    "notes": "Only the app shell (200) was confirmed; centre and level are standard Web AppBuilder parameters. Aerial Archaeology Mapping Explorer uses the same form with id=d45dabecef5541f18255e12e5cd5f85a."
+  },
+  {
+    "key": "he-research-report",
+    "name": "Historic England research report",
+    "template": "https://historicengland.org.uk/research/results/reports/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "not_tested",
+    "no_frame": true,
+    "notes": "{id} = Report_Num, from the Report_URL field. 403 to curl."
+  },
+  {
+    "key": "he-heritage-at-risk-entry",
+    "name": "Heritage at Risk register entry",
+    "template": "https://historicengland.org.uk/advice/heritage-at-risk/search-register/list-entry/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "not_tested",
+    "no_frame": true,
+    "notes": "From the URL field of the HAR layer; not fetched."
+  },
+  {
+    "key": "he-heritage-gateway-research-records",
+    "name": "Heritage Gateway record: Historic England research records (ex-NRHE)",
+    "template": "https://historicengland.org.uk/listing/heritage-gateway/results/record/0d636742-8028-4a8c-8b7c-e1f9aaf2d338/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "not_tested",
+    "no_frame": true,
+    "notes": "{id} is a new GUID that cannot be derived from the HOB UID; 200 in Wayback 2026-10-24. Conditions of use: information use only; 'must not be reused commercially or used for legal or planning purposes'. Historic England site terms: 'no page... may be framed' and HE 'reserves the right at its discretion to prohibit any link'. Live pages return a Cloudflare 403 to scripts; validate via the unchallenged redirect hosts."
+  },
+  {
+    "key": "he-heritage-gateway-devon-dartmoor",
+    "name": "Heritage Gateway record: Devon and Dartmoor HER",
+    "template": "https://historicengland.org.uk/listing/heritage-gateway/results/record/c39bc47e-3b72-4a06-9863-681629e456a2/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": true,
+    "notes": "{id} = MDV number; MDV100 opened in a browser. Conditions of use: information use only; 'must not be reused commercially or used for legal or planning purposes'. Historic England site terms: 'no page... may be framed' and HE 'reserves the right at its discretion to prohibit any link'. Live pages return a Cloudflare 403 to scripts; validate via the unchallenged redirect hosts."
+  },
+  {
+    "key": "he-heritage-gateway-bedford",
+    "name": "Heritage Gateway record: Bedford Borough HER",
+    "template": "https://historicengland.org.uk/listing/heritage-gateway/results/record/00514065-b008-44ba-a64b-c2fc78241ee5/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "not_tested",
+    "no_frame": true,
+    "notes": "{id} = HER reference, e.g. MBD1206; 200 in Wayback 2026-09-22. Conditions of use: information use only; 'must not be reused commercially or used for legal or planning purposes'. Historic England site terms: 'no page... may be framed' and HE 'reserves the right at its discretion to prohibit any link'. Live pages return a Cloudflare 403 to scripts; validate via the unchallenged redirect hosts."
+  },
+  {
+    "key": "he-heritage-gateway-wiltshire",
+    "name": "Heritage Gateway record: Wiltshire and Swindon HER",
+    "template": "https://historicengland.org.uk/listing/heritage-gateway/results/record/327e063c-c604-4fab-b973-b2566fb68559/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "redirect_only",
+    "no_frame": true,
+    "notes": "Learned from the legacy redirect for MWI11965 (resourceID=1010). Conditions of use: information use only; 'must not be reused commercially or used for legal or planning purposes'. Historic England site terms: 'no page... may be framed' and HE 'reserves the right at its discretion to prohibit any link'. Live pages return a Cloudflare 403 to scripts; validate via the unchallenged redirect hosts."
+  },
+  {
+    "key": "he-heritage-gateway-cornwall",
+    "name": "Heritage Gateway record: Cornwall and Scilly HER",
+    "template": "https://historicengland.org.uk/listing/heritage-gateway/results/record/1642254c-0359-4e5e-b197-59c0cc5509c8/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "redirect_only",
+    "no_frame": true,
+    "notes": "Learned from the legacy redirect (resourceID=1020). Conditions of use: information use only; 'must not be reused commercially or used for legal or planning purposes'. Historic England site terms: 'no page... may be framed' and HE 'reserves the right at its discretion to prohibit any link'. Live pages return a Cloudflare 403 to scripts; validate via the unchallenged redirect hosts."
+  },
+  {
+    "key": "he-heritage-gateway-york",
+    "name": "Heritage Gateway record: City of York HER",
+    "template": "https://historicengland.org.uk/listing/heritage-gateway/results/record/8962707c-eed5-4e59-beb1-dce060dc26ba/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "redirect_only",
+    "no_frame": true,
+    "notes": "Learned from the legacy redirect (resourceID=1003); York is listed as not yet on the new Gateway, so the record may not load. Conditions of use: information use only; 'must not be reused commercially or used for legal or planning purposes'. Historic England site terms: 'no page... may be framed' and HE 'reserves the right at its discretion to prohibit any link'. Live pages return a Cloudflare 403 to scripts; validate via the unchallenged redirect hosts."
+  },
+  {
+    "key": "he-heritage-gateway-wolverhampton-walsall",
+    "name": "Heritage Gateway record: Wolverhampton and Walsall HER",
+    "template": "https://historicengland.org.uk/listing/heritage-gateway/results/record/49695de2-09c7-4769-98de-0c3ce0ee96dc/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "not_tested",
+    "no_frame": true,
+    "notes": "GUID seen in the Gateway dataset facet. Conditions of use: information use only; 'must not be reused commercially or used for legal or planning purposes'. Historic England site terms: 'no page... may be framed' and HE 'reserves the right at its discretion to prohibit any link'. Live pages return a Cloudflare 403 to scripts; validate via the unchallenged redirect hosts."
+  },
+  {
+    "key": "he-heritage-gateway-norfolk",
+    "name": "Heritage Gateway record: Norfolk HER",
+    "template": "https://historicengland.org.uk/listing/heritage-gateway/results/record/47e876d1-227a-40b9-af73-135787c45ed2/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "redirect_only",
+    "no_frame": true,
+    "notes": "Norfolk's redirect resolves to this GUID although Norfolk is listed as not yet loaded. Conditions of use: information use only; 'must not be reused commercially or used for legal or planning purposes'. Historic England site terms: 'no page... may be framed' and HE 'reserves the right at its discretion to prohibit any link'. Live pages return a Cloudflare 403 to scripts; validate via the unchallenged redirect hosts."
+  },
+  {
+    "key": "he-heritage-gateway-legacy-nrhe",
+    "name": "Heritage Gateway legacy NRHE link by HOB UID (lands on a search)",
+    "template": "https://www.heritagegateway.org.uk/Gateway/Results_Single.aspx?uid={id}&resourceID=19191",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "redirect_only",
+    "no_frame": true,
+    "notes": "301 to /listing/heritage-gateway/results?q={id}&filters[0][field]=dataset&filters[0][values][0]=Historic%20England%20research%20records...; label it as a search. Legacy HER links (other resourceIDs) still 301 to records: keep the full URL from the source data. Unmapped resourceIDs fall back to the Gateway home page. https://www.pastscape.org.uk/hob.aspx?hob_id={id} 301s into this URL."
+  },
+  {
+    "key": "he-heritage-gateway-near-point",
+    "name": "Heritage Gateway results near a point",
+    "template": "https://historicengland.org.uk/listing/heritage-gateway/results/?filters[0][field]=initialLatLong&filters[0][values][0]={lat},{lon}&filters[0][type]=any",
+    "coverage": "england",
+    "placeholders_crs": "EPSG:4326",
+    "verified": "not_tested",
+    "no_frame": true,
+    "notes": "Copied from 'View on map' links on archived record pages; never seen rendering. No radius parameter seen. Needs one browser check before it goes into code."
+  },
+  {
+    "key": "pas-recorded-find",
+    "name": "Portable Antiquities Scheme record",
+    "template": "https://finds.org.uk/pas/recorded-find/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "not_tested",
+    "no_frame": false,
+    "notes": "{id} = PAS find ID such as BERK-F72627 (ARIADNE originalId). 200 in Wayback 2026-08-11; live 403 to scripts. A trailing slash 301s. PAS terms pre-authorise links to the home page only; the followup drafted an email asking for confirmation. Covers England and Wales."
+  },
+  {
+    "key": "pas-legacy-numeric",
+    "name": "PAS legacy numeric record URL (redirect)",
+    "template": "https://finds.org.uk/database/artefacts/record/id/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "redirect_only",
+    "no_frame": false,
+    "notes": "301 to /pas/recorded-find/{FIND-ID} in Wayback 2026-08-21; stored legacy links still work. Live 403 to scripts."
+  },
+  {
+    "key": "trove-place",
+    "name": "trove.scot place record (NRHE)",
+    "template": "https://www.trove.scot/place/{id}",
+    "coverage": "scotland",
+    "placeholders_crs": null,
+    "verified": "not_tested",
+    "no_frame": true,
+    "notes": "{id} = NRHE / CANMOREID. 200 in Wayback 2026-05-16; live 403 (Azure WAF). Terms clause 14.3: 'The Website must not be framed on any other website.' Tabs ?tab=details and ?tab=nearby-places-and-designations."
+  },
+  {
+    "key": "canmore-legacy-site",
+    "name": "canmore.org.uk legacy site link (redirect)",
+    "template": "https://canmore.org.uk/site/{id}",
+    "coverage": "scotland",
+    "placeholders_crs": null,
+    "verified": "redirect_only",
+    "no_frame": true,
+    "notes": "301 to https://www.trove.scot/site/{id} live today, which 308s to /place/{id} in Wayback. Unchallenged, so usable for server-side link checks."
+  },
+  {
+    "key": "trove-map-at-point",
+    "name": "trove.scot map search at a point",
+    "template": "https://www.trove.scot/search/map?q=*&page_type=Places&coords={easting},{northing},{zoom}",
+    "coverage": "scotland",
+    "placeholders_crs": "EPSG:27700",
+    "verified": "not_tested",
+    "no_frame": true,
+    "notes": "200 in Wayback 2025-08-14 and 2026-01-06. The third value is assumed to be zoom."
+  },
+  {
+    "key": "trove-designation",
+    "name": "trove.scot designation record",
+    "template": "https://www.trove.scot/designation/{id}",
+    "coverage": "scotland",
+    "placeholders_crs": null,
+    "verified": "not_tested",
+    "no_frame": true,
+    "notes": "{id} like LB43775 or BTL10; pattern noted in the followup but no capture cited."
+  },
+  {
+    "key": "hes-portal-designation",
+    "name": "HES Portal designation record",
+    "template": "https://portal.historicenvironment.scot/designation/{id}",
+    "coverage": "scotland",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = DES_REF (SM5287); 200 after redirect to the APEX page. The LINK field already holds it. The HES retiral notice lists the Portal for longer-term retirement with no date."
+  },
+  {
+    "key": "coflein-site",
+    "name": "Coflein site record (NMRW)",
+    "template": "https://coflein.gov.uk/en/site/{id}",
+    "coverage": "wales",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = NPRN; redirects to /en/sites/{id}. Do not crawl: robots.txt opts out of AI use."
+  },
+  {
+    "key": "cadw-report-sam",
+    "name": "Cadw full report: sam",
+    "template": "https://cadwpublic-api.azurewebsites.net/reports/sam/FullReport?lang=en&id={id}",
+    "coverage": "wales",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = RecordNumber, not SAMNumber. lang=cy for Welsh. The Report field in the data uses http://, which redirects to https."
+  },
+  {
+    "key": "cadw-report-listedbuilding",
+    "name": "Cadw full report: listedbuilding",
+    "template": "https://cadwpublic-api.azurewebsites.net/reports/listedbuilding/FullReport?lang=en&id={id}",
+    "coverage": "wales",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = RecordNumber, not SAMNumber. lang=cy for Welsh. The Report field in the data uses http://, which redirects to https."
+  },
+  {
+    "key": "cadw-report-parkgarden",
+    "name": "Cadw full report: parkgarden",
+    "template": "https://cadwpublic-api.azurewebsites.net/reports/parkgarden/FullReport?lang=en&id={id}",
+    "coverage": "wales",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = RecordNumber, not SAMNumber. lang=cy for Welsh. The Report field in the data uses http://, which redirects to https."
+  },
+  {
+    "key": "cadw-report-historiclandscape",
+    "name": "Cadw full report: historiclandscape",
+    "template": "https://cadwpublic-api.azurewebsites.net/reports/historiclandscape/FullReport?lang=en&id={id}",
+    "coverage": "wales",
+    "placeholders_crs": null,
+    "verified": "not_tested",
+    "no_frame": false,
+    "notes": "{id} = RecordNumber, not SAMNumber. lang=cy for Welsh. The Report field in the data uses http://, which redirects to https."
+  },
+  {
+    "key": "cadw-report-worldheritagesite",
+    "name": "Cadw full report: worldheritagesite",
+    "template": "https://cadwpublic-api.azurewebsites.net/reports/worldheritagesite/FullReport?lang=en&id={id}",
+    "coverage": "wales",
+    "placeholders_crs": null,
+    "verified": "not_tested",
+    "no_frame": false,
+    "notes": "{id} = RecordNumber, not SAMNumber. lang=cy for Welsh. The Report field in the data uses http://, which redirects to https."
+  },
+  {
+    "key": "cadw-report-wreck",
+    "name": "Cadw full report: wreck",
+    "template": "https://cadwpublic-api.azurewebsites.net/reports/wreck/FullReport?lang=en&id={id}",
+    "coverage": "wales",
+    "placeholders_crs": null,
+    "verified": "not_tested",
+    "no_frame": false,
+    "notes": "{id} = RecordNumber, not SAMNumber. lang=cy for Welsh. The Report field in the data uses http://, which redirects to https."
+  },
+  {
+    "key": "archwilio-record",
+    "name": "Archwilio (Welsh HER) record",
+    "template": "https://archwilio.org.uk/arch/query/page.php?watprn={id}",
+    "coverage": "wales",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = PRN with trust prefix (CPAT1, GAT1, DAT1, GGAT00001g). Conditions forbid passing data to third parties; link only."
+  },
+  {
+    "key": "dfc-nismr-record",
+    "name": "NI Sites and Monuments Record",
+    "template": "https://apps.communities-ni.gov.uk/NISMR-public/Details.aspx?MonID={id}",
+    "coverage": "northern_ireland",
+    "placeholders_crs": null,
+    "verified": "redirect_only",
+    "no_frame": false,
+    "notes": "{id} = MONID. Returned 200 but redirected to /NISMR-public/Disclaimer.aspx; whether later visits skip the disclaimer is unknown."
+  },
+  {
+    "key": "dfc-ni-buildings-record",
+    "name": "NI Buildings Database record",
+    "template": "https://apps.communities-ni.gov.uk/Buildings/buildview.aspx?id={id}&js=false",
+    "coverage": "northern_ireland",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = MainID."
+  },
+  {
+    "key": "dfc-ni-heritage-at-risk-record",
+    "name": "NI Heritage at Risk record",
+    "template": "https://apps.communities-ni.gov.uk/HARNI/barniview.aspx?id={id}&js=false",
+    "coverage": "northern_ireland",
+    "placeholders_crs": null,
+    "verified": "not_tested",
+    "no_frame": false,
+    "notes": "{id} = Main_ID; pattern from the official web map popup config."
+  },
+  {
+    "key": "ads-catalogue-resource",
+    "name": "ADS Data Catalogue record",
+    "template": "https://archaeologydataservice.ac.uk/data-catalogue/resource/{id}",
+    "coverage": "uk",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "200 (app shell); the stable deep-link target for catalogue ids."
+  },
+  {
+    "key": "ads-doi",
+    "name": "ADS archive or report by DOI",
+    "template": "https://doi.org/10.5284/{id}",
+    "coverage": "uk",
+    "placeholders_crs": null,
+    "verified": "redirect_only",
+    "no_frame": false,
+    "notes": "302 to archaeologydataservice.ac.uk/archives/view/..., which is 403 to scripts. Build the index from DataCite."
+  },
+  {
+    "key": "ads-archsearch-legacy",
+    "name": "ADS legacy Archsearch link",
+    "template": "https://archaeologydataservice.ac.uk/archsearch/record?titleId={id}",
+    "coverage": "uk",
+    "placeholders_crs": null,
+    "verified": "redirect_only",
+    "no_frame": false,
+    "notes": "301 to /data-catalogue/?titleId={id}; whether the app then opens the record was not verified in a browser."
+  },
+  {
+    "key": "nt-heritage-record",
+    "name": "National Trust Heritage Records Online",
+    "template": "https://heritagerecords.nationaltrust.org.uk/HBSMR/MonRecord.aspx?uid={id}",
+    "coverage": "uk",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = MNA number (from ADS otherId NTSMR-MNA{n}). Terms 11.1: 'You must not link to the Site for commercial purposes without our written agreement.' England, Wales and NI."
+  },
+  {
+    "key": "coe-church-heritage-record",
+    "name": "Church Heritage Record",
+    "template": "https://heritage.churchofengland.org/buildings/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = Asset_ID; old facultyonline.churchofengland.org/CHR/ChurchDetails.aspx?id={id} redirects here."
+  },
+  {
+    "key": "keys-to-the-past",
+    "name": "Keys to the Past (Durham and Northumberland HERs)",
+    "template": "https://keystothepast.info/search-records/results-of-search/results-of-search-2/site-details/?PRN={id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": true,
+    "notes": "{id} = N or D prefix plus number. 'you do not have to ask permission to link directly'; framing not permitted."
+  },
+  {
+    "key": "suffolk-her",
+    "name": "Suffolk HER record",
+    "template": "https://heritage.suffolk.gov.uk/Monument/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = MSF number. Site terms not read for every site."
+  },
+  {
+    "key": "norfolk-her",
+    "name": "Norfolk HER record",
+    "template": "https://www.heritage.norfolk.gov.uk/record-details?{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = MNF number. Site terms not read for every site."
+  },
+  {
+    "key": "lincs-her",
+    "name": "Lincolnshire HER record",
+    "template": "https://heritage-explorer.lincolnshire.gov.uk/Monument/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = MLI number. Site terms not read for every site."
+  },
+  {
+    "key": "york-her",
+    "name": "City of York HER record",
+    "template": "https://her.york.gov.uk/monument/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = MYO number. Site terms not read for every site."
+  },
+  {
+    "key": "exmoor-her",
+    "name": "Exmoor HER record",
+    "template": "https://www.exmoorher.co.uk/Monument/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = MonUID. robots.txt Crawl-delay 1000: never crawl. Site terms not read for every site."
+  },
+  {
+    "key": "tyne-wear-her",
+    "name": "Tyne and Wear HER record",
+    "template": "https://twsitelines.info/SMR/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = SMR number. Site terms not read for every site."
+  },
+  {
+    "key": "somerset-her",
+    "name": "Somerset HER record",
+    "template": "https://somersetheritage.org.uk/record/{id}",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "not_tested",
+    "no_frame": false,
+    "notes": "Returns the app shell; record content not verified server-side."
+  },
+  {
+    "key": "highland-her",
+    "name": "Highland HER record",
+    "template": "https://her.highland.gov.uk/monument/{id}",
+    "coverage": "scotland",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = MHG number."
+  },
+  {
+    "key": "isle-of-man-her",
+    "name": "Isle of Man HER report",
+    "template": "https://isleofmanher.im/report/{id}",
+    "coverage": "wider",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = Arches resourceinstanceid. Use the bare domain; www returns 400. Content for personal, educational, non-commercial use only."
+  },
+  {
+    "key": "jersey-her",
+    "name": "Jersey HER report",
+    "template": "https://her.jerseyheritage.org/report/{id}",
+    "coverage": "wider",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = Arches resourceinstanceid. All rights reserved."
+  },
+  {
+    "key": "treasure-trove-scotland-object",
+    "name": "Treasure Trove Scotland object",
+    "template": "https://treasuretrovescotland.co.uk/search/object-detail?id={id}",
+    "coverage": "scotland",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "Internal id. No findspot or coordinates. robots.txt Crawl-Delay 5; do not harvest the search form."
+  },
+  {
+    "key": "cucap-location",
+    "name": "Cambridge air photo record",
+    "template": "https://www.cambridgeairphotos.com/location/{id}/",
+    "coverage": "uk",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = CUCAP id lower-cased, e.g. rc8knbb223."
+  },
+  {
+    "key": "britain-from-above-map",
+    "name": "Britain from Above map at a point",
+    "template": "https://www.britainfromabove.org.uk/en/map?country=global&view=map#{zoom},{easting},{northing}",
+    "coverage": "uk",
+    "placeholders_crs": "EPSG:27700",
+    "verified": "not_tested",
+    "no_frame": false,
+    "notes": "Hash format read from bfaFullMap.js: zoom is an index on a custom 10-step resolution list (0-9). Content is personal and educational use only."
+  },
+  {
+    "key": "ncap-air-photo-finder",
+    "name": "NCAP Air Photo Finder at a point",
+    "template": "https://airphotofinder.ncap.org/map?c={northing}:{easting}&z={zoom}",
+    "coverage": "uk",
+    "placeholders_crs": "EPSG:3857",
+    "verified": "not_tested",
+    "no_frame": false,
+    "notes": "Here {easting} and {northing} mean EPSG:3857 x and y to 2 decimals (c is y:x). Read from the app's main.js; not run in a browser."
+  },
+  {
+    "key": "nls-explore-at-point",
+    "name": "NLS georeferenced maps viewer at a point",
+    "template": "https://maps.nls.uk/geo/explore/#zoom={zoom}&lat={lat}&lon={lon}&layers=6&b=1",
+    "coverage": "gb",
+    "placeholders_crs": "EPSG:4326",
+    "verified": "not_tested",
+    "no_frame": false,
+    "notes": "layers=6 is OS Six Inch 1888-1915 in the viewer script; 10 is OS 1:25,000 1937-61. Hash processed client-side."
+  },
+  {
+    "key": "nls-side-by-side-lidar",
+    "name": "NLS side-by-side viewer, LIDAR against CVAT",
+    "template": "https://maps.nls.uk/geo/explore/side-by-side/#zoom={zoom}&lat={lat}&lon={lon}&layers=LIDAR_DTM_1m&right=vat",
+    "coverage": "gb",
+    "placeholders_crs": "EPSG:4326",
+    "verified": "not_tested",
+    "no_frame": false,
+    "notes": "Layer ids from NLS's own guide links: LIDAR_DTM_1m, LIDAR_DSM_1m, LIDAR_1m, vat, 6, 168, BingSat, ESRIWorld, osm. Only the base page status was checked."
+  },
+  {
+    "key": "google-earth-web",
+    "name": "Google Earth web at a point",
+    "template": "https://earth.google.com/web/@{lat},{lon},160a,1500d,35y,0h,0t,0r",
+    "coverage": "wider",
+    "placeholders_crs": "EPSG:4326",
+    "verified": "not_tested",
+    "no_frame": false,
+    "notes": "Shell only checked. No URL parameter for historical imagery date. Google forbids tracing, so link out only."
+  },
+  {
+    "key": "know-your-place-wilts",
+    "name": "Know Your Place (Wiltshire edition) at a point",
+    "template": "https://maps.bristol.gov.uk/kyp/?edition=wilts&layer=Community%20layer&x={easting}&y={northing}&extent=1500",
+    "coverage": "england",
+    "placeholders_crs": "EPSG:27700",
+    "verified": "not_tested",
+    "no_frame": false,
+    "notes": "Share-link format read from kyp.js; other editions include bristol, glos, somerset. Only route found to georeferenced tithe maps for this region."
+  },
+  {
+    "key": "old-maps-online",
+    "name": "Old Maps Online at a point",
+    "template": "https://www.oldmapsonline.org/en/#position={zoom}/{lat}/{lon}",
+    "coverage": "wider",
+    "placeholders_crs": "EPSG:4326",
+    "verified": "not_tested",
+    "no_frame": false,
+    "notes": "403 to automated requests; the research said this pattern is from memory. Verify in a browser before relying on it."
+  },
+  {
+    "key": "open-domesday-place",
+    "name": "Open Domesday place page",
+    "template": "https://opendomesday.org/place/{gridref}/{id}/",
+    "coverage": "england",
+    "placeholders_crs": "EPSG:27700 (1 km grid reference)",
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{gridref} = 1 km grid reference such as NZ2011; {id} = place slug such as aldbrough."
+  },
+  {
+    "key": "megalithic-portal-site",
+    "name": "Megalithic Portal site",
+    "template": "https://www.megalithic.co.uk/article.php?sid={id}",
+    "coverage": "wider",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "All rights reserved; personal use only. Link only."
+  },
+  {
+    "key": "gatehouse-site",
+    "name": "Gatehouse Gazetteer site (England)",
+    "template": "https://www.gatehouse-gazetteer.info/English%20sites/{id}.html",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "Downloads are for 'your own, non-commerical use'; deep-link rather than ingest. Last updated 13 July 2017."
+  },
+  {
+    "key": "vision-of-britain-place",
+    "name": "Vision of Britain place page",
+    "template": "https://www.visionofbritain.org.uk/place/place_page.jsp?p_id={id}",
+    "coverage": "gb",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "One earlier request timed out."
+  },
+  {
+    "key": "rib-site",
+    "name": "Roman Inscriptions of Britain site page",
+    "template": "https://romaninscriptionsofbritain.org/sites/{id}",
+    "coverage": "uk",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "{id} = site_key slug, e.g. london-city."
+  },
+  {
+    "key": "itinere-route-segment",
+    "name": "Itiner-e road segment",
+    "template": "https://itiner-e.org/route-segment/{id}",
+    "coverage": "wider",
+    "placeholders_crs": null,
+    "verified": "redirect_only",
+    "no_frame": false,
+    "notes": "Redirects to /?id={id}."
+  },
+  {
+    "key": "pleiades-place",
+    "name": "Pleiades place page",
+    "template": "https://pleiades.stoa.org/places/{id}",
+    "coverage": "wider",
+    "placeholders_crs": null,
+    "verified": "not_tested",
+    "no_frame": false,
+    "notes": "The JSON form https://pleiades.stoa.org/places/{id}/json was tested (200); the HTML page was not."
+  },
+  {
+    "key": "geograph-photo",
+    "name": "Geograph photo page",
+    "template": "https://www.geograph.org.uk/photo/{id}",
+    "coverage": "wider",
+    "placeholders_crs": null,
+    "verified": "not_tested",
+    "no_frame": false,
+    "notes": "Recommended by the research as the photo link with credit and the CC BY-SA 2.0 notice; not fetched."
+  },
+  {
+    "key": "as-corpus-catalogue",
+    "name": "Corpus of Anglo-Saxon Stone Sculpture catalogue page",
+    "template": "https://chacklepie.com/ascorpus/catvol1.php?pageNum_urls={id}&totalRows_urls=532",
+    "coverage": "england",
+    "placeholders_crs": null,
+    "verified": "yes",
+    "no_frame": false,
+    "notes": "Volume 1 only shown; 14 volumes (catvol1-14). The site said it was migrating to ADS; re-check before building on these URLs. Crawl-Delay 20."
+  }
+]

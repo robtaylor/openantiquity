@@ -1,0 +1,1198 @@
+[
+  {
+    "id": "ea-dsp-hillshade-2022-wmts",
+    "title": "England LIDAR hillshade 2022 (EA WMTS)",
+    "group": "lidar",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://environment.data.gov.uk/spatialdata/lidar-composite-digital-terrain-model-dtm-1m/wmts?service=WMTS&version=1.0.0&request=GetTile&layer=Lidar_Composite_Hillshade_DTM_1m&style=hillshade&tilematrixset=WebMercatorQuad&format=image/png&tilematrix={z}&tilerow={y}&tilecol={x}"
+      ],
+      "tileSize": 256,
+      "attribution": "© Environment Agency copyright and/or database right 2022. All rights reserved."
+    },
+    "minzoom": 6,
+    "maxzoom": 19,
+    "bounds": null,
+    "attribution": "© Environment Agency copyright and/or database right 2022. All rights reserved.",
+    "licence": "Open Government Licence v3.0",
+    "key_required": false,
+    "coverage": "england",
+    "cors": "yes (access-control-allow-origin: *)",
+    "clean": true,
+    "notes": "Grey single-direction hillshade of the 2022 composite. z6-z19 were cache HITs in 0.19-0.47 s; z20 was a MISS at 2.2 s, so minzoom/maxzoom are the tested range. 1 of 20 requests hung for 20 s. Use the KVP form; the REST form on /spatialdata/ returns 400. Do not mix with 2025-edition tiles in one layer."
+  },
+  {
+    "id": "ea-dsp-hillshade-2022-wms",
+    "title": "England LIDAR hillshade 2022 (EA WMS)",
+    "group": "lidar",
+    "kind": "wms",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://environment.data.gov.uk/spatialdata/lidar-composite-digital-terrain-model-dtm-1m/wms?service=WMS&version=1.3.0&request=GetMap&layers=Lidar_Composite_Hillshade_DTM_1m&styles=&crs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256&format=image/png&transparent=true"
+      ],
+      "tileSize": 256,
+      "attribution": "© Environment Agency copyright and/or database right 2022. All rights reserved."
+    },
+    "minzoom": null,
+    "maxzoom": null,
+    "bounds": null,
+    "attribution": "© Environment Agency copyright and/or database right 2022. All rights reserved.",
+    "licence": "Open Government Licence v3.0",
+    "key_required": false,
+    "coverage": "england",
+    "cors": "yes (access-control-allow-origin: *)",
+    "clean": true,
+    "notes": "Tile-aligned EPSG:3857 GetMap requests are served from GeoWebCache. Other layers: Lidar_Composite_Elevation_DTM_1m (colour ramp, near-uniform at tile scale) and Lidar_Composite_DTM_1m (tinted group). GetFeatureInfo info_format=application/json on the Elevation layer returns {\"Elevation\": n}. research-lidar-visualisation tested the same layers at /spatialdata/lidar-composite-digital-terrain-model-dtm-1m-2022/wms; both paths returned 200."
+  },
+  {
+    "id": "ea-imageserver-2025-multidirectional",
+    "title": "England LIDAR multidirectional hillshade 2025 (EA ImageServer export)",
+    "group": "lidar",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://utility.arcgis.com/usrsvcs/servers/f9c4694d7d5140638536c4afe4119e6d/rest/services/LIDAR/LIDAR_Composite_1m_DTM/ImageServer/exportImage?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=png&f=image&renderingRule=%7B%22rasterFunction%22%3A%22Hillshade%20-%20Multidirectional%22%7D"
+      ],
+      "tileSize": 256,
+      "attribution": "© Environment Agency copyright and/or database right 2025. All rights reserved."
+    },
+    "minzoom": null,
+    "maxzoom": null,
+    "bounds": null,
+    "attribution": "© Environment Agency copyright and/or database right 2025. All rights reserved.",
+    "licence": "Open Government Licence v3.0 (item licenceInfo 'Open Government License (OGL)')",
+    "key_required": false,
+    "coverage": "england",
+    "cors": "yes (reflects Origin, allow-credentials true)",
+    "clean": false,
+    "notes": "Only source of the 2025 edition. About 0.5-2 s per tile, Cache-Control max-age=30, no published limit, timeouts and one 502 logged. The followup said keep it as a fallback or spot-check, never the hot path; research-lidar-england advised emailing the Defra Data Sharing & Access Team to confirm third-party use. Other rasterFunction values: 'Hillshade - Standard', 'Slope - Standard', 'Elevation - Detrended - 1m DTM'. The ImageServer copyrightText still says 2022."
+  },
+  {
+    "id": "nls-rvt-hillshade-england",
+    "title": "England LIDAR RVT three-direction hillshade (NLS)",
+    "group": "lidar",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/lidar/england/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "minzoom": 1,
+      "maxzoom": 18,
+      "bounds": [
+        -6.4665,
+        49.8506,
+        1.7782,
+        55.8782
+      ],
+      "attribution": "© Environment Agency copyright and/or database right 2022. All rights reserved. Processing by Richard Pearson using RVT, National Library of Scotland"
+    },
+    "minzoom": 1,
+    "maxzoom": 18,
+    "bounds": [
+      -6.4665,
+      49.8506,
+      1.7782,
+      55.8782
+    ],
+    "attribution": "© Environment Agency copyright and/or database right 2022. All rights reserved. Processing by Richard Pearson using RVT, National Library of Scotland",
+    "licence": "Derived from Environment Agency data under the Open Government Licence. NLS guide: 'If you re-use or re-publish these LiDAR layers, please ensure that you credit and appropriately acknowledge the creators of these specific layers.'",
+    "key_required": false,
+    "coverage": "england",
+    "cors": "yes (Access-Control-Allow-Origin: *) per research-lidar-visualisation",
+    "clean": true,
+    "notes": "Lit from 315, 15 and 75 degrees at 35 degrees elevation. Listed in the NLS guide's reuse section. Reports disagreed on CORS for NLS LIDAR tiles: research-lidar-scotland-wales-ni saw no header for a third-party Origin, research-lidar-visualisation and research-basemaps-historic-aerial saw *. No SLA. The attribution string combines the upstream credit and the NLS creator credit the guide asks for; the research did not record a single combined line."
+  },
+  {
+    "id": "nls-rvt-hillshade-wales",
+    "title": "Wales LIDAR RVT three-direction hillshade (NLS)",
+    "group": "lidar",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/lidar/wales/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "minzoom": 1,
+      "maxzoom": 18,
+      "bounds": [
+        -5.3026,
+        51.3662,
+        -2.6361,
+        53.4469
+      ],
+      "attribution": "Contains public sector information licensed under the Open Government Licence v3.0 (DataMapWales / Welsh Government and NRW)."
+    },
+    "minzoom": 1,
+    "maxzoom": 18,
+    "bounds": [
+      -5.3026,
+      51.3662,
+      -2.6361,
+      53.4469
+    ],
+    "attribution": "Contains public sector information licensed under the Open Government Licence v3.0 (DataMapWales / Welsh Government and NRW).",
+    "licence": "Derived from DataMapWales data; NLS viewer attribution 'Contains public sector information licensed under the Open Government Licence v3.0.'",
+    "key_required": false,
+    "coverage": "wales",
+    "cors": "yes per research-lidar-visualisation",
+    "clean": true,
+    "notes": "Wales is not in the first release. The Welsh 2020-23 LiDAR licence is recorded inconsistently ('Not Specified' on the tile catalogue)."
+  },
+  {
+    "id": "nls-rvt-hillshade-scotland-phase1",
+    "title": "Scotland LIDAR RVT hillshade, phase1 (NLS)",
+    "group": "lidar",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/lidar/rgb/phase1/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 16,
+      "attribution": "Crown copyright Scottish Government, SEPA and Scottish Water (2012); processing by Richard Pearson using RVT, National Library of Scotland"
+    },
+    "minzoom": null,
+    "maxzoom": 16,
+    "bounds": null,
+    "attribution": "Crown copyright Scottish Government, SEPA and Scottish Water (2012); processing by Richard Pearson using RVT, National Library of Scotland",
+    "licence": "Per-phase Crown copyright statements in the NLS guide; underlying phases 1-6 DTM are OGL v3 per the SRSP catalogue (followup).",
+    "key_required": false,
+    "coverage": "scotland",
+    "cors": "yes per research-lidar-visualisation; research-lidar-scotland-wales-ni saw none",
+    "clean": true,
+    "notes": "Scotland is not in the first release. Missing tiles return 404 XML. research-lidar-scotland-wales-ni classed NLS tiles as deep-link only ('Do not hotlink without permission'); research-lidar-visualisation found these multi-hillshade sets on the NLS reuse list. Phase 1-3 and Hebrides credits are the SRSP collection statements quoted in the followup. Phases 4-6 publish a licence but no statement, so the line shown is the generic one research-lidar-scotland-wales-ni suggested pending confirmation with GI-SAT; NLS credits phases 3-6 to Scottish Government, SEPA and Fugro (2020-2022)."
+  },
+  {
+    "id": "nls-rvt-hillshade-scotland-phase2",
+    "title": "Scotland LIDAR RVT hillshade, phase2 (NLS)",
+    "group": "lidar",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/lidar/rgb/phase2/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 16,
+      "attribution": "Copyright Scottish Government and SEPA (2014). Fugro retain the commercial copyright.; processing by Richard Pearson using RVT, National Library of Scotland"
+    },
+    "minzoom": null,
+    "maxzoom": 16,
+    "bounds": null,
+    "attribution": "Copyright Scottish Government and SEPA (2014). Fugro retain the commercial copyright.; processing by Richard Pearson using RVT, National Library of Scotland",
+    "licence": "Per-phase Crown copyright statements in the NLS guide; underlying phases 1-6 DTM are OGL v3 per the SRSP catalogue (followup).",
+    "key_required": false,
+    "coverage": "scotland",
+    "cors": "yes per research-lidar-visualisation; research-lidar-scotland-wales-ni saw none",
+    "clean": true,
+    "notes": "Scotland is not in the first release. Missing tiles return 404 XML. research-lidar-scotland-wales-ni classed NLS tiles as deep-link only ('Do not hotlink without permission'); research-lidar-visualisation found these multi-hillshade sets on the NLS reuse list. Phase 1-3 and Hebrides credits are the SRSP collection statements quoted in the followup. Phases 4-6 publish a licence but no statement, so the line shown is the generic one research-lidar-scotland-wales-ni suggested pending confirmation with GI-SAT; NLS credits phases 3-6 to Scottish Government, SEPA and Fugro (2020-2022)."
+  },
+  {
+    "id": "nls-rvt-hillshade-scotland-phase3",
+    "title": "Scotland LIDAR RVT hillshade, phase3 (NLS)",
+    "group": "lidar",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/lidar/rgb/phase3/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 16,
+      "attribution": "Copyright Scottish Government and SEPA (2014). Fugro retain the commercial copyright.; processing by Richard Pearson using RVT, National Library of Scotland"
+    },
+    "minzoom": null,
+    "maxzoom": 16,
+    "bounds": null,
+    "attribution": "Copyright Scottish Government and SEPA (2014). Fugro retain the commercial copyright.; processing by Richard Pearson using RVT, National Library of Scotland",
+    "licence": "Per-phase Crown copyright statements in the NLS guide; underlying phases 1-6 DTM are OGL v3 per the SRSP catalogue (followup).",
+    "key_required": false,
+    "coverage": "scotland",
+    "cors": "yes per research-lidar-visualisation; research-lidar-scotland-wales-ni saw none",
+    "clean": true,
+    "notes": "Scotland is not in the first release. Missing tiles return 404 XML. research-lidar-scotland-wales-ni classed NLS tiles as deep-link only ('Do not hotlink without permission'); research-lidar-visualisation found these multi-hillshade sets on the NLS reuse list. Phase 1-3 and Hebrides credits are the SRSP collection statements quoted in the followup. Phases 4-6 publish a licence but no statement, so the line shown is the generic one research-lidar-scotland-wales-ni suggested pending confirmation with GI-SAT; NLS credits phases 3-6 to Scottish Government, SEPA and Fugro (2020-2022)."
+  },
+  {
+    "id": "nls-rvt-hillshade-scotland-phase4",
+    "title": "Scotland LIDAR RVT hillshade, phase4 (NLS)",
+    "group": "lidar",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/lidar/rgb/phase4/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 16,
+      "attribution": "Contains Scottish Government LiDAR data, OGL v3; processing by Richard Pearson using RVT, National Library of Scotland"
+    },
+    "minzoom": null,
+    "maxzoom": 16,
+    "bounds": null,
+    "attribution": "Contains Scottish Government LiDAR data, OGL v3; processing by Richard Pearson using RVT, National Library of Scotland",
+    "licence": "Per-phase Crown copyright statements in the NLS guide; underlying phases 1-6 DTM are OGL v3 per the SRSP catalogue (followup).",
+    "key_required": false,
+    "coverage": "scotland",
+    "cors": "yes per research-lidar-visualisation; research-lidar-scotland-wales-ni saw none",
+    "clean": true,
+    "notes": "Scotland is not in the first release. Missing tiles return 404 XML. research-lidar-scotland-wales-ni classed NLS tiles as deep-link only ('Do not hotlink without permission'); research-lidar-visualisation found these multi-hillshade sets on the NLS reuse list. Phase 1-3 and Hebrides credits are the SRSP collection statements quoted in the followup. Phases 4-6 publish a licence but no statement, so the line shown is the generic one research-lidar-scotland-wales-ni suggested pending confirmation with GI-SAT; NLS credits phases 3-6 to Scottish Government, SEPA and Fugro (2020-2022)."
+  },
+  {
+    "id": "nls-rvt-hillshade-scotland-phase5",
+    "title": "Scotland LIDAR RVT hillshade, phase5 (NLS)",
+    "group": "lidar",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/lidar/rgb/phase5/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 17,
+      "attribution": "Contains Scottish Government LiDAR data, OGL v3; processing by Richard Pearson using RVT, National Library of Scotland"
+    },
+    "minzoom": null,
+    "maxzoom": 17,
+    "bounds": null,
+    "attribution": "Contains Scottish Government LiDAR data, OGL v3; processing by Richard Pearson using RVT, National Library of Scotland",
+    "licence": "Per-phase Crown copyright statements in the NLS guide; underlying phases 1-6 DTM are OGL v3 per the SRSP catalogue (followup).",
+    "key_required": false,
+    "coverage": "scotland",
+    "cors": "yes per research-lidar-visualisation; research-lidar-scotland-wales-ni saw none",
+    "clean": true,
+    "notes": "Scotland is not in the first release. Missing tiles return 404 XML. research-lidar-scotland-wales-ni classed NLS tiles as deep-link only ('Do not hotlink without permission'); research-lidar-visualisation found these multi-hillshade sets on the NLS reuse list. Phase 1-3 and Hebrides credits are the SRSP collection statements quoted in the followup. Phases 4-6 publish a licence but no statement, so the line shown is the generic one research-lidar-scotland-wales-ni suggested pending confirmation with GI-SAT; NLS credits phases 3-6 to Scottish Government, SEPA and Fugro (2020-2022)."
+  },
+  {
+    "id": "nls-rvt-hillshade-scotland-phase6",
+    "title": "Scotland LIDAR RVT hillshade, phase6 (NLS)",
+    "group": "lidar",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/lidar/rgb/phase6/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 17,
+      "attribution": "Contains Scottish Government LiDAR data, OGL v3; processing by Richard Pearson using RVT, National Library of Scotland"
+    },
+    "minzoom": null,
+    "maxzoom": 17,
+    "bounds": null,
+    "attribution": "Contains Scottish Government LiDAR data, OGL v3; processing by Richard Pearson using RVT, National Library of Scotland",
+    "licence": "Per-phase Crown copyright statements in the NLS guide; underlying phases 1-6 DTM are OGL v3 per the SRSP catalogue (followup).",
+    "key_required": false,
+    "coverage": "scotland",
+    "cors": "yes per research-lidar-visualisation; research-lidar-scotland-wales-ni saw none",
+    "clean": true,
+    "notes": "Scotland is not in the first release. Missing tiles return 404 XML. research-lidar-scotland-wales-ni classed NLS tiles as deep-link only ('Do not hotlink without permission'); research-lidar-visualisation found these multi-hillshade sets on the NLS reuse list. Phase 1-3 and Hebrides credits are the SRSP collection statements quoted in the followup. Phases 4-6 publish a licence but no statement, so the line shown is the generic one research-lidar-scotland-wales-ni suggested pending confirmation with GI-SAT; NLS credits phases 3-6 to Scottish Government, SEPA and Fugro (2020-2022)."
+  },
+  {
+    "id": "nls-rvt-hillshade-scotland-hebrides",
+    "title": "Scotland LIDAR RVT hillshade, hebrides (NLS)",
+    "group": "lidar",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/lidar/rgb/hebrides/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 16,
+      "attribution": "(c) SEPA (2019); processing by Richard Pearson using RVT, National Library of Scotland"
+    },
+    "minzoom": null,
+    "maxzoom": 16,
+    "bounds": null,
+    "attribution": "(c) SEPA (2019); processing by Richard Pearson using RVT, National Library of Scotland",
+    "licence": "Per-phase Crown copyright statements in the NLS guide; underlying phases 1-6 DTM are OGL v3 per the SRSP catalogue (followup).",
+    "key_required": false,
+    "coverage": "scotland",
+    "cors": "yes per research-lidar-visualisation; research-lidar-scotland-wales-ni saw none",
+    "clean": true,
+    "notes": "Scotland is not in the first release. Missing tiles return 404 XML. research-lidar-scotland-wales-ni classed NLS tiles as deep-link only ('Do not hotlink without permission'); research-lidar-visualisation found these multi-hillshade sets on the NLS reuse list. Phase 1-3 and Hebrides credits are the SRSP collection statements quoted in the followup. Phases 4-6 publish a licence but no statement, so the line shown is the generic one research-lidar-scotland-wales-ni suggested pending confirmation with GI-SAT; NLS credits phases 3-6 to Scottish Government, SEPA and Fugro (2020-2022)."
+  },
+  {
+    "id": "nls-cvat-england",
+    "title": "England Combined VAT (NLS)",
+    "group": "lidar",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/CVAT/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "minzoom": 1,
+      "maxzoom": 16,
+      "bounds": [
+        -6.5277,
+        49.812,
+        1.8364,
+        55.9231
+      ],
+      "attribution": "(c) Environment Agency copyright 2022. With thanks to Richard Pearson for processing using RVT"
+    },
+    "minzoom": 1,
+    "maxzoom": 16,
+    "bounds": [
+      -6.5277,
+      49.812,
+      1.8364,
+      55.9231
+    ],
+    "attribution": "(c) Environment Agency copyright 2022. With thanks to Richard Pearson for processing using RVT",
+    "licence": "Underlying data OGL. Not in the NLS guide's list of URLs offered for reuse.",
+    "key_required": false,
+    "coverage": "england",
+    "cors": "yes",
+    "clean": false,
+    "notes": "Ask NLS before hot-linking. 404 at z17. Comparison layer only; Decision 0006 renders our own CVAT."
+  },
+  {
+    "id": "nls-terrarium-england-wales",
+    "title": "England and Wales DTM terrarium tiles (NLS)",
+    "group": "lidar",
+    "kind": "raster-dem",
+    "source": {
+      "type": "raster-dem",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/slrm_england_wales/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 512,
+      "encoding": "terrarium",
+      "minzoom": 4,
+      "maxzoom": 16,
+      "attribution": "LiDAR DTM: Environment Agency, DataMapWales, Open Government Licence"
+    },
+    "minzoom": 4,
+    "maxzoom": 16,
+    "bounds": null,
+    "attribution": "LiDAR DTM: Environment Agency, DataMapWales, Open Government Licence",
+    "licence": "Underlying data OGL (Environment Agency, DataMapWales). Not listed by NLS as a tileset for reuse.",
+    "key_required": false,
+    "coverage": "england",
+    "cors": "yes",
+    "clean": false,
+    "notes": "Full 1/256 m precision. Low-zoom tiles carry alpha-0 no-data, which MapLibre is expected to decode as about -32768 m. Ask NLS before hot-linking."
+  },
+  {
+    "id": "mapterhorn-terrarium",
+    "title": "Mapterhorn terrain (terrarium)",
+    "group": "lidar",
+    "kind": "raster-dem",
+    "source": {
+      "type": "raster-dem",
+      "tiles": [
+        "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp"
+      ],
+      "tileSize": 512,
+      "encoding": "terrarium",
+      "maxzoom": 16,
+      "attribution": "(c) Mapterhorn https://mapterhorn.com/attribution"
+    },
+    "minzoom": null,
+    "maxzoom": 16,
+    "bounds": null,
+    "attribution": "(c) Mapterhorn https://mapterhorn.com/attribution",
+    "licence": "Code BSD-3. Data: 'various open-data sources'; UK entries in attribution.json are Open Government Licence.",
+    "key_required": false,
+    "coverage": "wider",
+    "cors": "yes",
+    "clean": false,
+    "notes": "Vertical step 1/32 m at z16, 1/16 m at z15: too coarse for earthwork analysis; 3D terrain or outside-coverage fallback only. critic-completeness listed its data licence as still to be resolved. TileJSON: https://tiles.mapterhorn.com/tilejson.json. 404 at z17."
+  },
+  {
+    "id": "aws-terrarium",
+    "title": "AWS Terrain Tiles (Mapzen terrarium)",
+    "group": "lidar",
+    "kind": "raster-dem",
+    "source": {
+      "type": "raster-dem",
+      "tiles": [
+        "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "encoding": "terrarium",
+      "maxzoom": 15
+    },
+    "minzoom": null,
+    "maxzoom": 15,
+    "bounds": null,
+    "attribution": null,
+    "licence": "Not checked by the research",
+    "key_required": false,
+    "coverage": "wider",
+    "cors": "yes (*)",
+    "clean": false,
+    "notes": "About 3 m per pixel at z15 in the UK; 404 at z16. Last-Modified 2017. Licence and source mix must be checked before shipping."
+  },
+  {
+    "id": "srsp-scotland-phase4-dtm-colour",
+    "title": "Scotland LIDAR phase 4 DTM colour ramp (SRSP WMTS)",
+    "group": "lidar",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://ows.remotesensing.data.gov.scot/geoserver/gwc/service/wmts/rest/scotland:scotland-lidar-4-dtm-s3/scotland:lidar-dem/WebMercatorQuad/{z}/{y}/{x}?format=image/png"
+      ],
+      "tileSize": 256,
+      "attribution": "Scottish Government (OGL v3)"
+    },
+    "minzoom": null,
+    "maxzoom": null,
+    "bounds": null,
+    "attribution": "Scottish Government (OGL v3)",
+    "licence": "OGL v3",
+    "key_required": false,
+    "coverage": "scotland",
+    "cors": "yes (*)",
+    "clean": true,
+    "notes": "Elevation colour ramp only; earthworks are invisible (the research classed the WMTS as reference only). WebMercatorQuad exists only on -s3, nlp, coastal and footprint layers. 1.45 s miss, 0.13 s hit. Useful mainly to show coverage."
+  },
+  {
+    "id": "daera-ni-coastal-dtm-relief",
+    "title": "NI 2021 coastal survey DTM colour relief (DAERA)",
+    "group": "lidar",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://tiles-eu1.arcgis.com/kswen6BYexuc1SUk/arcgis/rest/services/Topographic_LiDAR_DTM_TPK/MapServer/tile/{z}/{y}/{x}"
+      ],
+      "tileSize": 256,
+      "attribution": "Department of Agriculture, Environment and Rural Affairs (DAERA), Bluesky"
+    },
+    "minzoom": null,
+    "maxzoom": null,
+    "bounds": null,
+    "attribution": "Department of Agriculture, Environment and Rural Affairs (DAERA), Bluesky",
+    "licence": "UK Open Government Licence (OGL)",
+    "key_required": false,
+    "coverage": "northern_ireland",
+    "cors": "yes (DAERA ArcGIS tiles were browser-callable)",
+    "clean": true,
+    "notes": "Coastal strip only (intertidal to about 200 m landward). PNG8 colour relief, EPSG:3857 cache. tileSize 256 is assumed; the research did not record it. A float32 LERC cache exists at .../Full_NI_Elevation/ImageServer/tile/{z}/{y}/{x} but MapLibre cannot decode LERC directly."
+  },
+  {
+    "id": "esri-world-imagery",
+    "title": "Esri World Imagery",
+    "group": "imagery",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+      ],
+      "tileSize": 256,
+      "maxzoom": 19,
+      "attribution": "Source: Esri, Vantor, Earthstar Geographics, and the GIS User Community"
+    },
+    "minzoom": null,
+    "maxzoom": 19,
+    "bounds": null,
+    "attribution": "Source: Esri, Vantor, Earthstar Geographics, and the GIS User Community",
+    "licence": "Esri Master License Agreement. Terms summary (April 21, 2025): 'Use with Esri software and comply with its terms of use. If you do not have Esri software, you must purchase an ArcGIS Online subscription.'",
+    "key_required": false,
+    "coverage": "wider",
+    "cors": "yes (*)",
+    "clean": false,
+    "notes": "Loads without a key, but use from a non-Esri app without an ArcGIS account is outside Esri's stated terms. No proxy caching. Best cropmark imagery found; needs a decision on an ArcGIS Location Platform account."
+  },
+  {
+    "id": "esri-wayback-43291",
+    "title": "Esri World Imagery Wayback, release 43291 (2026-10-29)",
+    "group": "imagery",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/WMTS/1.0.0/default028mm/MapServer/tile/43291/{z}/{y}/{x}"
+      ],
+      "tileSize": 256,
+      "attribution": "Source: Esri, Vantor, Earthstar Geographics, and the GIS User Community"
+    },
+    "minzoom": null,
+    "maxzoom": null,
+    "bounds": null,
+    "attribution": "Source: Esri, Vantor, Earthstar Geographics, and the GIS User Community",
+    "licence": "Same Esri terms as World Imagery",
+    "key_required": false,
+    "coverage": "wider",
+    "cors": "yes (*)",
+    "clean": false,
+    "notes": "198 releases from 2014-02-20 (releaseNum 10) to 2026-10-29 (43291); one raster source per release. Release numbers are not in date order; sort by the date in itemTitle from https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com/waybackconfig.json. Capture dates per point from the metadata identify service."
+  },
+  {
+    "id": "eox-s2cloudless-2016",
+    "title": "Sentinel-2 cloudless 2016 (EOX)",
+    "group": "imagery",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg"
+      ],
+      "tileSize": 256,
+      "maxzoom": 14,
+      "attribution": "Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016)"
+    },
+    "minzoom": null,
+    "maxzoom": 14,
+    "bounds": null,
+    "attribution": "Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016)",
+    "licence": "Creative Commons Attribution 4.0 International",
+    "key_required": false,
+    "coverage": "wider",
+    "cors": "yes (origin reflected)",
+    "clean": true,
+    "notes": "10 m: field patterns only, not cropmarks. 2016 and 2017 are CC BY 4.0."
+  },
+  {
+    "id": "eox-s2cloudless-2025",
+    "title": "Sentinel-2 cloudless 2025 (EOX)",
+    "group": "imagery",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2025_3857/default/g/{z}/{y}/{x}.jpg"
+      ],
+      "tileSize": 256,
+      "maxzoom": 14,
+      "attribution": "Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016)"
+    },
+    "minzoom": null,
+    "maxzoom": 14,
+    "bounds": null,
+    "attribution": "Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016)",
+    "licence": "Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International",
+    "key_required": false,
+    "coverage": "wider",
+    "cors": "yes (origin reflected)",
+    "clean": true,
+    "notes": "10 m: field patterns only, not cropmarks. 2018 onward are non-commercial share-alike, usable under Decision 0004. The attribution recorded by the research names 2016 data; the year for this layer was not recorded."
+  },
+  {
+    "id": "nls-os-air-photo-mosaics-1944-50",
+    "title": "OS air photo mosaics 1944-1950 (NLS)",
+    "group": "imagery",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/air-photos-10560/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 16,
+      "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>"
+    },
+    "minzoom": null,
+    "maxzoom": 16,
+    "bounds": null,
+    "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>",
+    "licence": "CC-BY (NLS) per the layers list",
+    "key_required": false,
+    "coverage": "gb",
+    "cors": "yes (*)",
+    "clean": false,
+    "notes": "Partial coverage of England and Wales. The published https://geo.nls.uk/maps/air-photos/ URL returned 404; this S3 path is from the viewer script. Scotland equivalent: /air-photo/ (from the viewer script, not tested). The research advised emailing NLS before launch to confirm that hot-linking the mapseries-tilesets S3 bucket from a public app is acceptable, and offering to mirror under CC-BY. Missing tiles return 404 with CORS headers."
+  },
+  {
+    "id": "nls-os-six-inch-1888-1913",
+    "title": "OS six-inch 2nd edition 1888-1913 (NLS)",
+    "group": "historic",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/os/6inchsecond/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 17,
+      "minzoom": 1,
+      "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>"
+    },
+    "minzoom": 1,
+    "maxzoom": 17,
+    "bounds": null,
+    "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>",
+    "licence": "CC-BY (NLS); NLS copyright page: 'commercial, non-commercial, educational and private purposes under the terms of the Creative Commons Attribution (CC-BY) licence'",
+    "key_required": false,
+    "coverage": "gb",
+    "cors": "yes (*)",
+    "clean": false,
+    "notes": "Observed z17 at Avebury (NLS states 16); 404 at z18. Not on the published brief layers list, which points to MapTiler uk-osgb10k1888. The research advised emailing NLS before launch to confirm that hot-linking the mapseries-tilesets S3 bucket from a public app is acceptable, and offering to mirror under CC-BY. Missing tiles return 404 with CORS headers."
+  },
+  {
+    "id": "nls-os-25k-outline-1945-65",
+    "title": "OS 1:25,000 outline 1945-1965 (NLS)",
+    "group": "historic",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/os/25000_outline/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 16,
+      "minzoom": 1,
+      "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>"
+    },
+    "minzoom": 1,
+    "maxzoom": 16,
+    "bounds": null,
+    "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>",
+    "licence": "CC-BY (NLS); NLS copyright page: 'commercial, non-commercial, educational and private purposes under the terms of the Creative Commons Attribution (CC-BY) licence'",
+    "key_required": false,
+    "coverage": "gb",
+    "cors": "yes (*)",
+    "clean": false,
+    "notes": "On the published layers list. The research advised emailing NLS before launch to confirm that hot-linking the mapseries-tilesets S3 bucket from a public app is acceptable, and offering to mirror under CC-BY. Missing tiles return 404 with CORS headers."
+  },
+  {
+    "id": "nls-os-one-inch-1920s-40s",
+    "title": "OS small scales 1920s-1940s (NLS)",
+    "group": "historic",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/api/nls/{z}/{x}/{y}.jpg"
+      ],
+      "tileSize": 256,
+      "maxzoom": 14,
+      "minzoom": 1,
+      "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>"
+    },
+    "minzoom": 1,
+    "maxzoom": 14,
+    "bounds": null,
+    "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>",
+    "licence": "CC-BY (NLS); NLS copyright page: 'commercial, non-commercial, educational and private purposes under the terms of the Creative Commons Attribution (CC-BY) licence'",
+    "key_required": false,
+    "coverage": "gb",
+    "cors": "yes (*)",
+    "clean": false,
+    "notes": "On the published layers list. The old nls-0.tileserver.com URLs serve a placeholder; do not use them. The research advised emailing NLS before launch to confirm that hot-linking the mapseries-tilesets S3 bucket from a public app is acceptable, and offering to mirror under CC-BY. Missing tiles return 404 with CORS headers."
+  },
+  {
+    "id": "nls-bartholomew-half-inch-1897-1907",
+    "title": "Bartholomew half-inch 1897-1907 (NLS)",
+    "group": "historic",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/bartholomew_great_britain/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 15,
+      "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>"
+    },
+    "minzoom": null,
+    "maxzoom": 15,
+    "bounds": null,
+    "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>",
+    "licence": "CC-BY (NLS); NLS copyright page: 'commercial, non-commercial, educational and private purposes under the terms of the Creative Commons Attribution (CC-BY) licence'",
+    "key_required": false,
+    "coverage": "gb",
+    "cors": "yes (*)",
+    "clean": false,
+    "notes": "The research advised emailing NLS before launch to confirm that hot-linking the mapseries-tilesets S3 bucket from a public app is acceptable, and offering to mirror under CC-BY. Missing tiles return 404 with CORS headers."
+  },
+  {
+    "id": "nls-bartholomew-half-inch-1940s",
+    "title": "Bartholomew half-inch 1940-1947 (NLS)",
+    "group": "historic",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/bartholomew/great_britain_1940s/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 14,
+      "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>"
+    },
+    "minzoom": null,
+    "maxzoom": 14,
+    "bounds": null,
+    "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>",
+    "licence": "CC-BY (NLS); NLS copyright page: 'commercial, non-commercial, educational and private purposes under the terms of the Creative Commons Attribution (CC-BY) licence'",
+    "key_required": false,
+    "coverage": "gb",
+    "cors": "yes (*)",
+    "clean": false,
+    "notes": "The research advised emailing NLS before launch to confirm that hot-linking the mapseries-tilesets S3 bucket from a public app is acceptable, and offering to mirror under CC-BY. Missing tiles return 404 with CORS headers."
+  },
+  {
+    "id": "nls-ten-mile-general",
+    "title": "OS ten-mile planning map, general (NLS)",
+    "group": "historic",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/ten_mile/general/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 12,
+      "minzoom": 1,
+      "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>"
+    },
+    "minzoom": 1,
+    "maxzoom": 12,
+    "bounds": null,
+    "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>",
+    "licence": "CC-BY (NLS); NLS copyright page: 'commercial, non-commercial, educational and private purposes under the terms of the Creative Commons Attribution (CC-BY) licence'",
+    "key_required": false,
+    "coverage": "gb",
+    "cors": "yes (*)",
+    "clean": false,
+    "notes": "Overview only (research classed ten-mile maps as reference). Other sheets: geological, land_utilisation, land_classification, physical, farming, roads_46, roads_56 and more. The research advised emailing NLS before launch to confirm that hot-linking the mapseries-tilesets S3 bucket from a public app is acceptable, and offering to mirror under CC-BY. Missing tiles return 404 with CORS headers."
+  },
+  {
+    "id": "nls-os-six-inch-first-scotland",
+    "title": "OS six-inch 1st edition, Scotland (NLS)",
+    "group": "historic",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/os/6inchfirst/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 16,
+      "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>"
+    },
+    "minzoom": null,
+    "maxzoom": 16,
+    "bounds": null,
+    "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>",
+    "licence": "CC-BY (NLS); NLS copyright page: 'commercial, non-commercial, educational and private purposes under the terms of the Creative Commons Attribution (CC-BY) licence'",
+    "key_required": false,
+    "coverage": "scotland",
+    "cors": "yes (*)",
+    "clean": false,
+    "notes": "On the published list. England and Wales first editions are per county (next entry). The research advised emailing NLS before launch to confirm that hot-linking the mapseries-tilesets S3 bucket from a public app is acceptable, and offering to mirror under CC-BY. Missing tiles return 404 with CORS headers."
+  },
+  {
+    "id": "nls-os-six-inch-first-wiltshire",
+    "title": "OS six-inch 1st edition, Wiltshire (NLS county set)",
+    "group": "historic",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/os/six-inch-wiltshire/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 17,
+      "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>"
+    },
+    "minzoom": null,
+    "maxzoom": 17,
+    "bounds": null,
+    "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>",
+    "licence": "CC-BY (NLS); NLS copyright page: 'commercial, non-commercial, educational and private purposes under the terms of the Creative Commons Attribution (CC-BY) licence'",
+    "key_required": false,
+    "coverage": "england",
+    "cors": "yes (*)",
+    "clean": false,
+    "notes": "One tileset per county (os/six-inch-{county}); county names and bounds come from https://maps.nls.uk/geo/scripts/20251109/explore-layers-ol6.js (dated path that will change). Only Wiltshire was tested. The research advised emailing NLS before launch to confirm that hot-linking the mapseries-tilesets S3 bucket from a public app is acceptable, and offering to mirror under CC-BY. Missing tiles return 404 with CORS headers."
+  },
+  {
+    "id": "nls-os-25-inch-wiltshire",
+    "title": "OS 25-inch 1841-1952, Wiltshire (NLS county set)",
+    "group": "historic",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/25_inch/wiltshire/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 18,
+      "bounds": [
+        -2.37245,
+        50.9084,
+        -1.47408,
+        51.69208
+      ],
+      "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>"
+    },
+    "minzoom": null,
+    "maxzoom": 18,
+    "bounds": [
+      -2.37245,
+      50.9084,
+      -1.47408,
+      51.69208
+    ],
+    "attribution": "<a href=\"https://maps.nls.uk/\">Reproduced with the permission of the National Library of Scotland</a>",
+    "licence": "CC-BY (NLS), as shown on the sheet page for Wiltshire II.11",
+    "key_required": false,
+    "coverage": "england",
+    "cors": "yes (*)",
+    "clean": false,
+    "notes": "About 56 county tilesets under 25_inch/ (bedfordshire ... yorkshire, scotland_1, scotland_2); generate the list and bounds from the NLS viewer script. wiltshire2nd returned 200 at z15 and 404 at z16-18 at the test spot. Undocumented for reuse. The research advised emailing NLS before launch to confirm that hot-linking the mapseries-tilesets S3 bucket from a public app is acceptable, and offering to mirror under CC-BY. Missing tiles return 404 with CORS headers."
+  },
+  {
+    "id": "nls-roy-military-survey-lowlands",
+    "title": "Roy Military Survey of Scotland 1747-55, lowlands (NLS)",
+    "group": "historic",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/roy/lowlands/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "minzoom": 5,
+      "maxzoom": 14,
+      "attribution": "British Library / National Library of Scotland; permission required"
+    },
+    "minzoom": 5,
+    "maxzoom": 14,
+    "bounds": null,
+    "attribution": "British Library / National Library of Scotland; permission required",
+    "licence": "'CC-BY (BL)': 'This map is owned by the British Library, and their permission must be sought for any reproduction.'",
+    "key_required": false,
+    "coverage": "scotland",
+    "cors": "yes (*)",
+    "clean": false,
+    "notes": "Needs British Library permission before going in a public app; deep-link to the NLS viewer until cleared."
+  },
+  {
+    "id": "nls-roy-military-survey-highlands",
+    "title": "Roy Military Survey of Scotland 1747-55, highlands (NLS)",
+    "group": "historic",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://mapseries-tilesets.s3.amazonaws.com/roy/highlands/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "minzoom": 5,
+      "maxzoom": 14,
+      "attribution": "British Library / National Library of Scotland; permission required"
+    },
+    "minzoom": 5,
+    "maxzoom": 14,
+    "bounds": null,
+    "attribution": "British Library / National Library of Scotland; permission required",
+    "licence": "'CC-BY (BL)': 'This map is owned by the British Library, and their permission must be sought for any reproduction.'",
+    "key_required": false,
+    "coverage": "scotland",
+    "cors": "yes (*)",
+    "clean": false,
+    "notes": "Needs British Library permission before going in a public app; deep-link to the NLS viewer until cleared."
+  },
+  {
+    "id": "maptiler-nls-os-25k-1937-61",
+    "title": "OS 1:25,000 coloured 1937-61 (NLS on MapTiler)",
+    "group": "historic",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://api.maptiler.com/tiles/uk-osgb25k1937/{z}/{x}/{y}.jpg?key=KEY"
+      ],
+      "tileSize": 256,
+      "attribution": "National Library of Scotland with a link to its website, plus MapTiler attribution"
+    },
+    "minzoom": null,
+    "maxzoom": null,
+    "bounds": null,
+    "attribution": "National Library of Scotland with a link to its website, plus MapTiler attribution",
+    "licence": "NLS API page: 'Creative Commons Attribution 3.0 Unported Licence', plus MapTiler Cloud terms",
+    "key_required": true,
+    "coverage": "gb",
+    "cors": "yes (*)",
+    "clean": false,
+    "notes": "Not tested with a key (403 'Missing key'). Free tier 100,000 tile requests per month, non-commercial. Also uk-osgb63k1955 (one-inch 7th series). Never reuse the key embedded in the NLS viewer. JPEG or PNG format per tileset was not confirmed."
+  },
+  {
+    "id": "hes-designations-scheduled-monuments-export",
+    "title": "Scotland scheduled monuments (HES MapServer export)",
+    "group": "historic",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://inspire.hes.scot/arcgis/rest/services/HES/HES_Designations/MapServer/export?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=png32&transparent=true&layers=show:5&f=image"
+      ],
+      "tileSize": 256,
+      "attribution": "Contains Historic Environment Scotland and OS data © Historic Environment Scotland and Crown Copyright and [database right] (year), licensed under the Open Government Licence v3.0."
+    },
+    "minzoom": null,
+    "maxzoom": null,
+    "bounds": null,
+    "attribution": "Contains Historic Environment Scotland and OS data © Historic Environment Scotland and Crown Copyright and [database right] (year), licensed under the Open Government Licence v3.0.",
+    "licence": "Open Government Licence v3.0",
+    "key_required": false,
+    "coverage": "scotland",
+    "cors": "yes (echoes Origin, observed on REST query)",
+    "clean": true,
+    "notes": "The HES WMS draws blank in EPSG:3857, so use this export. Not a tile cache. The research recommended serving our own vector tiles instead of hot-linking."
+  },
+  {
+    "id": "dmw-cadw-scheduled-monuments-wms",
+    "title": "Wales scheduled monuments (DataMapWales WMS)",
+    "group": "historic",
+    "kind": "wms",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://datamap.gov.wales/geoserver/ows?service=WMS&version=1.3.0&request=GetMap&layers=inspire-wg:Cadw_SAM&styles=&crs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256&format=image/png&transparent=true"
+      ],
+      "tileSize": 256,
+      "attribution": "Designated Historic Asset GIS Data, The Welsh Historic Environment Service (Cadw), DATE [the date that you received the data from Cadw], licensed under the Open Government Licence http://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
+    },
+    "minzoom": null,
+    "maxzoom": null,
+    "bounds": null,
+    "attribution": "Designated Historic Asset GIS Data, The Welsh Historic Environment Service (Cadw), DATE [the date that you received the data from Cadw], licensed under the Open Government Licence http://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+    "licence": "Open Government Licence v3.0",
+    "key_required": false,
+    "coverage": "wales",
+    "cors": "yes (*)",
+    "clean": true,
+    "notes": "Any DataMapWales layer can be drawn this way; the WMTS path returned 400. DataMapWales is slow and mid-migration to a beta site."
+  },
+  {
+    "id": "opendomesday-places-vector",
+    "title": "Open Domesday places (vector tiles)",
+    "group": "historic",
+    "kind": "vector",
+    "source": {
+      "type": "vector",
+      "tiles": [
+        "https://tiles.opendomesday.org/services/domesday/mytiles-65536/tiles/{z}/{x}/{y}.pbf"
+      ],
+      "minzoom": 5,
+      "maxzoom": 14,
+      "attribution": "Maps and site by Anna Powell-Smith. Domesday data created by Professor J.J.N. Palmer and team."
+    },
+    "minzoom": 5,
+    "maxzoom": 14,
+    "bounds": [
+      -5.67,
+      49.97,
+      1.76,
+      54.62
+    ],
+    "attribution": "Maps and site by Anna Powell-Smith. Domesday data created by Professor J.J.N. Palmer and team.",
+    "licence": "Data: 'The raw Domesday data is hosted by Hull University, under a CC-NC-BY-SA licence'",
+    "key_required": false,
+    "coverage": "england",
+    "cors": "yes (*) on tiles",
+    "clean": false,
+    "notes": "Tile size 512, one layer with 31 attributes; the source-layer name was not recorded. A private server: do not hotlink without asking. The JSON API is dead (404)."
+  },
+  {
+    "id": "openfreemap-planet",
+    "title": "OpenFreeMap vector basemap / overlay",
+    "group": "map",
+    "kind": "vector",
+    "source": {
+      "type": "vector",
+      "url": "https://tiles.openfreemap.org/planet",
+      "attribution": "OpenFreeMap © OpenMapTiles Data from OpenStreetMap"
+    },
+    "minzoom": 0,
+    "maxzoom": 14,
+    "bounds": null,
+    "attribution": "OpenFreeMap © OpenMapTiles Data from OpenStreetMap",
+    "licence": "Service free; 'Is commercial usage allowed? Yes'; project MIT. Data OpenStreetMap (ODbL); schema OpenMapTiles.",
+    "key_required": false,
+    "coverage": "wider",
+    "cors": "yes (*)",
+    "clean": true,
+    "notes": "Always use the TileJSON url; tile paths carry a dated build id (20261101_080013_pt). Glyphs https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf; sprite https://tiles.openfreemap.org/sprites/ofm_f384/ofm. For the overlay over LIDAR use only line and symbol layers on transportation, transportation_name, place, boundary, waterway, water_name. No SLA: 'may discontinue it at any time without notice'; plan a self-hosted PMTiles fallback."
+  },
+  {
+    "id": "osm-standard-raster",
+    "title": "OpenStreetMap standard tiles",
+    "group": "map",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "maxzoom": 19,
+      "attribution": "© OpenStreetMap contributors"
+    },
+    "minzoom": null,
+    "maxzoom": 19,
+    "bounds": null,
+    "attribution": "© OpenStreetMap contributors",
+    "licence": "Data ODbL; use governed by the OSMF Tile Usage Policy",
+    "key_required": false,
+    "coverage": "wider",
+    "cors": "yes (*)",
+    "clean": false,
+    "notes": "Development only: no SLA, access may be withdrawn without notice ('Commercial services, or those that seek donations, should be especially aware'). Opaque, so not an overlay. Attribution must stay visible."
+  },
+  {
+    "id": "eox-osm-overlay",
+    "title": "EOX transparent OSM overlay",
+    "group": "map",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://tiles.maps.eox.at/wmts/1.0.0/overlay_3857/default/g/{z}/{y}/{x}.png"
+      ],
+      "tileSize": 256,
+      "attribution": "Overlay { Data © OpenStreetMap contributors, Rendering © EOX and MapServer }"
+    },
+    "minzoom": null,
+    "maxzoom": null,
+    "bounds": null,
+    "attribution": "Overlay { Data © OpenStreetMap contributors, Rendering © EOX and MapServer }",
+    "licence": "Capabilities: 'Proper attribution is required for any usage.'",
+    "key_required": false,
+    "coverage": "wider",
+    "cors": "yes (origin reflected)",
+    "clean": true,
+    "notes": "Raster fallback for the overlay. Sparse at z14 and has no footpaths; the vector overlay is far better. Also overlay_bright_3857."
+  },
+  {
+    "id": "os-maps-api-outdoor",
+    "title": "OS Maps API Outdoor (OpenData zooms)",
+    "group": "map",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://api.os.uk/maps/raster/v1/zxy/Outdoor_3857/{z}/{x}/{y}.png?key=KEY"
+      ],
+      "tileSize": 256,
+      "minzoom": 7,
+      "maxzoom": 16,
+      "attribution": "Contains OS data © Crown copyright and database right 2026"
+    },
+    "minzoom": 7,
+    "maxzoom": 16,
+    "bounds": null,
+    "attribution": "Contains OS data © Crown copyright and database right 2026",
+    "licence": "OS OpenData plan: 'free and unlimited usage' for open data zoom levels (z7-16 in 3857); z17-20 are premium",
+    "key_required": true,
+    "coverage": "gb",
+    "cors": "not observable without a key",
+    "clean": false,
+    "notes": "Returned 401 without a key; not tested with one. 600 transactions per minute live, 50 in development. Cap maxzoom at 16 to avoid premium charges. Road_3857 and Light_3857 also exist."
+  },
+  {
+    "id": "bgs-geology-625k-bedrock",
+    "title": "BGS 1:625k bedrock lithostratigraphy",
+    "group": "geology",
+    "kind": "wms",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://ogc.bgs.ac.uk/cgi-bin/BGS_Bedrock_and_Superficial_Geology/wms?service=WMS&version=1.3.0&request=GetMap&layers=GBR_BGS_625k_BLS&styles=&format=image/png&transparent=true&crs=EPSG:3857&width=256&height=256&bbox={bbox-epsg-3857}"
+      ],
+      "tileSize": 256,
+      "maxzoom": 12,
+      "attribution": "Contains British Geological Survey materials © UKRI 2026"
+    },
+    "minzoom": null,
+    "maxzoom": 12,
+    "bounds": null,
+    "attribution": "Contains British Geological Survey materials © UKRI 2026",
+    "licence": "Capabilities: 'The 1:625k DiGMap data is made available for all uses - including commercial use, however the British Geological Survey (BGS) at all times retains the copyright in this material and you are not permitted, without an appropriate licence, to set up a service selling on this material.'",
+    "key_required": false,
+    "coverage": "uk",
+    "cors": "yes (*)",
+    "clean": true,
+    "notes": "Other layers: GBR_BGS_625k_BLT, GBR_BGS_625k_BA, GBR_BGS_625k_SLT, GBR_BGS_625k_SLS (superficial). Max 3072 px."
+  },
+  {
+    "id": "bgs-geology-50k-superficial",
+    "title": "BGS 1:50k superficial deposits",
+    "group": "geology",
+    "kind": "wms",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://map.bgs.ac.uk/arcgis/services/BGS_Detailed_Geology/MapServer/WMSServer?service=WMS&version=1.3.0&request=GetMap&layers=BGS.50k.Superficial.deposits&styles=&format=image/png&transparent=true&crs=EPSG:3857&width=256&height=256&bbox={bbox-epsg-3857}"
+      ],
+      "tileSize": 256,
+      "minzoom": 13,
+      "attribution": "Contains British Geological Survey materials © UKRI 2026"
+    },
+    "minzoom": 13,
+    "maxzoom": null,
+    "bounds": null,
+    "attribution": "Contains British Geological Survey materials © UKRI 2026",
+    "licence": "Capabilities: 'These data are delivered under the terms of the Open Government Licence ..., subject to the following acknowledgement accompanying the reproduced BGS materials: Contains British Geological Survey materials copyright UKRI [year].'",
+    "key_required": false,
+    "coverage": "gb",
+    "cors": "yes (origin reflected)",
+    "clean": true,
+    "notes": "Blank above about 1:94,495 (z12 blank, z14 drawn). GetFeatureInfo with info_format=application/geo%2Bjson returns lexicon attributes for a click panel. Also BGS.50k.Bedrock, Artificial.ground, Mass.movement, Linear.features. The OGL statement covers this view service, not a vector download."
+  },
+  {
+    "id": "mra-coal-mine-entries",
+    "title": "Coal mine entries (Mining Remediation Authority)",
+    "group": "geology",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://services-eu1.arcgis.com/Qn4lKcPDVHNivEyr/arcgis/rest/services/Mine_Entries/MapServer/tile/{z}/{y}/{x}"
+      ],
+      "tileSize": 256
+    },
+    "minzoom": null,
+    "maxzoom": null,
+    "bounds": null,
+    "attribution": null,
+    "licence": "UK Open Government Licence (as listed on data.gov.uk)",
+    "key_required": false,
+    "coverage": "gb",
+    "cors": "not tested",
+    "clean": false,
+    "notes": "The one tile fetched (10/328/505) was 384 bytes and probably blank; visible points were not confirmed. 23 zoom levels. The FeatureServer needs a token. Attribution wording was not recorded; tileSize 256 per the tile fetched."
+  },
+  {
+    "id": "cranfield-soilscapes",
+    "title": "Soilscapes (Cranfield, UK Soil Observatory)",
+    "group": "land",
+    "kind": "raster",
+    "source": {
+      "type": "raster",
+      "tiles": [
+        "https://www.landis.org.uk/arcgis/rest/services/UKSoilObservatory/Soilscapes_Cranfield/MapServer/tile/{z}/{y}/{x}"
+      ],
+      "tileSize": 256,
+      "maxzoom": 14,
+      "attribution": "Copyright © Cranfield University, 2018"
+    },
+    "minzoom": null,
+    "maxzoom": 14,
+    "bounds": null,
+    "attribution": "Copyright © Cranfield University, 2018",
+    "licence": "Unclear for this endpoint. LandIS Portal EULA (1 March 2026) defines an Open Licence for 'Public Data'; whether Soilscapes is Public Data was not confirmed.",
+    "key_required": false,
+    "coverage": "england",
+    "cors": "yes (origin reflected)",
+    "clean": false,
+    "notes": "England and Wales. Identify returns SOILSCAPE class and a soils guide URL. Treat as live tiles only until the licence is confirmed."
+  }
+]

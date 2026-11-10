@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Test output
+playwright-report/
+test-results/
+
+# Runtime data. No trailing slash, so a worktree's symlink to it is ignored too.
+var
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!example.tfvars
+
+# Tools and OS
+.tldr/
+.claude/
+thoughts/
+.DS_Store
+.idea/
+.vscode/
