@@ -1,0 +1,90 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "id": "LIDAR_Composite_1m_DTM_2022_extents.6676",
+   "geometry": null,
+   "properties": {
+    "year": "2019",
+    "sd_flown": "2018-12-10T00:00:00Z",
+    "ed_flown": "2019-01-09T00:00:00Z"
+   },
+   "bbox": [
+    399750,
+    149750,
+    425250,
+    175250
+   ]
+  },
+  {
+   "type": "Feature",
+   "id": "LIDAR_Composite_1m_DTM_2022_extents.1",
+   "geometry": null,
+   "properties": {
+    "year": "2000",
+    "sd_flown": "2000-06-06T00:00:00Z",
+    "ed_flown": "2000-06-06T00:00:00Z"
+   },
+   "bbox": [
+    146000,
+    24000,
+    148000,
+    26000
+   ]
+  },
+  {
+   "type": "Feature",
+   "id": "LIDAR_Composite_1m_DTM_2022_extents.2",
+   "geometry": null,
+   "properties": {
+    "year": "2003",
+    "sd_flown": "2003-07-14T00:00:00Z",
+    "ed_flown": "2003-07-14T00:00:00Z"
+   },
+   "bbox": [
+    350000,
+    87000,
+    351000,
+    88000
+   ]
+  },
+  {
+   "type": "Feature",
+   "id": "LIDAR_Composite_1m_DTM_2022_extents.3",
+   "geometry": null,
+   "properties": {
+    "year": "2003",
+    "sd_flown": "2003-07-14T00:00:00Z",
+    "ed_flown": "2003-07-14T00:00:00Z"
+   },
+   "bbox": [
+    352000,
+    86000,
+    353000,
+    87000
+   ]
+  },
+  {
+   "type": "Feature",
+   "id": "LIDAR_Composite_1m_DTM_2022_extents.7214",
+   "geometry": null,
+   "properties": {
+    "year": "2018",
+    "sd_flown": "2018-10-10T00:00:00Z",
+    "ed_flown": "2018-10-10T00:00:00Z"
+   },
+   "bbox": [
+    84000,
+    4000,
+    86000,
+    6000
+   ]
+  }
+ ],
+ "totalFeatures": 5,
+ "numberMatched": 5,
+ "numberReturned": 5,
+ "timeStamp": "2026-11-10T21:04:11.413Z",
+ "crs": null
+}
