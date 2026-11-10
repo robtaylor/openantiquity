@@ -341,3 +341,46 @@ def test_an_archaeologist_cannot_verify_evidence_they_added(db: Session, make_us
         findings.verify(db, entry.id, expert)
     db.rollback()
     assert findings.verify(db, entry.id, make_user("moderator")).tier_after.value == "confirmed"
+
+
+def test_a_link_to_a_stored_record_survives_the_record_leaving_the_index(
+    db: Session, make_user: MakeUser, client_as: ClientAs
+) -> None:
+    """A full ingest that no longer sees a record deletes it. The evidence keeps its id and address."""
+    from fieldclub.ingest.runner import run_connector
+    from tests.ingest.fakes import FakeConnector, record
+
+    run_connector(
+        FakeConnector(
+            [record("A", url="https://example.org/fake/A"), record("B", url="https://example.org/B")]
+        )
+    )
+    cited = db.scalars(select(Record).where(Record.external_id == "A")).one()
+    finder, helper = make_user(), make_user()
+    finding = create(db, finder)
+    path = f"{API}/findings/{finding.public_id}/evidence"
+    added = client_as(helper).post(
+        path, json={"kind": "record_link", "relation": "same_as", "record_id": cited.id}
+    )
+    assert added.status_code == 201
+    [linked] = added.json()["evidence"]
+    assert (linked["record_id"], linked["reference"], linked["url"], linked["source_key"]) == (
+        cited.id,
+        "A",
+        "https://example.org/fake/A",
+        "fake-monuments",
+    )
+
+    run_connector(FakeConnector([record("B", url="https://example.org/B")]))
+    assert db.scalar(select(Record).where(Record.external_id == "A")) is None
+    page = client_as(helper).get(f"{API}/findings/{finding.public_id}")
+    assert page.status_code == 200
+    [kept] = page.json()["evidence"]
+    assert (kept["id"], kept["kind"], kept["relation"]) == (linked["id"], "record_link", "same_as")
+    assert (kept["record_id"], kept["reference"], kept["url"], kept["source_key"]) == (
+        None,
+        "A",
+        "https://example.org/fake/A",
+        "fake-monuments",
+    )
+    assert kept["standing"] is True

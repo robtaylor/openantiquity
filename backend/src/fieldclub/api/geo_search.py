@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Response
 
-from fieldclub.api.deps import Db, OptionalUser
+from fieldclub.api.deps import Db, OptionalUser, private
 from fieldclub.schemas.records import GeoResult, GeoResults, source_ref
 from fieldclub.services import records, search
 
@@ -17,10 +17,13 @@ router = APIRouter(tags=["geo"])
 def geo_search(
     db: Db,
     viewer: OptionalUser,
+    response: Response,
     q: Annotated[str, Query(min_length=1, max_length=records.MAX_QUERY_CHARS)],
     limit: Annotated[int, Query(ge=1, le=20)] = 10,
 ) -> GeoResults:
     """A grid reference, coordinates, a finding's id, a place or a record, as places the map can fly to."""
+    # A finding is placed where this viewer may see it.
+    private(response)
     hits = search.geo_search(db, q, viewer, limit=limit)
     return GeoResults(
         items=[

@@ -51,7 +51,7 @@ def test_search(client: TestClient, index: dict[str, int]) -> None:
 def test_search_filters_and_pages(client: TestClient, index: dict[str, int]) -> None:
     only_finds = client.get("/api/v1/records/search", params={"category": "find"}).json()["items"]
     assert [item["name"] for item in only_finds] == ["Roman coin"]
-    by_source = client.get("/api/v1/records/search", params={"source": "test-designations,nope"}).json()
+    by_source = client.get("/api/v1/records/search", params={"source": ["test-designations", "nope"]}).json()
     assert len(by_source["items"]) == 2
     first = client.get("/api/v1/records/search", params={"limit": 2}).json()
     assert first["next_cursor"]
@@ -66,7 +66,7 @@ def test_search_filters_and_pages(client: TestClient, index: dict[str, int]) -> 
     "params",
     [
         {"q": "\x00\x00"},
-        {"q": "silbury‮"},
+        {"q": "silbury\u202e"},
         {"q": "' OR 1=1 --"},
         {"q": "a & b | !c <-> d:*"},
         {"q": "\\\\\\"},
@@ -101,11 +101,14 @@ def test_too_long_a_search_is_refused(client: TestClient, index: dict[str, int])
 @pytest.mark.parametrize(
     ("params", "code"),
     [
-        ({"bbox": "1,2,3"}, "invalid_search"),
-        ({"bbox": "a,b,c,d"}, "invalid_search"),
-        ({"bbox": "1,52,0,51"}, "invalid_search"),
-        ({"bbox": "nan,51,0,52"}, "invalid_search"),
-        ({"category": "nonsense"}, "invalid_search"),
+        ({"bbox": "1,2,3"}, "invalid_bbox"),
+        ({"bbox": "a,b,c,d"}, "invalid_bbox"),
+        ({"bbox": "1,52,0,51"}, "invalid_bbox"),
+        ({"bbox": "nan,51,0,52"}, "invalid_bbox"),
+        ({"category": "nonsense"}, "validation_error"),
+        ({"cursor": "WyJhIl0"}, "invalid_cursor"),
+        # JSON true, which once read as offset 1.
+        ({"cursor": "W3RydWVd"}, "invalid_cursor"),
         ({"cursor": "not-a-cursor"}, "invalid_cursor"),
         ({"limit": "0"}, "validation_error"),
     ],

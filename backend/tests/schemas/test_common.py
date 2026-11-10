@@ -54,8 +54,9 @@ def test_page_params_defaults_and_limits() -> None:
     for limit in (0, -1, MAX_LIMIT + 1):
         with pytest.raises(ValidationError):
             PageParams(limit=limit)
-    with pytest.raises(ValidationError):
-        PageParams(cursor="x" * 600)
+    # A long cursor is refused where every other bad cursor is, with the same code.
+    with pytest.raises(InvalidCursorError):
+        decode_cursor("x" * 600)
 
 
 def test_cursor_round_trip() -> None:

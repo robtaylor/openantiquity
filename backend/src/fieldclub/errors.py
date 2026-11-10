@@ -65,6 +65,20 @@ class ValidationFailedError(AppError):
     message = "Some of the values sent were not valid."
 
 
+class InvalidBboxError(BadRequestError):
+    """A `bbox` that isn't four finite numbers running west to east and south to north."""
+
+    code = "invalid_bbox"
+    message = "bbox must be west,south,east,north in degrees, with west < east and south < north."
+
+
+class InvalidCursorError(BadRequestError):
+    """A page cursor that this server didn't make, or that asks for a page out of range."""
+
+    code = "invalid_cursor"
+    message = "That page cursor isn't valid. Start again from the first page."
+
+
 class UnauthorisedError(AppError):
     status_code = 401
     code = "unauthorised"
@@ -91,6 +105,13 @@ class NotFoundError(AppError):
     status_code = 404
     code = "not_found"
     message = "That doesn't exist."
+
+
+class TileNotFoundError(NotFoundError):
+    """A map tile address outside the zooms or the grid a tile set has."""
+
+    code = "tile_not_found"
+    message = "There is no tile with that address."
 
 
 class ConflictError(AppError):

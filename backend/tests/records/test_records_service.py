@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from fieldclub.errors import InvalidBboxError
 from fieldclub.models import Source
 from fieldclub.services import records
 from fieldclub.services.records import InvalidSearchError, RecordNotFoundError, SearchTimeoutError
@@ -20,7 +21,7 @@ HOSTILE = [
     "barrow:*",
     "(silbury | !hill) <2> mound",
     "\x00silbury\x00",
-    "silbury‮​\x07\x1b[31m",
+    "silbury\u202e\u200b\x07\x1b[31m",
     "%_%",
     "\ud800",
     "s" * 10_000,
@@ -113,7 +114,7 @@ def test_filters_by_source_category_and_box(db: Session, index: dict[str, int]) 
     assert names(near_overton) == ["Bowl barrow on Overton Hill"]
     with pytest.raises(InvalidSearchError, match="Unknown record categories: bogus"):
         records.search(db, categories=["bogus"])
-    with pytest.raises(InvalidSearchError, match="west < east"):
+    with pytest.raises(InvalidBboxError, match="west < east"):
         records.search(db, bbox=(1, 51, 0, 52))
 
 
@@ -149,7 +150,7 @@ def test_hostile_text_is_reduced_to_letters_and_digits() -> None:
     assert records.query_words("silbury'; DROP TABLE records; --") == ["silbury", "drop", "table", "records"]
     assert records.prefix_tsquery(["silbury", "hill"]) == "silbury:* & hill:*"
     assert records.prefix_tsquery(["st", "mary"]) == "st & mary:*"
-    assert records.clean_query("\x00silbury‮  hill\x07") == "silbury hill"
+    assert records.clean_query("\x00silbury\u202e  hill\x07") == "silbury hill"
     assert len(records.clean_query("s" * 10_000)) == records.MAX_QUERY_CHARS
     assert len(records.query_words("a " * 100)) == records.MAX_QUERY_WORDS
 
@@ -173,10 +174,13 @@ def test_quoted_words_still_match(db: Session, index: dict[str, int]) -> None:
 
 
 def test_a_cursor_out_of_range_is_refused(db: Session, index: dict[str, int]) -> None:
+    from fieldclub.errors import InvalidCursorError
     from fieldclub.schemas.common import encode_cursor
 
-    with pytest.raises(InvalidSearchError, match="out of range"):
+    with pytest.raises(InvalidCursorError):
         records.search(db, cursor=encode_cursor([records.MAX_OFFSET + 1]))
+    with pytest.raises(InvalidCursorError):
+        records.search(db, cursor=encode_cursor([True]))
 
 
 # --------------------------------------------------------------------------

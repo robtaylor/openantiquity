@@ -10,8 +10,11 @@
 6. record names from the record index.
 
 The first four give at most one result each and come first. Places and
-records follow, best match first. A finding is placed where this viewer
-may see it (Decision 0005), never more exactly.
+records follow, best match first, under one time limit
+(`records.SEARCH_TIMEOUT_MS`): a slow half gives no results, not an error.
+A finding is placed where this viewer may see it (Decision 0005), never
+more exactly. A finding is found as `GET /findings` finds it: a hidden one
+only by those who may see it, and a withdrawn one not at all.
 """
 
 from __future__ import annotations
@@ -27,7 +30,8 @@ from sqlalchemy.orm import Session
 from fieldclub import gridref
 from fieldclub.models import Place, Source, User
 from fieldclub.schemas.records import GeoResultType
-from fieldclub.services import ids, records, sensitivity
+from fieldclub.services import findings, ids, records, sensitivity
+from fieldclub.vocab import FindingState
 
 logger = logging.getLogger(__name__)
 
@@ -151,8 +155,10 @@ def as_finding(db: Session, text: str, viewer: User | None) -> GeoHit | None:
     if public_id is None:
         return None
     try:
-        finding = records.load_finding(db, public_id, viewer)
-    except records.FindingNotFoundError:
+        finding = findings.get_finding(db, public_id, viewer)
+    except findings.FindingNotFoundError:
+        return None
+    if finding.state == FindingState.WITHDRAWN.value:
         return None
     seen = sensitivity.visible_location(finding, viewer)
     square = seen.square_polygon()
@@ -244,4 +250,10 @@ def geo_search(db: Session, q: str, viewer: User | None, *, limit: int = 10) -> 
         for hit in (as_gridref(text), as_lat_lon(text), as_east_north(text), as_finding(db, text, viewer))
         if hit is not None
     ]
-    return (exact + places(db, text) + record_hits(db, text))[:limit]
+    try:
+        with records.time_limit(db, records.SEARCH_TIMEOUT_MS):
+            named = places(db, text) + record_hits(db, text)
+    except records.SearchTimeoutError:
+        logger.warning("Place search for %r ran out of time; the search box shows no names", text)
+        named = []
+    return (exact + named)[:limit]

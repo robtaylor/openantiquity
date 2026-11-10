@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, Response
 
-from fieldclub.api.deps import Db, OptionalUser, PageQuery, private
+from fieldclub.api.deps import CursorQuery, Db, OptionalUser, PageQuery, private
 from fieldclub.errors import BadRequestError
 from fieldclub.models import Finding, User
 from fieldclub.schemas.common import Page
@@ -16,7 +16,7 @@ from fieldclub.schemas.findings import (
     ReviewCard,
     ReviewPlace,
     TaskFinding,
-    TaskGroup,
+    TaskGroupOut,
     TaskGroups,
     TaskItem,
     ViewState,
@@ -47,7 +47,7 @@ def next_cards(
     lon: Annotated[float | None, Query(ge=-180, le=180)] = None,
     lat: Annotated[float | None, Query(ge=-90, le=90)] = None,
     limit: Annotated[int, Query(ge=1, le=CARD_MAX_LIMIT)] = CARD_DEFAULT_LIMIT,
-    cursor: Annotated[str | None, Query(max_length=512)] = None,
+    cursor: CursorQuery = None,
 ) -> Page[ReviewCard]:
     """Findings waiting for a second look, one answer from moving up first.
 
@@ -89,7 +89,7 @@ def tasks(
     private(response)
     return TaskGroups(
         groups=[
-            TaskGroup(
+            TaskGroupOut(
                 code=group.code,
                 total=group.total,
                 items=[_task(task, viewer) for task in group.tasks],

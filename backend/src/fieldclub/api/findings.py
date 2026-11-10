@@ -11,10 +11,13 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from fieldclub.api.deps import Contributor, CursorQuery, Db, OptionalUser, private, rate_limit
-from fieldclub.errors import BadRequestError
+from fieldclub.api.deps import BBoxQuery, Contributor, CursorQuery, Db, OptionalUser, private, rate_limit
+from fieldclub.errors import BadRequestError, ValidationFailedError
+
+# Its home was here once. Kept importable for code written against that.
+from fieldclub.errors import InvalidBboxError as InvalidBboxError
 from fieldclub.models import Finding, User
-from fieldclub.schemas.common import MAX_LIMIT, BBox, Page, from_geojson, is_bbox, split_bbox
+from fieldclub.schemas.common import MAX_LIMIT, Page, from_geojson, parse_bbox
 from fieldclub.schemas.findings import (
     FindingCreate,
     FindingDetail,
@@ -36,26 +39,9 @@ PAGE_DEFAULT_LIMIT = 50
 EXPORT_DEFAULT_LIMIT = 1000
 
 
-class InvalidBboxError(BadRequestError):
-    code = "invalid_bbox"
-    message = "bbox must be west,south,east,north in degrees, running west to east and south to north."
-
-
-def parse_bbox(text: str | None) -> BBox | None:
-    if text is None:
-        return None
-    try:
-        bbox = split_bbox(text)
-    except ValueError:
-        raise InvalidBboxError() from None
-    if not is_bbox(bbox):
-        raise InvalidBboxError()
-    return bbox
-
-
 # A repeated filter can name each value at most once, so no list is longer than its vocabulary.
 def list_filters(
-    bbox: Annotated[str | None, Query(max_length=200, description="west,south,east,north")] = None,
+    bbox: BBoxQuery = None,
     tier: Annotated[list[Tier] | None, Query(max_length=len(Tier))] = None,
     state: Annotated[
         list[FindingState] | None,
@@ -151,7 +137,9 @@ def list_findings(
             next_cursor=page.next_cursor,
         )
     if limit is not None and limit > MAX_LIMIT:
-        raise BadRequestError(f"A page holds at most {MAX_LIMIT} findings.", code="limit_too_high")
+        # The same answer as any other limit out of range, though the cap depends on the format.
+        message = f"A page holds at most {MAX_LIMIT} findings, and GeoJSON {GEOJSON_MAX_LIMIT}."
+        raise ValidationFailedError(details=[{"field": "query.limit", "message": message}])
     page = findings.list_findings(db, viewer, filters, limit=limit or PAGE_DEFAULT_LIMIT, cursor=cursor)
     authors = findings.users_by_id(db, (f.author_id for f in page.findings))
     return Page[FindingSummary](

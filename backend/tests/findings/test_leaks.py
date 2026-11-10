@@ -1,7 +1,7 @@
 """No route returns an exact position to a viewer who shouldn't have it (WS4 exit criterion).
 
-Every route this track owns that returns a finding, or anything derived from
-its position, is called as a signed-out visitor, a member, the finder, a
+Every route that returns a finding, or anything derived from its position,
+is called as a signed-out visitor, a member, the finder, a
 trusted member and a moderator, against an open, a protected and a
 restricted finding. Each finding sits at its own point, so a response that
 holds several can be checked for each one separately. The check searches the
@@ -24,11 +24,12 @@ from sqlalchemy.orm import Session
 
 from fieldclub import gridref
 from fieldclub.models import Activity, Finding, Notification, User
+from fieldclub.models.common import db_point
 from fieldclub.services import findings, sensitivity
 from fieldclub.services.findings import EvidenceFields
 from fieldclub.vocab import EvidenceKind, FeatureClass, Outcome, Sensitivity, Visible
 from tests.findings.support import API, answer, create
-from tests.helpers import MakeUser, lon_lat
+from tests.helpers import MakeUser, add_record, add_source, lon_lat
 
 VIEWERS = ("signed_out", "member", "finder", "trusted", "moderator")
 LEVELS = (Sensitivity.OPEN, Sensitivity.PROTECTED, Sensitivity.RESTRICTED)
@@ -329,3 +330,77 @@ def test_the_sql_visibility_clause_agrees_with_sees_exact(world: World, db: Sess
         in_sql = set(db.scalars(select(Finding.id).where(clause)))
         in_python = {f.id for f in world.findings.values() if sensitivity.sees_exact(f, viewer)}
         assert in_sql == in_python, f"viewer {viewer}"
+
+
+# --------------------------------------------------------------------------
+# Routes outside the findings track that take a finding's position
+# --------------------------------------------------------------------------
+
+
+def _records_around(db: Session) -> None:
+    """Records at each exact point, round it, and at each square's centre, so distances have work to do."""
+    source = add_source(db)
+    for level, (lon, lat) in POINTS.items():
+        add_record(db, source, f"Enclosure by the {level} point", lon + 0.00013, lat + 0.00011)
+        for step in range(1, 4):
+            add_record(db, source, f"Bank {level} {step}", lon + 0.0007 * step, lat - 0.0004 * step)
+        centre = gridref.gridref_at(lon, lat, 4).centre()
+        add_record(db, source, f"Camp at the {level} square", *centre)
+    db.commit()
+
+
+def _move_within_square(db: Session, finding: Finding) -> None:
+    """Move a finding's exact point to elsewhere in its 1 km square, which keeps its public position."""
+    lon, lat = lon_lat(finding.location)
+    square = gridref.gridref_at(lon, lat, 4)
+    _, easting, northing = gridref.to_grid(lon, lat)
+    inside = (
+        square.easting + 1000 - (easting - square.easting),
+        square.northing + 1000 - (northing - square.northing),
+    )
+    moved = gridref.to_lonlat(square.system, *inside)
+    assert gridref.gridref_at(*moved, 4) == square
+    finding.location = db_point(*moved)
+    db.commit()
+
+
+@pytest.mark.parametrize("viewer", VIEWERS)
+@pytest.mark.parametrize("level", LEVELS)
+def test_suggested_records(world: World, db: Session, viewer: str, level: Sensitivity) -> None:
+    """Distances, order and the set returned all start from the position the viewer may see.
+
+    For a viewer who sees only the square, moving the finding within its square
+    changes nothing in the answer, so nothing in it can depend on the exact point.
+    """
+    _records_around(db)
+    finding = world.findings[level]
+    path = f"{API}/findings/{finding.public_id}/suggested-records"
+    client = world.client(viewer)
+    before = client.get(path, params={"limit": 50})
+    assert before.status_code == 200
+    allowed = {level} & SEES[viewer]
+    check(before.text, allowed, where=f"suggested records ({level})")
+    assert before.json()["origin"]["obscured"] is (level not in SEES[viewer])
+    assert before.headers["cache-control"] == "private, no-cache"
+    _move_within_square(db, finding)
+    after = client.get(path, params={"limit": 50})
+    if level in SEES[viewer]:
+        assert after.json() != before.json()
+    else:
+        assert after.json() == before.json()
+
+
+@pytest.mark.parametrize("viewer", VIEWERS)
+@pytest.mark.parametrize("level", LEVELS)
+def test_the_search_box_flies_to_what_the_viewer_may_see(
+    world: World, viewer: str, level: Sensitivity
+) -> None:
+    finding = world.findings[level]
+    response = world.client(viewer).get(f"{API}/geo/search", params={"q": finding.public_id.lower()})
+    assert response.status_code == 200
+    allowed = {level} & SEES[viewer]
+    check(response.text, allowed, allowed, where=f"GET /geo/search ({level})")
+    [hit] = [item for item in response.json()["items"] if item["type"] == "finding"]
+    assert hit["obscured"] is (level not in SEES[viewer])
+    assert (hit["bbox"] is None) is (level in SEES[viewer])
+    assert response.headers["cache-control"] == "private, no-cache"

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
-from fieldclub.models import Place
+from fieldclub.models import Place, User
 from fieldclub.models.common import db_point
 from fieldclub.services import records, search
 from fieldclub.vocab import FeatureClass
@@ -152,6 +152,35 @@ def test_a_protected_finding_is_placed_at_its_square(
 def test_a_hidden_finding_is_not_found(db: Session, make_finding: MakeFinding) -> None:
     finding = make_finding(hidden_at=datetime(2026, 11, 1, tzinfo=UTC))
     assert "finding" not in types(search.geo_search(db, finding.public_id, None))
+
+
+def test_a_withdrawn_finding_is_left_out_as_the_findings_list_leaves_it_out(
+    db: Session, make_finding: MakeFinding
+) -> None:
+    finding = make_finding(state="withdrawn")
+    assert "finding" not in types(search.geo_search(db, finding.public_id, db.get(User, finding.author_id)))
+
+
+def test_places_and_records_share_one_time_limit(
+    db: Session, gazetteer: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A slow place query is cancelled like a slow record query, and the exact hits still come back."""
+    import time
+
+    from sqlalchemy import func, select
+
+    def slow_places(db: Session, text: str) -> list[search.GeoHit]:
+        db.execute(select(func.pg_sleep(2)))
+        return []
+
+    monkeypatch.setattr(records, "SEARCH_TIMEOUT_MS", 100)
+    monkeypatch.setattr(search, "places", slow_places)
+    started = time.monotonic()
+    hits = search.geo_search(db, "SU 1025 6996", None)
+    assert time.monotonic() - started < 1.5
+    assert types(hits) == ["gridref"]
+    # The session is still usable.
+    assert types(search.geo_search(db, "SU 1025 6996", None)) == ["gridref"]
 
 
 @pytest.mark.parametrize(

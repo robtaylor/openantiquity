@@ -24,7 +24,7 @@ from fieldclub.auth.deps import (
 )
 from fieldclub.config import Settings, get_settings
 from fieldclub.ratelimit import rate_limit
-from fieldclub.schemas.common import MAX_CURSOR_CHARS, PageParams
+from fieldclub.schemas.common import PageParams
 from fieldclub.terrain.service import Terrain, get_terrain
 
 AppSettings = Annotated[Settings, Depends(get_settings)]
@@ -32,13 +32,21 @@ TerrainDep = Annotated[Terrain, Depends(get_terrain)]
 
 # `limit` and `cursor` query parameters.
 PageQuery = Annotated[PageParams, Query()]
-# A `cursor` alone, for a list whose limits differ from `PageQuery`'s.
-CursorQuery = Annotated[str | None, Query(max_length=MAX_CURSOR_CHARS)]
+# A `cursor` alone, for a list whose limits differ from `PageQuery`'s. Its
+# length is checked with everything else about it, as `invalid_cursor`.
+CursorQuery = Annotated[str | None, Query()]
+# A `bbox` parameter. Read it with `schemas.common.parse_bbox`, the one rule for a box.
+BBoxQuery = Annotated[str | None, Query(max_length=200, description="west,south,east,north in degrees")]
+
+
+# What a response that depends on the viewer is sent with. `main.PrivateByDefaultMiddleware`
+# sends it for any response that sets no cache policy of its own.
+PRIVATE_CACHE = "private, no-cache"
 
 
 def private(response: Response) -> None:
     """What this response holds depends on the viewer, so no shared cache may keep it."""
-    response.headers["Cache-Control"] = "private, no-cache"
+    response.headers["Cache-Control"] = PRIVATE_CACHE
     response.headers["Vary"] = "Cookie"
 
 
@@ -51,7 +59,9 @@ def split_list(value: str | None) -> list[str] | None:
 
 
 __all__ = [
+    "PRIVATE_CACHE",
     "AppSettings",
+    "BBoxQuery",
     "Contributor",
     "CurrentUser",
     "CursorQuery",

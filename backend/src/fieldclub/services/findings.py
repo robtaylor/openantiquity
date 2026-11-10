@@ -51,7 +51,13 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, aliased
 
 from fieldclub import gridref
-from fieldclub.errors import ConflictError, ForbiddenError, NotFoundError, ValidationFailedError
+from fieldclub.errors import (
+    ConflictError,
+    ForbiddenError,
+    InvalidCursorError,
+    NotFoundError,
+    ValidationFailedError,
+)
 from fieldclub.models import (
     Comment,
     Evidence,
@@ -65,7 +71,7 @@ from fieldclub.models import (
     User,
 )
 from fieldclub.models.common import point_lon_lat, to_db_geometry
-from fieldclub.schemas.common import InvalidCursorError, decode_cursor, int_from_cursor, is_bbox, paginate
+from fieldclub.schemas.common import cursor_int, decode_cursor, int_from_cursor, is_bbox, paginate
 from fieldclub.services import activity, geo, ids, reputation, sensitivity
 from fieldclub.services.confidence import (
     VERIFIER_ROLES,
@@ -666,7 +672,7 @@ def _escape_like(text: str) -> str:
 _SORT_COLUMNS: dict[FindingSort, tuple[Any, bool, Callable[[Any], Any]]] = {
     FindingSort.NEWEST: (Finding.created_at, True, datetime.fromisoformat),
     FindingSort.OLDEST: (Finding.created_at, False, datetime.fromisoformat),
-    FindingSort.CONFIDENCE: (Finding.confidence, True, int),
+    FindingSort.CONFIDENCE: (Finding.confidence, True, cursor_int),
     FindingSort.UPDATED: (Finding.updated_at, True, datetime.fromisoformat),
 }
 
@@ -707,8 +713,7 @@ def _cursor_key(finding: Finding, sort: FindingSort) -> list[Any]:
 def _after_cursor(query: Select[Finding], sort: FindingSort, cursor: str) -> Select[Finding]:
     value, last_id = decode_cursor(cursor, 2)
     column, descending, parse = _SORT_COLUMNS[sort]
-    if not isinstance(last_id, int) or isinstance(last_id, bool):
-        raise InvalidCursorError()
+    last_id = cursor_int(last_id)
     try:
         typed = parse(value)
     except (TypeError, ValueError):
@@ -835,15 +840,28 @@ def check_evidence_fields(db: Session, user: User, fields: EvidenceFields, *, to
 def add_evidence(
     db: Session, finding: Finding, user: User, fields: EvidenceFields
 ) -> tuple[Evidence, Reassessment]:
-    """Add evidence to a finding and reassess it. Hold the lock."""
+    """Add evidence to a finding and reassess it. Hold the lock.
+
+    Evidence that points at a stored record also keeps the record's
+    identifier, address and source, as a link to a record we don't store
+    would (Decision 0007). A full ingest deletes a record its source no
+    longer has, which empties `record_id`, and the evidence stays a working
+    reference.
+    """
     check_open(finding)
     require_exact(finding, user)
     check_evidence_fields(db, user, fields, today=datetime.now(UTC).date())
     data: dict[str, Any] = {}
     if fields.view is not None:
         data["view"] = fields.view
-    if fields.source_key is not None:
-        data["source_key"] = fields.source_key
+    reference, url, source_key = fields.reference, fields.url, fields.source_key
+    if fields.record_id is not None:
+        record = db.get(Record, fields.record_id)
+        assert record is not None, "check_evidence_fields refuses a record that isn't stored"
+        reference, source_key = reference or record.external_id, record.source_key
+        url = url or record.url
+    if source_key is not None:
+        data["source_key"] = source_key
     evidence = Evidence(
         finding_id=finding.id,
         user_id=user.id,
@@ -851,13 +869,13 @@ def add_evidence(
         stance=fields.stance.value,
         title=fields.title,
         note=fields.note,
-        url=fields.url,
+        url=url,
         record_id=fields.record_id,
         relation=fields.relation.value if fields.relation is not None else None,
         media_id=fields.media_id,
         occurred_on=fields.occurred_on,
         organisation=fields.organisation,
-        reference=fields.reference,
+        reference=reference,
         outcome=fields.outcome.value if fields.outcome is not None else None,
         data=data or None,
     )

@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from starlette.responses import JSONResponse
 
-from fieldclub.api.deps import TerrainDep
-from fieldclub.errors import BadRequestError
+from fieldclub.api.deps import BBoxQuery, TerrainDep
 from fieldclub.ratelimit import rate_limit
-from fieldclub.schemas.common import BBox, is_bbox, split_bbox
+from fieldclub.schemas.common import GeoJSONFeatureCollection, parse_bbox
 from fieldclub.terrain.coverage import coverage
 from fieldclub.terrain.service import MAX_PROFILE_SAMPLES, MAX_PROFILE_VERTICES
 
@@ -63,20 +62,9 @@ def profile(body: ProfileRequest, terrain: TerrainDep) -> ProfileOut:
     )
 
 
-def _parse_bbox(value: str | None) -> BBox | None:
-    if value is None:
-        return None
-    try:
-        bbox = split_bbox(value)
-    except ValueError:
-        bbox = None
-    if bbox is None or not is_bbox(bbox, allow_empty=True):
-        raise BadRequestError("bbox is west,south,east,north in degrees.", code="invalid_bbox")
-    return bbox
-
-
-@router.get("/coverage")
-def get_coverage(terrain: TerrainDep, bbox: Annotated[str | None, Query()] = None) -> JSONResponse:
+# The body is built as plain GeoJSON for speed. The model documents it for the generated client.
+@router.get("/coverage", response_model=GeoJSONFeatureCollection)
+def get_coverage(terrain: TerrainDep, bbox: BBoxQuery = None) -> JSONResponse:
     """The 5 km tiles that have 1 m elevation, as a GeoJSON FeatureCollection."""
-    body: dict[str, Any] = coverage(terrain.catalogue, _parse_bbox(bbox))
+    body: dict[str, Any] = coverage(terrain.catalogue, parse_bbox(bbox))
     return JSONResponse(body, headers={"Cache-Control": "public, max-age=86400"})

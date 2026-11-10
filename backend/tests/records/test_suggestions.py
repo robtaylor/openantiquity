@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 import respx
+from fastapi.testclient import TestClient
 from shapely.geometry import Point
 from sqlalchemy.orm import Session
 
@@ -18,7 +19,7 @@ from fieldclub.models import Record
 from fieldclub.models.common import point_lon_lat
 from fieldclub.services import records
 from fieldclub.vocab import FeatureClass, Sensitivity
-from tests.helpers import MakeFinding, MakeUser, add_record, add_source
+from tests.helpers import ClientAs, MakeFinding, MakeUser, add_record, add_source, error_code
 from tests.records.support import MONUMENTS_GPKG, SILBURY, serve_hub
 
 
@@ -132,17 +133,22 @@ def test_the_community_class_counts_too(db: Session) -> None:
     assert not records.type_fits(["unknown"], kiln)
 
 
-def test_a_hidden_finding_is_not_found_except_by_a_moderator(
-    db: Session, make_finding: MakeFinding, make_user: MakeUser
+def test_a_hidden_finding_is_found_as_its_page_is(
+    make_finding: MakeFinding, make_user: MakeUser, client: TestClient, client_as: ClientAs
 ) -> None:
-    finding = make_finding(hidden_at=datetime(2026, 11, 1, tzinfo=UTC))
-    with pytest.raises(records.FindingNotFoundError):
-        records.load_finding(db, finding.public_id, None)
-    with pytest.raises(records.FindingNotFoundError):
-        records.load_finding(db, finding.public_id, make_user("trusted"))
-    assert records.load_finding(db, finding.public_id, make_user("moderator")) is not None
-    with pytest.raises(records.FindingNotFoundError):
-        records.load_finding(db, "ZZZZZZ", None)
+    """One lookup for a finding everywhere (`findings.get_finding`): only its finder and moderators see it."""
+    finder = make_user()
+    finding = make_finding(finder, hidden_at=datetime(2026, 11, 1, tzinfo=UTC))
+    path = f"/api/v1/findings/{finding.public_id}/suggested-records"
+    for refused in (client, client_as(make_user("trusted"))):
+        assert error_code(refused.get(path)) == "finding_not_found"
+    for allowed in (client_as(make_user("moderator")), client_as(finder)):
+        assert allowed.get(path).status_code == 200
+    # Ids are read as the finding page reads them, in any case and with any spacing.
+    assert (
+        client_as(finder).get(path.replace(finding.public_id, finding.public_id.lower())).status_code == 200
+    )
+    assert error_code(client.get("/api/v1/findings/ZZZZZZ/suggested-records")) == "finding_not_found"
 
 
 @respx.mock
@@ -165,3 +171,35 @@ def test_a_finding_on_silbury_hill_is_offered_its_scheduled_monument_first(
         # The public sees a protected one by its square, and Silbury Hill is still offered.
         public = records.suggest_for_finding(db, finding, None)
         assert any(item.result.record.name.startswith("Silbury Hill") for item in public.items)
+
+
+def test_the_community_class_counts_only_for_those_who_may_see_the_answers(
+    db: Session, make_finding: MakeFinding, make_user: MakeUser
+) -> None:
+    """The community class comes from other people's answers, so it must not show through a blind look.
+
+    A reviewer holding a card's public id could otherwise read the answers
+    from `type_fit` and the order (Decision 0008).
+    """
+    from fieldclub.services.review import Answer, put_observation
+    from fieldclub.vocab import Visible
+
+    source = add_source(db)
+    lon, lat = SILBURY
+    add_record(db, source, "Moat", lon, lat)
+    finding = make_finding(lon=lon, lat=lat, feature_class=FeatureClass.ENCLOSURE)
+    reviewer, answerer = make_user(), make_user()
+    put_observation(db, finding, answerer, Answer(visible=Visible.YES))
+    # As if enough people had named it a moat.
+    finding.community_class = FeatureClass.MOAT.value
+    db.commit()
+
+    def fits(viewer: object) -> bool:
+        [item] = records.suggest_for_finding(db, finding, viewer).items  # pyright: ignore[reportArgumentType]
+        return item.type_fit
+
+    assert finding.community_class == FeatureClass.MOAT.value
+    assert fits(None) is False
+    assert fits(reviewer) is False
+    assert fits(answerer) is True
+    assert fits(db.get(type(reviewer), finding.author_id)) is True

@@ -55,7 +55,7 @@ from sqlalchemy.orm import Session
 from fieldclub.errors import ConflictError, ForbiddenError, NotFoundError
 from fieldclub.models import Finding, Observation, User
 from fieldclub.models.common import SRID
-from fieldclub.schemas.common import int_from_cursor, offset_page, paginate
+from fieldclub.schemas.common import int_from_cursor, offset_from_cursor, offset_page, paginate
 from fieldclub.services import activity, findings, sensitivity
 from fieldclub.services.confidence import CHECK_PHRASES, NextStep, load_next_steps
 from fieldclub.services.findings import ANSWER_CODES, Reassessment
@@ -326,7 +326,7 @@ def _queue_order(viewer: User | None, near: tuple[float, float] | None) -> list[
 def _offset_page(
     db: Session, query: Select[Finding], *, limit: int, cursor: str | None
 ) -> tuple[list[Finding], str | None]:
-    offset = 0 if cursor is None else int_from_cursor(cursor)
+    offset = offset_from_cursor(cursor)
     return offset_page(db.scalars(query.offset(offset).limit(limit + 1)).all(), offset, limit)
 
 

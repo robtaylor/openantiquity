@@ -75,7 +75,7 @@ def test_every_sort_pages_through_everything_once(
         ({"bbox": "a,b,c,d"}, "invalid_bbox"),
         ({"bbox": "-1,52,-2,53"}, "invalid_bbox"),
         ({"bbox": "nan,51,1,52"}, "invalid_bbox"),
-        ({"limit": 500}, "limit_too_high"),
+        ({"limit": 500}, "validation_error"),
         ({"limit": 1001, "format": "geojson"}, "validation_error"),
         ({"cursor": "garbage"}, "invalid_cursor"),
         ({"sort": "random"}, "validation_error"),

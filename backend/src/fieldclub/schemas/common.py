@@ -15,7 +15,8 @@ from shapely.errors import ShapelyError
 from shapely.geometry import mapping, shape
 from shapely.geometry.base import BaseGeometry
 
-from fieldclub.errors import BadRequestError, ValidationFailedError
+from fieldclub.errors import InvalidBboxError, ValidationFailedError
+from fieldclub.errors import InvalidCursorError as InvalidCursorError
 from fieldclub.models.common import to_db_geometry as to_db_geometry
 from fieldclub.schemas import text
 
@@ -25,6 +26,11 @@ if TYPE_CHECKING:
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
 MAX_CURSOR_CHARS = 512
+# The furthest any list paged by offset goes. Nobody reads 2,000 results, and
+# an unbounded offset makes the database walk past every row before it.
+MAX_OFFSET = 2000
+# The largest id or offset a cursor may hold: PostgreSQL's BIGINT.
+_MAX_CURSOR_INT = 2**63 - 1
 
 # A source's stored record count. A source that has never been ingested has none, which reads as 0.
 RecordCount = Annotated[int, BeforeValidator(lambda value: value or 0)]
@@ -60,16 +66,15 @@ class RequestModel(BaseModel):
 # --------------------------------------------------------------------------
 
 
-class InvalidCursorError(BadRequestError):
-    code = "invalid_cursor"
-    message = "That page cursor isn't valid. Start again from the first page."
-
-
 class PageParams(BaseModel):
-    """Query parameters every list takes. Use as `Annotated[PageParams, Query()]`."""
+    """Query parameters every list takes. Use as `Annotated[PageParams, Query()]`.
+
+    The cursor's length is checked by `decode_cursor`, so that a cursor that is
+    wrong in any way, too long included, is the same 400 `invalid_cursor`.
+    """
 
     limit: int = Field(default=DEFAULT_LIMIT, ge=1, le=MAX_LIMIT)
-    cursor: str | None = Field(default=None, max_length=MAX_CURSOR_CHARS)
+    cursor: str | None = None
 
 
 class Page[T](BaseModel):
@@ -91,6 +96,8 @@ def encode_cursor(values: Sequence[Any]) -> str:
 
 def decode_cursor(cursor: str, length: int | None = None) -> list[Any]:
     """Unpack a cursor made by `encode_cursor`. Anything else raises `InvalidCursorError`."""
+    if len(cursor) > MAX_CURSOR_CHARS:
+        raise InvalidCursorError()
     try:
         padded = cursor + "=" * (-len(cursor) % 4)
         values = json.loads(base64.b64decode(padded, altchars=b"-_", validate=True))
@@ -104,12 +111,27 @@ def decode_cursor(cursor: str, length: int | None = None) -> list[Any]:
     return values
 
 
+def cursor_int(value: Any) -> int:
+    """A value from a cursor that must be a whole number a BIGINT column can hold, not negative."""
+    if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= _MAX_CURSOR_INT:
+        raise InvalidCursorError()
+    return value
+
+
 def int_from_cursor(cursor: str) -> int:
     """The one non-negative whole number a cursor holds: a last id, or an offset."""
     (value,) = decode_cursor(cursor, 1)
-    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+    return cursor_int(value)
+
+
+def offset_from_cursor(cursor: str | None) -> int:
+    """The offset a cursor made by `offset_page` holds, 0 without one, and never past `MAX_OFFSET`."""
+    if cursor is None:
+        return 0
+    offset = int_from_cursor(cursor)
+    if offset > MAX_OFFSET:
         raise InvalidCursorError()
-    return value
+    return offset
 
 
 def paginate[T](rows: Sequence[T], limit: int, key: Any) -> tuple[list[T], str | None]:
@@ -126,17 +148,22 @@ def paginate[T](rows: Sequence[T], limit: int, key: Any) -> tuple[list[T], str |
 
 
 def offset_page[T](
-    rows: Sequence[T], offset: int, limit: int, *, max_offset: int | None = None
+    rows: Sequence[T], offset: int, limit: int, *, max_offset: int = MAX_OFFSET
 ) -> tuple[list[T], str | None]:
     """Turn `limit + 1` rows fetched from `offset` into a page and the cursor for the next.
 
     For lists whose order changes as people use them, where a keyset cursor
-    would skip rows. No next cursor is given past `max_offset`.
+    would skip rows. Read the offset back with `offset_from_cursor`. No next
+    cursor is given past `max_offset`, which is never more than `MAX_OFFSET`,
+    and an offset past it is refused as `InvalidCursorError`.
     """
     assert limit >= 1, "limit must be at least 1"
     assert len(rows) <= limit + 1, "fetch at most limit + 1 rows"
+    assert 0 <= max_offset <= MAX_OFFSET, "every list shares MAX_OFFSET as its furthest offset"
+    if not 0 <= offset <= max_offset:
+        raise InvalidCursorError()
     following = offset + limit
-    more = len(rows) > limit and (max_offset is None or following <= max_offset)
+    more = len(rows) > limit and following <= max_offset
     return list(rows[:limit]), encode_cursor([following]) if more else None
 
 
@@ -152,6 +179,29 @@ def split_bbox(text: str) -> BBox:
     """`west,south,east,north` as four numbers. Raises `ValueError` when it isn't four numbers."""
     west, south, east, north = (float(part) for part in text.split(","))
     return west, south, east, north
+
+
+def check_bbox(bbox: BBox) -> BBox:
+    """The box as four floats, or `InvalidBboxError` when it isn't a box with an area (`is_bbox`).
+
+    The one rule for a box, on every route and in every command that takes one.
+    """
+    assert len(bbox) == 4, "a bbox has four numbers: west, south, east, north"
+    west, south, east, north = (float(value) for value in bbox)
+    if not is_bbox((west, south, east, north)):
+        raise InvalidBboxError()
+    return west, south, east, north
+
+
+def parse_bbox(text: str | None) -> BBox | None:
+    """A `bbox` query parameter, `west,south,east,north`, checked by `check_bbox`. None when absent."""
+    if text is None:
+        return None
+    try:
+        bbox = split_bbox(text)
+    except ValueError:
+        raise InvalidBboxError() from None
+    return check_bbox(bbox)
 
 
 def is_bbox(bbox: BBox, *, allow_empty: bool = False) -> bool:

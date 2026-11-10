@@ -58,12 +58,12 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from fieldclub.config import get_settings
 from fieldclub.db import SessionLocal
-from fieldclub.errors import ConflictError
+from fieldclub.errors import ConflictError, InvalidBboxError
 from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo, fill_attribution
 from fieldclub.ingest.errors import IngestError
 from fieldclub.models import IngestRun, Record, Source
 from fieldclub.models.common import SRID
-from fieldclub.schemas.common import is_bbox
+from fieldclub.schemas import common
 from fieldclub.services import record_tiles
 from fieldclub.vocab import IngestStatus, Period, RecordCategory
 
@@ -149,14 +149,11 @@ class RunStats:
 
 
 def check_bbox(bbox: BBox) -> BBox:
-    """Validate a west, south, east, north box in degrees."""
-    assert len(bbox) == 4, "a bbox has four numbers: west, south, east, north"
-    west, south, east, north = (float(value) for value in bbox)
-    if not all(math.isfinite(value) for value in (west, south, east, north)):
-        raise IngestError("A bbox must be four finite numbers.")
-    if not is_bbox((west, south, east, north)):
-        raise IngestError("A bbox is west,south,east,north in degrees, with west < east and south < north.")
-    return west, south, east, north
+    """Validate a west, south, east, north box in degrees, by the API's rule (`schemas.common.check_bbox`)."""
+    try:
+        return common.check_bbox(bbox)
+    except InvalidBboxError as exc:
+        raise IngestError(exc.message) from None
 
 
 # How to put each kind of multi-part geometry back together from its members.

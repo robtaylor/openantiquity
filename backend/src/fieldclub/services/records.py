@@ -45,11 +45,9 @@ from sqlalchemy.orm import Session
 
 from fieldclub import gridref
 from fieldclub.errors import AppError, BadRequestError, NotFoundError
-from fieldclub.ingest import runner
-from fieldclub.ingest.errors import IngestError
 from fieldclub.models import Finding, Record, Source, User
 from fieldclub.models.common import SRID
-from fieldclub.schemas.common import decode_cursor, offset_page
+from fieldclub.schemas.common import MAX_OFFSET, check_bbox, offset_from_cursor, offset_page
 from fieldclub.services import findings, geo, record_tiles, sensitivity
 from fieldclub.vocab import FeatureClass
 
@@ -63,8 +61,6 @@ MAX_WORD_CHARS = 40
 # word similarity, 0 to 1). The default of 0.6 misses one wrong letter in a
 # short word, such as "silbery" for "Silbury".
 NAME_SIMILARITY = 0.4
-# Offsets beyond this are refused. Nobody reads 2,000 search results.
-MAX_OFFSET = 2000
 # How many matches each index may give before they are ranked: enough to page
 # to `MAX_OFFSET`. Ranking every match of a common word took a second at 500,000 records.
 SEARCH_CANDIDATES = MAX_OFFSET + 200
@@ -91,11 +87,6 @@ AnySelect = Select[*tuple[Any, ...]]
 class RecordNotFoundError(NotFoundError):
     code = "record_not_found"
     message = "There is no record with that id."
-
-
-class FindingNotFoundError(NotFoundError):
-    code = "finding_not_found"
-    message = "There is no finding with that id."
 
 
 class InvalidSearchError(BadRequestError):
@@ -186,14 +177,6 @@ def _base() -> AnySelect:
         .join(Source, Source.key == Record.source_key)
         .where(Source.enabled)
     )
-
-
-def check_bbox(bbox: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
-    """The ingest runner's bbox check, raised as a search error."""
-    try:
-        return runner.check_bbox(bbox)
-    except IngestError as exc:
-        raise InvalidSearchError(exc.message) from None
 
 
 def _filters(
@@ -349,9 +332,7 @@ def search(
     raises `SearchTimeoutError`.
     """
     assert 1 <= limit <= 200, "limit must be between 1 and 200"
-    offset = decode_cursor(cursor, 1)[0] if cursor else 0
-    if not isinstance(offset, int) or not 0 <= offset <= MAX_OFFSET:
-        raise InvalidSearchError("That page is out of range. Narrow the search instead.")
+    offset = offset_from_cursor(cursor)
     text = clean_query(q)
     words = query_words(text)
     if text and not words:
@@ -378,7 +359,7 @@ def search(
             statement = statement.order_by(Record.name, Record.id)
         rows = db.execute(statement.offset(offset).limit(limit + 1)).all()
 
-    page, next_cursor = offset_page(rows, offset, limit, max_offset=MAX_OFFSET)
+    page, next_cursor = offset_page(rows, offset, limit)
     return _results(page), next_cursor
 
 
@@ -507,16 +488,6 @@ def type_fits(feature_classes: list[str], record: Record) -> bool:
     return False
 
 
-def load_finding(db: Session, public_id: str, viewer: User | None) -> Finding:
-    """A finding by public id. A hidden one is only found by a moderator."""
-    finding = db.scalars(select(Finding).where(Finding.public_id == public_id)).one_or_none()
-    if finding is None:
-        raise FindingNotFoundError()
-    if finding.hidden_at is not None and not findings.is_moderator(viewer):
-        raise FindingNotFoundError()
-    return finding
-
-
 def suggest_for_finding(
     db: Session, finding: Finding, viewer: User | None, *, limit: int = 10
 ) -> SuggestionList:
@@ -527,8 +498,10 @@ def suggest_for_finding(
     itself, so everything inside it is 0 m away, and ties are broken by the
     distance from the square's centre. Both are public, so neither the
     distances nor the order can give the exact position away. The score weighs
-    nearness against whether the record's type fits the finding's class or its
-    community class.
+    nearness against whether the record's type fits the finding's class or,
+    for someone who may see other people's answers, its community class. The
+    community class comes from those answers, so for anyone else it plays no
+    part, and neither `type_fit` nor the order can give it away (Decision 0008).
     """
     assert 1 <= limit <= 50, "limit must be between 1 and 50"
     origin = sensitivity.visible_location(finding, viewer)
@@ -537,7 +510,10 @@ def suggest_for_finding(
     candidates = nearby(
         db, origin.lon, origin.lat, radius_m=SUGGEST_RADIUS_M, limit=SUGGEST_CANDIDATES, area=area
     )
-    classes = [value for value in (finding.feature_class, finding.community_class) if value]
+    classes = [finding.feature_class]
+    answered = findings.my_observation(db, finding, viewer) is not None
+    if finding.community_class and findings.answers_visible(finding, viewer, answered):
+        classes.append(finding.community_class)
     scored = []
     for result in candidates:
         assert result.distance_m is not None, "nearby() always gives a distance"

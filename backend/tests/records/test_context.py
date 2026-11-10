@@ -14,6 +14,7 @@ from tests.helpers import AVEBURY, admin_area
 from tests.records import context_data
 
 BELFAST = (-5.93, 54.597)
+DUBLIN = (-6.26, 53.35)
 PARIS = (2.35, 48.86)
 
 
@@ -118,6 +119,17 @@ def test_links_in_northern_ireland_skip_british_grid_viewers(db: Session) -> Non
     assert "britain-from-above-map" not in links  # needs British grid eastings
     assert "he-apex-viewer" not in links  # England only
     assert "google-earth-web" in links
+
+
+def test_a_point_on_the_irish_grid_is_not_taken_for_northern_ireland(db: Session) -> None:
+    """The Irish Grid covers the whole island, so until the nations are loaded nothing is guessed."""
+    assert gridref.to_grid(*DUBLIN)[0] is gridref.GridSystem.IRISH
+    assert set(by_key(context.links_for(db, *DUBLIN))) == {"google-earth-web"}
+    assert "ncap-air-photo-finder" not in by_key(context.links_for(db, *BELFAST))
+    db.add(admin_area("nation", "northern_ireland", "Northern Ireland", (-8.2, 54.0, -5.4, 55.3)))
+    db.commit()
+    assert "ncap-air-photo-finder" in by_key(context.links_for(db, *BELFAST))
+    assert set(by_key(context.links_for(db, *DUBLIN))) == {"google-earth-web"}
 
 
 def test_links_off_the_grids(db: Session) -> None:
