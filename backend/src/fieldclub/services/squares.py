@@ -1,21 +1,35 @@
 """Scan a square: hand out 1 km grid squares, keep each person's result, and count coverage.
 
 A square is named by its compact 1 km grid reference, such as `SU1069`
-(`gridref`). Only squares with 1 m elevation are handed out or recorded.
-A 1 km square lies wholly inside one 5 km tile of the terrain catalogue,
-so a square has elevation exactly when its tile is listed. Only
-`terrain.catalogue` is imported from the terrain package, because it reads a
-text file and loads no raster library.
+(`gridref`). Only squares with 1 m elevation are handed out or recorded
+(`scannable`). A 1 km square lies wholly inside one 5 km tile of the
+terrain catalogue, and a square can only have elevation when its tile is
+listed. That isn't enough on its own: at the coast and along the Welsh and
+Scottish borders the catalogue lists partial tiles, and many of their
+squares are sea or outside England, where the DTM has no data. So a square
+also needs its centre inside England's boundary in `admin_areas`. A coastal
+square whose centre is just offshore is lost, and one whose centre is just
+inland may still be mostly sea; nothing reads the rasters to tell. Until
+`admin_areas` holds England, the tile alone decides and a warning is logged.
+
+Only `terrain.catalogue` is imported from the terrain package, because it
+reads a text file and loads no raster library.
 
 An empty square is a result. "Nothing obvious" is how the map shows that an
 area was looked at and not ignored, so it counts towards coverage as much as
 a square where something was marked. A skip doesn't count as a scan.
 
+Coverage counts each person's result as they gave it. A square somebody
+marked stays marked after the finding marked there is hidden, withdrawn or
+deleted, because a survey keeps only how many findings were marked, not
+which. It shows no more than that somebody marked something in a public
+1 km square.
+
 Choosing the next square (`next_square`):
 
 1. Start from the point given, or the middle of a random tile with elevation.
-2. Walk outwards a ring of 5 km tiles at a time, collecting the squares the
-   person hasn't done and didn't ask to leave out, until there are at least
+2. Walk outwards a ring of 5 km tiles at a time, collecting the scannable
+   squares the person hasn't done and didn't ask to leave out, until there are at least
    `POOL` of them or the walk reaches `MAX_RING` tiles out.
 3. Rank them by how many people have had them (skips included, so a square
    everyone skips stops being handed out first), then by distance.
@@ -28,22 +42,25 @@ Services flush and never commit.
 
 from __future__ import annotations
 
+import logging
 import math
 import random
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 
-from sqlalchemy import Select, func, literal_column, select
+from sqlalchemy import Select, func, literal_column, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
 from fieldclub.errors import BadRequestError, NotFoundError, ValidationFailedError
-from fieldclub.models import SquareSurvey, User
+from fieldclub.models import AdminArea, SquareSurvey, User
 from fieldclub.models.common import to_db_geometry
 from fieldclub.services import geo, sensitivity
 from fieldclub.terrain.catalogue import TILE_METRES, Catalogue, england_catalogue, tile_name_at
-from fieldclub.vocab import SurveyResult
+from fieldclub.vocab import AdminAreaKind, Nation, SurveyResult
+
+logger = logging.getLogger(__name__)
 
 SQUARE_METRES = 1000
 SQUARES_PER_SIDE = TILE_METRES // SQUARE_METRES
@@ -113,9 +130,51 @@ def name(ref: gridref.GridRef) -> str:
 
 
 def has_elevation(ref: gridref.GridRef, catalogue: Catalogue) -> bool:
+    """Whether the square's 5 km tile is listed. Needed for elevation, but not enough: see `scannable`."""
     if ref.system is not gridref.GridSystem.OSGB:
         return False
     return tile_name_at(ref.easting, ref.northing) in catalogue
+
+
+_CENTRES_IN_AREA = text(
+    """
+    SELECT t.i FROM admin_areas AS a,
+        unnest(CAST(:lons AS float8[]), CAST(:lats AS float8[])) WITH ORDINALITY AS t(lon, lat, i)
+    WHERE a.id = :area AND ST_Covers(a.geom, ST_SetSRID(ST_MakePoint(t.lon, t.lat), 4326))
+    """
+)
+
+
+def england_area(db: Session) -> int | None:
+    """The id of England's row in `admin_areas`, or None, with a warning, while it isn't there."""
+    area = db.scalar(
+        select(AdminArea.id).where(
+            AdminArea.kind == AdminAreaKind.NATION.value, AdminArea.code == Nation.ENGLAND.value
+        )
+    )
+    if area is None:
+        logger.warning("admin_areas has no England boundary, so squares at sea or over the border count")
+    return area
+
+
+def centres_inside(db: Session, area: int, refs: Sequence[gridref.GridRef]) -> list[bool]:
+    """Whether each square's centre is inside the boundary `area` of `admin_areas`. One query."""
+    if not refs:
+        return []
+    half = SQUARE_METRES / 2
+    lons, lats = gridref.transformer(27700, 4326).transform(
+        [ref.easting + half for ref in refs], [ref.northing + half for ref in refs]
+    )
+    inside = set(db.scalars(_CENTRES_IN_AREA, {"lons": list(lons), "lats": list(lats), "area": area}))
+    return [i in inside for i in range(1, len(refs) + 1)]
+
+
+def scannable(db: Session, ref: gridref.GridRef, catalogue: Catalogue) -> bool:
+    """Whether the square has 1 m elevation to scan: its tile is listed and its centre is in England."""
+    if not has_elevation(ref, catalogue):
+        return False
+    area = england_area(db)
+    return area is None or centres_inside(db, area, [ref])[0]
 
 
 def _square_at(easting: int, northing: int) -> gridref.GridRef:
@@ -230,6 +289,7 @@ def next_square(
     if not (math.isfinite(easting) and math.isfinite(northing)):
         raise NoSquareError()
     col, row = int(easting // TILE_METRES), int(northing // TILE_METRES)
+    england = england_area(db)
     pool: list[Candidate] = []
     for radius in range(MAX_RING + 1):
         ring = [
@@ -237,6 +297,9 @@ def next_square(
             for c in _ring_squares(catalogue, col, row, radius, easting, northing)
             if name(c.ref) not in left_out
         ]
+        if england is not None:
+            inside = centres_inside(db, england, [c.ref for c in ring])
+            ring = [c for c, keep in zip(ring, inside, strict=True) if keep]
         names = [name(c.ref) for c in ring]
         done = _done(db, viewer, names)
         pool.extend(c for c in ring if name(c.ref) not in done)
@@ -282,7 +345,7 @@ def record_survey(
     Returns the row and whether it is new. Two requests at once can't make two rows.
     """
     check_result(result, findings_count, seconds)
-    if not has_elevation(ref, catalogue or england_catalogue()):
+    if not scannable(db, ref, catalogue or england_catalogue()):
         raise NoElevationError()
     values = {"result": result.value, "findings_count": findings_count, "seconds": seconds}
     statement = (

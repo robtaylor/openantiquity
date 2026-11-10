@@ -14,7 +14,7 @@ from fieldclub.models import SquareSurvey, User
 from fieldclub.services import squares
 from fieldclub.terrain.catalogue import england_catalogue
 from fieldclub.vocab import SurveyResult
-from tests.helpers import AVEBURY, ClientAs, MakeUser, count, error_code, run_fresh
+from tests.helpers import AVEBURY, ClientAs, MakeUser, admin_area, count, error_code, run_fresh
 
 API = "/api/v1/squares"
 # The square the henge at Avebury is in.
@@ -131,6 +131,54 @@ def test_recording_needs_a_contributor(client: TestClient, client_as: ClientAs, 
     assert client.put(f"{API}/{HENGE}", json={"result": "nothing"}).status_code == 401
     response = client_as(newcomer).put(f"{API}/{HENGE}", json={"result": "nothing"})
     assert error_code(response) == "onboarding_required"
+
+
+# Part of TM58se, a partial tile on the Suffolk coast. TM5984's centre is offshore
+# of Kessingland; TM4580's is inland. England here is everything west of 1.70 E.
+OFFSHORE, INLAND = "TM5984", "TM4580"
+ENGLAND_TO_1_70_E = (-6.5, 49.8, 1.70, 55.9)
+
+
+def add_england(db: Session) -> None:
+    db.add(admin_area("nation", "england", "England", ENGLAND_TO_1_70_E))
+    db.commit()
+
+
+def centre_lon(square: str) -> float:
+    ref = squares.parse_square(square)
+    lon, _ = gridref.transformer(27700, 4326).transform(ref.easting + 500, ref.northing + 500)
+    return lon
+
+
+def test_a_square_in_a_listed_tile_needs_its_centre_in_england(
+    db: Session, make_user: MakeUser, client_as: ClientAs
+) -> None:
+    catalogue = england_catalogue()
+    for square in (OFFSHORE, INLAND):
+        assert squares.has_elevation(squares.parse_square(square), catalogue)
+    add_england(db)
+    assert not squares.scannable(db, squares.parse_square(OFFSHORE), catalogue)
+    assert squares.scannable(db, squares.parse_square(INLAND), catalogue)
+    me = client_as(make_user())
+    offshore = me.put(f"{API}/{OFFSHORE}", json={"result": "nothing"})
+    assert offshore.status_code == 422
+    assert error_code(offshore) == "square_has_no_elevation"
+    assert me.put(f"{API}/{INLAND}", json={"result": "nothing"}).status_code == 201
+
+
+def test_the_next_square_on_the_coast_is_never_at_sea(db: Session) -> None:
+    add_england(db)
+    near = (1.75, 52.38)
+    handed_out = {
+        squares.name(squares.next_square(db, None, near=near, rng=random.Random(seed)).ref)
+        for seed in range(30)
+    }
+    assert all(centre_lon(square) < 1.70 for square in handed_out), handed_out
+
+
+def test_until_england_is_loaded_the_tile_alone_decides(db: Session) -> None:
+    assert squares.england_area(db) is None
+    assert squares.scannable(db, squares.parse_square(OFFSHORE), england_catalogue())
 
 
 # --------------------------------------------------------------------------
