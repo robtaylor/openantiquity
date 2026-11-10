@@ -23,16 +23,15 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-import pyogrio
-import pyogrio.raw
 import shapely
-from pyogrio.errors import DataSourceError
 from pyproj import Transformer
 from shapely.errors import ShapelyError
 from shapely.geometry import Point, shape
 from shapely.geometry.base import BaseGeometry
 
+from fieldclub.ingest.adapters import ogr
 from fieldclub.ingest.adapters.common import WGS84, Feature, UpstreamFormatError, plain, plain_tree, to_wgs84
+from fieldclub.ingest.adapters.ogr import DataSourceError
 from fieldclub.ingest.base import BBox
 
 logger = logging.getLogger(__name__)
@@ -49,7 +48,7 @@ def _vsi(path: Path | str) -> str:
 def vector_info(path: Path | str, layer: str | int | None = None) -> dict[str, Any]:
     """The layer's CRS, fields, geometry type and feature count, as pyogrio reports them."""
     try:
-        return dict(pyogrio.read_info(_vsi(path), layer=layer))
+        return dict(ogr.read_info(_vsi(path), layer=layer))
     except DataSourceError as exc:
         raise UpstreamFormatError(f"{Path(path).name} could not be opened: {exc}") from None
 
@@ -84,7 +83,7 @@ def read_vector(
     if crs is None:
         raise UpstreamFormatError(f"{Path(path).name} states no CRS. Pass crs= to say what it is.")
     with quiet_ogr():
-        _, fids, _, _ = pyogrio.raw.read(
+        _, fids, _, _ = ogr.read(
             source,
             layer=layer,
             read_geometry=False,
@@ -97,7 +96,7 @@ def read_vector(
     logger.info("%s: %d features", Path(path).name, len(fids))
     for start in range(0, len(fids), chunk):
         with quiet_ogr():
-            meta, chunk_fids, geometries, fields = pyogrio.raw.read(
+            meta, chunk_fids, geometries, fields = ogr.read(
                 source, layer=layer, columns=columns, fids=fids[start : start + chunk], return_fids=True
             )
         yield from ogr_features(meta, chunk_fids, geometries, fields, crs)

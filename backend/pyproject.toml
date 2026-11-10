@@ -105,10 +105,14 @@ ignore = [
 "src/fieldclub/main.py" = ["T20"]
 "src/fieldclub/db.py" = ["T20"]
 "src/fieldclub/terrain/cli.py" = ["T20"]
+"src/fieldclub/ingest/adapters/ogr.py" = ["TID251"] # the one place pyogrio is imported
 "src/fieldclub/auth/handles.py" = ["SIM905"] # word lists read better as split strings
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"pyogrio".msg = "Import it through fieldclub.ingest.adapters.ogr, which loads rasterio's GDAL first."
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.Body"]

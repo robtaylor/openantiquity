@@ -28,9 +28,9 @@ from collections.abc import Iterator
 from typing import Any
 
 import httpx
-import pyogrio.raw
 from pyproj import CRS, Transformer
 
+from fieldclub.ingest.adapters import ogr
 from fieldclub.ingest.adapters.common import (
     WGS84,
     Feature,
@@ -139,7 +139,7 @@ class WFSLayer:
     def _from_ogr(self, content: bytes) -> list[Feature]:
         # DOWNLOAD_SCHEMA=NO: GDAL would otherwise fetch the XSD the response points at.
         with quiet_ogr():
-            meta, fids, geometries, fields = pyogrio.raw.read(
+            meta, fids, geometries, fields = ogr.read(
                 io.BytesIO(content), return_fids=True, DOWNLOAD_SCHEMA="NO"
             )
         return list(ogr_features(meta, fids, geometries, fields, meta.get("crs") or self.srs_name))

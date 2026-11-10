@@ -5,10 +5,10 @@ import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-import pyogrio.raw
 import pytest
 from shapely.geometry import Point
 
+from fieldclub.ingest.adapters import ogr
 from fieldclub.ingest.adapters.common import UpstreamFormatError
 from fieldclub.ingest.adapters.files import read_csv, read_ndjson, read_vector, vector_info
 from tests.ingest.adapters.support import FIXTURES, xy
@@ -60,8 +60,8 @@ def test_where_and_columns_are_passed_through() -> None:
 
 def test_reads_a_zipped_shapefile(tmp_path: Path) -> None:
     shp = tmp_path / "monuments.shp"
-    meta, _, geometry, fields = pyogrio.raw.read(GPKG, columns=["ListEntry", "Name"])
-    pyogrio.raw.write(
+    meta, _, geometry, fields = ogr.read(GPKG, columns=["ListEntry", "Name"])
+    ogr.write(
         shp,
         geometry,
         fields,
