@@ -32,6 +32,7 @@ dependencies = [
 fieldclub-api = "fieldclub.main:run"
 fieldclub-ingest = "fieldclub.ingest.cli:main"
 fieldclub-openapi = "fieldclub.main:print_openapi"
+fieldclub-terrain = "fieldclub.terrain.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.13.7,<0.14.0"]
@@ -103,6 +104,7 @@ ignore = [
 "src/fieldclub/ingest/cli.py" = ["T20"]
 "src/fieldclub/main.py" = ["T20"]
 "src/fieldclub/db.py" = ["T20"]
+"src/fieldclub/terrain/cli.py" = ["T20"]
 "src/fieldclub/auth/handles.py" = ["SIM905"] # word lists read better as split strings
 
 [tool.ruff.lint.flake8-tidy-imports]

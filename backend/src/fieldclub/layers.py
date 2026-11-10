@@ -34,10 +34,15 @@ from fieldclub.schemas.meta import (
     RecordsOverlay,
     View,
 )
+from fieldclub.terrain.grid import TILE_SIZE
+from fieldclub.terrain.styles import MAXZOOM, MINZOOM
 
-TILE_SIZE = 512
-LIDAR_MINZOOM = 7
-LIDAR_MAXZOOM = 16
+# --- Terrain (b1/terrain): the zoom range comes from what the terrain service serves.
+# Below zoom 13 the tiles are drawn from the 10 m national composite, from 13
+# to 16 from the 1 m mirror. Both are the Environment Agency's 2022 composite,
+# so one attribution covers them.
+LIDAR_MINZOOM = MINZOOM
+LIDAR_MAXZOOM = MAXZOOM
 
 OGL_V3_URL = "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
 
@@ -79,7 +84,7 @@ LIDAR_STYLES: tuple[tuple[str, str, str], ...] = (
     (
         "multi_shade",
         "Multi-direction shade",
-        "Sixteen light directions at once, so nothing hides by running parallel to the sun.",
+        "Three lights in red, green and blue, so nothing hides by running parallel to the sun.",
     ),
     (
         "slope",

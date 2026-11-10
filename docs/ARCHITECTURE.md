@@ -202,7 +202,7 @@ All paths are under `/api/v1`. Bodies are JSON. The session is a `fieldclub_sess
 | Records | `GET /records/search`, `GET /records/nearby`, `GET /records/{id}`, `GET /sources`, `GET /findings/{public_id}/suggested-records` |
 | Context | `GET /context/nearby?lon=&lat=` (live lookups, cached), `GET /context/links?lon=&lat=` (deep links to external viewers) |
 | Geo | `GET /geo/search?q=` (grid reference, coordinates, place, record or finding id), `GET /geo/point?lon=&lat=` (grid reference, nation, elevation) |
-| Terrain | `POST /terrain/profile` (elevation along a line) |
+| Terrain | `POST /terrain/profile` (elevation along a line), `GET /terrain/coverage?bbox=` (the 5 km tiles that have 1 m elevation, as GeoJSON) |
 | Investigations | `GET` and `POST /investigations`, `GET`, `PATCH` and `DELETE /investigations/{public_id}`, items and members sub-resources, `GET /investigations/{public_id}/export?format=` |
 | Exports | `GET /findings/{public_id}/export?format=geojson|csv` |
 | People | `GET /users/{handle}`, `GET /users/{handle}/findings`, `GET /users/{handle}/contributions` |
@@ -314,6 +314,9 @@ The shape is fixed. The sources are filled in from `docs/DATA_SOURCES.md`.
 `terrain/sources.py` defines `ElevationSource.read(bounds_3857, width, height) -> float32 array` with NaN for no data. There's one implementation per upstream service and a `Mosaic` that asks sources in priority order and fills gaps. `terrain/render.py` asks the mosaic for a tile's bounds plus a buffer, so neighbourhood filters have real data at tile edges, then crops. The buffered elevation array is cached once per tile, so switching style doesn't hit the upstream again. Rendered tiles are cached too. Both caches use `Storage`, which is local disk in development and a bucket in production.
 
 `terrain/visualise.py` holds the pure numpy functions: hillshade, multi-directional hillshade, slope, local relief, sky-view factor, openness, and the blends. Each takes elevation and ground resolution in metres and returns an array with a fixed stretch, so adjacent tiles always match. Kernel sizes are given in metres and converted to pixels per zoom.
+
+<!-- Terrain (b1/terrain) -->
+Elevation is read only from the mirror (`terrain/mirror.py`): one COG per 5 km tile, LERC_ZSTD at 1 cm, 512-pixel blocks, overviews at 2, 4 and 8 m, in a local folder or under `gs://`. A tile that isn't mirrored is converted from Defra's source file on disk if it is there, or fetched from the SFTP bulk supply (`terrain/sftp.py`), once however many requests want it. `terrain/catalogue.py` lists the 5,877 tiles, so a tile that doesn't exist costs no network call. From zoom 13 up, map tiles read the 1 m mirror and fetch what is missing. Below 13 they read the national 10 m composite, or, until it is built, the overviews of tiles already mirrored, uncached. `fieldclub-terrain` mirrors tiles, warms the tile cache and reports on both. The styles, their parameters and versions are in `terrain/styles.py`.
 
 ## Ingest
 
