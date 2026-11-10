@@ -187,14 +187,15 @@ test("the drafts bar and its list stay on screen, clear of the other controls", 
   await page.reload();
   const region = bar(page);
   await expect(region.getByRole("status")).toHaveText("3 drafts not saved yet");
-  const closed = await region.boundingBox();
+  const strip = region.locator(".fc-drafts__bar");
+  const closed = await strip.boundingBox();
   await region.getByRole("button", { name: "Show drafts" }).click();
   const viewport = page.viewportSize() ?? { width: 0, height: 0 };
   const box = await region.boundingBox();
   const list = await region.locator(".fc-drafts__list").boundingBox();
   if (!box || !closed || !list) throw new Error("No drafts bar on screen");
   // Opening the list doesn't change the bar.
-  expect(box).toEqual(closed);
+  expect(await strip.boundingBox()).toEqual(closed);
   for (const shown of [box, list]) {
     expect(shown.x).toBeGreaterThanOrEqual(0);
     expect(shown.x + shown.width).toBeLessThanOrEqual(viewport.width);
