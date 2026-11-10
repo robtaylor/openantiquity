@@ -49,9 +49,13 @@ frontend/
     features/               findings, review, squares, records, investigations, account
     ui/                     shared components and design tokens
 infra/
+  README.md                 the deployment runbook, with sizing and cost
   docker-compose.yml        local PostGIS on port 54329
-  Dockerfile                multi-stage build: frontend, then backend serving it
+  Dockerfile                multi-stage build: frontend, then backend serving it; one image for the service and every job
+  bootstrap.sh              makes a project's Terraform state bucket
+  jobs/                     deployment glue run inside the image, such as the sharded elevation copy
   terraform/                Cloud Run, Cloud SQL, buckets, secrets, scheduler
+.github/workflows/          ci.yml on every push; deploy.yml by hand builds, pushes and plans
 docs/
   DESIGN.md  ARCHITECTURE.md  UI.md  prose-style.md
   architecture/             area docs, and decision records in decisions/
@@ -367,7 +371,7 @@ The payload carries ids only, and `activity.location` is the centre of the findi
 
 The shape is fixed. The sources are filled in from the catalogue in `docs/sources/`, `lidar.md` and `lidar-england-bulk-supply.md` among them.
 
-`terrain/sources.py` defines `ElevationSource.read(bounds_3857, width, height) -> float32 array` with NaN for no data. There's one implementation per upstream service and a `Mosaic` that asks sources in priority order and fills gaps. `terrain/render.py` asks the mosaic for a tile's bounds plus a buffer, so neighbourhood filters have real data at tile edges, then crops. The buffered elevation array is cached once per tile, so switching style doesn't hit the upstream again. Rendered tiles are cached too. Both caches use `Storage`, which is local disk in development and a bucket in production.
+`terrain/sources.py` defines `ElevationSource.read(bounds_3857, width, height) -> float32 array` with NaN for no data. There's one implementation per upstream service and a `Mosaic` that asks sources in priority order and fills gaps. `terrain/render.py` asks the mosaic for a tile's bounds plus a buffer, so neighbourhood filters have real data at tile edges, then crops. The buffered elevation array is cached once per tile, so switching style doesn't hit the upstream again. Rendered tiles are cached too. Both caches use `Storage`, which is local disk in development and a bucket in production. Each kind of data is a namespace (`tiles`, `media`) under `FIELDCLUB_GCS_BUCKET`, unless `FIELDCLUB_GCS_NAMESPACE_BUCKETS` gives it a bucket of its own, as production does for uploaded photos.
 
 `terrain/visualise.py` holds the pure numpy functions: hillshade, multi-directional hillshade, slope, local relief, sky-view factor, openness, and the blends. Each takes elevation and ground resolution in metres and returns an array with a fixed stretch, so adjacent tiles always match. Kernel sizes are given in metres and converted to pixels per zoom.
 
