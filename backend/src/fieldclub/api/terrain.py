@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel, Field
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from fieldclub.api.deps import BBoxQuery, TerrainDep
 from fieldclub.ratelimit import rate_limit
-from fieldclub.schemas.common import GeoJSONFeatureCollection, parse_bbox
-from fieldclub.terrain.coverage import coverage
+from fieldclub.schemas.common import parse_bbox
+from fieldclub.terrain.coverage import coverage, coverage_edition
 from fieldclub.terrain.service import MAX_PROFILE_SAMPLES, MAX_PROFILE_VERTICES
 
 router = APIRouter(prefix="/terrain", tags=["terrain"])
@@ -39,7 +39,8 @@ class ProfileSample(BaseModel):
 
 class ProfileOut(BaseModel):
     length_m: float
-    # The grid the heights were read from: 1 m, or coarser for long lines with few samples.
+    # The level of the mirror the heights were read from, in metres: 1 m, or a
+    # coarser copy (2, 4, 8, 40, 200 or 1000) for a long line with few samples.
     resolution_m: float
     samples: list[ProfileSample]
 
@@ -62,9 +63,50 @@ def profile(body: ProfileRequest, terrain: TerrainDep) -> ProfileOut:
     )
 
 
-# The body is built as plain GeoJSON for speed. The model documents it for the generated client.
-@router.get("/coverage", response_model=GeoJSONFeatureCollection)
-def get_coverage(terrain: TerrainDep, bbox: BBoxQuery = None) -> JSONResponse:
-    """The 5 km tiles that have 1 m elevation, as a GeoJSON FeatureCollection."""
-    body: dict[str, Any] = coverage(terrain.catalogue, parse_bbox(bbox))
-    return JSONResponse(body, headers={"Cache-Control": "public, max-age=86400"})
+class CoveragePolygon(BaseModel):
+    type: Literal["Polygon"]
+    # One ring of five WGS84 positions, longitude then latitude, closed.
+    coordinates: list[list[tuple[float, float]]]
+
+
+class CoverageProperties(BaseModel):
+    # The 5 km tile, such as SU16nw.
+    tile: str
+    # The edition the elevation comes from, such as "2022 composite".
+    capture: str
+    resolution_m: float
+    # The years the surveys behind this tile were flown, oldest first. Empty where the index has none.
+    years: list[int]
+
+
+class CoverageFeature(BaseModel):
+    type: Literal["Feature"]
+    id: str
+    geometry: CoveragePolygon
+    properties: CoverageProperties
+
+
+class CoverageOut(BaseModel):
+    type: Literal["FeatureCollection"]
+    edition: str
+    features: list[CoverageFeature]
+
+
+# The coverage changes only with a new catalogue or new capture years, which change the ETag.
+COVERAGE_CACHE = "public, max-age=3600"
+
+
+@router.get("/coverage", response_model=CoverageOut)
+def get_coverage(
+    terrain: TerrainDep,
+    bbox: BBoxQuery = None,
+    if_none_match: Annotated[str | None, Header()] = None,
+) -> Response:
+    """The 5 km tiles that have 1 m elevation, with the years they were flown, as GeoJSON."""
+    box = parse_bbox(bbox)
+    etag = f'"{coverage_edition(terrain.catalogue)}"'
+    headers = {"Cache-Control": COVERAGE_CACHE, "ETag": etag}
+    if if_none_match is not None and etag in {tag.strip() for tag in if_none_match.split(",")}:
+        return Response(status_code=304, headers=headers)
+    body: dict[str, Any] = coverage(terrain.catalogue, box)
+    return JSONResponse(body, headers=headers)

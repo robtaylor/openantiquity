@@ -38,7 +38,7 @@ _CLOUD_RUN_JOB = "CLOUD_RUN_JOB"
 _TERRAIN_UNDER_VAR = {
     "terrain_mirror": "lidar/england/mirror",
     "terrain_source_dir": "lidar/england/dtm-2022",
-    "terrain_national": "lidar/england/dtm-2022-10m/england-dtm-2022-10m-cog.tif",
+    "terrain_national": "lidar/england/national",
     "terrain_work_dir": "lidar/england/work",
 }
 
@@ -159,10 +159,16 @@ class Settings(BaseSettings):
     terrain_mirror: str = ""
     # Defra's source tiles already on disk, converted instead of fetched. Empty to fetch everything.
     terrain_source_dir: str = ""
-    # The national 10 m composite as a cloud-optimised GeoTIFF, for zoom 12 and below.
+    # The national overview for zoom 12 and below, built from the mirror by
+    # `fieldclub-terrain national build`: a local folder or `gs://bucket/prefix`.
     terrain_national: str = ""
     # Downloads from the bulk supply that may run at once in one process.
     terrain_fetch_concurrency: int = Field(default=2, ge=1, le=8)
+    # A mirror in a bucket is filled under a lock object per tile. One older
+    # than this is taken to be left by a process that died.
+    terrain_lock_stale_s: float = Field(default=900.0, gt=0)
+    # How long a request waits for another server to finish fetching a tile.
+    terrain_lock_wait_s: float = Field(default=120.0, ge=0)
     # Where downloads and conversions are staged before they enter the mirror.
     terrain_work_dir: str = ""
 

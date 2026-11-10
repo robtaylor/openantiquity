@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from fieldclub import APP_NAME, __version__, vocab
 from fieldclub.auth.providers import provider_statuses
 from fieldclub.config import Settings
-from fieldclub.layers import build_layers
+from fieldclub.layers import TileVersion, build_layers, default_tile_version
 from fieldclub.schemas import meta as schema
 from fieldclub.services import record_tiles, records
 
@@ -41,9 +41,12 @@ def build_notices() -> schema.Notices:
     )
 
 
-def build_layers_for(db: Session) -> schema.Layers:
-    """The layer catalogue with the record tiles' address carrying the current `?v=` token."""
-    layers = build_layers()
+def build_layers_for(db: Session, tile_version: TileVersion = default_tile_version) -> schema.Layers:
+    """The layer catalogue with the record tiles' address carrying the current `?v=` token.
+
+    `tile_version` gives the token terrain tile URLs carry, normally the terrain service's.
+    """
+    layers = build_layers(tile_version)
     versioned = [record_tiles.tile_url(record_tiles.tile_token(db))]
     layers.overlays = [
         overlay.model_copy(update={"tiles": versioned})
@@ -54,7 +57,10 @@ def build_layers_for(db: Session) -> schema.Layers:
     return layers
 
 
-def build_meta(db: Session, settings: Settings) -> schema.Meta:
+def build_meta(
+    db: Session, settings: Settings, *, tile_version: TileVersion = default_tile_version
+) -> schema.Meta:
+    """`tile_version` gives the token terrain tile URLs carry, normally the terrain service's."""
     return schema.Meta(
         app=schema.AppInfo(
             name=APP_NAME, version=__version__, contribution_licence=vocab.CONTRIBUTION_LICENCE
@@ -66,7 +72,7 @@ def build_meta(db: Session, settings: Settings) -> schema.Meta:
             ]
         ),
         vocab=build_vocab(),
-        layers=build_layers_for(db),
+        layers=build_layers_for(db, tile_version),
         sources=list_sources(db),
         notices=build_notices(),
     )

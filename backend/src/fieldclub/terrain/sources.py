@@ -49,7 +49,7 @@ from rasterio.windows import Window as RasterWindow
 from fieldclub.errors import DataIntegrityError
 from fieldclub.gridref import transformer
 from fieldclub.terrain.catalogue import Catalogue
-from fieldclub.terrain.errors import ElevationUnavailableError, ReadTooLargeError
+from fieldclub.terrain.errors import ReadTooLargeError
 from fieldclub.terrain.grid import (
     HALF_WORLD,
     Window,
@@ -93,6 +93,26 @@ def project_window(window: Window) -> tuple[np.ndarray, np.ndarray]:
     col_pos = (cols - lattice_cols[0]) / step
     row_pos = (rows - lattice_rows[0]) / step
     return _bilinear_nodes(node_e, col_pos, row_pos), _bilinear_nodes(node_n, col_pos, row_pos)
+
+
+def bng_box(
+    window: Window, extent: tuple[float, float, float, float]
+) -> tuple[float, float, float, float] | None:
+    """The British National Grid box of the part of a window inside a WGS84 extent, or None.
+
+    Worked out from pixels along the window's edges, which bound the
+    projection of everything inside it.
+    """
+    inner = _within(window, extent)
+    if inner is None:
+        return None
+    cols = np.unique(np.r_[np.arange(0, inner.width, LATTICE_STEP), inner.width - 1])
+    rows = np.unique(np.r_[np.arange(0, inner.height, LATTICE_STEP), inner.height - 1])
+    xs, ys = inner.x_centres(), inner.y_centres()
+    edge_x = np.concatenate([xs[cols], xs[cols], np.full(rows.size, xs[0]), np.full(rows.size, xs[-1])])
+    edge_y = np.concatenate([np.full(cols.size, ys[0]), np.full(cols.size, ys[-1]), ys[rows], ys[rows]])
+    eastings, northings = transformer(3857, 27700).transform(edge_x, edge_y)
+    return float(eastings.min()), float(northings.min()), float(eastings.max()), float(northings.max())
 
 
 def _bilinear_nodes(nodes: np.ndarray, col_pos: np.ndarray, row_pos: np.ndarray) -> np.ndarray:
@@ -155,11 +175,13 @@ class Grid:
 class ElevationSource(Protocol):
     # What the values come from. Part of every cache key.
     edition: str
-    # Whether the same edition always gives the same values, so they may be cached.
-    cacheable: bool
 
     def read(self, bounds: tuple[float, float, float, float], width: int, height: int) -> np.ndarray:
         """Float32 metres on the Web Mercator grid of `bounds`, NaN for no data."""
+        ...
+
+    def cacheable_for(self, bounds: tuple[float, float, float, float], width: int, height: int) -> bool:
+        """Whether this read always gives the same values under this edition, so it may be cached."""
         ...
 
 
@@ -215,12 +237,22 @@ class CogMosaicSource:
         out[top : top + inner.height, left : left + inner.width] = values
         return out
 
+    def cacheable_for(self, bounds: tuple[float, float, float, float], width: int, height: int) -> bool:
+        return self.cacheable
+
     def sample(self, eastings: np.ndarray, northings: np.ndarray, resolution: float) -> np.ndarray:
         """Elevation at grid positions, read at the coarsest level no coarser than `resolution`."""
+        return self.sample_level(eastings, northings, resolution)[0]
+
+    def sample_level(
+        self, eastings: np.ndarray, northings: np.ndarray, resolution: float
+    ) -> tuple[np.ndarray, float]:
+        """`sample`, and the resolution in metres of the level the heights came from."""
         assert eastings.shape == northings.shape, "eastings and northings must match"
         finite = np.isfinite(eastings) & np.isfinite(northings)
+        nothing = np.full(eastings.shape, np.nan, dtype=np.float32)
         if not finite.any():
-            return np.full(eastings.shape, np.nan, dtype=np.float32)
+            return nothing, self.level_for(resolution)
         bbox = (
             float(eastings[finite].min()),
             float(northings[finite].min()),
@@ -229,8 +261,15 @@ class CogMosaicSource:
         )
         grid = self.grid(bbox, resolution)
         if grid is None:
-            return np.full(eastings.shape, np.nan, dtype=np.float32)
-        return grid.sample(eastings, northings)
+            return nothing, self.level_for(resolution)
+        return grid.sample(eastings, northings), grid.res
+
+    def level_for(self, resolution: float, base: float | None = None) -> float:
+        """The level a read at `resolution` uses, for files whose own pixels are `base` metres.
+
+        `base` defaults to the finest level, which is what the mirror's files have.
+        """
+        return choose_level(self._resolutions, self._resolutions[0] if base is None else base, resolution)
 
     def grid(self, bbox: tuple[float, float, float, float], resolution: float) -> Grid | None:
         """The files' data over a box, laid on one grid. None when no file covers it."""
@@ -243,8 +282,7 @@ class CogMosaicSource:
             first = datasets[0]
             base = float(first.res[0])
             origin_e, origin_n = float(first.transform.c), float(first.transform.f)
-            usable = [r for r in self._resolutions if r >= base * (1 - 1e-9)] or [base]
-            res = max((r for r in usable if r <= resolution * (1 + 1e-9)), default=usable[0])
+            res = self.level_for(resolution, base)
             west, south, east, north = bbox
             # On the first file's grid, with a margin of two cells so the B-spline always has
             # its 4 by 4 cells.
@@ -255,12 +293,21 @@ class CogMosaicSource:
             assert rows * cols <= MAX_GRID_PIXELS, f"a {rows} by {cols} grid is too big to assemble"
             data = np.full((rows, cols), np.nan, dtype=np.float32)
             for ds in datasets:
-                _paste(ds, res, data, grid_west, grid_north)
+                paste(ds, res, data, grid_west, grid_north)
         return Grid(data, grid_west, grid_north, res)
 
 
 # About 256 MB of float32. A tile or profile never needs more than a small part of it.
 MAX_GRID_PIXELS = 8192 * 8192
+
+
+def choose_level(resolutions: Sequence[float], base: float, wanted: float) -> float:
+    """The coarsest of `resolutions` no coarser than `wanted` and no finer than `base`.
+
+    When every level is coarser than `wanted`, the finest usable one.
+    """
+    usable = [r for r in resolutions if r >= base * (1 - 1e-9)] or [base]
+    return max((r for r in usable if r <= wanted * (1 + 1e-9)), default=usable[0])
 
 
 def _within(window: Window, extent: tuple[float, float, float, float]) -> Window | None:
@@ -295,8 +342,11 @@ def _check_span(window: Window, eastings: np.ndarray, northings: np.ndarray) -> 
         raise ReadTooLargeError(f"{window} projects to a box {span:.0f} m across, more than {limit:.0f} m.")
 
 
-def _paste(ds: DatasetReader, res: float, data: np.ndarray, west: float, north: float) -> None:
-    """Read the grid cells that lie wholly inside a file, averaging down to the grid's resolution."""
+def paste(ds: DatasetReader, res: float, data: np.ndarray, west: float, north: float) -> None:
+    """Read the grid cells that lie wholly inside a file, averaging down to the grid's resolution.
+
+    `data` is a grid of `res` metre cells whose top left corner is at `west`, `north`.
+    """
     rows, cols = data.shape
     base = float(ds.res[0])
     f_west, f_north = float(ds.transform.c), float(ds.transform.f)
@@ -326,8 +376,6 @@ def _paste(ds: DatasetReader, res: float, data: np.ndarray, west: float, north: 
 
 # Metres. Each divides 5 km, so 5 km tiles never share a cell.
 MIRROR_RESOLUTIONS = (1.0, 2.0, 4.0, 8.0, 40.0, 200.0, 1000.0)
-# The national composite's own 10 m and its overviews.
-NATIONAL_RESOLUTIONS = tuple(10.0 * 2**k for k in range(10))
 
 
 def mirror_source(mirror: Mirror, *, fetch: bool = True) -> CogMosaicSource:
@@ -362,42 +410,3 @@ def _fetch_missing(mirror: Mirror, names: Sequence[str]) -> None:
         return
     with ThreadPoolExecutor(max_workers=len(missing), thread_name_prefix="mirror-fetch") as pool:
         list(pool.map(mirror.ensure, missing))
-
-
-class NationalSource(CogMosaicSource):
-    """The national 10 m composite as one COG. Unavailable until `available()`, the file, exists."""
-
-    def __init__(self, edition: str, path: str, *, exists: Callable[[], bool]) -> None:
-        def paths_for(bbox: tuple[float, float, float, float]) -> list[str]:
-            if not exists():
-                # The path stays in the log: the message reaches the client.
-                logger.info("The national composite %s isn't at %s", edition, path)
-                raise ElevationUnavailableError(f"{edition} isn't built yet.")
-            return [path]
-
-        super().__init__(edition, paths_for, NATIONAL_RESOLUTIONS, extent=ENGLAND_WGS84)
-        self.available = exists
-
-
-def file_source(edition: str, path: str, *, exists: Callable[[], bool]) -> NationalSource:
-    """The national 10 m composite as one COG. Unavailable until the file exists."""
-    return NationalSource(edition, path, exists=exists)
-
-
-class Mosaic:
-    """Sources in priority order. Each one fills the gaps the ones before it left."""
-
-    def __init__(self, sources: Sequence[ElevationSource]) -> None:
-        assert sources, "a mosaic needs at least one source"
-        self.sources = list(sources)
-        self.edition = "+".join(source.edition for source in self.sources)
-        self.cacheable = all(source.cacheable for source in self.sources)
-
-    def read(self, bounds: tuple[float, float, float, float], width: int, height: int) -> np.ndarray:
-        out = self.sources[0].read(bounds, width, height)
-        for source in self.sources[1:]:
-            gaps = np.isnan(out)
-            if not gaps.any():
-                break
-            out = np.where(gaps, source.read(bounds, width, height), out)
-        return out

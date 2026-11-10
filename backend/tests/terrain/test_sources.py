@@ -11,20 +11,19 @@ import pytest
 
 from fieldclub.terrain.catalogue import SourceTile, england_catalogue
 from fieldclub.terrain.cog import to_cog
-from fieldclub.terrain.errors import ElevationUnavailableError, ReadTooLargeError
+from fieldclub.terrain.errors import ReadTooLargeError
 from fieldclub.terrain.grid import Window, tile_at
 from fieldclub.terrain.mirror import Fetched, LocalMirrorStore, LocalSourceFetcher, Mirror
 from fieldclub.terrain.sources import (
     ENGLAND_WGS84,
-    Mosaic,
     _check_span,
-    file_source,
+    choose_level,
     mirror_source,
     project_window,
     transformer,
 )
 from fieldclub.terrain.styles import elevation_buffer
-from tests.terrain.fakes import TO_LONLAT, FunctionSource, laplacian, local_mirror, write_source_tile
+from tests.terrain.fakes import TO_LONLAT, laplacian, local_mirror, write_source_tile
 
 
 def linear(east: np.ndarray | float, north: np.ndarray | float) -> np.ndarray:
@@ -106,20 +105,12 @@ def test_the_projection_lattice_matches_exact_projection() -> None:
         assert np.abs(northings - exact_n).max() < 0.02
 
 
-def test_a_file_source_is_unavailable_until_built(tmp_path: Path) -> None:
-    missing = file_source("national", str(tmp_path / "none.tif"), exists=(tmp_path / "none.tif").is_file)
-    with pytest.raises(ElevationUnavailableError):
-        missing.sample(np.array([400_000.0]), np.array([200_000.0]), 10.0)
-
-
-def test_a_mosaic_fills_the_first_source_gaps_from_the_next() -> None:
-    first = FunctionSource(lambda xs, ys: np.where(xs < xs.mean(), 1.0, np.nan), edition="a")
-    second = FunctionSource(lambda xs, ys: np.full(xs.shape, 2.0), edition="b")
-    mosaic = Mosaic([first, second])
-    window = Window.tile(14, 8100, 5400)
-    values = mosaic.read(window.bounds, window.width, window.height)
-    assert set(np.unique(values)) == {1.0, 2.0}
-    assert mosaic.edition == "a+b"
+def test_the_level_read_is_reported() -> None:
+    assert choose_level((1.0, 2.0, 4.0, 8.0, 40.0), 1.0, 50.0) == 40.0
+    assert choose_level((1.0, 2.0, 4.0, 8.0, 40.0), 1.0, 0.5) == 1.0
+    # Never finer than the files themselves.
+    assert choose_level((1.0, 2.0, 4.0, 8.0, 40.0), 4.0, 3.0) == 4.0
+    assert choose_level((8.0, 16.0), 8.0, 5.8) == 8.0
 
 
 def test_a_cropped_coastal_tile_sits_beside_a_whole_one(tmp_path: Path) -> None:

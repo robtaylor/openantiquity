@@ -1,22 +1,25 @@
 """Where LIDAR exists, as GeoJSON a map can draw (Decision 0006, point 7).
 
-One square per 5 km source tile in the catalogue, with the edition's capture
-year and resolution. Per-survey flight dates aren't in the catalogue yet.
+One square per 5 km source tile in the catalogue, with the edition, its
+resolution and the years the surveys behind it were flown (`years.py`). A
+tile the survey index doesn't reach has an empty list of years.
 """
 
 from __future__ import annotations
 
+import hashlib
 from functools import lru_cache
 from typing import Any
 
 from fieldclub.gridref import transformer
 from fieldclub.terrain.catalogue import Catalogue, SourceTile
+from fieldclub.terrain.years import england_years, years_edition
 
 CAPTURE = "2022 composite"
 RESOLUTION_M = 1
 
 
-def _feature(tile: SourceTile) -> dict[str, Any]:
+def _feature(tile: SourceTile, years: tuple[int, ...]) -> dict[str, Any]:
     west, south, east, north = tile.bounds
     lons, lats = transformer(27700, 4326).transform(
         [west, east, east, west, west], [south, south, north, north, south]
@@ -26,20 +29,31 @@ def _feature(tile: SourceTile) -> dict[str, Any]:
         "type": "Feature",
         "id": tile.name,
         "geometry": {"type": "Polygon", "coordinates": [ring]},
-        "properties": {"tile": tile.name, "capture": CAPTURE, "resolution_m": RESOLUTION_M},
+        "properties": {
+            "tile": tile.name,
+            "capture": CAPTURE,
+            "resolution_m": RESOLUTION_M,
+            "years": list(years),
+        },
     }
 
 
 @lru_cache(maxsize=4)
 def _features(catalogue: Catalogue) -> tuple[tuple[dict[str, Any], tuple[float, float, float, float]], ...]:
     """Each tile's feature with its WGS84 bounding box, built once per catalogue."""
+    years = england_years()
     found = []
     for tile in catalogue:
-        feature = _feature(tile)
+        feature = _feature(tile, years.get(tile.name, ()))
         ring = feature["geometry"]["coordinates"][0]
         lons, lats = [point[0] for point in ring], [point[1] for point in ring]
         found.append((feature, (min(lons), min(lats), max(lons), max(lats))))
     return tuple(found)
+
+
+def coverage_edition(catalogue: Catalogue) -> str:
+    """Changes whenever the coverage could: the catalogue's edition or the capture years."""
+    return hashlib.sha256(f"{catalogue.edition}/{years_edition()}".encode()).hexdigest()[:16]
 
 
 def coverage(catalogue: Catalogue, bbox: tuple[float, float, float, float] | None = None) -> dict[str, Any]:

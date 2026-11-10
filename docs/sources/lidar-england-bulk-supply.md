@@ -69,8 +69,9 @@ Every `.tif` in the folder carried a modification date of 2026-05-28.
 | Read in windows of 32 MiB | Completed at the same speed |
 | Tiles larger than 52 MiB | 4,054 of 5,877 |
 | Host key | `ecdsa-sha2-nistp256`, fingerprint `SHA256:vp1YdDYlFLMB/r/5jb86NNGUn1HWEiZ5z1CdB1mT7No` |
+| Two connections at once, three tiles, the same evening at about 21:45 | 184.7 MB in 96 s, 1.9 MB/s in all. One tile alone took 51.0 MB in 32.3 s, 1.6 MB/s. Both connections worked |
 
-At the observed speed one connection would take about twelve hours for the 1 m DTM.
+At the speed observed first, one connection would take about twelve hours for the 1 m DTM. At the evening's 1.9 MB/s over two it would take about 52 hours.
 
 ## Suggested use
 
@@ -84,4 +85,5 @@ Defra's wording covers the data the project needs. The folders beyond the compos
 
 - Whether Defra refreshes this supply as new surveys are published. The year folders seen ended at 2022, while the research found DTM tiles dated up to 2024 in the public catalogue.
 - The size of the surface-model folders.
-- Whether several connections at once are tolerated. Only one was tried.
+- Whether more than two connections at once are tolerated. Two worked.
+- Why the evening's transfers ran at a quarter of the first speed: the line, the time of day or the server.

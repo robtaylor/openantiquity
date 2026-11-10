@@ -1,38 +1,56 @@
-"""`fieldclub-terrain`: mirror, warm and info, over a small synthetic mirror."""
+"""`fieldclub-terrain`: mirror, national build, warm, years, sources and info, over a synthetic mirror."""
 
 from __future__ import annotations
 
+import io
+import threading
 from pathlib import Path
 
 import pytest
+from pydantic import SecretStr
+from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session
 
-from fieldclub.terrain import cli
+from fieldclub.config import DefraSftpSettings
+from fieldclub.models import Source
+from fieldclub.terrain import cli, sftp
 from fieldclub.terrain.catalogue import SourceTile
 from fieldclub.terrain.errors import FetchFailedError, SupplyRefusedError
-from fieldclub.terrain.mirror import Fetched
+from fieldclub.terrain.mirror import Fetched, LocalSourceFetcher, SftpFetcher
 from fieldclub.terrain.service import Terrain
 from tests.terrain.fakes import TO_LONLAT, local_mirror, local_terrain, write_source_tile
 
+NAMES = ("SU16nw", "SU16ne", "SU17sw", "SU17se")
+
 
 @pytest.fixture
-def terrain(tmp_path: Path) -> Terrain:
-    for name in ("SU16nw", "SU16ne"):
+def sources(tmp_path: Path) -> Path:
+    for name in NAMES:
         write_source_tile(tmp_path / "src", name)
+    return tmp_path / "src"
+
+
+@pytest.fixture
+def terrain(tmp_path: Path, sources: Path) -> Terrain:
     return local_terrain(local_mirror(tmp_path), tmp_path / "tiles")
 
 
+@pytest.mark.usefixtures("db")
 def test_mirror_named_tiles_then_info(terrain: Terrain, capsys: pytest.CaptureFixture[str]) -> None:
     assert cli.main(["mirror", "SU16nw", "SV00sw"], terrain=terrain) == 0
     out = capsys.readouterr()
+    assert "sources rows written: defra-lidar-composite-dtm-2022-1m" in out.out
     assert "SV00sw: not in the test-edition catalogue" in out.out
     assert "mirror 1/1" in out.err
     assert terrain.mirror.store.names() == ["SU16nw"]
     assert cli.main(["info"], terrain=terrain) == 0
     info = capsys.readouterr().out
     assert "mirrored     1 tiles" in info
-    assert "national     not built" in info
+    assert "overview     not built" in info
 
 
+@pytest.mark.usefixtures("db")
 def test_mirror_a_box_skips_what_is_already_there(
     terrain: Terrain, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -44,14 +62,129 @@ def test_mirror_a_box_skips_what_is_already_there(
     assert terrain.mirror.store.names() == ["SU16ne", "SU16nw"]
 
 
-def test_warm_renders_and_caches_tiles(terrain: Terrain, tmp_path: Path) -> None:
+class Flaky:
+    """A local source that fails a named tile once, as a dropped run would, and counts every fetch."""
+
+    def __init__(self, folder: Path, fail: str) -> None:
+        self.inner = LocalSourceFetcher(folder)
+        self.fail = fail
+        self.calls: list[str] = []
+        self.lock = threading.Lock()
+
+    def fetch(self, tile: SourceTile, work_dir: Path) -> Fetched | None:
+        with self.lock:
+            self.calls.append(tile.name)
+        if tile.name == self.fail:
+            self.fail = ""
+            raise OSError("the machine went away")
+        return self.inner.fetch(tile, work_dir)
+
+
+@pytest.mark.usefixtures("db")
+def test_the_whole_country_job_resumes_without_repeating_finished_tiles(
+    tmp_path: Path, sources: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    flaky = Flaky(sources, fail="SU17sw")
+    terrain = local_terrain(local_mirror(tmp_path, fetchers=[flaky]), tmp_path / "tiles")
+    assert cli.main(["mirror", "--all", "--concurrency", "2"], terrain=terrain) == 1
+    out = capsys.readouterr()
+    assert "4 tiles asked for, 4 to add" in out.out
+    assert "1 tiles failed: SU17sw. Run the same command again to retry them." in out.out
+    assert "GB" in out.err
+    assert "left" in out.err
+    assert sorted(terrain.mirror.store.names()) == sorted(set(NAMES) - {"SU17sw"})
+    assert cli.main(["mirror", "--all"], terrain=terrain) == 0
+    again = capsys.readouterr().out
+    assert "4 tiles asked for, 1 to add" in again
+    assert "each read back and checked before it was published" in again
+    assert sorted(flaky.calls) == sorted([*NAMES, "SU17sw"])
+
+
+def test_progress_estimates_the_time_left_from_bytes() -> None:
+    now = [0.0]
+    out = io.StringIO()
+    progress = cli.Progress(4, "mirror", total_bytes=400_000_000, out=out, clock=lambda: now[0])
+    now[0] = 100.0
+    progress.step("SU16nw", size=100_000_000)
+    line = progress.line()
+    assert "1/4 0.1/0.4 GB" in line
+    assert "1.0 MB/s" in line
+    assert "about 5m00s left" in line
+
+
+@pytest.mark.usefixtures("db")
+def test_no_credential_or_address_reaches_the_output_or_the_log(
+    tmp_path: Path, sources: Path, capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
+) -> None:
+    known_hosts = tmp_path / "known_hosts"
+    known_hosts.write_text("")
+    settings = DefraSftpSettings(
+        defra_sftp_host="127.0.0.1",
+        defra_sftp_port=1,
+        defra_sftp_user="someone-secret",
+        defra_sftp_password=SecretStr("not-a-real-password"),
+        defra_sftp_known_hosts=known_hosts,
+    )
+    fetcher = SftpFetcher(lambda: sftp.defra_connector(settings), max_failures=2)
+    terrain = local_terrain(local_mirror(tmp_path, fetchers=[fetcher]), tmp_path / "tiles")
+    with caplog.at_level("DEBUG"):
+        assert cli.main(["mirror", "SU16nw"], terrain=terrain) == 1
+    out = capsys.readouterr()
+    for secret in ("127.0.0.1", "someone-secret", "not-a-real-password", "composite/2022"):
+        assert secret not in out.out, secret
+        assert secret not in out.err, secret
+        assert secret not in caplog.text, secret
+    assert "SU16nw" in out.out
+
+
+@pytest.mark.usefixtures("db")
+def test_the_national_build_and_its_report(terrain: Terrain, capsys: pytest.CaptureFixture[str]) -> None:
+    for name in NAMES:
+        terrain.mirror.ensure(name)
+    assert cli.main(["national", "build", "--workers", "2"], terrain=terrain) == 0
+    assert "built overview" in capsys.readouterr().out
+    assert cli.main(["national", "build"], terrain=terrain) == 0
+    assert "already holds all 4 mirrored tiles" in capsys.readouterr().out
+    assert cli.main(["info"], terrain=terrain) == 0
+    assert "overview     " in capsys.readouterr().out
+
+
+def test_warm_renders_the_default_layer_unless_told_otherwise(terrain: Terrain, tmp_path: Path) -> None:
     west, south = TO_LONLAT.transform(412_000, 167_000)
     east, north = TO_LONLAT.transform(412_200, 167_200)
     bbox = f"{west},{south},{east},{north}"
+    assert cli.main(["warm", f"--bbox={bbox}", "--zooms", "14"], terrain=terrain) == 0
+    tiles = tmp_path / "tiles"
+    styles = {path.relative_to(tiles).parts[1] for path in (tiles / "lidar").rglob("*.png")}
+    assert styles == {"composite"}
+    assert list((tiles / "dem").rglob("*.png"))
     assert cli.main(["warm", f"--bbox={bbox}", "--zooms", "14", "--styles", "slope"], terrain=terrain) == 0
-    pngs = list((tmp_path / "tiles").rglob("*.png"))
-    assert {path.parts[len((tmp_path / "tiles").parts)] for path in pngs} == {"lidar", "dem"}
+    styles = {path.relative_to(tiles).parts[1] for path in (tiles / "lidar").rglob("*.png")}
+    assert styles == {"composite", "slope"}
     assert cli.main(["warm", f"--bbox={bbox}", "--styles", "nope"], terrain=terrain) == 2
+
+
+def test_sources_writes_the_lidar_rows(terrain: Terrain, db: Session) -> None:
+    assert cli.main(["sources"], terrain=terrain) == 0
+    keys = db.scalars(select(Source.key).order_by(Source.key)).all()
+    assert keys == ["defra-lidar-composite-dtm-2022-1m", "defra-lidar-survey-index-catalogues"]
+
+
+def test_skip_sources_leaves_the_database_alone(terrain: Terrain, db: Session) -> None:
+    assert cli.main(["mirror", "SU16nw", "--skip-sources"], terrain=terrain) == 0
+    assert db.scalars(select(Source)).all() == []
+
+
+def test_without_a_database_a_storing_command_says_what_to_do(
+    terrain: Terrain, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def unreachable() -> list[str]:
+        raise OperationalError("SELECT 1", {}, Exception("connection refused"))
+
+    monkeypatch.setattr(cli, "_register", unreachable)
+    assert cli.main(["mirror", "SU16nw"], terrain=terrain) == 1
+    assert "--skip-sources" in capsys.readouterr().err
+    assert terrain.mirror.store.names() == []
 
 
 def test_mirror_needs_exactly_one_way_of_naming_tiles(terrain: Terrain) -> None:
@@ -103,4 +236,4 @@ def test_a_success_resets_the_count_of_failures_in_a_row() -> None:
         if not next(outcomes):
             raise FetchFailedError("failed")
 
-    assert cli.run_parallel(range(7), work, 1, "test", max_failures_in_a_row=3) == 5
+    assert len(cli.run_parallel(range(7), work, 1, "test", max_failures_in_a_row=3)) == 5

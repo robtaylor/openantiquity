@@ -15,11 +15,14 @@ Change it here, in one place, when another nation's elevation is added.
 Every layer someone else publishes carries its attribution, licence and
 reuse class, as a source does (Decision 0004). The records overlay names each
 record's source in the tile, and `/meta` lists the sources. These layers have
-no `sources` row: they are drawn, not indexed.
+no `sources` row: they are drawn, not indexed. The LIDAR providers are the
+exception, because the elevation they publish is stored in the mirror: their
+rows are written by `fieldclub.terrain.attribution.register_sources`.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TypedDict
 
 from fieldclub.schemas.meta import (
@@ -37,14 +40,22 @@ from fieldclub.schemas.meta import (
 )
 from fieldclub.terrain.grid import TILE_SIZE
 from fieldclub.terrain.render import DEM_KIND, tile_version
-from fieldclub.terrain.service import TILE_EDITIONS
-from fieldclub.terrain.styles import MAXZOOM, MINZOOM
+from fieldclub.terrain.service import default_editions
+from fieldclub.terrain.styles import DEFAULT_STYLE, MAXZOOM, MINZOOM
 from fieldclub.vocab import SourceReuse
 
+# A style id or `DEM_KIND` to the token terrain tile URLs carry.
+TileVersion = Callable[[str], str]
 
-def terrain_tiles(path: str, kind: str) -> str:
+
+def default_tile_version(kind: str) -> str:
+    """The token before any national overview is built. `/meta` passes the terrain service's own."""
+    return tile_version(kind, default_editions())
+
+
+def terrain_tiles(path: str, kind: str, version: TileVersion = default_tile_version) -> str:
     """A terrain tile URL with the version token that lets the tile be cached as immutable."""
-    return f"{path}/{{z}}/{{x}}/{{y}}.png?v={tile_version(kind, TILE_EDITIONS)}"
+    return f"{path}/{{z}}/{{x}}/{{y}}.png?v={version(kind)}"
 
 
 OGL_V3_URL = "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
@@ -111,9 +122,14 @@ LIDAR_STYLES: tuple[tuple[str, str, str], ...] = (
         "Slope",
         "Steepness. Picks out the sharp edges of platforms, lynchets and quarries.",
     ),
+    (
+        "openness",
+        "Openness",
+        "How much sky each spot sees, without the light. Banks and ridges go bright, ditches dark.",
+    ),
 )
 
-DEFAULT_VIEW = "composite"
+DEFAULT_VIEW = DEFAULT_STYLE
 
 
 def lidar_view(style: str, title: str, description: str) -> RasterView:
@@ -125,8 +141,8 @@ def lidar_view(style: str, title: str, description: str) -> RasterView:
         tiles=[terrain_tiles(f"/tiles/lidar/{style}", style)],
         tile_size=TILE_SIZE,
         # The zoom range the terrain service serves. Below zoom 13 the tiles
-        # are drawn from the 10 m national composite, from 13 to 16 from the
-        # 1 m mirror. Both are the Environment Agency's 2022 composite, so one
+        # are drawn from the national overview, from 13 to 16 from the 1 m
+        # mirror. Both are the Environment Agency's 2022 composite, so one
         # attribution covers them.
         minzoom=MINZOOM,
         maxzoom=MAXZOOM,
@@ -217,12 +233,28 @@ def _insert[T: (View, Overlay)](items: list[T], item: T, before: str | None) -> 
     items.insert(positions[0], item)
 
 
-def build_layers() -> Layers:
-    """The `layers` part of `/meta`, checked for the mistakes that would break the map."""
+def _versioned(view: View, version: TileVersion) -> View:
+    """A terrain view with the URL token `version` gives. Every other view as it is."""
+    if isinstance(view, RasterView) and view.group == "lidar" and view.id in _STYLE_IDS:
+        return view.model_copy(update={"tiles": [terrain_tiles(f"/tiles/lidar/{view.id}", view.id, version)]})
+    return view
+
+
+_STYLE_IDS = frozenset(style for style, _, _ in LIDAR_STYLES)
+
+
+def build_layers(tile_version: TileVersion = default_tile_version) -> Layers:
+    """The `layers` part of `/meta`, checked for the mistakes that would break the map.
+
+    `tile_version` gives the token terrain tile URLs carry. `/meta` passes the
+    terrain service's, which changes when the national overview is rebuilt.
+    """
     view_ids = [view.id for view in VIEWS]
     overlay_ids = [overlay.id for overlay in OVERLAYS]
     assert len(set(view_ids)) == len(view_ids), f"duplicate view ids: {view_ids}"
     assert len(set(overlay_ids)) == len(overlay_ids), f"duplicate overlay ids: {overlay_ids}"
     defaults = [view.id for view in VIEWS if isinstance(view, RasterView) and view.default]
     assert defaults == [DEFAULT_VIEW], f"exactly one view must be the default, found {defaults}"
-    return Layers(views=list(VIEWS), dem=DEM, overlays=list(OVERLAYS), initial_view=INITIAL_VIEW)
+    views = [_versioned(view, tile_version) for view in VIEWS]
+    dem = DEM.model_copy(update={"tiles": [terrain_tiles("/tiles/dem", DEM_KIND, tile_version)]})
+    return Layers(views=views, dem=dem, overlays=list(OVERLAYS), initial_view=INITIAL_VIEW)

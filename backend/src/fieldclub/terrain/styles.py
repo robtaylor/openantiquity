@@ -30,8 +30,10 @@ from fieldclub.terrain.grid import nominal_ground_resolution
 MINZOOM = 7
 MAXZOOM = 16
 # From this zoom up, elevation comes from the 1 m mirror. Below it, from the
-# national 10 m composite. See `service.py` for the measurements behind it.
+# national overview. See `service.py` for the measurements behind it.
 FINE_MINZOOM = 13
+# The layer the map opens on, and the one `fieldclub-terrain warm` renders unless told otherwise.
+DEFAULT_STYLE = "composite"
 
 
 @dataclass(frozen=True)

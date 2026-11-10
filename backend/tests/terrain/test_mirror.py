@@ -5,7 +5,6 @@ from __future__ import annotations
 import threading
 import time
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -14,6 +13,7 @@ from google.api_core.exceptions import Forbidden, PreconditionFailed
 
 from fieldclub.config import DefraSftpSettings
 from fieldclub.errors import DataIntegrityError
+from fieldclub.terrain.blobs import GcsFolder, LocalFolder
 from fieldclub.terrain.catalogue import SourceTile
 from fieldclub.terrain.cog import check_cog
 from fieldclub.terrain.errors import CredentialsMissingError, ElevationUnavailableError, SupplyRefusedError
@@ -28,6 +28,7 @@ from fieldclub.terrain.mirror import (
 )
 from fieldclub.terrain.sftp import defra_connector
 from tests.terrain.fakes import FakeServer, catalogue_of, local_mirror, small_cog, write_source_tile
+from tests.terrain.gcs import FakeGcs
 
 
 @pytest.fixture(scope="module")
@@ -153,44 +154,26 @@ def test_a_tile_is_fetched_from_the_bulk_supply_and_the_download_removed(
 
 def test_mirror_locations() -> None:
     local = mirror_store("/data/mirror")
-    assert isinstance(local, LocalMirrorStore)
+    assert isinstance(local.folder, LocalFolder)
+    assert not local.shared
     assert local.gdal_path("SU16nw") == "/data/mirror/SU16nw.tif"
     bucket = mirror_store("gs://fieldclub-lidar/england/dtm-2022")
-    assert isinstance(bucket, GcsMirrorStore)
+    assert isinstance(bucket.folder, GcsFolder)
+    assert bucket.shared
     assert bucket.gdal_path("su16nw") == "/vsigs/fieldclub-lidar/england/dtm-2022/SU16nw.tif"
-
-
-class FakeBucket:
-    def __init__(self, refusal: type[Exception] = PreconditionFailed) -> None:
-        self.objects: dict[str, bytes] = {}
-        # What an upload that may not replace an object gets when one is there.
-        self.refusal = refusal
-
-    def blob(self, name: str) -> SimpleNamespace:
-        def upload_from_filename(
-            filename: str, content_type: str, if_generation_match: int | None = None
-        ) -> None:
-            # As Cloud Storage does: generation 0 means "only if there is no such object".
-            if if_generation_match == 0 and name in self.objects:
-                raise self.refusal("the object already exists")
-            self.objects[name] = Path(filename).read_bytes()
-
-        return SimpleNamespace(
-            exists=lambda: name in self.objects, upload_from_filename=upload_from_filename, name=name
-        )
-
-    def list_blobs(self, prefix: str, delimiter: str) -> list[SimpleNamespace]:
-        return [SimpleNamespace(name=name) for name in self.objects if name.startswith(prefix)]
+    assert bucket.lock_name("su16nw") == "locks/SU16nw.lock"
 
 
 def test_a_bucket_mirror_uploads_whole_files_under_its_prefix(tmp_path: Path) -> None:
-    bucket = FakeBucket()
-    store = GcsMirrorStore("lidar", "england", client=SimpleNamespace(bucket=lambda name: bucket))
+    gcs = FakeGcs()
+    store = GcsMirrorStore("lidar", "england", client=gcs.client())
+    assert store.shared
     local = tmp_path / "SU16nw.cog.tif"
     local.write_bytes(b"cog")
     assert not store.exists("SU16nw")
     store.publish(local, "SU16nw")
-    assert bucket.objects == {"england/SU16nw.tif": b"cog"}
+    assert gcs.names("lidar") == ["england/SU16nw.tif"]
+    assert gcs.data("lidar", "england/SU16nw.tif") == b"cog"
     assert store.exists("SU16nw")
     assert store.names() == ["SU16nw"]
     assert not local.exists()
@@ -200,25 +183,39 @@ def test_a_bucket_mirror_uploads_whole_files_under_its_prefix(tmp_path: Path) ->
 def test_a_bucket_mirror_never_replaces_a_tile_another_instance_published(
     tmp_path: Path, refusal: type[Exception]
 ) -> None:
-    bucket = FakeBucket(refusal)
-    store = GcsMirrorStore("lidar", "england", client=SimpleNamespace(bucket=lambda name: bucket))
+    gcs = FakeGcs(refusal=refusal)
+    store = GcsMirrorStore("lidar", "england", client=gcs.client())
     first, second = tmp_path / "first.tif", tmp_path / "second.tif"
     first.write_bytes(b"first")
     second.write_bytes(b"second")
     store.publish(first, "SU16nw")
     # The writers may create objects but not replace them, so a second upload must ask not to.
     store.publish(second, "SU16nw")
-    assert bucket.objects == {"england/SU16nw.tif": b"first"}
+    assert gcs.names("lidar") == ["england/SU16nw.tif"]
+    assert gcs.data("lidar", "england/SU16nw.tif") == b"first"
     assert not second.exists()
 
 
-def test_a_refused_upload_of_a_new_tile_is_an_error(tmp_path: Path) -> None:
-    def refuse(filename: str, content_type: str, if_generation_match: int | None = None) -> None:
+def test_a_local_mirror_never_replaces_a_tile_either(tmp_path: Path) -> None:
+    store = mirror_store(str(tmp_path / "mirror"))
+    first, second = tmp_path / "first.tif", tmp_path / "second.tif"
+    first.write_bytes(b"first")
+    second.write_bytes(b"second")
+    store.publish(first, "SU16nw")
+    store.publish(second, "SU16nw")
+    assert (tmp_path / "mirror" / "SU16nw.tif").read_bytes() == b"first"
+    assert not second.exists()
+    assert [path.name for path in (tmp_path / "mirror").iterdir()] == ["SU16nw.tif"]
+
+
+def test_a_refused_upload_of_a_new_tile_is_an_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    gcs = FakeGcs()
+
+    def refuse(*args: Any, **kwargs: Any) -> Any:
         raise Forbidden("no permission")
 
-    blob = SimpleNamespace(exists=lambda: False, upload_from_filename=refuse)
-    bucket = SimpleNamespace(blob=lambda name: blob)
-    store = GcsMirrorStore("lidar", "england", client=SimpleNamespace(bucket=lambda name: bucket))
+    monkeypatch.setattr(gcs, "put", refuse)
+    store = GcsMirrorStore("lidar", "england", client=gcs.client())
     local = tmp_path / "SU16nw.cog.tif"
     local.write_bytes(b"cog")
     with pytest.raises(Forbidden):

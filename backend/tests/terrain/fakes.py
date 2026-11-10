@@ -17,13 +17,16 @@ from rasterio.transform import from_origin
 
 from fieldclub.gridref import transformer
 from fieldclub.storage import LocalStorage, Storage
+from fieldclub.terrain.blobs import LocalFolder
 from fieldclub.terrain.catalogue import Catalogue, SourceTile, tile_origin
 from fieldclub.terrain.cog import to_cog
 from fieldclub.terrain.grid import window_for
 from fieldclub.terrain.mirror import Fetcher, LocalMirrorStore, LocalSourceFetcher, Mirror
-from fieldclub.terrain.render import TileRenderer
+from fieldclub.terrain.national import NationalStore
+from fieldclub.terrain.overview import Overview
+from fieldclub.terrain.render import Selection, TileRenderer
 from fieldclub.terrain.service import Terrain
-from fieldclub.terrain.sources import ElevationSource, file_source
+from fieldclub.terrain.sources import ElevationSource
 
 MIB = 1024 * 1024
 NODATA = -3.4028234663852886e38
@@ -35,9 +38,12 @@ def decode_png(png: bytes) -> np.ndarray:
     return np.asarray(Image.open(io.BytesIO(png)))
 
 
-def single_source_renderer(source: ElevationSource, storage: Storage) -> TileRenderer:
-    """A renderer drawing every zoom from one source."""
-    return TileRenderer(lambda zoom: source, storage, editions=[source.edition])
+def single_source_renderer(
+    source: ElevationSource, storage: Storage, *, fill: ElevationSource | None = None
+) -> TileRenderer:
+    """A renderer drawing every zoom from one source, with `fill` beyond its data in Terrarium tiles."""
+    editions = (source.edition,) + ((fill.edition,) if fill else ())
+    return TileRenderer(lambda zoom: Selection(source, fill, editions), storage, editions=lambda: editions)
 
 
 def ground(shape: tuple[int, int], res: float = 1.0) -> tuple[np.ndarray, np.ndarray]:
@@ -76,6 +82,9 @@ class FunctionSource:
         self.cacheable = True
         self.reads: list[tuple[float, float, float, float]] = []
         self.lock = threading.Lock()
+
+    def cacheable_for(self, bounds: tuple[float, float, float, float], width: int, height: int) -> bool:
+        return self.cacheable
 
     def read(self, bounds: tuple[float, float, float, float], width: int, height: int) -> np.ndarray:
         with self.lock:
@@ -175,10 +184,16 @@ def local_mirror(
     )
 
 
-def local_terrain(mirror: Mirror, tiles: Path) -> Terrain:
-    """The terrain service over a mirror, caching tiles in `tiles`, with no national composite."""
-    national = file_source("national", str(tiles / "national.tif"), exists=lambda: False)
-    return Terrain(mirror, national, LocalStorage(tiles))
+def local_terrain(
+    mirror: Mirror, tiles: Path, *, national: Path | None = None, refresh_s: float = 0.0
+) -> Terrain:
+    """The terrain service over a mirror, caching tiles in `tiles`.
+
+    The national overview lives in `national`, beside `tiles` by default, and
+    is looked up afresh on every request unless `refresh_s` says otherwise.
+    """
+    store = NationalStore(LocalFolder(national or tiles.parent / "national"))
+    return Terrain(mirror, Overview(mirror, store, refresh_s=refresh_s), LocalStorage(tiles))
 
 
 # --------------------------------------------------------------------------

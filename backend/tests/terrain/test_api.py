@@ -12,12 +12,11 @@ from fastapi.testclient import TestClient
 from PIL import Image
 from sqlalchemy.orm import Session
 
-from fieldclub.layers import LIDAR_STYLES, build_layers
+from fieldclub.layers import LIDAR_STYLES, build_layers, default_tile_version
 from fieldclub.schemas.meta import RasterView
-from fieldclub.storage import LocalStorage
 from fieldclub.terrain.grid import tile_at
 from fieldclub.terrain.render import terrarium_decode
-from fieldclub.terrain.service import Terrain, build_terrain, get_terrain
+from fieldclub.terrain.service import Terrain, get_terrain
 from tests.helpers import admin_area, error_code
 from tests.terrain.fakes import TO_LONLAT, decode_png, local_mirror, local_terrain, write_source_tile
 
@@ -71,14 +70,26 @@ def test_a_lidar_tile_is_a_512_pixel_png_with_immutable_caching(api: TestClient,
     assert image.size == (512, 512)
 
 
-def test_the_meta_tile_urls_carry_the_versions_the_served_tiles_have(tmp_path: Path) -> None:
-    renderer = build_terrain(storage=LocalStorage(tmp_path)).renderer
-    layers = build_layers()
-    views = {view.id: view for view in layers.views if isinstance(view, RasterView)}
+def test_the_meta_tile_urls_carry_the_versions_the_served_tiles_have(
+    api: TestClient, terrain: Terrain
+) -> None:
+    layers = api.get("/api/v1/meta").json()["layers"]
+    views = {view["id"]: view for view in layers["views"]}
+    renderer = terrain.renderer
     for style in SERVED:
-        tiles = views[style].tiles
+        tiles = views[style]["tiles"]
         assert tiles == [f"/tiles/lidar/{style}/{{z}}/{{x}}/{{y}}.png?v={renderer.version(style)}"]
-    assert layers.dem.tiles == [f"/tiles/dem/{{z}}/{{x}}/{{y}}.png?v={renderer.version('dem')}"]
+    assert layers["dem"]["tiles"] == [f"/tiles/dem/{{z}}/{{x}}/{{y}}.png?v={renderer.version('dem')}"]
+    x, y = tile_at(*INSIDE, 15)
+    assert renderer.lidar_png("composite", 15, x, y).version == renderer.version("composite")
+
+
+def test_without_a_terrain_service_the_layers_carry_the_unbuilt_token() -> None:
+    layers = build_layers()
+    view = next(view for view in layers.views if isinstance(view, RasterView) and view.id == "composite")
+    assert view.tiles == [
+        f"/tiles/lidar/composite/{{z}}/{{x}}/{{y}}.png?v={default_tile_version('composite')}"
+    ]
 
 
 @pytest.mark.parametrize("query", ["", "?v=old"])
@@ -143,7 +154,7 @@ def test_dem_tiles_are_terrarium_with_opaque_pixels(api: TestClient, terrain: Te
     assert 140 < np.median(heights) < 260
 
 
-def test_low_zooms_without_the_national_composite_read_the_mirror_uncached(
+def test_low_zooms_before_any_overview_build_read_the_mirror_uncached(
     api: TestClient, terrain: Terrain, tmp_path: Path
 ) -> None:
     x, y = tile_at(*INSIDE, 12)
@@ -199,6 +210,21 @@ def test_a_profile_samples_heights_along_a_line(api: TestClient) -> None:
     # The source tile is at 4 m, so bilinear can't follow the 40 m ripple exactly.
     assert np.abs(got - expected).max() < 0.05
     assert samples[10]["lon"] == pytest.approx(TO_LONLAT.transform(411_080, 167_060)[0], abs=1e-6)
+
+
+def test_a_profile_reports_the_level_it_really_read(api: TestClient) -> None:
+    start = TO_LONLAT.transform(410_500, 167_500)
+    end = TO_LONLAT.transform(414_500, 167_500)
+    line = {"type": "LineString", "coordinates": [list(start), list(end)]}
+    # 1 km between samples reads the mirror's coarsest copy, not its 8 m one.
+    sparse = api.post("/api/v1/terrain/profile", json={"line": line, "samples": 5}).json()
+    assert sparse["resolution_m"] == 1000
+    # 80 m between samples reads the 40 m copy.
+    middling = api.post("/api/v1/terrain/profile", json={"line": line, "samples": 51}).json()
+    assert middling["resolution_m"] == 40
+    # The source tiles here are 4 m, so a close spacing can read no finer than that.
+    close = api.post("/api/v1/terrain/profile", json={"line": line, "samples": 1000}).json()
+    assert close["resolution_m"] == 4
 
 
 def test_a_profile_into_a_tile_that_cannot_be_fetched_is_unavailable(api: TestClient) -> None:
@@ -288,7 +314,43 @@ def test_coverage_can_be_limited_to_a_box(api: TestClient) -> None:
     east, north = TO_LONLAT.transform(410_200, 165_200)
     response = api.get("/api/v1/terrain/coverage", params={"bbox": f"{west},{south},{east},{north}"})
     assert [feature["id"] for feature in response.json()["features"]] == ["SU16nw"]
-    assert error_code(api.get("/api/v1/terrain/coverage", params={"bbox": "1,2,3"})) == "invalid_bbox"
+
+
+@pytest.mark.parametrize(
+    "bbox", ["1,2,3", "a,b,c,d", "-1.85,51.4,-1.85,51.5", "-1.8,51.4,-1.9,51.5", "0,0,0,0"]
+)
+def test_coverage_refuses_a_box_with_no_area(api: TestClient, bbox: str) -> None:
+    response = api.get("/api/v1/terrain/coverage", params={"bbox": bbox})
+    assert response.status_code == 400
+    assert error_code(response) == "invalid_bbox"
+
+
+def test_coverage_carries_the_years_each_tile_was_flown(api: TestClient) -> None:
+    features = {feature["id"]: feature for feature in api.get("/api/v1/terrain/coverage").json()["features"]}
+    # Avebury was flown from December 2018 to January 2019.
+    assert features["SU16nw"]["properties"]["years"] == [2018, 2019]
+    assert features["SU16nw"]["properties"]["capture"] == "2022 composite"
+
+
+def test_coverage_has_an_etag_from_its_edition_and_an_hour_of_caching(api: TestClient) -> None:
+    first = api.get("/api/v1/terrain/coverage")
+    assert first.headers["cache-control"] == "public, max-age=3600"
+    etag = first.headers["etag"]
+    assert etag.startswith('"')
+    again = api.get("/api/v1/terrain/coverage", headers={"If-None-Match": etag})
+    assert again.status_code == 304
+    assert again.content == b""
+    boxed = api.get("/api/v1/terrain/coverage", params={"bbox": "-1.9,51.4,-1.8,51.5"})
+    assert boxed.headers["etag"] == etag
+
+
+def test_the_coverage_edition_changes_with_the_capture_years(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fieldclub.terrain import coverage as coverage_module
+    from fieldclub.terrain.catalogue import england_catalogue
+
+    before = coverage_module.coverage_edition(england_catalogue())
+    monkeypatch.setattr(coverage_module, "years_edition", lambda: "different")
+    assert coverage_module.coverage_edition(england_catalogue()) != before
 
 
 def test_the_whole_england_coverage_is_drawable() -> None:

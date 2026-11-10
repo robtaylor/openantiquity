@@ -9,7 +9,7 @@ import pytest
 from fieldclub import layers
 from fieldclub.schemas.meta import CoverageOverlay, RakingView, RasterView
 from fieldclub.terrain.render import tile_version
-from fieldclub.terrain.service import TILE_EDITIONS
+from fieldclub.terrain.service import default_editions
 from fieldclub.vocab import SourceReuse
 
 
@@ -32,6 +32,7 @@ def test_views_in_order() -> None:
         "sky_view",
         "multi_shade",
         "slope",
+        "openness",
         "raking",
         "osm_standard",
     ]
@@ -63,7 +64,7 @@ def test_composite_matches_the_documented_shape_exactly() -> None:
         "group": "lidar",
         "type": "raster",
         "tiles": [
-            f"/tiles/lidar/composite/{{z}}/{{x}}/{{y}}.png?v={tile_version('composite', TILE_EDITIONS)}"
+            f"/tiles/lidar/composite/{{z}}/{{x}}/{{y}}.png?v={tile_version('composite', default_editions())}"
         ],
         "tile_size": 512,
         "minzoom": 7,
@@ -81,11 +82,11 @@ def test_composite_matches_the_documented_shape_exactly() -> None:
 
 def test_lidar_raster_views_are_served_by_the_lidar_tile_endpoint() -> None:
     views = {view["id"]: view for view in dump()["views"]}
-    for style in ("composite", "local_relief", "sky_view", "multi_shade", "slope"):
+    for style in ("composite", "local_relief", "sky_view", "multi_shade", "slope", "openness"):
         view = views[style]
         assert view["type"] == "raster"
         assert view["group"] == "lidar"
-        version = tile_version(style, TILE_EDITIONS)
+        version = tile_version(style, default_editions())
         assert view["tiles"] == [f"/tiles/lidar/{style}/{{z}}/{{x}}/{{y}}.png?v={version}"]
         assert view["tile_size"] == 512
         assert view["default"] is (style == "composite")
@@ -122,7 +123,7 @@ def test_openstreetmap_standard_is_a_raster_view_in_the_map_group() -> None:
 def test_dem_source() -> None:
     dem = dump()["dem"]
     assert dem == {
-        "tiles": [f"/tiles/dem/{{z}}/{{x}}/{{y}}.png?v={tile_version('dem', TILE_EDITIONS)}"],
+        "tiles": [f"/tiles/dem/{{z}}/{{x}}/{{y}}.png?v={tile_version('dem', default_editions())}"],
         "tile_size": 512,
         "encoding": "terrarium",
         "minzoom": 7,
@@ -230,7 +231,7 @@ def test_lidar_attribution_is_the_environment_agency_wording_under_ogl() -> None
     )
     catalogue = dump()
     lidar = [view for view in catalogue["views"] if view["group"] == "lidar"]
-    assert len(lidar) == 6
+    assert len(lidar) == 7
     assert {view["attribution"] for view in lidar} == {layers.LIDAR_ATTRIBUTION}
     assert catalogue["dem"]["attribution"] == layers.LIDAR_ATTRIBUTION
     for other in ("Natural Resources Wales", "Scottish Government", "DfI"):

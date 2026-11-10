@@ -129,18 +129,19 @@ def test_vocab_examples_from_the_contract(meta: dict) -> None:
 def test_layers(meta: dict) -> None:
     layers = meta["layers"]
     assert list(layers) == ["views", "dem", "overlays", "initial_view"]
-    assert [view["id"] for view in layers["views"]][:6] == [
+    assert [view["id"] for view in layers["views"]][:7] == [
         "composite",
         "local_relief",
         "sky_view",
         "multi_shade",
         "slope",
+        "openness",
         "raking",
     ]
     composite = layers["views"][0]
     assert composite["tiles"][0].startswith("/tiles/lidar/composite/{z}/{x}/{y}.png?v=")
     assert (composite["bounds"], composite["default"]) == (None, True)
-    raking = layers["views"][5]
+    raking = layers["views"][6]
     assert set(raking) == {
         "id",
         "title",

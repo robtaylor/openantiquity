@@ -132,6 +132,57 @@ def test_dem_tiles_fill_the_edge_of_the_data_for_the_buffer_then_sea_level(tmp_p
     assert (heights[:, 256 + reach + 1 :] == 0.0).all()
 
 
+def test_beyond_the_reach_dem_tiles_take_the_fill_where_it_has_data(tmp_path: Path) -> None:
+    x, y = tile_at(*AVEBURY, 15)
+    window = Window.tile(15, x, y)
+    middle, three_quarters = window.x_centres()[256], window.x_centres()[400]
+    half = FunctionSource(lambda xs, ys: np.where(xs < middle, 80.0, np.nan))
+    fill = FunctionSource(lambda xs, ys: np.where(xs < three_quarters, 75.0, np.nan), edition="overview")
+    renderer = single_source_renderer(half, LocalStorage(tmp_path), fill=fill)
+    tile = renderer.dem_png(15, x, y)
+    heights = terrarium_decode(decode_png(tile.png))
+    reach = elevation_buffer(15)
+    assert (heights[:, : 256 + reach] == 80.0).all()
+    assert (heights[:, 256 + reach + 1 : 400] == 75.0).all()
+    # Where neither has data: sea level.
+    assert (heights[:, 401:] == 0.0).all()
+    assert tile.cacheable
+    keys = [path.relative_to(tmp_path).as_posix() for path in tmp_path.rglob("*.png")]
+    assert keys == [f"dem/v2/{ELEVATION_FORMAT}/synthetic/overview/15/{x}/{y}.png"]
+
+
+def test_a_dem_tile_the_fill_never_touches_is_keyed_without_it(tmp_path: Path) -> None:
+    x, y = tile_at(*AVEBURY, 15)
+    fill = FunctionSource(lambda xs, ys: np.full(xs.shape, 1.0), edition="overview")
+    fill.cacheable = False
+    renderer = single_source_renderer(FunctionSource(rolling_hills), LocalStorage(tmp_path), fill=fill)
+    # The fill isn't drawn from, so its edition and its cacheability don't matter.
+    assert renderer.dem_png(15, x, y).cacheable
+    assert fill.reads == []
+    keys = [path.relative_to(tmp_path).as_posix() for path in tmp_path.rglob("*.png")]
+    assert keys == [f"dem/v2/{ELEVATION_FORMAT}/synthetic/15/{x}/{y}.png"]
+
+
+def test_a_dem_tile_drawing_on_a_fill_that_is_still_filling_isnt_cached(tmp_path: Path) -> None:
+    x, y = tile_at(*AVEBURY, 15)
+    fill = FunctionSource(lambda xs, ys: np.full(xs.shape, 1.0), edition="overview")
+    fill.cacheable = False
+    empty = FunctionSource(lambda xs, ys: np.full(xs.shape, np.nan))
+    renderer = single_source_renderer(empty, LocalStorage(tmp_path), fill=fill)
+    tile = renderer.dem_png(15, x, y)
+    assert not tile.cacheable
+    assert (terrarium_decode(decode_png(tile.png)) == 1.0).all()
+    assert not list(tmp_path.rglob("*.png"))
+
+
+def test_a_tile_carries_the_version_of_the_editions_it_was_drawn_from(
+    renderer: TileRenderer, source: FunctionSource
+) -> None:
+    x, y = tile_at(*AVEBURY, 14)
+    assert renderer.lidar_png("slope", 14, x, y).version == tile_version("slope", [source.edition])
+    assert renderer.dem_png(14, x, y).version == tile_version(DEM_KIND, [source.edition])
+
+
 def test_terrarium_encodes_no_data_as_sea_level() -> None:
     rgb = terrarium_encode(np.array([np.nan, 12.5], dtype=np.float32))
     assert terrarium_decode(rgb).tolist() == [0.0, 12.5]
