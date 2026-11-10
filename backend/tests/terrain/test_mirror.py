@@ -10,12 +10,13 @@ from typing import Any
 
 import pytest
 import rasterio
+from google.api_core.exceptions import Forbidden, PreconditionFailed
 
 from fieldclub.config import DefraSftpSettings
 from fieldclub.errors import DataIntegrityError
 from fieldclub.terrain.catalogue import SourceTile
 from fieldclub.terrain.cog import check_cog
-from fieldclub.terrain.errors import CredentialsMissingError, ElevationUnavailableError
+from fieldclub.terrain.errors import CredentialsMissingError, ElevationUnavailableError, SupplyRefusedError
 from fieldclub.terrain.mirror import (
     Fetched,
     GcsMirrorStore,
@@ -160,11 +161,18 @@ def test_mirror_locations() -> None:
 
 
 class FakeBucket:
-    def __init__(self) -> None:
+    def __init__(self, refusal: type[Exception] = PreconditionFailed) -> None:
         self.objects: dict[str, bytes] = {}
+        # What an upload that may not replace an object gets when one is there.
+        self.refusal = refusal
 
     def blob(self, name: str) -> SimpleNamespace:
-        def upload_from_filename(filename: str, content_type: str) -> None:
+        def upload_from_filename(
+            filename: str, content_type: str, if_generation_match: int | None = None
+        ) -> None:
+            # As Cloud Storage does: generation 0 means "only if there is no such object".
+            if if_generation_match == 0 and name in self.objects:
+                raise self.refusal("the object already exists")
             self.objects[name] = Path(filename).read_bytes()
 
         return SimpleNamespace(
@@ -186,6 +194,61 @@ def test_a_bucket_mirror_uploads_whole_files_under_its_prefix(tmp_path: Path) ->
     assert store.exists("SU16nw")
     assert store.names() == ["SU16nw"]
     assert not local.exists()
+
+
+@pytest.mark.parametrize("refusal", [PreconditionFailed, Forbidden])
+def test_a_bucket_mirror_never_replaces_a_tile_another_instance_published(
+    tmp_path: Path, refusal: type[Exception]
+) -> None:
+    bucket = FakeBucket(refusal)
+    store = GcsMirrorStore("lidar", "england", client=SimpleNamespace(bucket=lambda name: bucket))
+    first, second = tmp_path / "first.tif", tmp_path / "second.tif"
+    first.write_bytes(b"first")
+    second.write_bytes(b"second")
+    store.publish(first, "SU16nw")
+    # The writers may create objects but not replace them, so a second upload must ask not to.
+    store.publish(second, "SU16nw")
+    assert bucket.objects == {"england/SU16nw.tif": b"first"}
+    assert not second.exists()
+
+
+def test_a_refused_upload_of_a_new_tile_is_an_error(tmp_path: Path) -> None:
+    def refuse(filename: str, content_type: str, if_generation_match: int | None = None) -> None:
+        raise Forbidden("no permission")
+
+    blob = SimpleNamespace(exists=lambda: False, upload_from_filename=refuse)
+    bucket = SimpleNamespace(blob=lambda name: blob)
+    store = GcsMirrorStore("lidar", "england", client=SimpleNamespace(bucket=lambda name: bucket))
+    local = tmp_path / "SU16nw.cog.tif"
+    local.write_bytes(b"cog")
+    with pytest.raises(Forbidden):
+        store.publish(local, "SU16nw")
+
+
+class RefusingConnector:
+    """A bulk supply that refuses every login, counting the attempts."""
+
+    def __init__(self) -> None:
+        self.attempts = 0
+
+    def connect(self) -> Any:
+        self.attempts += 1
+        raise SupplyRefusedError("Defra's bulk supply rejected the user name or password.")
+
+
+def test_a_refused_login_pauses_every_later_fetch(sources: Path, tmp_path: Path) -> None:
+    supply = RefusingConnector()
+    now = [1000.0]
+    fetcher = SftpFetcher(lambda: supply.connect, refusal_pause=600, clock=lambda: now[0])
+    tile = SourceTile("SU17sw", 1_000)
+    for _ in range(3):
+        with pytest.raises(SupplyRefusedError, match="user name or password"):
+            fetcher.fetch(tile, tmp_path)
+    assert supply.attempts == 1
+    now[0] += 601
+    with pytest.raises(SupplyRefusedError):
+        fetcher.fetch(tile, tmp_path)
+    assert supply.attempts == 2
 
 
 def corrupt_copy(sources: Path, folder: Path, name: str) -> Path:

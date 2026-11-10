@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import threading
 import time
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -26,6 +27,7 @@ from fieldclub.errors import AppError
 from fieldclub.gridref import transformer
 from fieldclub.terrain import national
 from fieldclub.terrain.catalogue import SourceTile
+from fieldclub.terrain.errors import CredentialsMissingError, SupplyRefusedError
 from fieldclub.terrain.grid import tiles_in
 from fieldclub.terrain.service import Terrain, build_terrain, national_location
 from fieldclub.terrain.styles import FINE_MINZOOM, MAXZOOM, MINZOOM, STYLES
@@ -87,22 +89,68 @@ def run_parallel[T](
     concurrency: int,
     label: str,
     name: Callable[[T], str] = str,
+    *,
+    stop_on: tuple[type[BaseException], ...] = (),
+    max_failures_in_a_row: int | None = None,
 ) -> int:
-    """Run `work` on each item with a pool, showing progress by `name`. Returns how many failed."""
+    """Run `work` on each item with a pool, showing progress by `name`.
+
+    Stops starting new items after an error of a type in `stop_on`, or after
+    `max_failures_in_a_row` failures with no success between them. Returns how
+    many failed or were never started.
+    """
+    assert max_failures_in_a_row is None or max_failures_in_a_row >= 1, "the limit must be at least one"
     jobs = list(items)
     progress = Progress(len(jobs), label)
+    stop = threading.Event()
+    counted = threading.Lock()
+    in_a_row = 0
+
+    def guarded(job: T) -> bool:
+        """Run `job` unless the run has been told to stop. Whether it was started.
+
+        The decision to stop is taken here, in the worker, so that no further
+        item starts while the main thread is still catching up.
+        """
+        nonlocal in_a_row
+        if stop.is_set():
+            return False
+        try:
+            work(job)
+        except (AppError, OSError) as exc:
+            with counted:
+                in_a_row += 1
+                limit_reached = max_failures_in_a_row is not None and in_a_row >= max_failures_in_a_row
+                if (isinstance(exc, stop_on) or limit_reached) and not stop.is_set():
+                    logger.error("Stopping %s after %s: no further items will be started", label, name(job))
+                    stop.set()
+            raise
+        with counted:
+            in_a_row = 0
+        return True
+
+    never_started = 0
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
-        futures = {pool.submit(work, job): name(job) for job in jobs}
+        futures = {pool.submit(guarded, job): name(job) for job in jobs}
         for future in as_completed(futures):
             job_name = futures[future]
             try:
-                future.result()
+                if not future.result():
+                    never_started += 1
+                    continue
                 progress.step(job_name)
             except (AppError, OSError) as exc:
                 progress.step(job_name, failed=True)
                 logger.error("%s failed: %s", job_name, exc)
     progress.finish()
-    return progress.failed
+    if never_started:
+        logger.error("%s: %d of %d items were never started", label, never_started, len(jobs))
+    return progress.failed + never_started
+
+
+# A mirror run gives up after this many tiles fail in a row: the supply is
+# down or refusing us, and asking about every remaining tile won't help.
+MIRROR_FAILURES_IN_A_ROW = 5
 
 
 def cmd_mirror(terrain: Terrain, args: argparse.Namespace) -> int:
@@ -121,7 +169,14 @@ def cmd_mirror(terrain: Terrain, args: argparse.Namespace) -> int:
     missing = [tile for tile in tiles if not terrain.mirror.has(tile.name)]
     size = sum(tile.size for tile in missing)
     print(f"{len(tiles)} tiles asked for, {len(missing)} to add ({size / 1e9:.1f} GB of source)")
-    failed = run_parallel((t.name for t in missing), terrain.mirror.ensure, args.concurrency, "mirror")
+    failed = run_parallel(
+        (t.name for t in missing),
+        terrain.mirror.ensure,
+        args.concurrency,
+        "mirror",
+        stop_on=(SupplyRefusedError, CredentialsMissingError),
+        max_failures_in_a_row=MIRROR_FAILURES_IN_A_ROW,
+    )
     return 1 if failed else 0
 
 

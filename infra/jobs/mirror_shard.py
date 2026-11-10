@@ -7,7 +7,9 @@ which it is through CLOUD_RUN_TASK_INDEX and CLOUD_RUN_TASK_COUNT. This splits
 the England catalogue into that many shares of about equal size, the same way
 in every task, and runs `fieldclub-terrain mirror` on this task's share. Each
 task holds one connection to Defra's server unless told otherwise, so the
-job's parallelism is the number of connections the server sees.
+job's parallelism is the number of connections the job opens. A task stops
+early if the supply refuses the login or several tiles fail in a row
+(`fieldclub-terrain mirror`), so a broken supply isn't asked about every tile.
 
 A tile already in the mirror is skipped, so a failed or interrupted task can be
 run again and only fetches what is still missing.

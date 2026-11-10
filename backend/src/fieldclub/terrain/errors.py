@@ -23,6 +23,10 @@ class FetchFailedError(UpstreamError):
     message = "Elevation for this area couldn't be fetched from the bulk supply."
 
 
+class SupplyRefusedError(FetchFailedError):
+    """The bulk supply refused the login or showed the wrong host key. Asking again won't help."""
+
+
 class ReadTooLargeError(AppError):
     """A read would cover far more ground than any tile or profile does. A bug, refused before any fetch."""
 

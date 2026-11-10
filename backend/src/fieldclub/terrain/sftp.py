@@ -7,6 +7,11 @@ the file handle reopened for each. And connections fail now and then, so a
 download writes to `<name>.part`, resumes from whatever that file holds, and
 is renamed into place only when its size matches.
 
+A failed attempt is retried after a pause that doubles each time, and every
+read gives up after `READ_TIMEOUT` seconds of silence, so a stalled server
+can't hold a fetch for ever. A refused login or a wrong host key is never
+retried: `SupplyRefusedError` says to stop asking.
+
 The host key is pinned: a host whose key isn't in the known-hosts file is
 refused. The password is never logged. An error's message reaches the client,
 so it names only the file being read. The host, port, remote folder and
@@ -17,13 +22,14 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import time
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any, Protocol
 
 from fieldclub.config import DefraSftpSettings
 from fieldclub.errors import ConfigError
-from fieldclub.terrain.errors import CredentialsMissingError, FetchFailedError
+from fieldclub.terrain.errors import CredentialsMissingError, FetchFailedError, SupplyRefusedError
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +38,13 @@ WINDOW_BYTES = 8 * MIB
 CHUNK_BYTES = 32 * 1024
 # Consecutive failed attempts, with no bytes gained between them, before giving up.
 MAX_FAILURES = 5
+# The pause after the first failed attempt, doubled after each further one, up to the cap.
+RETRY_DELAY = 2.0
+RETRY_DELAY_CAP = 60.0
+# Seconds of silence before a read or a connection attempt gives up.
+READ_TIMEOUT = 60.0
+# Seconds between keepalive packets, so an idle connection that has died is noticed.
+KEEPALIVE_INTERVAL = 30
 
 
 class RemoteFile(Protocol):
@@ -67,15 +80,19 @@ def download(
     expected_size: int | None = None,
     window: int = WINDOW_BYTES,
     max_failures: int = MAX_FAILURES,
+    retry_delay: float = RETRY_DELAY,
+    sleep: Callable[[float], None] = time.sleep,
     on_progress: Callable[[int, int], None] | None = None,
 ) -> Path:
     """Copy `remote` to `dest`, in windows, resuming from `dest.part`.
 
     `dest` appears only when the whole file has arrived and its size matches
     the server's (and `expected_size`, when given). A partial file is never
-    left at `dest`.
+    left at `dest`. After a failed attempt it waits `retry_delay` seconds,
+    doubled for each further failure in a row, before connecting again.
     """
     assert window > 0, "the window must hold at least one byte"
+    assert retry_delay >= 0, "a pause can't be negative"
     # What error messages call the file: never the host or the folder.
     file = Path(remote).name
     if dest.is_file() and (expected_size is None or dest.stat().st_size == expected_size):
@@ -114,6 +131,7 @@ def download(
                 session = None
                 if failures >= max_failures:
                     raise FetchFailedError(f"Reading {file} failed {failures} times in a row.") from exc
+                sleep(min(retry_delay * 2 ** (failures - 1), RETRY_DELAY_CAP))
                 continue
             got = part.stat().st_size
             if got != size:
@@ -221,22 +239,31 @@ def defra_connector(credentials: DefraSftpSettings) -> Connect:
                 password=password.get_secret_value(),
                 allow_agent=False,
                 look_for_keys=False,
-                timeout=30,
-                banner_timeout=30,
-                auth_timeout=30,
+                timeout=READ_TIMEOUT,
+                banner_timeout=READ_TIMEOUT,
+                auth_timeout=READ_TIMEOUT,
             )
+            transport = client.get_transport()
+            assert transport is not None, "a connected client has a transport"
+            transport.set_keepalive(KEEPALIVE_INTERVAL)
+            session = client.open_sftp()
+            channel = session.get_channel()
+            assert channel is not None, "an open SFTP session has a channel"
+            # Without this a read from a server that has gone quiet blocks for ever.
+            channel.settimeout(READ_TIMEOUT)
         except paramiko.AuthenticationException as exc:
             client.close()
-            raise FetchFailedError("Defra's bulk supply rejected the user name or password.") from exc
+            logger.error("The bulk supply at %s refused the login", host)
+            raise SupplyRefusedError("Defra's bulk supply rejected the user name or password.") from exc
         except paramiko.BadHostKeyException as exc:
             client.close()
             logger.error("The bulk supply's host key isn't the one pinned in %s", known_hosts)
-            raise FetchFailedError(
+            raise SupplyRefusedError(
                 "Defra's bulk supply presented a host key that isn't the pinned one."
             ) from exc
         except BaseException:
             client.close()
             raise
-        return _ParamikoSession(client, client.open_sftp())
+        return _ParamikoSession(client, session)
 
     return connect

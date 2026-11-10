@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any, ClassVar
 
+import paramiko
 import pytest
 from pydantic import SecretStr
 
@@ -12,7 +14,7 @@ from fieldclub.config import DefraSftpSettings, get_defra_sftp_settings
 from fieldclub.errors import ConfigError
 from fieldclub.terrain import sftp
 from fieldclub.terrain.catalogue import SourceTile
-from fieldclub.terrain.errors import CredentialsMissingError, FetchFailedError
+from fieldclub.terrain.errors import CredentialsMissingError, FetchFailedError, SupplyRefusedError
 from tests.terrain.fakes import MIB, FakeServer
 
 REMOTE = SourceTile("SU16nw", 0).remote_path
@@ -54,9 +56,30 @@ def test_a_failure_mid_window_reconnects_and_resumes_from_the_partial_file(
 ) -> None:
     middle = 20 * MIB + 5 * 32_768 + 100
     server = FakeServer({REMOTE: big}, fail_at={middle, 41 * MIB})
-    dest = sftp.download(server.connect, REMOTE, tmp_path / "SU16nw.tif", expected_size=len(big))
+    pauses: list[float] = []
+    dest = sftp.download(
+        server.connect, REMOTE, tmp_path / "SU16nw.tif", expected_size=len(big), sleep=pauses.append
+    )
     assert dest.read_bytes() == big
     assert server.connections == 3
+    # Each failure came after progress, so neither pause grew.
+    assert pauses == [sftp.RETRY_DELAY, sftp.RETRY_DELAY]
+
+
+def test_failures_in_a_row_wait_longer_each_time(big: bytes, tmp_path: Path) -> None:
+    server = FakeServer({REMOTE: big}, stuck_at=0)
+    pauses: list[float] = []
+    with pytest.raises(FetchFailedError, match="4 times in a row"):
+        sftp.download(
+            server.connect, REMOTE, tmp_path / "a.tif", max_failures=4, retry_delay=1.5, sleep=pauses.append
+        )
+    assert pauses == [1.5, 3.0, 6.0]
+    assert server.connections == 4
+    long = FakeServer({REMOTE: big}, stuck_at=0)
+    pauses.clear()
+    with pytest.raises(FetchFailedError):
+        sftp.download(long.connect, REMOTE, tmp_path / "a.tif", max_failures=9, sleep=pauses.append)
+    assert max(pauses) == sftp.RETRY_DELAY_CAP
 
 
 def test_a_partial_download_is_resumed_and_never_appears_complete(big: bytes, tmp_path: Path) -> None:
@@ -65,7 +88,9 @@ def test_a_partial_download_is_resumed_and_never_appears_complete(big: bytes, tm
     part.write_bytes(big[: 13 * MIB + 7])
     server = FakeServer({REMOTE: big}, stuck_at=30 * MIB)
     with pytest.raises(FetchFailedError):
-        sftp.download(server.connect, REMOTE, dest, expected_size=len(big), max_failures=3)
+        sftp.download(
+            server.connect, REMOTE, dest, expected_size=len(big), max_failures=3, sleep=lambda _: None
+        )
     assert not dest.exists()
     assert big.startswith(part.read_bytes())
     # Everything up to the chunk holding the bad offset is kept.
@@ -130,7 +155,7 @@ def test_a_connection_failure_names_only_the_file_and_logs_the_rest(
     connect = sftp.defra_connector(refused_settings(known_hosts))
     logged = caplog.at_level("WARNING", logger="fieldclub.terrain.sftp")
     with logged, pytest.raises(FetchFailedError) as raised:
-        sftp.download(connect, REMOTE, tmp_path / "a.tif", max_failures=2)
+        sftp.download(connect, REMOTE, tmp_path / "a.tif", max_failures=2, sleep=lambda _: None)
     body = str(raised.value.to_body())
     assert "SU16nw_DTM_1m.tif" in body
     for secret in ("127.0.0.1", "port 1", "composite/", "not-a-real-password"):
@@ -143,3 +168,96 @@ def test_a_missing_host_key_file_is_not_named_to_the_client(tmp_path: Path) -> N
     with pytest.raises(ConfigError) as raised:
         sftp.defra_connector(refused_settings(tmp_path / "nowhere" / "known_hosts"))
     assert "nowhere" not in str(raised.value.to_body())
+
+
+class FakeSshClient:
+    """Stands in for `paramiko.SSHClient`, recording how the connection is set up."""
+
+    instances: ClassVar[list[FakeSshClient]] = []
+    refuse: ClassVar[BaseException | None] = None
+
+    def __init__(self) -> None:
+        self.keepalive: int | None = None
+        self.read_timeout: float | None = None
+        self.connect_options: dict[str, Any] = {}
+        self.closed = False
+        FakeSshClient.instances.append(self)
+
+    def load_host_keys(self, path: str) -> None:
+        pass
+
+    def set_missing_host_key_policy(self, policy: object) -> None:
+        assert isinstance(policy, paramiko.RejectPolicy)
+
+    def connect(self, host: str, **options: Any) -> None:
+        self.connect_options = options
+        if FakeSshClient.refuse is not None:
+            raise FakeSshClient.refuse
+
+    def get_transport(self) -> Any:
+        client = self
+
+        class Transport:
+            def set_keepalive(self, interval: int) -> None:
+                client.keepalive = interval
+
+        return Transport()
+
+    def open_sftp(self) -> Any:
+        client = self
+
+        class Channel:
+            def settimeout(self, seconds: float) -> None:
+                client.read_timeout = seconds
+
+        class Sftp:
+            def get_channel(self) -> Channel:
+                return Channel()
+
+            def close(self) -> None:
+                pass
+
+        return Sftp()
+
+    def close(self) -> None:
+        self.closed = True
+
+
+@pytest.fixture
+def ssh(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> sftp.Connect:
+    FakeSshClient.instances = []
+    FakeSshClient.refuse = None
+    monkeypatch.setattr(paramiko, "SSHClient", FakeSshClient)
+    known_hosts = tmp_path / "known_hosts"
+    known_hosts.write_text("")
+    return sftp.defra_connector(refused_settings(known_hosts))
+
+
+def test_a_connection_gives_up_on_a_silent_server_and_keeps_itself_alive(ssh: sftp.Connect) -> None:
+    ssh().close()
+    [client] = FakeSshClient.instances
+    # Without a read timeout a stalled read would hold the fetch for ever.
+    assert client.read_timeout == sftp.READ_TIMEOUT
+    assert client.keepalive == sftp.KEEPALIVE_INTERVAL
+    assert client.connect_options["timeout"] == sftp.READ_TIMEOUT
+    assert client.connect_options["auth_timeout"] == sftp.READ_TIMEOUT
+
+
+@pytest.mark.parametrize(
+    "refusal",
+    [
+        paramiko.AuthenticationException("no"),
+        paramiko.BadHostKeyException("h", paramiko.PKey(), paramiko.PKey()),
+    ],
+    ids=["login", "host key"],
+)
+def test_a_refused_login_or_host_key_is_never_retried(
+    ssh: sftp.Connect, refusal: BaseException, tmp_path: Path
+) -> None:
+    FakeSshClient.refuse = refusal
+    pauses: list[float] = []
+    with pytest.raises(SupplyRefusedError):
+        sftp.download(ssh, REMOTE, tmp_path / "a.tif", sleep=pauses.append)
+    assert len(FakeSshClient.instances) == 1
+    assert FakeSshClient.instances[0].closed
+    assert pauses == []

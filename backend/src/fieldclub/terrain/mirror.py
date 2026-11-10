@@ -37,7 +37,7 @@ from fieldclub.errors import DataIntegrityError
 from fieldclub.terrain import sftp
 from fieldclub.terrain.catalogue import Catalogue, SourceTile, normalise_name
 from fieldclub.terrain.cog import COG_FORMAT, to_cog
-from fieldclub.terrain.errors import ElevationUnavailableError
+from fieldclub.terrain.errors import ElevationUnavailableError, SupplyRefusedError
 
 logger = logging.getLogger(__name__)
 
@@ -121,8 +121,24 @@ class GcsMirrorStore:
         return bool(self._bucket().blob(self._object(name)).exists())
 
     def publish(self, local: Path, name: str) -> None:
+        """Upload the tile only if no copy is there yet.
+
+        The writers hold permission to create objects, not to replace them, so
+        a mirror file can't be overwritten or lost. Another instance that
+        published the same tile first has done the job. Cloud Storage answers
+        that case with a failed precondition, or, to a writer that can't
+        replace objects, possibly with a refusal; either is fine once the
+        tile is there.
+        """
+        from google.api_core.exceptions import Forbidden, PreconditionFailed
+
         blob = self._bucket().blob(self._object(name))
-        blob.upload_from_filename(str(local), content_type="image/tiff")
+        try:
+            blob.upload_from_filename(str(local), content_type="image/tiff", if_generation_match=0)
+        except (PreconditionFailed, Forbidden):
+            if not blob.exists():
+                raise
+            logger.info("%s was already in the mirror", name)
         local.unlink()
 
     def names(self) -> list[str]:
@@ -174,23 +190,52 @@ class LocalSourceFetcher:
         return Fetched(path, temporary=False)
 
 
-class SftpFetcher:
-    """Defra's bulk supply. The connection is set up on first use, so missing credentials only matter then."""
+# How long a refused login keeps every later fetch from trying again.
+REFUSAL_PAUSE = 15 * 60.0
 
-    def __init__(self, connector: Callable[[], sftp.Connect], **download_options: Any) -> None:
+
+class SftpFetcher:
+    """Defra's bulk supply. The connection is set up on first use, so missing credentials only matter then.
+
+    Once the supply refuses the login or shows the wrong host key, every fetch
+    for the next `refusal_pause` seconds fails at once with the same error, so
+    a run over many tiles, or a busy map, doesn't send Defra a login attempt
+    for each one.
+    """
+
+    def __init__(
+        self,
+        connector: Callable[[], sftp.Connect],
+        *,
+        refusal_pause: float = REFUSAL_PAUSE,
+        clock: Callable[[], float] = time.monotonic,
+        **download_options: Any,
+    ) -> None:
         self._connector = connector
         self._options = download_options
+        self._refusal_pause = refusal_pause
+        self._clock = clock
+        self._refused: tuple[float, SupplyRefusedError] | None = None
 
     def fetch(self, tile: SourceTile, work_dir: Path) -> Fetched | None:
+        if self._refused is not None:
+            at, error = self._refused
+            if self._clock() - at < self._refusal_pause:
+                raise SupplyRefusedError(error.message)
+            self._refused = None
         connect = self._connector()
         started = time.perf_counter()
-        path = sftp.download(
-            connect,
-            tile.remote_path,
-            work_dir / tile.source_filename,
-            expected_size=tile.size,
-            **self._options,
-        )
+        try:
+            path = sftp.download(
+                connect,
+                tile.remote_path,
+                work_dir / tile.source_filename,
+                expected_size=tile.size,
+                **self._options,
+            )
+        except SupplyRefusedError as exc:
+            self._refused = (self._clock(), exc)
+            raise
         logger.info(
             "Fetched %s (%.1f MB) in %.1f s", tile.name, tile.size / 1e6, time.perf_counter() - started
         )
