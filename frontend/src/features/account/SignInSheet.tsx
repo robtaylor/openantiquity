@@ -67,11 +67,12 @@ function DevSignIn() {
 
 function SignInChoices({ meta }: { meta: Meta }) {
   const signinError = useAccountUi((state) => state.signinError);
+  const chosenNext = useAccountUi((state) => state.next);
   const [emailOpen, setEmailOpen] = useState(false);
-  // Worked out as the sheet opens. The map can't move while it is open.
+  // Where the opener said, or back here, worked out as the sheet opens. The map can't move while it is open.
   const location = useLocation();
   // biome-ignore lint/correctness/useExhaustiveDependencies: fixed for as long as the sheet is open
-  const next = useMemo(() => returnPath(location), []);
+  const next = useMemo(() => chosenNext ?? returnPath(location), []);
   const enabled = meta.auth.providers.filter((provider) => provider.enabled);
   const providers = enabled.filter((provider) => provider.id !== EMAIL_PROVIDER);
   const emailEnabled = enabled.some((provider) => provider.id === EMAIL_PROVIDER);

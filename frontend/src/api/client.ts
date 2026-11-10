@@ -4,7 +4,8 @@
  * requires and a cross-site form cannot send. Failures become an `ApiError`
  * built from the `{"error": {"code", "message", "details"}}` envelope. A 401
  * from any path is announced to `onUnauthorised` listeners, which is how the
- * session learns that nobody is signed in any more.
+ * session learns that nobody is signed in any more, and a 403 to `onForbidden`
+ * listeners, which is how it learns the welcome step is still owed.
  */
 
 import { isRecord } from "./guards.js";
@@ -44,6 +45,21 @@ export function onUnauthorised(listener: UnauthorisedListener): () => void {
   unauthorisedListeners.add(listener);
   return () => {
     unauthorisedListeners.delete(listener);
+  };
+}
+
+type ForbiddenListener = (error: ApiError, path: string) => void;
+const forbiddenListeners = new Set<ForbiddenListener>();
+
+/**
+ * Call `listener` with the error and path of every request the server
+ * answers with 403, such as `onboarding_required`. Returns a function that
+ * stops listening.
+ */
+export function onForbidden(listener: ForbiddenListener): () => void {
+  forbiddenListeners.add(listener);
+  return () => {
+    forbiddenListeners.delete(listener);
   };
 }
 
@@ -128,7 +144,11 @@ export async function apiFetch<T>(path: string, request: ApiRequest = {}): Promi
   if (response.status === 401) {
     for (const listener of [...unauthorisedListeners]) listener(path);
   }
-  if (!response.ok) throw await errorFrom(response);
+  if (!response.ok) {
+    const error = await errorFrom(response);
+    if (response.status === 403) for (const listener of [...forbiddenListeners]) listener(error, path);
+    throw error;
+  }
   if (response.status === 204) return undefined as T;
   try {
     return (await response.json()) as T;

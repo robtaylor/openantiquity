@@ -21,13 +21,10 @@ type Phase =
   | { name: "missing" }
   | { name: "failed"; message: string; confirm: boolean };
 
-function askForAnother(): void {
-  useAccountUi.getState().openSignIn();
-}
-
-function AskAgain() {
+/** Opens the sign-in sheet, keeping the `next` the link was for. */
+function AskAgain({ next }: { next: string }) {
   return (
-    <Button variant="primary" onClick={askForAnother}>
+    <Button variant="primary" onClick={() => useAccountUi.getState().openSignIn(null, next)}>
       Ask for a new link
     </Button>
   );
@@ -143,7 +140,7 @@ export function EmailLinkPage() {
       break;
     case "invalid":
       body = (
-        <EmptyState icon={<MailX size={22} />} title="This link can't be used" action={<AskAgain />}>
+        <EmptyState icon={<MailX size={22} />} title="This link can't be used" action={<AskAgain next={next} />}>
           <p>
             It has expired, it has been used already, or a newer link replaced it. Each link works once, for fifteen
             minutes.
@@ -153,7 +150,7 @@ export function EmailLinkPage() {
       break;
     case "missing":
       body = (
-        <EmptyState icon={<MailX size={22} />} title="This link is incomplete" action={<AskAgain />}>
+        <EmptyState icon={<MailX size={22} />} title="This link is incomplete" action={<AskAgain next={next} />}>
           <p>Part of it seems to be missing. Try opening it from the email again, or ask for a new one.</p>
         </EmptyState>
       );

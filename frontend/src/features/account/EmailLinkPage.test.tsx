@@ -9,7 +9,7 @@ import { meFixture } from "../../test/fixtures/me.js";
 import { json, setUpShellTests } from "../../test/shellHarness.js";
 import { resetDraftsForTests } from "../drafts/store.js";
 import { Shell } from "../shell/Shell.js";
-import { captureEmailLinkToken, resetEmailLinkForTests } from "./emailLink.js";
+import { captureEmailLinkToken, emailLinkToken, resetEmailLinkForTests } from "./emailLink.js";
 import { useAccountUi } from "./requireAccount.js";
 
 vi.mock("maplibre-gl", async () => {
@@ -72,6 +72,31 @@ function expectTokenOnlyInExchange(routes: ApiRoutes): void {
   expect(JSON.stringify({ ...window.sessionStorage })).not.toContain(TOKEN);
   expect(window.location.href).not.toContain(TOKEN);
 }
+
+describe("captureEmailLinkToken", () => {
+  it.each(["/signin/email/", "/SIGNIN/Email", "/Signin/email//"])(
+    "keeps the token on %s, which the router shows the link page at",
+    (path) => {
+      window.history.replaceState(null, "", `${path}?next=%2F#token=${TOKEN}`);
+      captureEmailLinkToken();
+      expect(window.location.hash).toBe("");
+      expect(emailLinkToken()).toBe(TOKEN);
+    },
+  );
+
+  it("takes a token out of the address on any other page, without keeping it", () => {
+    window.history.replaceState(null, "", `/signin//email#token=${TOKEN}`);
+    captureEmailLinkToken();
+    expect(window.location.href).not.toContain(TOKEN);
+    expect(emailLinkToken()).toBeNull();
+  });
+
+  it("leaves another page's fragment alone, such as the map's position", () => {
+    window.history.replaceState(null, "", "/#m=13/51.4/-1.85");
+    captureEmailLinkToken();
+    expect(window.location.hash).toBe("#m=13/51.4/-1.85");
+  });
+});
 
 describe("the emailed link page", () => {
   it("takes the token out of the address, exchanges it once, and goes on to next", async () => {
@@ -150,7 +175,10 @@ describe("the emailed link page", () => {
     const panel = await screen.findByRole("complementary", { name: "Signing in" });
     expect(await within(panel).findByRole("heading", { name: "This link can't be used" })).toBeInTheDocument();
     await userEvent.click(within(panel).getByRole("button", { name: "Ask for a new link" }));
-    expect(await screen.findByRole("dialog", { name: "Sign in" })).toBeInTheDocument();
+    const sheet = await screen.findByRole("dialog", { name: "Sign in" });
+    // The new link goes where the old one would have, not to the front page.
+    const google = within(sheet).getByRole("link", { name: /Google/ });
+    expect(new URL(google.getAttribute("href") ?? "", "http://x").searchParams.get("next")).toBe("/f/abc");
   });
 
   it("says so when the link has no token, and asks the server nothing", async () => {

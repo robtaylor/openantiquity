@@ -21,17 +21,26 @@ const TOKEN_KEY = "token";
 let captured: string | null = null;
 const exchanges = new Map<string, Promise<Me>>();
 
+/** True for the paths the router shows the link page at: it ignores case and a trailing slash. */
+export function isEmailLinkPath(pathname: string): boolean {
+  return pathname.toLowerCase().replace(/\/+$/, "") === EMAIL_LINK_PATH;
+}
+
 /**
- * If this is the link page with a token in its fragment, keep the token and
- * rewrite the address without the fragment. Safe to call more than once.
+ * If the fragment holds a token, take the fragment out of the address,
+ * whatever the path, so the token never lingers there. Keep the token only
+ * on the link page. Safe to call more than once.
  */
 export function captureEmailLinkToken(win: Window = window): void {
   const { pathname, search, hash } = win.location;
-  if (pathname !== EMAIL_LINK_PATH || hash.length < 2) return;
-  const token = new URLSearchParams(hash.slice(1)).get(TOKEN_KEY);
-  // Whatever was in the fragment goes, token or not.
+  if (hash.length < 2) return;
+  const fragment = new URLSearchParams(hash.slice(1));
+  const onLinkPage = isEmailLinkPath(pathname);
+  if (!onLinkPage && !fragment.has(TOKEN_KEY)) return;
+  // On the link page whatever was in the fragment goes, token or not.
   win.history.replaceState(win.history.state, "", `${pathname}${search}`);
-  if (token) captured = token;
+  const token = fragment.get(TOKEN_KEY);
+  if (onLinkPage && token) captured = token;
 }
 
 /** The captured token, or null when the page was opened without one. */
