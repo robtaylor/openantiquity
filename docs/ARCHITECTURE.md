@@ -39,7 +39,7 @@ backend/
     services/               business logic with no FastAPI imports
     auth/                   sessions, the welcome step, magic links, OAuth
     terrain/                elevation sources, visualisations, tile rendering, cache
-    ingest/                 connector base, registry, runner, CLI, adapters/, connectors/
+    ingest/                 connector base, registry, runner, CLI, adapters/, connectors/, reference/ (gazetteer and boundary loaders)
     jobs/                   scheduled work (channel scan, source refresh), not built yet
   tests/                    mirrors src layout; conftest.py owns the database fixtures, test_routes.py lists every route
 frontend/
@@ -121,7 +121,7 @@ Columns marked with `*` are required. Every table has `id BIGINT` and `created_a
 
 `sources.access` follows Decision 0007. A `bulk` source is stored in `records`. A `live` source is queried by the browser when someone looks at an area and is never stored on our servers. A `deeplink` source is only linked. A finding linked to a live or deep-link record stores the record's identifier and address in the evidence row and nothing else. Evidence linking a stored record keeps its identifier (`reference`), address (`url`) and source key as well as `record_id`, so when a full ingest removes the record and `record_id` is emptied, the evidence stays a working reference.
 
-`records.category` is one of `designation`, `monument`, `find`, `event`, `document`, `community`, `map_label`. It drives map layers and filters. `precision_m` records how exact the position is. A Portable Antiquities find published to a 1 km square has `precision_m = 1000`.
+`records.category` is one of `designation`, `monument`, `find`, `event`, `document`, `community`, `map_label`. It drives map layers and filters. `precision_m` records how exact the position is. A Portable Antiquities find published to a 1 km square has `precision_m = 1000`. The `map_label` records are the antiquities lettered on the Ordnance Survey six-inch maps of about 1900, from the GB1900 gazetteer, under its share-alike licence.
 
 ### Collaboration around findings
 
@@ -231,7 +231,7 @@ Rules every route follows, whichever area it belongs to:
 | Squares | `GET /squares/next`, `PUT /squares/{ref}`, `GET /squares/coverage?bbox=` |
 | Records | `GET /records/search`, `GET /records/nearby`, `GET /records/{id}`, `GET /sources`, `GET /findings/{public_id}/suggested-records` |
 | Context | `GET /context/live-sources` (the sources the browser queries itself, with endpoint, query pattern, licence and attribution), `GET /context/links?lon=&lat=` (deep links to external viewers, filled in for that point and the nation it is in; until the nations are loaded, a point on the Irish Grid gets only the viewers that cover the wider world) |
-| Geo | `GET /geo/search?q=` (grid reference, coordinates, place, record or finding id), `GET /geo/point?lon=&lat=` (grid reference, nation, elevation) |
+| Geo | `GET /geo/search?q=` (grid reference, coordinates, place, record or finding id), `GET /geo/point?lon=&lat=` (grid reference, nation, county, elevation) |
 | Terrain | `POST /terrain/profile` (elevation along a line), `GET /terrain/coverage?bbox=` (the 5 km tiles that have 1 m elevation, as GeoJSON) |
 | Investigations | `GET` and `POST /investigations`, `GET`, `PATCH` and `DELETE /investigations/{public_id}`, items and members sub-resources, `GET /investigations/{public_id}/export?format=` |
 | Exports | `GET /findings/{public_id}/export?format=geojson|csv`, `GET /findings/export` (the list's filters, a filtered set) |
@@ -386,6 +386,8 @@ The National Heritage List layers share `ingest/connectors/he_nhle_hub.py`: the 
 A record is a thing, not a feature. Where a source publishes several features for one thing, its connector joins them: York's HER gives a point, lines and outlines under one `MonUID`, and `york-her-monuments` stores one record per `MonUID` with every part as one geometry, which is why it holds about 5,200 records for 9,662 features. The undesignated parklands do the same: parts of one name and HER within 2 km of each other are one record, a MultiPolygon, and parts further apart, or marked distinct in a comment, stay separate parks. A York monument that is a point plus an outline is a GeometryCollection in the record API, but its vector-tile geometry keeps only the highest-dimension parts, so tiles show its outline and not its point. When a source has no identifier of its own, the connector hashes the fields that name the thing and raises if two features give the same hash. A source whose own coordinates are wrong is placed from the better field: the lost villages are placed from their grid references, and the layer's geometry is used only when the reference does not parse. `ArcGISLayer` pages by offset where it can. A layer that is a view of several shapes needs `by_object_id=True`, because its offsets count rows the layer hides.
 
 Some sources are not records. Natural England's CRoW access land (42,054 polygons), the National Historic Landscape Characterisation 250 m grid (2.1 million cells) and the Forestry Commission's woodland opportunity map (552,503 cells) say where one may walk or what kind of landscape lies under a cell. They hold no sites to find. They belong in the map layer catalogue, not in `records`, where they would fill search, nearby results and suggestions with polygons that are not sites. They have no connector.
+
+A reference loader in `ingest/reference/` fills `places` or `admin_areas` instead of `records`. It declares its `Source` row like a connector, and each run replaces its rows in one transaction and writes an `ingest_runs` row. `fieldclub-ingest run <key>` runs loaders too: `--bbox` replaces only the rows in the box, and `--limit N` leaves at most N. `os-open-names` fills `places` with Great Britain's populated places, landforms, water, woods and the airports, harbours and stations people navigate by, about 270,000 names, and leaves out postcodes, roads and buildings. A place's `rank` is its kind in the hundreds (a city 9, a town 8, a village 7, down to a wood 2) plus up to 99 for the size of its bounding box. The search box orders names that start with the query by rank, and the rest by similarity first. `ons-countries-2025` and `ons-counties-2025` fill `admin_areas` with the four nations and ONS's counties and unitary authorities, simplified to 20 m as one coverage so neighbours share their borders, and each reaching 2 km out to sea from a coarse copy of its coast, except where it is that close to another area.
 
 ## Frontend
 

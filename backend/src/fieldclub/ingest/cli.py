@@ -7,6 +7,11 @@ A run with `--bbox` or `--limit` is partial: it adds and updates records but
 never deletes any. A full run deletes what the source no longer has, and
 refuses when that is a large share of what is stored unless `--allow-shrink`
 says the loss is real.
+
+The same commands run the reference loaders in `ingest/reference/`, which
+fill the gazetteer and the admin areas instead of the record index. A loader
+replaces its rows: those in the box with `--bbox`, and all of them, with at
+most N, with `--limit N`.
 """
 
 from __future__ import annotations
@@ -18,8 +23,9 @@ from collections.abc import Sequence
 
 from fieldclub.config import get_settings
 from fieldclub.errors import AppError
-from fieldclub.ingest import registry, runner
+from fieldclub.ingest import reference, registry, runner
 from fieldclub.ingest.base import BBox
+from fieldclub.ingest.reference.base import run_loader
 
 
 def parse_bbox(text: str) -> BBox:
@@ -72,7 +78,7 @@ def list_connectors() -> int:
         return 0
     settings = get_settings()
     rows = [("KEY", "CATEGORY", "ACCESS", "READY", "NAME")]
-    for cls in connectors:
+    for cls in [*connectors, *reference.all_loaders()]:
         info = cls.source
         ready = "yes" if cls(settings).is_configured() else "no"
         rows.append((info.key, str(info.category), str(info.access), ready, info.name))
@@ -84,7 +90,27 @@ def list_connectors() -> int:
     return 0
 
 
+def load_one(key: str, bbox: BBox | None, limit: int | None, allow_shrink: bool = False) -> int:
+    """Run the reference loader for `key`."""
+    loader_cls = reference.get(key)
+    assert loader_cls is not None, f"{key} is not a loader"
+    try:
+        run = run_loader(loader_cls(get_settings()), bbox=bbox, limit=limit, allow_shrink=allow_shrink)
+    except AppError as exc:
+        print(exc.message, file=sys.stderr)
+        return 1
+    assert run.stats is not None, "a finished run stores its stats"
+    stats = run.stats
+    print(
+        f"{key}: {stats['inserted']} rows from {stats['read']} read upstream "
+        f"(replacing {stats['deleted']}) in {stats['seconds']} s"
+    )
+    return 0
+
+
 def run_one(key: str, bbox: BBox | None, limit: int | None, allow_shrink: bool = False) -> int:
+    if reference.get(key) is not None:
+        return load_one(key, bbox, limit, allow_shrink)
     try:
         connector = registry.get(key)(get_settings())
     except registry.UnknownConnectorError as exc:

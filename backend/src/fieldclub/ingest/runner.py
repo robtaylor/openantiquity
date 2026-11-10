@@ -351,6 +351,10 @@ def _source_lock(engine: Engine, source_key: str) -> Iterator[None]:
             conn.execute(text("SELECT pg_advisory_unlock(:namespace, hashtext(:key))"), params)
 
 
+# The reference loaders in `ingest/reference/` take the same lock.
+source_lock = _source_lock
+
+
 def _start_time(db: Session, source_key: str) -> datetime:
     """A start time later than any `ingested_at` the source already has.
 

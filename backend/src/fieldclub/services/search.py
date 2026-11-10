@@ -181,7 +181,12 @@ def as_finding(db: Session, text: str, viewer: User | None) -> GeoHit | None:
 
 
 def places(db: Session, text: str, limit: int = PLACE_LIMIT) -> list[GeoHit]:
-    """Places whose name is like the query: a name starting with it first, then bigger places."""
+    """Places whose name is like the query.
+
+    Names that start with the query come first, bigger places first, which
+    suits someone still typing. The rest come by how alike they are, then
+    by size, so a misspelt village comes before a town that only shares a word.
+    """
     words = records.query_words(text)
     if not words:
         return []
@@ -192,7 +197,7 @@ def places(db: Session, text: str, limit: int = PLACE_LIMIT) -> list[GeoHit]:
     rows = db.execute(
         select(Place, func.ST_X(Place.geom), func.ST_Y(Place.geom))
         .where(Place.name.op("%>")(literal(phrase)))
-        .order_by(starts.desc(), Place.rank.desc(), similarity.desc(), Place.id)
+        .order_by(starts.desc(), (starts * Place.rank).desc(), similarity.desc(), Place.rank.desc(), Place.id)
         .limit(limit)
     ).all()
     hits = []
