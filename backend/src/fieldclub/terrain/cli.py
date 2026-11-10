@@ -21,14 +21,13 @@ from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from pyproj import Transformer
-
 from fieldclub.config import get_settings
 from fieldclub.errors import AppError
 from fieldclub.terrain import national
 from fieldclub.terrain.catalogue import SourceTile
 from fieldclub.terrain.grid import tiles_in
 from fieldclub.terrain.service import Terrain, build_terrain, national_location
+from fieldclub.terrain.sources import transformer
 from fieldclub.terrain.styles import FINE_MINZOOM, MAXZOOM, MINZOOM, STYLES
 
 logger = logging.getLogger(__name__)
@@ -54,8 +53,9 @@ def parse_zooms(text: str) -> range:
 
 def tiles_for_bbox(terrain: Terrain, bbox: tuple[float, float, float, float]) -> list[SourceTile]:
     west, south, east, north = bbox
-    to_bng = Transformer.from_crs(4326, 27700, always_xy=True)
-    eastings, northings = to_bng.transform([west, east, east, west], [south, south, north, north])
+    eastings, northings = transformer(4326, 27700).transform(
+        [west, east, east, west], [south, south, north, north]
+    )
     return terrain.catalogue.covering((min(eastings), min(northings), max(eastings), max(northings)))
 
 

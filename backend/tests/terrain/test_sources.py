@@ -108,7 +108,7 @@ def test_the_projection_lattice_matches_exact_projection() -> None:
 
 
 def test_a_file_source_is_unavailable_until_built(tmp_path: Path) -> None:
-    missing = file_source("national", str(tmp_path / "none.tif"), exists=lambda path: Path(path).is_file())
+    missing = file_source("national", str(tmp_path / "none.tif"), exists=(tmp_path / "none.tif").is_file)
     with pytest.raises(ElevationUnavailableError):
         missing.sample(np.array([400_000.0]), np.array([200_000.0]), 10.0)
 

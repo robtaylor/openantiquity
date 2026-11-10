@@ -29,7 +29,7 @@ def terrain(tmp_path: Path) -> Terrain:
         tmp_path / "work",
         convert=lambda src, dst: to_cog(src, dst, overview_count=1),
     )
-    national = file_source("national", str(tmp_path / "none.tif"), exists=lambda path: False)
+    national = file_source("national", str(tmp_path / "none.tif"), exists=lambda: False)
     return Terrain(mirror, national, LocalStorage(tmp_path / "tiles"), national_exists=lambda: False)
 
 

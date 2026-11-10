@@ -33,7 +33,7 @@ from rasterio.windows import Window as RasterWindow
 from fieldclub.errors import DataIntegrityError
 from fieldclub.terrain.catalogue import Catalogue
 from fieldclub.terrain.errors import ElevationUnavailableError
-from fieldclub.terrain.grid import HALF_WORLD, REFERENCE_LATITUDE, Window, window_for
+from fieldclub.terrain.grid import HALF_WORLD, Window, nominal_ground_resolution, window_for
 from fieldclub.terrain.mirror import Mirror
 
 LATTICE_STEP = 16
@@ -42,19 +42,20 @@ LATTICE_MINZOOM = 10
 _local = threading.local()
 
 
-def _to_bng() -> Transformer:
-    # pyproj transformers aren't safe to share between threads.
-    transformer = getattr(_local, "to_bng", None)
-    if transformer is None:
-        transformer = _local.to_bng = Transformer.from_crs(3857, 27700, always_xy=True)
-    return transformer
+def transformer(source_epsg: int, target_epsg: int) -> Transformer:
+    """A transformer between two EPSG codes, one per thread: pyproj's aren't safe to share."""
+    cache: dict[tuple[int, int], Transformer] = _local.__dict__.setdefault("transformers", {})
+    key = (source_epsg, target_epsg)
+    if key not in cache:
+        cache[key] = Transformer.from_crs(source_epsg, target_epsg, always_xy=True)
+    return cache[key]
 
 
 def project_window(window: Window) -> tuple[np.ndarray, np.ndarray]:
     """British National Grid eastings and northings of every pixel centre in a window."""
     if window.zoom < LATTICE_MINZOOM:
         xs, ys = np.meshgrid(window.x_centres(), window.y_centres())
-        return _to_bng().transform(xs, ys)
+        return transformer(3857, 27700).transform(xs, ys)
     step = LATTICE_STEP
     cols = np.arange(window.col, window.col + window.width)
     rows = np.arange(window.row, window.row + window.height)
@@ -62,7 +63,7 @@ def project_window(window: Window) -> tuple[np.ndarray, np.ndarray]:
     lattice_rows = np.arange(rows[0] // step, rows[-1] // step + 2) * step
     res = window.resolution
     xs, ys = np.meshgrid(-HALF_WORLD + (lattice_cols + 0.5) * res, HALF_WORLD - (lattice_rows + 0.5) * res)
-    node_e, node_n = _to_bng().transform(xs, ys)
+    node_e, node_n = transformer(3857, 27700).transform(xs, ys)
     col_pos = (cols - lattice_cols[0]) / step
     row_pos = (rows - lattice_rows[0]) / step
     return _bilinear_nodes(node_e, col_pos, row_pos), _bilinear_nodes(node_n, col_pos, row_pos)
@@ -119,11 +120,6 @@ class ElevationSource(Protocol):
         ...
 
 
-def target_resolution(window: Window) -> float:
-    """Ground metres per pixel at the reference latitude: the same for every tile of a zoom level."""
-    return window.resolution * math.cos(math.radians(REFERENCE_LATITUDE))
-
-
 class CogMosaicSource:
     """COGs laid on one grid, read at a resolution that suits the output.
 
@@ -158,7 +154,8 @@ class CogMosaicSource:
     def read(self, bounds: tuple[float, float, float, float], width: int, height: int) -> np.ndarray:
         window = window_for(bounds, width, height)
         eastings, northings = project_window(window)
-        return self.sample(eastings, northings, target_resolution(window))
+        # Constant per zoom level, so neighbouring tiles read the same level.
+        return self.sample(eastings, northings, nominal_ground_resolution(window.zoom))
 
     def sample(self, eastings: np.ndarray, northings: np.ndarray, resolution: float) -> np.ndarray:
         """Elevation at grid positions, read at the coarsest level no coarser than `resolution`."""
@@ -252,11 +249,11 @@ def mirror_source(mirror: Mirror, *, fetch: bool = True) -> CogMosaicSource:
     return CogMosaicSource(mirror.edition, paths_for, MIRROR_RESOLUTIONS, cacheable=fetch)
 
 
-def file_source(edition: str, path: str, *, exists: Callable[[str], bool]) -> CogMosaicSource:
+def file_source(edition: str, path: str, *, exists: Callable[[], bool]) -> CogMosaicSource:
     """The national 10 m composite as one COG. Unavailable until the file exists."""
 
     def paths_for(bbox: tuple[float, float, float, float]) -> list[str]:
-        if not exists(path):
+        if not exists():
             raise ElevationUnavailableError(f"{edition} isn't built yet: {path} doesn't exist.")
         return [path]
 

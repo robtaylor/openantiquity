@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -170,9 +170,6 @@ class _ParamikoSession:
     def open(self, path: str, mode: str = "r") -> RemoteFile:
         return self._sftp.open(path, mode)
 
-    def listdir_attr(self, path: str) -> Any:
-        return self._sftp.listdir_attr(path)
-
     def close(self) -> None:
         try:
             self._sftp.close()
@@ -237,12 +234,3 @@ def defra_connector(credentials: DefraSftpSettings) -> Connect:
         return _ParamikoSession(client, client.open_sftp())
 
     return connect
-
-
-@contextlib.contextmanager
-def session(connect: Connect) -> Iterator[SftpSession]:
-    opened = connect()
-    try:
-        yield opened
-    finally:
-        _close(opened)

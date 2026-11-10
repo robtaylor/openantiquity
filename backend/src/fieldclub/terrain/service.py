@@ -24,7 +24,6 @@ from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
-from pyproj import Transformer
 
 from fieldclub.config import Settings, get_defra_sftp_settings, get_settings
 from fieldclub.errors import BadRequestError
@@ -43,7 +42,13 @@ from fieldclub.terrain.mirror import (
     mirror_store,
 )
 from fieldclub.terrain.render import TileRenderer
-from fieldclub.terrain.sources import CogMosaicSource, ElevationSource, file_source, mirror_source
+from fieldclub.terrain.sources import (
+    CogMosaicSource,
+    ElevationSource,
+    file_source,
+    mirror_source,
+    transformer,
+)
 from fieldclub.terrain.styles import FINE_MINZOOM
 
 logger = logging.getLogger(__name__)
@@ -151,7 +156,7 @@ class Terrain:
         # Read no finer than the spacing, so a long line doesn't assemble a huge 1 m grid.
         resolution = max(FINE_RESOLUTION_M, length / (samples - 1))
         heights = self.fine.sample(eastings, northings, resolution)
-        lons, lats = _from_bng().transform(eastings, northings)
+        lons, lats = transformer(27700, 4326).transform(eastings, northings)
         return Profile(
             length_m=round(length, 2),
             distances=[round(float(d), 2) for d in distances],
@@ -169,33 +174,25 @@ def _level_resolution(resolution: float) -> float:
     return level
 
 
-def _from_bng() -> Transformer:
-    return Transformer.from_crs(27700, 4326, always_xy=True)
-
-
-def _location(settings: Settings, value: str) -> str:
-    return settings.terrain_path(value)
-
-
 def build_mirror(settings: Settings, *, fetchers: list[Fetcher] | None = None) -> Mirror:
     if fetchers is None:
         fetchers = []
-        source_dir = _location(settings, settings.terrain_source_dir)
+        source_dir = settings.terrain_path(settings.terrain_source_dir)
         if source_dir:
             fetchers.append(LocalSourceFetcher(Path(source_dir)))
         fetchers.append(SftpFetcher(lambda: sftp.defra_connector(get_defra_sftp_settings())))
     return Mirror(
         england_catalogue(),
-        mirror_store(_location(settings, settings.terrain_mirror)),
+        mirror_store(settings.terrain_path(settings.terrain_mirror)),
         fetchers,
-        Path(_location(settings, settings.terrain_work_dir)),
+        Path(settings.terrain_path(settings.terrain_work_dir)),
         max_fetches=settings.terrain_fetch_concurrency,
     )
 
 
 def national_location(settings: Settings) -> tuple[str, Callable[[], bool]]:
     """The national composite's GDAL path, and how to tell whether it has been built."""
-    location = _location(settings, settings.terrain_national)
+    location = settings.terrain_path(settings.terrain_national)
     if location.startswith(GS_SCHEME):
         # In a bucket it is built before the service is deployed.
         return "/vsigs/" + location[len(GS_SCHEME) :], lambda: True
@@ -205,7 +202,7 @@ def national_location(settings: Settings) -> tuple[str, Callable[[], bool]]:
 def build_terrain(settings: Settings | None = None, *, storage: Storage | None = None) -> Terrain:
     settings = settings or get_settings()
     path, exists = national_location(settings)
-    national = file_source(NATIONAL_EDITION, path, exists=lambda _: exists())
+    national = file_source(NATIONAL_EDITION, path, exists=exists)
     return Terrain(build_mirror(settings), national, storage or get_storage("tiles"), national_exists=exists)
 
 

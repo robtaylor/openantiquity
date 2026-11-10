@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 import rasterio
 import rasterio.shutil
+from affine import Affine
 from rasterio.errors import RasterioError
 from rasterio.transform import from_origin
 
@@ -86,6 +87,7 @@ class CogSummary:
     overviews: list[int]
     compression: str
     nodata: float | None
+    transform: Affine
 
 
 def to_cog(
@@ -107,9 +109,8 @@ def to_cog(
             str(src), str(tmp), **creation_options(overview_count=overview_count, threads=threads)
         )
         summary = check_cog(tmp)
-        with rasterio.open(tmp) as written:
-            if (written.height, written.width) != shape or written.transform != transform:
-                raise DataIntegrityError(f"The COG of {src} doesn't have the source's grid.")
+        if (summary.height, summary.width) != shape or summary.transform != transform:
+            raise DataIntegrityError(f"The COG of {src} doesn't have the source's grid.")
         tmp.replace(dst)
         return summary
     finally:
@@ -123,4 +124,4 @@ def check_cog(path: str | Path) -> CogSummary:
             raise DataIntegrityError(f"{path} has blocks of {ds.block_shapes[0]}, expected {BLOCK_SIZE}.")
         if ds.compression is None:
             raise DataIntegrityError(f"{path} isn't compressed.")
-        return CogSummary(ds.width, ds.height, ds.overviews(1), ds.compression.name, ds.nodata)
+        return CogSummary(ds.width, ds.height, ds.overviews(1), ds.compression.name, ds.nodata, ds.transform)
