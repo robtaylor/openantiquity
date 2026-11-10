@@ -287,3 +287,24 @@ def test_an_id_range_whose_features_have_gone_ends_short() -> None:
     layer = SyntheticLayer(cap=3, max_record_count=6, pagination=False, last=7)
     with pytest.raises(IncompleteReadError, match="said it had 10 features and gave 7"):
         read_synthetic(layer)
+
+
+@respx.mock
+def test_require_accepts_the_recorded_shape_and_refuses_a_changed_one() -> None:
+    respx.route(host="services-eu1.arcgis.com").mock(side_effect=RecordedLayer())
+    layer = make_layer()
+    layer.require(["ListEntry", "Name"], geometry_type="esriGeometryPolygon")
+    with pytest.raises(UpstreamFormatError, match=r"missing fields \['Nom'\]"):
+        layer.require(["ListEntry", "Nom"])
+    with pytest.raises(UpstreamFormatError, match="geometry esriGeometryPolygon"):
+        layer.require(["ListEntry"], geometry_type="esriGeometryPoint")
+
+
+@respx.mock
+def test_by_object_id_pages_by_id_ranges_though_the_layer_offers_offsets() -> None:
+    recorded = RecordedLayer()
+    respx.route(host="services-eu1.arcgis.com").mock(side_effect=recorded)
+    features = list(make_layer(page_size=2, by_object_id=True).features(bbox=BBOX))
+    assert len(features) == 3
+    assert not any("resultOffset" in query for query in recorded.queries)
+    assert any(query.get("returnIdsOnly") == "true" for query in recorded.queries)

@@ -187,6 +187,11 @@ def json_ready(properties: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def text_of(properties: dict[str, Any], field: str) -> str:
+    """A text property trimmed, or an empty string when it is missing or null."""
+    return str(properties.get(field) or "").strip()
+
+
 def cache_dir(settings: Settings, source_key: str) -> Path:
     """Where a connector keeps downloaded files: `var/ingest/<source key>/`."""
     path = Path(settings.var_dir) / "ingest" / source_key

@@ -63,10 +63,15 @@ class ArcGISLayer:
         page_size: int | None = None,
         geometry_precision: int | None = None,
         tolerance: float = 0.0,
+        by_object_id: bool = False,
     ) -> None:
         """`tolerance` is the share of the count that may go missing between counting and paging.
 
-        Leave it at 0 unless the layer is edited while it is read.
+        Leave it at 0 unless the layer is edited while it is read. `by_object_id` pages by
+        ranges of object ids even when the layer offers offsets. Use it for a layer whose
+        offsets count rows the layer then filters out, such as a view that holds several
+        kinds of shape and shows one: its pages come back short of what was asked for
+        while more remain, and paging by offset ends early.
         """
         assert url.rstrip("/").rsplit("/", 1)[-1].isdigit(), f"{url} must end with the layer number"
         assert page_size is None or page_size >= 1, "page_size must be at least 1"
@@ -79,6 +84,7 @@ class ArcGISLayer:
         self.page_size = page_size
         self.geometry_precision = geometry_precision
         self.tolerance = tolerance
+        self.by_object_id = by_object_id
         self._info: dict[str, Any] | None = None
 
     # ------------------------------------------------------------------ metadata
@@ -125,6 +131,23 @@ class ArcGISLayer:
     def supports_pagination(self) -> bool:
         capabilities = self.info().get("advancedQueryCapabilities") or {}
         return bool(capabilities.get("supportsPagination"))
+
+    def require(self, fields: Sequence[str], *, geometry_type: str | None = None) -> None:
+        """Raise `UpstreamFormatError` unless the layer has every named field and the geometry type.
+
+        A connector calls this before reading, so a layer that was rebuilt with other
+        field names or another kind of shape stops the run instead of writing bad rows.
+        `geometry_type` is Esri's name for it, such as `esriGeometryPoint`.
+        """
+        info = self.info()
+        present = {str(field.get("name")) for field in info.get("fields", []) if isinstance(field, dict)}
+        missing = [name for name in fields if name not in present]
+        found = info.get("geometryType")
+        if missing or (geometry_type is not None and found != geometry_type):
+            raise UpstreamFormatError(
+                f"{self.url} changed shape: missing fields {missing}, geometry {found} "
+                f"(expected {geometry_type or 'any'})."
+            )
 
     def _filter(self, bbox: BBox | None) -> dict[str, str]:
         params = {"where": self.where}
@@ -230,7 +253,7 @@ class ArcGISLayer:
         logger.info("%s: %d features to read, %d per page", self.url, expected, page)
         pages = (
             self._by_offset(bbox, expected, page)
-            if self.supports_pagination
+            if self.supports_pagination and not self.by_object_id
             else self._by_id_range(bbox, page)
         )
         tally = Tally(self.url, expected, self.tolerance)

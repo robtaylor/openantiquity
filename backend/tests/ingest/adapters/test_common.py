@@ -10,7 +10,7 @@ import respx
 from shapely.geometry import Point
 
 from fieldclub import gridref
-from fieldclub.ingest.adapters.common import AdapterError, json_ready, plain, plain_tree, to_wgs84
+from fieldclub.ingest.adapters.common import AdapterError, json_ready, plain, plain_tree, text_of, to_wgs84
 from tests.helpers import run_fresh
 from tests.ingest.adapters.support import NoWait, xy
 
@@ -133,3 +133,8 @@ def test_the_adapters_dont_import_the_database_layer() -> None:
         "assert not loaded, loaded\n"
     )
     run_fresh(code)
+
+
+def test_text_of_trims_and_turns_nothing_into_an_empty_string() -> None:
+    properties = {"a": "  Aconbury Camp ", "b": " ", "c": None, "d": 12}
+    assert [text_of(properties, name) for name in "abcde"] == ["Aconbury Camp", "", "", "12", ""]
