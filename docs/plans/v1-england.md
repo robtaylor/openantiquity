@@ -14,8 +14,11 @@ A deployed Field Club covering England. People explore 1 m LIDAR in archaeologic
 
 ## Where things stand (2026-11-10)
 
-- WS0 and WS1 are shipped in the first commits on `main`: the backend core (1,264 tests), the frontend shell on MapLibre 6 (329 unit tests, 44 browser tests), the rename to Field Club, and the contract sync.
-- WS2 to WS5 are next. Each backend track is built in its own worktree and branch under `.claude/worktrees/` and rebased onto `main` when it has been reviewed.
+- WS0 and WS1 are shipped in the first commits on `main`: the backend core, the frontend shell on MapLibre 6, the rename to Field Club, and the contract sync.
+- The backend halves of WS2 to WS5 are on `main`: terrain tiles, sign-in, findings with the confidence engine, and the record index with its first connector. Each was built in its own worktree, reviewed adversarially, fixed, and rebased onto `main`. The backend suite stood at about 2,500 tests when they were combined.
+- Combining them showed that `rasterio` and `pyogrio` each bundle their own GDAL, and that the process aborts when `pyogrio`'s loads first. `ingest/adapters/ogr.py` is the one place `pyogrio` is imported, and it loads `rasterio` first.
+- Review changed two rules, both now in the decision records. An answer to a second look is final (Decision 0008). Promotion to trusted is a moderator's call (Decision 0005).
+- Next: the remaining connectors, the collaboration and moderation API, the terrain follow-ups, and the interface. Each track is built in its own worktree and branch under `.claude/worktrees/` and rebased onto `main` when it has been reviewed.
 - Defra supplied England's 2022 composite DTM in bulk on the day it was asked, ticket DSP3-11967. See `owner-actions.md` and `../sources/lidar-england-bulk-supply.md`. Eleven tiles around Avebury and Stonehenge are in the local mirror folder for development.
 
 ## Workstreams
@@ -54,7 +57,7 @@ One audited rename from the working name to `fieldclub` across directories, impo
 
 ### WS2 — Terrain
 
-**Status:** Not started.
+**Status:** In progress. The mirror, the visualisations, the tile endpoints, the height profile, the coverage layer and the mirror command shipped on 2026-11-10. Left: the national overview, capture years on the coverage layer, and the browser screenshot.
 
 England's elevation behind one interface, the visualisations, and the tile endpoints. See Decision 0006 and `sources/lidar.md`.
 
@@ -64,6 +67,7 @@ England's elevation behind one interface, the visualisations, and the tile endpo
 - numpy implementations of hillshade, multi-direction hillshade, slope, local relief, sky-view factor, openness and the combined blend, with the published presets.
 - Rendered tiles, Terrarium elevation tiles, the height profile endpoint, and a coverage layer with capture year.
 - A command that mirrors named 5 km tiles or all of England, reading in windows and resuming after a dropped connection.
+- A national overview for zooms below 13, built from the 8 m copies inside our own mirrored tiles. Defra's national 10 m composite can't be downloaded: its server cuts every response at about 1.08 GB and ignores range requests.
 
 **Exit criteria:**
 
@@ -73,7 +77,7 @@ England's elevation behind one interface, the visualisations, and the tile endpo
 
 ### WS3 — Accounts
 
-**Status:** Not started. Provider credentials are an owner action.
+**Status:** In progress. The server side shipped on 2026-11-10: provider sign-in, account linking and the emailed link. Left: the sign-in sheet, the welcome sheet and browser drafts in the interface. Provider credentials are an owner action.
 
 Provider sign-in, the emailed link, the welcome sheet and account deletion. See Decisions 0002 and 0009.
 
@@ -90,7 +94,7 @@ Provider sign-in, the emailed link, the welcome sheet and account deletion. See 
 
 ### WS4 — Findings and confidence
 
-**Status:** Not started.
+**Status:** In progress. The server side shipped on 2026-11-10: the confidence engine, findings, second looks, evidence, discussion, the review queue, reputation and exports. Left: the end-to-end test through the interface.
 
 The core loop. See Decisions 0003, 0005 and 0008.
 
@@ -108,7 +112,7 @@ The core loop. See Decisions 0003, 0005 and 0008.
 
 ### WS5 — Records
 
-**Status:** Not started.
+**Status:** In progress. The shared ingest adapters, the scheduled monuments connector (20,006 records, the count the research recorded), search, nearby records, record pages, vector tiles, suggestions and the live-source and deep-link catalogues shipped on 2026-11-10. Left: connectors for the other 47 sources, the place-name gazetteer, and the nation and county lookup.
 
 England's open records, stored, searchable and linked. See Decision 0007 and `sources/records-england.md`.
 

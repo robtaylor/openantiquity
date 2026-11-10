@@ -25,6 +25,7 @@ The first design had two levels, open and restricted, with restricted findings h
 7. The generalised position is stored in its own column and written when the finding is saved. Queries for signed-out visitors run against that column only. One service function picks the column for a viewer, and every route goes through it.
 8. Downloads use the generalised position for `protected` and `restricted` findings unless the person downloading is the finder or trusted.
 9. Field Club doesn't accept artefact findspots. Where someone mentions a find, the tool shows the reporting route for that nation and stores nothing about the find.
+10. A member becomes trusted only when a moderator promotes them. Fifty reputation points make a member eligible. Points alone never promote anyone.
 
 ## Alternatives considered
 
@@ -32,6 +33,7 @@ The first design had two levels, open and restricted, with restricted findings h
 - **Exact locations for trusted users only**, which the research favoured for looting-prone types, was rejected because new members couldn't then corroborate those findings, and a new service has no trusted users at all.
 - **Jittering points** inside a cell was rejected in favour of showing the cell. A jittered point looks exact and invites a visit to the wrong field.
 - **Generalising everything until reviewed** was rejected for the same cold-start reason, and because most findings are field boundaries and trackways that nobody loots.
+- **Automatic promotion to trusted at fifty points** was the first design. Review of the built code on 2026-11-10 showed that three accounts working together could take two findings to "checked on the ground" among themselves, which earned the finder 54 points and with them the exact position of every `restricted` finding. It was rejected in favour of a moderator's decision, with the points as the signal that someone is worth considering.
 
 ## Consequences
 
@@ -39,6 +41,7 @@ The first design had two levels, open and restricted, with restricted findings h
 - Anyone willing to sign in can see `protected` findings exactly. Sign-in gives an identity to rate-limit, log and ban, and it's the price of members being able to check each other's work.
 - The class-based default will sometimes be wrong in both directions, so people need the manual override.
 - Every query path has to choose the right column. A missed path is a leak, so the choice lives in one function with tests that try each viewer type against each level.
+- Nobody is trusted until a moderator has promoted them. On a new service, `restricted` findings can be checked only by their finder, experts and moderators, and promotion is a task moderators have to keep up with.
 
 ## Walk-back options
 
