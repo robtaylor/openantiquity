@@ -34,6 +34,15 @@ _CLOUD_RUN_SERVICE = "K_SERVICE"
 _CLOUD_RUN_JOB = "CLOUD_RUN_JOB"
 
 
+# Where each terrain folder is when it isn't set, below `var_dir`.
+_TERRAIN_UNDER_VAR = {
+    "terrain_mirror": "lidar/england/mirror",
+    "terrain_source_dir": "lidar/england/dtm-2022",
+    "terrain_national": "lidar/england/dtm-2022-10m/england-dtm-2022-10m-cog.tif",
+    "terrain_work_dir": "lidar/england/work",
+}
+
+
 class Environment(StrEnum):
     DEV = "dev"
     TEST = "test"
@@ -126,22 +135,31 @@ class Settings(BaseSettings):
     # Terrain (Decision 0006).
     # Elevation is read only from the mirror of cloud-optimised GeoTIFFs: a
     # local folder, or `gs://bucket/prefix` in production. Relative paths are
-    # resolved against the repository root, where `var/lidar` lives.
-    terrain_mirror: str = "var/lidar/england/mirror"
+    # resolved against the repository root, where `var/lidar` lives. Each
+    # folder left unset is under `var_dir`, as in `_TERRAIN_UNDER_VAR`.
+    terrain_mirror: str = ""
     # Defra's source tiles already on disk, converted instead of fetched. Empty to fetch everything.
-    terrain_source_dir: str = "var/lidar/england/dtm-2022"
+    terrain_source_dir: str = ""
     # The national 10 m composite as a cloud-optimised GeoTIFF, for zoom 12 and below.
-    terrain_national: str = "var/lidar/england/dtm-2022-10m/england-dtm-2022-10m-cog.tif"
+    terrain_national: str = ""
     # Downloads from the bulk supply that may run at once in one process.
     terrain_fetch_concurrency: int = Field(default=2, ge=1, le=8)
     # Where downloads and conversions are staged before they enter the mirror.
-    terrain_work_dir: str = "var/lidar/england/work"
+    terrain_work_dir: str = ""
 
     def terrain_path(self, value: str) -> str:
         """A terrain location as given, or a relative local path resolved against the repository root."""
         if not value or "://" in value or Path(value).is_absolute():
             return value
         return str(_REPO_ROOT / value)
+
+    @model_validator(mode="after")
+    def _terrain_under_var_dir(self) -> Self:
+        """Put each terrain folder that wasn't set under `var_dir`, like every other runtime path."""
+        for name, below in _TERRAIN_UNDER_VAR.items():
+            if name not in self.model_fields_set:
+                setattr(self, name, str(self.var_dir / below))
+        return self
 
     @model_validator(mode="after")
     def _check_consistency(self) -> Self:

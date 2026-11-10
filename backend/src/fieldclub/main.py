@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import pkgutil
-import re
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -17,12 +16,14 @@ from pathlib import Path
 from fastapi import APIRouter, FastAPI
 from fastapi.routing import APIRoute
 from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import MutableHeaders
 from starlette.responses import FileResponse, Response
 from starlette.staticfiles import StaticFiles
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 import fieldclub.api
 from fieldclub import APP_NAME, __version__, http
+from fieldclub.api.deps import PRIVATE_CACHE
 from fieldclub.auth.csrf import ClientHeaderMiddleware
 from fieldclub.auth.oauth import FORM_POST_CALLBACK_PATHS
 from fieldclub.config import Settings, get_settings
@@ -38,11 +39,40 @@ API_PREFIX = "/api/v1"
 RESERVED_ROOTS = frozenset({"api", "tiles", "healthz", "assets"})
 
 
-# Paths that take a POST without the client header, as regular expressions
-# for the whole path: exactly the OAuth callbacks a provider reaches with a
-# cross-site POST (Apple's), which `state` protects instead. See
-# fieldclub.auth.csrf and fieldclub.auth.flow.
-CLIENT_HEADER_EXEMPT: tuple[str, ...] = tuple(re.escape(path) for path in FORM_POST_CALLBACK_PATHS)
+# The paths that take a POST without the client header: exactly the OAuth
+# callbacks a provider reaches with a cross-site POST (Apple's), which `state`
+# protects instead. See fieldclub.auth.csrf and fieldclub.auth.flow.
+CLIENT_HEADER_EXEMPT: frozenset[str] = frozenset(FORM_POST_CALLBACK_PATHS)
+
+
+class PrivateByDefaultMiddleware:
+    """Send a response that says nothing about caching as `private, no-cache`, varying by cookie.
+
+    Most API answers depend on who is asking: a position (Decision 0005),
+    whether answers show (Decision 0008), a hidden finding a moderator can
+    open. A route that forgets `deps.private` must not let a shared cache hand
+    one viewer's answer to another, so private is the default and a route that
+    is the same for everyone, such as a tile, says so with its own
+    `Cache-Control`. Every private response varies by cookie.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_policy(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers.setdefault("Cache-Control", PRIVATE_CACHE)
+                if headers["Cache-Control"].startswith("private"):
+                    headers.add_vary_header("Cookie")
+            await send(message)
+
+        await self.app(scope, receive, send_with_policy)
 
 
 @dataclass(frozen=True)
@@ -205,8 +235,9 @@ def create_app(settings: Settings | None = None, *, include_dev_routes: bool | N
         lifespan=_lifespan,
     )
     install_error_handlers(app)
-    # Middleware, not a router dependency, so that no route can be added without it.
+    # Middleware, not router dependencies, so that no route can be added without them.
     app.add_middleware(ClientHeaderMiddleware, exempt=CLIENT_HEADER_EXEMPT)
+    app.add_middleware(PrivateByDefaultMiddleware)
 
     for found in discover_routers():
         if found.dev_only and not include_dev_routes:

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 
-from fieldclub.api.deps import Contributor, Db, OptionalUser, PageQuery, rate_limit
+from fieldclub.api.deps import Contributor, Db, OptionalUser, PageQuery, private, rate_limit
 from fieldclub.schemas.common import Page
 from fieldclub.schemas.findings import CommentIn, CommentOut, FollowOut
 from fieldclub.services import findings
@@ -13,8 +13,11 @@ router = APIRouter(tags=["discussion"])
 
 
 @router.get("/findings/{public_id}/comments", response_model=Page[CommentOut])
-def list_comments(public_id: str, page: PageQuery, db: Db, viewer: OptionalUser) -> Page[CommentOut]:
+def list_comments(
+    public_id: str, page: PageQuery, db: Db, viewer: OptionalUser, response: Response
+) -> Page[CommentOut]:
     """A finding's comments, oldest first. A deleted one stays as a placeholder for its replies."""
+    private(response)
     finding = findings.get_finding(db, public_id, viewer)
     found = findings.list_comments(db, finding, limit=page.limit, cursor=page.cursor)
     return Page[CommentOut](
@@ -53,8 +56,9 @@ def delete_comment(comment_id: int, user: Contributor, db: Db) -> None:
     response_model=FollowOut,
     dependencies=[Depends(rate_limit("follows", 300, per_seconds=3600))],
 )
-def follow(public_id: str, user: Contributor, db: Db) -> FollowOut:
+def follow(public_id: str, user: Contributor, db: Db, response: Response) -> FollowOut:
     """Follow a finding, to hear when it changes."""
+    private(response)
     findings.follow(db, user, findings.get_finding(db, public_id, user))
     db.commit()
     return FollowOut(following=True)
@@ -65,8 +69,9 @@ def follow(public_id: str, user: Contributor, db: Db) -> FollowOut:
     response_model=FollowOut,
     dependencies=[Depends(rate_limit("follows", 300, per_seconds=3600))],
 )
-def unfollow(public_id: str, user: Contributor, db: Db) -> FollowOut:
+def unfollow(public_id: str, user: Contributor, db: Db, response: Response) -> FollowOut:
     """Stop following a finding."""
+    private(response)
     findings.unfollow(db, user, findings.get_finding(db, public_id, user))
     db.commit()
     return FollowOut(following=False)

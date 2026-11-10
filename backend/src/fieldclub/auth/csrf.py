@@ -24,21 +24,27 @@ from fieldclub.errors import ClientHeaderRequiredError
 
 MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
+# What an exempt path may be made of: plain segments, nothing a pattern or template would hold.
+_PLAIN_PATH = re.compile(r"(/[a-z0-9_.-]+)+")
+
 
 class ClientHeaderMiddleware:
     """Refuse any request that changes data unless it carries `X-FieldClub-Client: web`.
 
-    `exempt` holds regular expressions for paths that must accept a POST from
-    another site, and so have to defend themselves some other way. The one
-    expected case is an OAuth callback that a provider posts back to (Apple's
-    `form_post` response mode), which is protected by its `state` value. A
-    path is exempt only when a pattern matches all of it, and only for POST:
-    a provider never sends PUT, PATCH or DELETE.
+    `exempt` holds the exact paths that must accept a POST from another
+    site, and so have to defend themselves some other way. The one expected
+    case is an OAuth callback that a provider posts back to (Apple's
+    `form_post` response mode), which is protected by its `state` value.
+    They are paths, not patterns, so a router added later can't fall under
+    one by accident. A path is exempt only for POST: a provider never sends
+    PUT, PATCH or DELETE.
     """
 
     def __init__(self, app: ASGIApp, exempt: Iterable[str] = ()) -> None:
         self.app = app
-        self.exempt = tuple(re.compile(pattern) for pattern in exempt)
+        self.exempt = frozenset(exempt)
+        for path in self.exempt:
+            assert _PLAIN_PATH.fullmatch(path), f"an exempt path is an exact path, not a pattern: {path!r}"
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         method = scope["method"].upper() if scope["type"] == "http" else ""
@@ -53,4 +59,4 @@ class ClientHeaderMiddleware:
         await self.app(scope, receive, send)
 
     def _is_exempt(self, path: str) -> bool:
-        return any(pattern.fullmatch(path) for pattern in self.exempt)
+        return path in self.exempt

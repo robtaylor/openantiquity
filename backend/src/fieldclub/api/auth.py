@@ -135,7 +135,11 @@ def welcome(body: Welcome, request: Request, user: CurrentUser, db: Db, settings
     return Me.from_user(user)
 
 
-@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/me",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(rate_limit("auth_delete", 10, per_seconds=3600))],
+)
 def delete_me(response: Response, user: CurrentUser, db: Db) -> None:
     """Delete your account and sign out everywhere.
 
@@ -147,7 +151,11 @@ def delete_me(response: Response, user: CurrentUser, db: Db) -> None:
     cookies.clear_session_cookie(response)
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(rate_limit("auth_logout", 60, per_seconds=3600))],
+)
 def logout(request: Request, response: Response, db: Db) -> None:
     """End this session. Safe to call when not signed in."""
     sessions.revoke_session(db, request.cookies.get(SESSION_COOKIE))
@@ -354,7 +362,11 @@ def email_verify(
     return Me.from_user(user)
 
 
-@dev_router.post("/dev-login", response_model=Me)
+@dev_router.post(
+    "/dev-login",
+    response_model=Me,
+    dependencies=[Depends(rate_limit("auth_dev_login", 600, per_seconds=3600))],
+)
 def dev_login(body: DevLogin, request: Request, response: Response, db: Db, settings: AppSettings) -> Me:
     """Sign in as a named test user, creating it if need be. Development and test only.
 
@@ -366,9 +378,7 @@ def dev_login(body: DevLogin, request: Request, response: Response, db: Db, sett
     if not settings.dev_login_enabled:
         raise NotFoundError()
     user = accounts.dev_user(db, body.handle, role=body.role, display_name=body.display_name)
-    token = sessions.create_session(
-        db, user, user_agent=request.headers.get("user-agent"), ip=client_ip(request)
-    )
+    token = _begin_session(db, user, request)
     db.commit()
     cookies.set_session_cookie(response, token)
     return Me.from_user(user)

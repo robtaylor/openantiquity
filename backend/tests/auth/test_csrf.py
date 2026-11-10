@@ -27,7 +27,7 @@ def csrf_app() -> FastAPI:
     """One route of every kind a route can be, behind the middleware."""
     app = FastAPI()
     install_error_handlers(app)
-    app.add_middleware(ClientHeaderMiddleware, exempt=[r"/callback/[a-z]+"])
+    app.add_middleware(ClientHeaderMiddleware, exempt=["/callback/apple"])
 
     @app.api_route("/on-app", methods=ALL_METHODS)
     def on_app() -> dict[str, bool]:
@@ -92,18 +92,26 @@ def test_a_path_that_does_not_exist_is_refused_before_it_is_looked_up(csrf_app: 
     assert bare.get("/nowhere").status_code == 404
 
 
-def test_only_a_whole_path_match_is_exempt(csrf_app: FastAPI) -> None:
+def test_only_an_exempt_path_itself_is_exempt(csrf_app: FastAPI) -> None:
     bare = TestClient(csrf_app, base_url=BASE_URL)
     # A provider posting back to its callback can't send the header.
     assert bare.post("/callback/apple").status_code == 200
+    # Exempt paths are paths, not patterns, so no other callback is.
+    assert bare.post("/callback/google").status_code == 403
     assert bare.post("/callback/apple/extra").status_code == 403
+    assert bare.post("/callback/apple/").status_code == 403
     assert bare.post("/callback/APPLE").status_code == 403
     assert bare.post("/x/callback/apple").status_code == 403
     assert bare.post("/on-app").status_code == 403
 
 
 def test_nothing_is_exempt_by_default() -> None:
-    assert ClientHeaderMiddleware(FastAPI()).exempt == ()
+    assert ClientHeaderMiddleware(FastAPI()).exempt == frozenset()
+
+
+def test_an_exempt_path_is_a_path_not_a_pattern() -> None:
+    with pytest.raises(AssertionError, match="exact path"):
+        ClientHeaderMiddleware(FastAPI(), exempt=[r"/callback/[a-z]+"])
 
 
 @pytest.mark.parametrize("method", ["PUT", "PATCH", "DELETE"])

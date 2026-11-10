@@ -246,6 +246,30 @@ def test_env_example_documents_every_setting() -> None:
     assert documented == expected
 
 
+def test_env_example_documents_every_bulk_supply_setting() -> None:
+    from fieldclub.config import DefraSftpSettings
+
+    lines = [line.lstrip("# ") for line in ENV_EXAMPLE.read_text().splitlines()]
+    documented = {line.split("=", 1)[0] for line in lines if line.startswith("DEFRA_") and "=" in line}
+    assert documented == {name.upper() for name in DefraSftpSettings.model_fields}
+
+
+def test_terrain_folders_follow_the_var_dir(clean_env: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Like every other runtime path, unless one is set for itself."""
+    default = settings()
+    assert default.terrain_mirror == "var/lidar/england/mirror"
+    assert default.terrain_source_dir == "var/lidar/england/dtm-2022"
+    assert default.terrain_national == "var/lidar/england/dtm-2022-10m/england-dtm-2022-10m-cog.tif"
+    assert default.terrain_work_dir == "var/lidar/england/work"
+    moved = settings(var_dir=tmp_path)
+    assert moved.terrain_mirror == str(tmp_path / "lidar" / "england" / "mirror")
+    assert moved.terrain_work_dir == str(tmp_path / "lidar" / "england" / "work")
+    assert moved.terrain_path(moved.terrain_mirror) == str(tmp_path / "lidar" / "england" / "mirror")
+    chosen = settings(var_dir=tmp_path, terrain_mirror="gs://bucket/mirror", terrain_source_dir="")
+    assert (chosen.terrain_mirror, chosen.terrain_source_dir) == ("gs://bucket/mirror", "")
+    assert chosen.terrain_national.startswith(str(tmp_path))
+
+
 def test_env_example_holds_no_real_secret() -> None:
     values = dict(
         line.lstrip("# ").split("=", 1)

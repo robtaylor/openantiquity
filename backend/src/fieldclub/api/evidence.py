@@ -55,8 +55,9 @@ def delete_evidence(evidence_id: int, user: Contributor, db: Db) -> None:
     response_model=VoteOut,
     dependencies=[Depends(rate_limit("evidence_votes", 600, per_seconds=3600))],
 )
-def vote(evidence_id: int, body: VoteIn, user: Contributor, db: Db) -> VoteOut:
+def vote(evidence_id: int, body: VoteIn, user: Contributor, db: Db, response: Response) -> VoteOut:
     """Endorse (+1) or object to (-1) evidence, or take your vote back (0)."""
+    private(response)
     findings.vote(db, evidence_id, user, body.value)
     db.commit()
     return VoteOut(evidence_id=evidence_id, value=body.value)

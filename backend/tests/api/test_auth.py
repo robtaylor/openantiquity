@@ -96,7 +96,21 @@ def test_dev_login_can_set_a_role_and_a_display_name(client: TestClient, db: Ses
     again = client.post("/api/v1/auth/dev-login", json={"handle": "TestMod", "role": "trusted"})
     assert again.json()["role"] == "trusted"
     assert count(db, User) == 1
-    assert count(db, UserSession) == 2
+    # The second sign-in ended the session the browser presented, as every sign-in does.
+    assert count(db, UserSession) == 1
+
+
+def test_dev_login_ends_the_session_the_browser_presented(client: TestClient, db: Session) -> None:
+    from fieldclub.config import SESSION_COOKIE
+
+    client.post("/api/v1/auth/dev-login", json={"handle": "TestAnn"})
+    first = client.cookies[SESSION_COOKIE]
+    client.post("/api/v1/auth/dev-login", json={"handle": "TestBob"})
+    assert client.cookies[SESSION_COOKIE] != first
+    assert client.get("/api/v1/auth/me").json()["handle"] == "TestBob"
+    stale = TestClient(client.app, base_url=str(client.base_url), cookies={SESSION_COOKIE: first})
+    assert stale.get("/api/v1/auth/me").status_code == 401
+    assert count(db, UserSession) == 1
 
 
 @pytest.mark.parametrize(

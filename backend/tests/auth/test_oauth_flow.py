@@ -666,7 +666,7 @@ def test_nothing_but_a_post_to_apples_callback_skips_the_client_header(
 def test_the_exempt_paths_are_exactly_apples_callback() -> None:
     from fieldclub.main import CLIENT_HEADER_EXEMPT
 
-    assert CLIENT_HEADER_EXEMPT == (r"/api/v1/auth/oauth/apple/callback",)
+    assert frozenset({"/api/v1/auth/oauth/apple/callback"}) == CLIENT_HEADER_EXEMPT
 
 
 def test_the_callback_path_the_providers_are_given_is_the_routed_one(browser: TestClient) -> None:
