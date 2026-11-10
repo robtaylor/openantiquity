@@ -7,7 +7,7 @@ sensitivity. Findings never go into tiles (Decision 0005).
 
 As with terrain tiles, every response carries an ETag, and a tile asked for
 with the current `?v=` token (`record_tiles.tile_token`, in the address
-`/meta` gives) is sent as immutable.
+`/meta` gives) is sent as immutable, unless an ingest run is still going.
 """
 
 from __future__ import annotations
@@ -45,7 +45,8 @@ def records_tile(
 ) -> Response:
     """Counts by category on a grid below zoom 12, individual records from zoom 12 up."""
     tile = record_tiles.record_tile(db, z, x, y, split_list(category))
-    current = v is not None and v == record_tiles.tile_token(db)
+    version = record_tiles.tile_version(db)
+    current = v is not None and v == version.token and version.settled
     etag = f'"{hashlib.sha256(tile).hexdigest()[:32]}"'
     headers = {
         "Cache-Control": record_tiles.IMMUTABLE_CACHE if current else record_tiles.UNVERSIONED_CACHE,

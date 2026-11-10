@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -8,10 +9,11 @@ from shapely.geometry import LineString
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from fieldclub.ingest.runner import run_connector
-from fieldclub.models import Source
+from fieldclub.ingest.runner import IngestFailedError, run_connector
+from fieldclub.models import IngestRun, Record, Source
 from fieldclub.services import record_tiles
-from tests.helpers import add_record, add_source, error_code
+from fieldclub.vocab import IngestStatus
+from tests.helpers import add_record, add_source, count, error_code
 from tests.ingest.fakes import FakeConnector, record
 from tests.records import mvt
 from tests.records.support import OVERTON, SILBURY, SILBURY_MOUND, add_finds_source, tile_of
@@ -154,6 +156,36 @@ def test_a_completed_ingest_or_a_disabled_source_changes_the_token(client: TestC
     db.execute(update(Source).values(enabled=False))
     db.commit()
     assert current_token(client) not in (before, after_ingest)
+
+
+def test_a_failed_run_that_stored_records_changes_the_token(client: TestClient, db: Session) -> None:
+    """The runner commits batch by batch, so a run that fails part-way has still changed the tiles."""
+    run_connector(FakeConnector([record("A")]))
+    before = current_token(client)
+    with pytest.raises(IngestFailedError):
+        run_connector(FakeConnector([record("B"), RuntimeError("boom")]), batch_size=1)
+    assert count(db, Record) == 2, "the failed run's first batch was kept"
+    assert current_token(client) != before
+
+
+def test_no_tile_is_immutable_while_a_run_is_going(client: TestClient, db: Session) -> None:
+    """Each committed batch changes the tiles under the same token, so none can be kept."""
+    add_source(db, "test-running")
+    db.add(
+        IngestRun(source_key="test-running", started_at=datetime.now(UTC), status=IngestStatus.RUNNING.value)
+    )
+    db.commit()
+    token = current_token(client)
+    response = client.get("/tiles/records/0/0/0.mvt", params={"v": token})
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == record_tiles.UNVERSIONED_CACHE
+    # The run ends, so the token moves on and its tiles can be kept again.
+    db.execute(update(IngestRun).values(status=IngestStatus.FAILED.value, finished_at=datetime.now(UTC)))
+    db.commit()
+    settled = current_token(client)
+    assert settled != token
+    again = client.get("/tiles/records/0/0/0.mvt", params={"v": settled})
+    assert again.headers["cache-control"] == record_tiles.IMMUTABLE_CACHE
 
 
 def test_an_unknown_category(client: TestClient, index: dict[str, int]) -> None:

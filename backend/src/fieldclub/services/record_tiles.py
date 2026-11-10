@@ -28,15 +28,20 @@ Mercator tile is a longitude and latitude rectangle, so that test is exact.
 A tile with nothing in it is an empty byte string, which is a valid tile
 with no layers.
 
-Tiles change only when an ingest run completes or a source is switched on or
-off. `tile_token` is a token of both, and `/meta` gives the tile address with
-it as `?v=`, so a tile asked for with the current token can be cached as
-immutable and an ingest reaches every browser at once.
+Tiles change only when an ingest run stores records or a source is switched
+on or off. The runner commits batch by batch, so a run that fails part-way
+has changed them too, and a run still going changes them with every batch.
+`tile_token` covers the last run to finish in any status, every run still
+going and the enabled sources, and `/meta` gives the tile address with it as
+`?v=`. A tile asked for with the current token can be cached as
+immutable while no run is going (`tile_version`), so an ingest reaches every
+browser at once.
 """
 
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 
 from sqlalchemy import TextClause, func, select, text
 from sqlalchemy.orm import Session
@@ -239,14 +244,36 @@ def check_tile(z: int, x: int, y: int) -> None:
         raise TileNotFoundError(f"{z}/{x}/{y} is not a tile. Zoom runs from 0 to {MAX_ZOOM}.")
 
 
-def tile_token(db: Session) -> str:
-    """A token of what the tiles are drawn from: the last completed ingest run and the enabled sources."""
-    finished = db.scalar(
-        select(func.max(IngestRun.finished_at)).where(IngestRun.status == IngestStatus.COMPLETED.value)
-    )
+@dataclass(frozen=True)
+class TileVersion:
+    token: str
+    # False while an ingest run is going: its batches change tiles under the same token.
+    settled: bool
+
+
+def tile_version(db: Session) -> TileVersion:
+    """A token of what the tiles are drawn from, and whether tiles under it can still change.
+
+    The token covers the last run to finish in any status, because a failed
+    run keeps the batches it committed, the start of every run still going,
+    and the enabled sources.
+    """
+    finished = db.scalar(select(func.max(IngestRun.finished_at)))
+    running = db.scalars(
+        select(IngestRun.started_at)
+        .where(IngestRun.status == IngestStatus.RUNNING.value)
+        .order_by(IngestRun.started_at)
+    ).all()
     enabled = db.scalars(select(Source.key).where(Source.enabled).order_by(Source.key)).all()
     stamp = finished.isoformat() if finished is not None else "never"
-    return hashlib.sha256("\n".join([stamp, *enabled]).encode()).hexdigest()[:12]
+    parts = [stamp, *(f"running {started.isoformat()}" for started in running), *enabled]
+    token = hashlib.sha256("\n".join(parts).encode()).hexdigest()[:12]
+    return TileVersion(token=token, settled=not running)
+
+
+def tile_token(db: Session) -> str:
+    """The token `/meta` puts in the tile address (`tile_version`)."""
+    return tile_version(db).token
 
 
 def tile_url(token: str) -> str:
