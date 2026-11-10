@@ -265,6 +265,10 @@ def create_app(settings: Settings | None = None, *, include_dev_routes: bool | N
     return app
 
 
+# How long a stopping server waits for open requests before closing them.
+GRACEFUL_SHUTDOWN_SECONDS = 5
+
+
 def run() -> None:
     """`fieldclub-api`: serve the app with uvicorn."""
     import uvicorn
@@ -280,6 +284,10 @@ def run() -> None:
         # The client address comes from X-Forwarded-For under our own rules
         # (see fieldclub.auth.deps.client_ip), not uvicorn's.
         proxy_headers=False,
+        # Without a limit uvicorn waits for every open connection after SIGTERM,
+        # so one long request (an event stream) would hold each shutdown until
+        # the platform kills the process.
+        timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_SECONDS,
     )
 
 
