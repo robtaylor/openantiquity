@@ -20,7 +20,7 @@ from pyproj import CRS, Transformer
 from shapely.geometry.base import BaseGeometry
 
 from fieldclub.config import Settings
-from fieldclub.ingest.runner import IngestError
+from fieldclub.ingest.errors import IngestError
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,49 @@ class IncompleteReadError(AdapterError):
     """A reader got fewer features than the upstream said it had."""
 
     code = "ingest_incomplete_read"
+
+
+class Tally:
+    """The distinct features a paged read has given, so a repeat can't stand in for one that was skipped.
+
+    When the data shifts between pages, an offset can give one feature twice
+    and never give another. Counting every feature would then look complete.
+    `add` takes each feature's id, and `check` compares the distinct count
+    with what the upstream said it had. A feature without an id counts once
+    each time, because there is nothing to tell it by.
+    """
+
+    def __init__(self, where: str, expected: int, tolerance: float = 0.0, what: str = "features") -> None:
+        assert expected >= 0, "the expected count can't be negative"
+        assert 0 <= tolerance < 1, "tolerance is a share between 0 and 1"
+        self.where = where
+        self.expected = expected
+        self.tolerance = tolerance
+        self.what = what
+        self.repeats = 0
+        self._ids: set[Any] = set()
+        self._without_id = 0
+
+    def add(self, key: Any) -> None:
+        if key is None:
+            self._without_id += 1
+        elif key in self._ids:
+            self.repeats += 1
+        else:
+            self._ids.add(key)
+
+    @property
+    def distinct(self) -> int:
+        return len(self._ids) + self._without_id
+
+    def check(self) -> None:
+        """Raise `IncompleteReadError` when fewer distinct features came than were promised."""
+        if self.distinct >= self.expected * (1 - self.tolerance):
+            return
+        repeats = f", and {self.repeats} more that repeated one already given" if self.repeats else ""
+        raise IncompleteReadError(
+            f"{self.where} said it had {self.expected} {self.what} and gave {self.distinct}{repeats}."
+        )
 
 
 @dataclass(frozen=True)
@@ -104,6 +147,19 @@ def plain(value: Any) -> Any:
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="replace")
     return value
+
+
+def plain_tree(value: Any) -> Any:
+    """`plain` applied all the way down through the lists and objects of a JSON value.
+
+    Python's JSON reader accepts `NaN` and `Infinity`, so a parsed payload can
+    hold values the runner refuses to store.
+    """
+    if isinstance(value, dict):
+        return {key: plain_tree(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [plain_tree(item) for item in value]
+    return plain(value)
 
 
 def json_ready(properties: dict[str, Any]) -> dict[str, Any]:

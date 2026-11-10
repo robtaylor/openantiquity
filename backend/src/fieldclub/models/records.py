@@ -13,6 +13,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    SmallInteger,
     Text,
     UniqueConstraint,
     true,
@@ -105,6 +106,31 @@ class Record(Base):
         return f"<Record {self.source_key}:{self.external_id} {self.name!r}>"
 
 
+class RecordCellCount(Base):
+    """How many records of one source and category have their centroid in one map cell.
+
+    Derived from `records` by `services.record_tiles.refresh_counts`, which the
+    ingest runner calls after every run, so low-zoom tiles read a few hundred
+    rows instead of counting the whole index. A cell at `level` L is one tile
+    of the Web Mercator grid at zoom L, numbered `cx` from the west and `cy`
+    from the north as tiles are. A tile at zoom z holds the 32 by 32 cells of
+    level z + 5 inside it.
+    """
+
+    __tablename__ = "record_cell_counts"
+    __table_args__ = (enum_check("category", RecordCategory),)
+
+    created_at: Mapped[CreatedAt]
+    level: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    cx: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cy: Mapped[int] = mapped_column(Integer, primary_key=True)
+    category: Mapped[str] = mapped_column(Text, primary_key=True)
+    source_key: Mapped[str] = mapped_column(
+        Text, ForeignKey("sources.key", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    count: Mapped[int] = mapped_column(Integer)
+
+
 class IngestRun(Base):
     __tablename__ = "ingest_runs"
     __table_args__ = (enum_check("status", IngestStatus),)
@@ -161,4 +187,4 @@ class AdminArea(Base):
     geom: Mapped[WKBElement] = mapped_column(multipolygon())
 
 
-__all__ = ["AdminArea", "IngestRun", "Place", "Record", "Source"]
+__all__ = ["AdminArea", "IngestRun", "Place", "Record", "RecordCellCount", "Source"]

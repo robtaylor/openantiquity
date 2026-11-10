@@ -27,6 +27,7 @@ EXPECTED_TABLES = {
     "media",
     "sources",
     "records",
+    "record_cell_counts",
     "ingest_runs",
     "places",
     "admin_areas",

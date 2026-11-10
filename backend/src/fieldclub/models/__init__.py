@@ -21,7 +21,7 @@ from fieldclub.models.findings import (
     Observation,
 )
 from fieldclub.models.people import AuthIdentity, MagicLink, ReputationEvent, User, UserSession
-from fieldclub.models.records import AdminArea, IngestRun, Place, Record, Source
+from fieldclub.models.records import AdminArea, IngestRun, Place, Record, RecordCellCount, Source
 
 __all__ = [
     "Activity",
@@ -43,6 +43,7 @@ __all__ = [
     "Observation",
     "Place",
     "Record",
+    "RecordCellCount",
     "Report",
     "ReputationEvent",
     "Source",

@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import math
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 from shapely.geometry import LineString, Point
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from fieldclub.ingest.runner import run_connector
+from fieldclub.models import Source
 from fieldclub.services import record_tiles
 from tests.helpers import error_code
+from tests.ingest.fakes import FakeConnector, record
 from tests.records import mvt
 from tests.records.support import OVERTON, SILBURY, add_record, add_source
 
@@ -33,6 +38,8 @@ def index(db: Session) -> dict[str, int]:
         "dyke": add_record(db, designations, "Wansdyke", geom=LineString([(-1.95, 51.37), (-1.80, 51.38)])),
         "secret": add_record(db, hidden, "Hidden record", -1.8560, 51.4160),
     }
+    # The ingest runner does this after every run. These records were added by hand.
+    record_tiles.refresh_counts(db)
     db.commit()
     return {name: record.id for name, record in made.items()}
 
@@ -142,3 +149,47 @@ def test_a_busy_feature_tile_falls_back_to_counts(
     # With the filter, few enough records remain to send them one by one.
     filtered = get_tile(client, 15, *tile_of(*SILBURY, 15), category="find")
     assert set(filtered) == {"records"}
+
+
+def cells(tile: bytes) -> list[tuple[Any, ...]]:
+    layer = mvt.decode(tile).get("record_counts")
+    found = [] if layer is None else layer.features
+    return sorted((f.first, *(f.properties[key] for key in ("category", "count", "sources"))) for f in found)
+
+
+@pytest.mark.parametrize("z", range(record_tiles.FEATURES_FROM_ZOOM))
+def test_stored_counts_match_counting_the_records(db: Session, z: int) -> None:
+    """Every count zoom, around Avebury with records spread over several cells and a tile edge."""
+    source = add_source(db)
+    finds = add_source(db, "test-finds", name="Test finds", category="find")
+    for step in range(40):
+        lon, lat = -1.95 + step * 0.0071, 51.36 + (step % 7) * 0.013
+        add_record(db, source if step % 3 else finds, f"Record {step}", lon, lat)
+    record_tiles.refresh_counts(db)
+    db.flush()
+    x, y = tile_of(-1.85, 51.40, z)
+    assert cells(record_tiles.record_tile(db, z, x, y)), "the tile in the middle has counts"
+    for dx in (-1, 0, 1):
+        if not 0 <= x + dx < 2**z:
+            continue
+        stored = record_tiles.record_tile(db, z, x + dx, y)
+        live = db.execute(
+            record_tiles._COUNTS,
+            {"z": z, "x": x + dx, "y": y, "extent": record_tiles.EXTENT, "categories": None, "grid": 32},
+        ).scalar()
+        assert cells(stored) == cells(bytes(live) if live is not None else b"")
+
+
+def test_an_ingest_run_refreshes_the_counts(client: TestClient, db: Session) -> None:
+    def total() -> int:
+        layers = get_tile(client, 6, *tile_of(-1.85, 51.43, 6))
+        return sum(f.properties["count"] for f in layers["record_counts"].features) if layers else 0
+
+    run_connector(FakeConnector([record("A"), record("B"), record("C")]))
+    assert total() == 3
+    run_connector(FakeConnector([record("A")]))
+    assert total() == 1
+    # A disabled source drops out at once, without a refresh.
+    db.execute(update(Source).values(enabled=False))
+    db.commit()
+    assert total() == 0

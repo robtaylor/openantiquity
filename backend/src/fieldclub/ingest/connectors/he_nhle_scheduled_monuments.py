@@ -25,6 +25,12 @@ HUB_EXPORT = (
     "767f279327a24845bf47dfe5eae9862b/geoPackage?layers=6"
 )
 LIST_ENTRY_URL = "https://historicengland.org.uk/listing/the-list/list-entry/{ListEntry}"
+# Historic England recommends this statement with its data. The work-list keeps it among the gotchas.
+CURRENCY_STATEMENT = (
+    "The Historic England Data contained in this material was obtained on [date]. "
+    "The most publicly available up to date Historic England Data can be obtained from "
+    "HistoricEngland.org.uk."
+)
 FIELDS = ("ListEntry", "Name", "SchedDate", "AmendDate", "CaptureScale", "NGR", "area_ha")
 
 
@@ -34,11 +40,12 @@ class ScheduledMonuments(Connector):
         key="he-nhle-scheduled-monuments",
         name="Scheduled monuments",
         publisher="Historic England",
-        licence="Open Government Licence v3.0, via the Historic England Open Data Hub terms",
+        licence="Open Government Licence v3.0, via Historic England Open Data Hub Terms and Conditions",
         licence_url="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+        # The runner fills in [year] and [date] from when the export was downloaded.
         attribution=(
-            "© Historic England 2026. "
-            "Contains Ordnance Survey data © Crown copyright and database right 2026."
+            "© Historic England [year]. "
+            "Contains Ordnance Survey data © Crown copyright and database right [year]. " + CURRENCY_STATEMENT
         ),
         category=RecordCategory.DESIGNATION,
         access=SourceAccess.BULK,
@@ -51,7 +58,8 @@ class ScheduledMonuments(Connector):
 
     def fetch(self, *, bbox: BBox | None = None, limit: int | None = None) -> Iterator[RecordIn]:
         path = cache_dir(self.settings, self.source.key) / "scheduled-monuments.gpkg"
-        download(HUB_EXPORT, path, client=self.http, polite=Polite(), max_age=self.max_age)
+        fetched = download(HUB_EXPORT, path, client=self.http, polite=Polite(), max_age=self.max_age)
+        self.obtained_at = fetched.fetched_at
         info = vector_info(path)
         missing = [name for name in FIELDS if name not in list(info["fields"])]
         if missing or info.get("crs") != "EPSG:27700":

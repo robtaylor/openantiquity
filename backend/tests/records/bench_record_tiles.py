@@ -1,5 +1,5 @@
 # ruff: noqa: T201 - a command-line report, so it prints
-"""Record tile timings and query plans over 500,000 synthetic records.
+"""Record tile timings and query plans over synthetic records, 500,000 by default.
 
     uv run python -m tests.records.bench_record_tiles [--records 500000]
 
@@ -92,10 +92,16 @@ def main() -> None:
                         {"count": args.records, "dense_lon": DENSE[0], "dense_lat": DENSE[1]},
                     )
         print(f"Filled {args.records:,} records in {time.perf_counter() - started:.1f} s")
+        started = time.perf_counter()
+        with Session(engine) as db:
+            record_tiles.refresh_counts(db)
+            db.commit()
+        print(f"Stored the low-zoom cell counts in {time.perf_counter() - started:.1f} s")
 
-        cases = [(6, "most of England in one tile"), (10, "about 40 km across"), (14, "about 2.4 km across")]
-        cases.insert(2, (record_tiles.FEATURES_FROM_ZOOM, "the first zoom that can carry individual records"))
-        cases.insert(3, (13, "about 4.8 km across"))
+        cases = [(0, "the whole world"), (6, "most of England in one tile"), (10, "about 40 km across")]
+        cases.append((14, "about 2.4 km across"))
+        cases.insert(3, (record_tiles.FEATURES_FROM_ZOOM, "the first zoom that can carry individual records"))
+        cases.insert(4, (13, "about 4.8 km across"))
         with Session(engine) as db:
             for z, what in cases:
                 x, y = tile_of(*DENSE, z)
@@ -104,11 +110,8 @@ def main() -> None:
                     clock = time.perf_counter()
                     size = len(record_tiles.record_tile(db, z, x, y))
                     timings.append((time.perf_counter() - clock) * 1000)
-                params = {"z": z, "x": x, "y": y, "extent": record_tiles.EXTENT, "categories": None}
-                features = z >= record_tiles.FEATURES_FROM_ZOOM and not record_tiles.is_busy(db, params)
-                statement = record_tiles._FEATURES if features else record_tiles._COUNTS
-                params |= {"buffer": record_tiles.BUFFER, "margin": record_tiles.BUFFER / record_tiles.EXTENT}
-                params |= {"grid": record_tiles.GRID}
+                statement, params = record_tiles.tile_query(db, z, x, y)
+                layer = "records" if statement is record_tiles._FEATURES else "record_counts"
                 plan = (
                     db.execute(text(f"EXPLAIN (ANALYZE, BUFFERS) {statement.text}"), params).scalars().all()
                 )
@@ -119,7 +122,6 @@ def main() -> None:
                     ),
                     {"z": z, "x": x, "y": y},
                 ).scalar()
-                layer = "records" if features else "record_counts"
                 print(f"\n=== z{z}/{x}/{y}: {what}. {inside:,} records, layer {layer}, tile {size:,} bytes")
                 print(
                     f"    median {statistics.median(timings):.1f} ms, "

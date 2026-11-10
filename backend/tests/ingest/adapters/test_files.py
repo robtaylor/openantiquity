@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -127,6 +128,13 @@ def test_csv_rows_without_coordinates_have_no_geometry(tmp_path: Path) -> None:
     assert features[0].properties["Easting"] is None
 
 
+def test_csv_in_the_wrong_encoding_is_named(tmp_path: Path) -> None:
+    path = tmp_path / "rows.csv"
+    path.write_bytes("MonUID,Name\nMLI1,Mill\nMLI2,Caf\xe9 site\n".encode("cp1252"))
+    with pytest.raises(UpstreamFormatError, match=r"rows\.csv isn't utf-8-sig: .*Pass encoding="):
+        list(read_csv(path))
+
+
 def test_csv_without_the_named_columns_is_an_error() -> None:
     with pytest.raises(UpstreamFormatError, match="no column 'X'"):
         list(read_csv(FIXTURES / "lincs.csv", x="X", y="Y", encoding="cp1252"))
@@ -159,3 +167,23 @@ def test_plain_objects_are_kept_whole(tmp_path: Path) -> None:
     [feature] = read_ndjson(path)
     assert feature.properties == {"id": 1, "name": "A"}
     assert feature.geometry is None
+
+
+def test_nan_and_infinity_become_none_all_the_way_down(tmp_path: Path) -> None:
+    path = tmp_path / "odd.ndjson"
+    path.write_text(
+        '{"type": "Feature", "properties": {"len": NaN, "parts": [1, Infinity, {"w": -Infinity}]}, '
+        '"geometry": null}\n{"a": Infinity, "b": "text"}\n'
+    )
+    first, second = read_ndjson(path)
+    assert first.properties == {"len": None, "parts": [1, None, {"w": None}]}
+    assert second.properties == {"a": None, "b": "text"}
+    # What the runner does with `raw`.
+    json.dumps([first.properties, second.properties], allow_nan=False)
+
+
+def test_ndjson_in_the_wrong_encoding_is_named(tmp_path: Path) -> None:
+    path = tmp_path / "rows.ndjson"
+    path.write_bytes('{"name": "Caf\xe9"}\n'.encode("cp1252"))
+    with pytest.raises(UpstreamFormatError, match=r"rows\.ndjson isn't utf-8: .*Pass encoding="):
+        list(read_ndjson(path))

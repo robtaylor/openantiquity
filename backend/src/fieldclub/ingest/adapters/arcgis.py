@@ -7,12 +7,13 @@
 The reader asks the layer for its metadata, then for a count, then pages. A
 layer that supports pagination is paged by `resultOffset`, ordered by object
 id. One that doesn't is paged by ranges of object ids, from `returnIdsOnly`.
-The page size never exceeds the layer's `maxRecordCount`, and the offset
-moves by however many features came back, so a server that caps pages lower
-than it says (Historic England's says 22,000 at the root and gives 2,000)
-still reads completely. Geometry is asked for in EPSG:4326 and checked on the
-way back. When fewer features arrive than the count promised, the reader
-raises `IncompleteReadError` instead of letting a short run look complete.
+The page size never exceeds the layer's `maxRecordCount`. Servers cap pages
+lower than they say (Historic England's says 22,000 at the root and gives
+2,000), so the offset moves by however many features came back, and a range
+that comes back short is asked for again from the first id still missing.
+Geometry is asked for in EPSG:4326 and checked on the way back. When fewer
+distinct object ids arrive than the count promised, the reader raises
+`IncompleteReadError` instead of letting a short run look complete.
 
 Responses are Esri JSON, not GeoJSON, because every ArcGIS server version
 speaks it. `esri_geometry` turns its geometries into shapely.
@@ -33,8 +34,8 @@ from shapely.geometry.base import BaseGeometry
 from fieldclub.ingest.adapters.common import (
     AdapterError,
     Feature,
-    IncompleteReadError,
     Polite,
+    Tally,
     UpstreamFormatError,
     plain,
     to_wgs84,
@@ -157,7 +158,7 @@ class ArcGISLayer:
 
     # ------------------------------------------------------------------ paging
 
-    def _query(self, params: dict[str, str]) -> tuple[list[Feature], bool]:
+    def _query(self, params: dict[str, str]) -> list[Feature]:
         query = {
             **params,
             "outFields": self.out_fields,
@@ -181,34 +182,48 @@ class ArcGISLayer:
             if geometry is not None and crs is not None:
                 geometry = to_wgs84(geometry, crs)
             properties = {key: plain(value) for key, value in attributes.items()}
-            features.append(Feature(properties, geometry, properties.get(oid)))
-        return features, bool(body.get("exceededTransferLimit"))
+            if not isinstance(properties.get(oid), int):
+                raise UpstreamFormatError(f"{self.url} gave a feature without its object id {oid}.")
+            features.append(Feature(properties, geometry, properties[oid]))
+        return features
 
     def _by_offset(self, bbox: BBox | None, expected: int, page: int) -> Iterator[Feature]:
+        """Pages by offset until the count is reached or a page comes back empty."""
         offset = 0
         base = {**self._filter(bbox), "orderByFields": self.object_id_field}
         while offset < expected:
-            features, more = self._query(
-                {**base, "resultOffset": str(offset), "resultRecordCount": str(page)}
-            )
+            features = self._query({**base, "resultOffset": str(offset), "resultRecordCount": str(page)})
+            if not features:
+                break
             yield from features
             offset += len(features)
-            if not features or not (more or len(features) == page):
-                break
 
     def _by_id_range(self, bbox: BBox | None, page: int) -> Iterator[Feature]:
+        """Pages by ranges of object ids, asking again for the part of a range a capped answer left out."""
         ids = self.object_ids(bbox)
         oid = self.object_id_field
         filters = self._filter(bbox)
         for start in range(0, len(ids), page):
             chunk = ids[start : start + page]
-            where = f"({filters['where']}) AND {oid} >= {chunk[0]} AND {oid} <= {chunk[-1]}"
-            features, _ = self._query({**filters, "where": where})
-            if len(features) > len(chunk):
-                raise UpstreamFormatError(
-                    f"{self.url} returned more features than ids in {chunk[0]}..{chunk[-1]}."
-                )
-            yield from features
+            missing, given = set(chunk), set()
+            low = chunk[0]
+            while True:
+                where = f"({filters['where']}) AND {oid} >= {low} AND {oid} <= {chunk[-1]}"
+                features = self._query({**filters, "where": where})
+                if len(features) > len(chunk):
+                    raise UpstreamFormatError(
+                        f"{self.url} returned more features than ids in {low}..{chunk[-1]}."
+                    )
+                fresh = [feature for feature in features if feature.id not in given]
+                yield from fresh
+                given.update(feature.id for feature in fresh)
+                before = len(missing)
+                missing -= given
+                # Stop when the range is complete, or when asking again brought nothing new:
+                # the rest has gone since the ids were listed, and the tally will say so.
+                if not missing or len(missing) == before:
+                    break
+                low = min(missing)
 
     def features(self, bbox: BBox | None = None) -> Iterator[Feature]:
         """Every matching feature. Raises `IncompleteReadError` when the pages come up short."""
@@ -220,12 +235,11 @@ class ArcGISLayer:
             if self.supports_pagination
             else self._by_id_range(bbox, page)
         )
-        seen = 0
+        tally = Tally(self.url, expected, self.tolerance)
         for feature in pages:
-            seen += 1
+            tally.add(feature.id)
             yield feature
-        if seen < expected * (1 - self.tolerance):
-            raise IncompleteReadError(f"{self.url} said it had {expected} features and gave {seen}.")
+        tally.check()
 
 
 def _crs_of(reference: Any) -> str | None:

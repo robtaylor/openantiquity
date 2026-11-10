@@ -106,6 +106,7 @@ Columns marked with `*` are required. Every table has `id BIGINT` and `created_a
 | `sources` | `key*` text primary key, `name*`, `publisher*`, `licence*`, `licence_url`, `attribution*`, `reuse*` (open, share_alike, non_commercial, link_only), `homepage`, `coverage`, `category*`, `access*` (bulk, live, deeplink), `record_count`, `last_ingest_at`, `enabled*` |
 | `records` | `source_key*`, `external_id*`, `name*`, `summary`, `category*`, `record_type`, `monument_types` text[], `periods` text[], `geom*` Geometry, `centroid*` Point, `precision_m`, `url`, `raw` jsonb, `source_updated_at`, `ingested_at*`, `search` tsvector generated. Unique on source and external id |
 | `ingest_runs` | `source_key*`, `started_at*`, `finished_at`, `status*`, `stats` jsonb, `error` |
+| `record_cell_counts` | `level*`, `cx*`, `cy*`, `category*`, `source_key*`, `count*`. Primary key on the first five, no `id`. Records per Web Mercator cell for the low-zoom record tiles, rebuilt per source after every ingest run |
 | `places` | `name*`, `kind*`, `district`, `county`, `nation`, `geom*` Point, `rank*`, `source*`. Gazetteer for the search box |
 | `admin_areas` | `kind*` (nation, county), `code*`, `name*`, `geom*` MultiPolygon. Unique on kind and code. Used to work out which nation and county a point is in |
 
@@ -131,7 +132,7 @@ Columns marked with `*` are required. Every table has `id BIGINT` and `created_a
 ### Indexes that matter
 
 - `GIST (location)`, `GIST ((location::geography))`, `GIST (location_public)` and `GIST ((location_public::geography))` on `findings`.
-- `GIST (geom)`, `GIST ((centroid::geography))`, `GIN (search)` and a trigram `GIN (name gin_trgm_ops)` on `records`.
+- `GIST (geom)`, `GIST ((centroid::geography))`, `GIN (search)` and a trigram `GIN (name gin_trgm_ops)` on `records`. Also `GIST (centroid)` for the record tiles and `(lower(name) text_pattern_ops)` for names that start with the search text.
 - Trigram `GIN (name gin_trgm_ops)` and `GIST (geom)` on `places`.
 - `(finding_id)` on every child table of findings. `(user_id, read_at)` on `notifications`. `(created_at DESC)` on `activity`.
 

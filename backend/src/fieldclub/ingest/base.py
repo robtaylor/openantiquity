@@ -15,7 +15,7 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, ClassVar
 
 import httpx
@@ -33,6 +33,16 @@ BBox = tuple[float, float, float, float]
 BRITISH_ISLES: BBox = (-11.5, 49.0, 2.5, 61.5)
 
 _KEY_PATTERN = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
+
+
+def fill_attribution(text: str, obtained: date) -> str:
+    """`text` with `[year]` and `[date]`, such as "10 November 2026", filled in from `obtained`.
+
+    Work-list attributions carry `[year]`, and Historic England's currency
+    statement `[date]`. A connector copies the text as it stands, and the
+    runner fills both in when it stores the `sources` row, so it never goes stale.
+    """
+    return text.replace("[year]", str(obtained.year)).replace("[date]", f"{obtained.day} {obtained:%B %Y}")
 
 
 @dataclass(frozen=True)
@@ -106,6 +116,10 @@ class Connector(ABC):
     def __init__(self, settings: Settings | None = None, client: httpx.Client | None = None) -> None:
         self.settings = settings or get_settings()
         self._client = client
+        # When the data `fetch()` read was obtained from upstream, such as a
+        # cached download's fetch time. The runner fills the attribution's
+        # `[date]` and `[year]` from it, or from the run's start when it is None.
+        self.obtained_at: datetime | None = None
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)

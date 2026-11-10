@@ -143,6 +143,18 @@ def test_waits_while_the_hub_prepares_an_export(tmp_path: Path) -> None:
 
 
 @respx.mock
+def test_a_long_export_wait_leaves_the_error_retries_alone(tmp_path: Path) -> None:
+    exporting = httpx.Response(202, json={"status": "ExportingData"})
+    respx.get(HUB).mock(side_effect=[exporting] * 5 + [httpx.Response(502), redirect()])
+    respx.get(FILE).mock(return_value=whole())
+    polite = NoWait(delay_s=0, backoff_s=2)
+    result = download(HUB, tmp_path / "sm.gpkg", client=client(), polite=polite)
+    assert result.path.read_bytes() == BODY
+    # Five export polls with growing gaps, then the first retry's backoff.
+    assert polite.slept == [10.0, 20.0, 40.0, 80.0, 120.0, 2.0]
+
+
+@respx.mock
 def test_gives_up_on_an_export_that_never_finishes(tmp_path: Path) -> None:
     respx.get(HUB).mock(return_value=httpx.Response(202, json={"status": "ExportingData"}))
     with pytest.raises(AdapterError, match="still preparing the export"):

@@ -14,8 +14,16 @@ A tile at a feature zoom with more than `MAX_TILE_FEATURES` records gets
 counts instead, so a tile in the middle of a town never runs to a megabyte.
 The frontend draws whichever of the two layers a tile has.
 
-Both queries filter on an indexed column first: `centroid` for counts and
-`geom` for features, against the tile's envelope in EPSG:4326. A Web
+Counting a low-zoom tile from `records` meant transforming every centroid in
+it, over a second a tile at a million records. So the counts below
+`FEATURES_FROM_ZOOM` come from `record_cell_counts`, which holds each cell
+of every level a count tile uses, per source and category.
+`refresh_counts` rebuilds one source's cells, and the ingest runner calls it
+after every run. A busy tile at a feature zoom covers a small area, so it is
+still counted from `records`.
+
+The live queries filter on an indexed column first: `centroid` for counts
+and `geom` for features, against the tile's envelope in EPSG:4326. A Web
 Mercator tile is a longitude and latitude rectangle, so that test is exact.
 A tile with nothing in it is an empty byte string, which is a valid tile
 with no layers.
@@ -23,7 +31,7 @@ with no layers.
 
 from __future__ import annotations
 
-from sqlalchemy import text
+from sqlalchemy import TextClause, text
 from sqlalchemy.orm import Session
 
 from fieldclub.errors import BadRequestError, NotFoundError
@@ -35,6 +43,11 @@ FEATURES_FROM_ZOOM = 12
 # to 942 KB. 5,000 keeps a tile to about 300 KB.
 MAX_TILE_FEATURES = 5000
 GRID = 32
+# A count tile at zoom z is a GRID by GRID block of the cells at level z + CELL_LEVELS.
+CELL_LEVELS = 5
+assert 2**CELL_LEVELS == GRID, "a count cell must be a tile some zooms further in"
+# Half the width of the Web Mercator square, in metres.
+MERCATOR_HALF = 20_037_508.342789244
 EXTENT = 4096
 # How far features reach past the tile edge, in tile units, so lines and
 # outlines join up across tiles.
@@ -138,6 +151,78 @@ _COUNTS = text(
 )
 
 
+_STORED_COUNTS = text(
+    """
+    WITH cells AS (
+        SELECT c.cx, c.cy, c.category, sum(c.count) AS count,
+               string_agg(DISTINCT c.source_key, ',' ORDER BY c.source_key) AS sources
+        FROM record_cell_counts c
+        JOIN sources s ON s.key = c.source_key
+        WHERE s.enabled
+          AND c.level = :level
+          AND c.cx BETWEEN :cx0 AND :cx0 + :grid - 1
+          AND c.cy BETWEEN :cy0 AND :cy0 + :grid - 1
+          AND (CAST(:categories AS text[]) IS NULL OR c.category = ANY (CAST(:categories AS text[])))
+        GROUP BY c.cx, c.cy, c.category
+    )
+    SELECT ST_AsMVT(counted, 'record_counts', :extent, 'geom')
+    FROM (
+        SELECT cells.category, cells.count, cells.sources,
+               ST_AsMVTGeom(
+                   ST_SetSRID(
+                       ST_MakePoint(
+                           -:half + (cells.cx + 0.5) * :cell,
+                           :half - (cells.cy + 0.5) * :cell
+                       ),
+                       3857
+                   ),
+                   ST_TileEnvelope(:z, :x, :y), :extent, 0, true
+               ) AS geom
+        FROM cells
+    ) AS counted
+    WHERE counted.geom IS NOT NULL
+    """
+)
+
+_CLEAR_COUNTS = text(
+    "DELETE FROM record_cell_counts WHERE CAST(:source AS text) IS NULL OR source_key = :source"
+)
+
+# Each record's centroid in Web Mercator once, then its cell at every level.
+_FILL_COUNTS = text(
+    """
+    INSERT INTO record_cell_counts (source_key, level, cx, cy, category, count)
+    SELECT placed.source_key, levels.level,
+           LEAST(GREATEST(
+               CAST(floor((ST_X(placed.point) + :half) / (2 * :half) * power(2, levels.level)) AS integer), 0
+           ), CAST(power(2, levels.level) AS integer) - 1),
+           LEAST(GREATEST(
+               CAST(floor((:half - ST_Y(placed.point)) / (2 * :half) * power(2, levels.level)) AS integer), 0
+           ), CAST(power(2, levels.level) AS integer) - 1),
+           placed.category, count(*)
+    FROM (
+        SELECT source_key, category, ST_Transform(centroid, 3857) AS point
+        FROM records
+        WHERE CAST(:source AS text) IS NULL OR source_key = :source
+    ) AS placed
+    CROSS JOIN generate_series(CAST(:first_level AS integer), CAST(:last_level AS integer)) AS levels (level)
+    GROUP BY 1, 2, 3, 4, 5
+    """
+)
+
+
+def refresh_counts(db: Session, source_key: str | None = None) -> None:
+    """Rebuild the stored cell counts of one source, or of every source. Flushes, never commits."""
+    params = {
+        "source": source_key,
+        "half": MERCATOR_HALF,
+        "first_level": CELL_LEVELS,
+        "last_level": FEATURES_FROM_ZOOM - 1 + CELL_LEVELS,
+    }
+    db.execute(_CLEAR_COUNTS, params)
+    db.execute(_FILL_COUNTS, params)
+
+
 def check_tile(z: int, x: int, y: int) -> None:
     if not 0 <= z <= MAX_ZOOM or not (0 <= x < 2**z and 0 <= y < 2**z):
         raise TileOutOfRangeError(f"{z}/{x}/{y} is not a tile. Zoom runs from 0 to {MAX_ZOOM}.")
@@ -153,15 +238,26 @@ def check_categories(categories: list[str] | None) -> list[str] | None:
 
 
 def record_tile(db: Session, z: int, x: int, y: int, categories: list[str] | None = None) -> bytes:
-    """The tile at `z/x/y`: counts below `FEATURES_FROM_ZOOM`, records from it up."""
-    check_tile(z, x, y)
-    params = {"z": z, "x": x, "y": y, "extent": EXTENT, "categories": check_categories(categories)}
-    if z >= FEATURES_FROM_ZOOM and not is_busy(db, params):
-        statement, params = _FEATURES, params | {"buffer": BUFFER, "margin": BUFFER / EXTENT}
-    else:
-        statement, params = _COUNTS, params | {"grid": GRID}
+    """The tile at `z/x/y`: stored counts below `FEATURES_FROM_ZOOM`, records from it up."""
+    statement, params = tile_query(db, z, x, y, categories)
     tile = db.execute(statement, params).scalar()
     return bytes(tile) if tile is not None else b""
+
+
+def tile_query(
+    db: Session, z: int, x: int, y: int, categories: list[str] | None = None
+) -> tuple[TextClause, dict[str, object]]:
+    """The statement that builds the tile at `z/x/y`, and its parameters."""
+    check_tile(z, x, y)
+    params: dict[str, object] = {"z": z, "x": x, "y": y, "extent": EXTENT}
+    params["categories"] = check_categories(categories)
+    if z < FEATURES_FROM_ZOOM:
+        level = z + CELL_LEVELS
+        cells = {"level": level, "cx0": x * GRID, "cy0": y * GRID, "grid": GRID, "half": MERCATOR_HALF}
+        return _STORED_COUNTS, params | cells | {"cell": 2 * MERCATOR_HALF / 2**level}
+    if not is_busy(db, params):
+        return _FEATURES, params | {"buffer": BUFFER, "margin": BUFFER / EXTENT}
+    return _COUNTS, params | {"grid": GRID}
 
 
 def is_busy(db: Session, params: dict[str, object]) -> bool:

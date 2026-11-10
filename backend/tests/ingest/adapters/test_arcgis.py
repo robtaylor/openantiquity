@@ -188,3 +188,102 @@ def test_empty_and_unknown_geometry() -> None:
         esri_geometry({"curveRings": []})
     with pytest.raises(UpstreamFormatError, match="Unknown Esri geometry"):
         esri_geometry({"spline": []})
+
+
+# --------------------------------------------------------------------------
+# Paging against a synthetic layer
+# --------------------------------------------------------------------------
+
+
+class SyntheticLayer:
+    """A layer of `size` points with object ids 1 to `size`, serving at most `cap` a request.
+
+    `shift` moves feature 5 in front of feature 4 once the first page has
+    gone, as an edit between pages would. Features above `last` are listed
+    but never served, as if deleted after the ids were read.
+    """
+
+    def __init__(
+        self,
+        size: int = 10,
+        *,
+        cap: int,
+        max_record_count: int,
+        pagination: bool,
+        shift: bool = False,
+        last: int | None = None,
+    ) -> None:
+        self.order = list(range(1, size + 1))
+        self.cap = cap
+        self.shift = shift
+        self.last = size if last is None else last
+        self.info = {
+            "name": "Synthetic",
+            "objectIdField": "OBJECTID",
+            "maxRecordCount": max_record_count,
+            "advancedQueryCapabilities": {"supportsPagination": pagination},
+        }
+        self.pages = 0
+
+    def feature(self, oid: int) -> dict[str, Any]:
+        return {"attributes": {"OBJECTID": oid}, "geometry": {"x": -1.85 + oid / 1000, "y": 51.4}}
+
+    def answer(self, oids: list[int]) -> httpx.Response:
+        given = [oid for oid in oids if oid <= self.last][: self.cap]
+        body = {
+            "features": [self.feature(oid) for oid in given],
+            "exceededTransferLimit": len(oids) > self.cap,
+        }
+        return httpx.Response(200, json=body)
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        params = dict(request.url.params)
+        if request.url.path.endswith("/0"):
+            return httpx.Response(200, json=self.info)
+        if params.get("returnCountOnly") == "true":
+            return httpx.Response(200, json={"count": len(self.order)})
+        if params.get("returnIdsOnly") == "true":
+            return httpx.Response(
+                200, json={"objectIdFieldName": "OBJECTID", "objectIds": sorted(self.order)}
+            )
+        if "resultOffset" in params:
+            offset, count = int(params["resultOffset"]), int(params["resultRecordCount"])
+            order = self.order
+            if self.shift and self.pages > 0:
+                order = [1, 2, 3, 5, 4, *self.order[5:]]
+            self.pages += 1
+            return self.answer(order[offset : offset + count])
+        low, high = (int(value) for value in re.findall(r"OBJECTID [<>]= (\d+)", params["where"]))
+        return self.answer([oid for oid in sorted(self.order) if low <= oid <= high])
+
+
+def read_synthetic(layer: SyntheticLayer, **kwargs: Any) -> list[object]:
+    url = "https://synthetic.example/arcgis/rest/services/Things/FeatureServer/0"
+    with respx.mock:
+        respx.route(host="synthetic.example").mock(side_effect=layer)
+        reader = ArcGISLayer(url, client=httpx.Client(), polite=NoWait(delay_s=0), **kwargs)
+        return [feature.id for feature in reader.features()]
+
+
+def test_a_repeat_cannot_hide_a_skipped_feature() -> None:
+    layer = SyntheticLayer(cap=4, max_record_count=4, pagination=True, shift=True)
+    with pytest.raises(
+        IncompleteReadError, match="said it had 10 features and gave 9, and 1 more that repeated"
+    ):
+        read_synthetic(layer)
+
+
+def test_pages_capped_below_the_stated_limit_still_read_completely() -> None:
+    layer = SyntheticLayer(cap=3, max_record_count=6, pagination=True)
+    assert read_synthetic(layer) == list(range(1, 11))
+
+
+def test_an_id_range_capped_below_the_stated_limit_is_asked_for_again() -> None:
+    layer = SyntheticLayer(cap=3, max_record_count=6, pagination=False)
+    assert read_synthetic(layer) == list(range(1, 11))
+
+
+def test_an_id_range_whose_features_have_gone_ends_short() -> None:
+    layer = SyntheticLayer(cap=3, max_record_count=6, pagination=False, last=7)
+    with pytest.raises(IncompleteReadError, match="said it had 10 features and gave 7"):
+        read_synthetic(layer)

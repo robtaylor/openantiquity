@@ -23,7 +23,7 @@ Only `bulk` sources get a connector. A `live` source is queried by the browser a
 
 Every adapter yields `Feature(properties, geometry, id)`. The properties are plain Python values with NaN turned into None. The geometry is shapely in WGS84, longitude first, whatever the source's own CRS. Requests go through `Polite`, which leaves a second between requests, retries 408, 429 and 5xx with backoff, and honours `Retry-After`. Pass a `Polite(delay_s=...)` of your own when a source's `robots.txt` or terms ask for a longer gap.
 
-The ArcGIS and WFS readers count first and raise `IncompleteReadError` when the pages come up short, so a truncated answer fails the run instead of deleting records.
+The ArcGIS and WFS readers count first and raise `IncompleteReadError` when fewer distinct features arrive than the count promised, so a truncated answer, or one that repeats a feature where it skipped another, fails the run instead of deleting records. ArcGIS features are told apart by object id. A WFS layer needs `sort_by`, a unique property, which both keeps the paging stable and tells the features apart.
 
 ## 3. Write the class
 
@@ -36,9 +36,11 @@ class ScheduledMonuments(Connector):
         key="he-nhle-scheduled-monuments",  # the work-list key
         name="Scheduled monuments",
         publisher="Historic England",
-        licence="Open Government Licence v3.0, via the Historic England Open Data Hub terms",
+        licence="Open Government Licence v3.0, via Historic England Open Data Hub Terms and Conditions",
         licence_url="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
-        attribution="© Historic England 2026. Contains Ordnance Survey data © Crown copyright and database right 2026.",
+        # Copied with its placeholders. The runner fills in [year] and [date].
+        attribution="© Historic England [year]. Contains Ordnance Survey data © Crown copyright and database right [year]. "
+        + CURRENCY_STATEMENT,
         category=RecordCategory.DESIGNATION,
         access=SourceAccess.BULK,
         reuse=SourceReuse.OPEN,  # from the work-list, never guessed
@@ -49,7 +51,8 @@ class ScheduledMonuments(Connector):
 
     def fetch(self, *, bbox=None, limit=None):
         path = cache_dir(self.settings, self.source.key) / "scheduled-monuments.gpkg"
-        download(HUB_EXPORT, path, client=self.http, polite=Polite(), max_age=self.max_age)
+        fetched = download(HUB_EXPORT, path, client=self.http, polite=Polite(), max_age=self.max_age)
+        self.obtained_at = fetched.fetched_at  # dates the attribution
         info = vector_info(path)
         ...  # check the fields and CRS you rely on
         for feature in read_vector(path, bbox=bbox):
@@ -59,7 +62,7 @@ class ScheduledMonuments(Connector):
 Rules for the class:
 
 - The file name is the key with hyphens as underscores. `registry.discover()` imports every module in this package, so the file is all it takes.
-- `SourceInfo` refuses a blank licence or attribution and an unknown reuse class, and the `sources` table has a check that does the same. Copy licence, attribution and reuse from the work-list. Fill in any `[year]` in an attribution.
+- `SourceInfo` refuses a blank licence or attribution and an unknown reuse class, and the `sources` table has a check that does the same. Copy licence, attribution and reuse from the work-list word for word, and test them for equality with the entry. Leave `[year]` and `[date]` in the attribution as the work-list writes them: the runner fills both in when it stores the `sources` row, from `self.obtained_at` if `fetch()` set it and from the day of the run if not. Set `self.obtained_at` to the download's `fetched_at`, so a copy reused from the cache keeps the date it was really obtained. Add any statement the work-list's `gotchas` say the publisher asks for, such as Historic England's currency statement.
 - Use `self.http`, the shared client with the project `User-Agent`. Don't build your own.
 - Keep downloads under `cache_dir(self.settings, key)`, which is `var/ingest/<key>/`. Set `max_age` to how often the source changes, so a second run the same day costs the publisher nothing.
 - Check the shape you rely on before reading: the field names, the CRS, the layer. Raise `UpstreamFormatError` when it changed. A wrong assumption must stop the run, not write bad rows.
@@ -70,7 +73,7 @@ Rules for the class:
 
 | `RecordIn` field | From |
 |---|---|
-| `external_id` | The work-list's `id_field`, as text. It must be stable across runs, because the runner upserts on it |
+| `external_id` | The work-list's `id_field`, as text. It must be stable across runs, because the runner upserts on it. When `id_field` is null, see below |
 | `name` | `name_field`, stripped |
 | `geom` | `feature.geometry`. The runner works out the centroid, repairs invalid shapes and refuses anything outside Britain and Ireland |
 | `category` | Leave it out to use the source's |
@@ -81,6 +84,16 @@ Rules for the class:
 | `precision_m` | The work-list's `precision_m` |
 | `source_updated_at` | A timezone-aware datetime, if the source has one |
 | `raw` | `json_ready(feature.properties)`, so nothing is lost |
+
+### When the work-list has no `id_field`
+
+Many entries have `id_field` null: the source publishes no identifier of its own. Build `external_id` from upstream fields that name the thing itself and don't change when the file is republished, such as the grid reference and the name, or a hash of them:
+
+```python
+external_id = hashlib.sha256(f"{props['NGR']}|{props['Name'].strip().lower()}".encode()).hexdigest()[:20]
+```
+
+Don't use `OBJECTID`, `FID`, a row number or `feature.id` unless the publisher states the value is stable. They're numbered afresh when a layer is republished, and then a full run upserts every record under a new id and deletes the old ones, with their links from evidence and investigations. Check that the key is unique in the data, and raise `UpstreamFormatError` when two features give the same one, because the runner would otherwise keep the first and count the rest as duplicates. Say in the connector's docstring which fields the key is built from.
 
 ## 5. Record a fixture and test against it
 

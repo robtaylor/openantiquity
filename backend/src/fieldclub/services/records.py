@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 from fieldclub import gridref
 from fieldclub.errors import BadRequestError, NotFoundError
 from fieldclub.ingest import runner
-from fieldclub.ingest.runner import IngestError
+from fieldclub.ingest.errors import IngestError
 from fieldclub.models import Finding, Record, Source, User
 from fieldclub.models.common import SRID
 from fieldclub.schemas.common import decode_cursor, encode_cursor

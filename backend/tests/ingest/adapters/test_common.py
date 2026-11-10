@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import math
+import subprocess
+import sys
 from datetime import UTC, datetime
 
 import httpx
@@ -10,7 +12,7 @@ import respx
 from shapely.geometry import Point
 
 from fieldclub import gridref
-from fieldclub.ingest.adapters.common import AdapterError, json_ready, plain, to_wgs84
+from fieldclub.ingest.adapters.common import AdapterError, json_ready, plain, plain_tree, to_wgs84
 from tests.ingest.adapters.support import NoWait, xy
 
 URL = "https://upstream.example/thing"
@@ -113,3 +115,22 @@ def test_json_ready_writes_datetimes_as_text() -> None:
         "when": "2026-01-01T00:00:00+00:00",
         "n": 1,
     }
+
+
+def test_plain_tree_cleans_nested_values() -> None:
+    value = {"a": [math.nan, {"b": math.inf, "c": np.int64(3)}], "d": "x"}
+    assert plain_tree(value) == {"a": [None, {"b": None, "c": 3}], "d": "x"}
+
+
+def test_the_adapters_dont_import_the_database_layer() -> None:
+    # They know nothing about our tables, so loading one mustn't load the models or the runner.
+    code = (
+        "import sys\n"
+        "import fieldclub.ingest.adapters.arcgis, fieldclub.ingest.adapters.download\n"
+        "import fieldclub.ingest.adapters.files, fieldclub.ingest.adapters.sparql\n"
+        "import fieldclub.ingest.adapters.wfs\n"
+        "loaded = [m for m in ('fieldclub.db', 'fieldclub.models', 'fieldclub.ingest.runner', 'sqlalchemy')"
+        " if m in sys.modules]\n"
+        "assert not loaded, loaded\n"
+    )
+    subprocess.run([sys.executable, "-c", code], check=True)

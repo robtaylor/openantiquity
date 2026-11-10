@@ -5,8 +5,12 @@
     for feature in layer.features(bbox=bbox): ...
 
 The reader counts first with `resultType=hits`, then pages with `count` and
-`startIndex`. Paging is only stable when the server sorts, so `sort_by` names
-a unique property, usually the record number.
+`startIndex`. Paging is only stable when the server sorts, so `sort_by` is
+required and names a unique property, usually the record number. The reader
+also counts distinct values of it, so a feature repeated across pages can't
+hide one that was skipped. `startIndex` moves by however many features came
+back, so a server that caps pages below `count` (GeoServer's `maxFeatures`)
+still reads completely.
 
 Features are asked for in a projected CRS, the layer's own by default, and
 reprojected here. A WFS 2.0 server writes EPSG:4326 latitude first, and
@@ -30,10 +34,10 @@ from pyproj import CRS, Transformer
 from fieldclub.ingest.adapters.common import (
     WGS84,
     Feature,
-    IncompleteReadError,
     Polite,
+    Tally,
     UpstreamFormatError,
-    plain,
+    plain_tree,
 )
 from fieldclub.ingest.adapters.files import geojson_geometry, ogr_features, quiet_ogr
 from fieldclub.ingest.base import BBox
@@ -53,7 +57,7 @@ class WFSLayer:
         client: httpx.Client,
         polite: Polite | None = None,
         srs_name: str = "EPSG:27700",
-        sort_by: str | None = None,
+        sort_by: str,
         page_size: int = 1000,
         output_format: str = "application/json",
         tolerance: float = 0.0,
@@ -62,6 +66,7 @@ class WFSLayer:
         assert crs.is_projected, (
             f"ask for features in a projected CRS, not {srs_name}: geographic axis order is ambiguous"
         )
+        assert sort_by, "name a unique property to sort by, or paging can repeat and skip features"
         assert page_size >= 1, "page_size must be at least 1"
         assert 0 <= tolerance < 1, "tolerance is a share between 0 and 1"
         self.url = url
@@ -103,9 +108,8 @@ class WFSLayer:
             "srsName": self.srs_name,
             "count": str(self.page_size),
             "startIndex": str(start),
+            "sortBy": self.sort_by,
         }
-        if self.sort_by:
-            params["sortBy"] = self.sort_by
         response = self.polite.request(self.client, "GET", self.url, params=params)
         if b"ExceptionReport" in response.content[:400]:
             raise UpstreamFormatError(f"{self.url} refused the request: {response.text[:300]!r}")
@@ -125,7 +129,7 @@ class WFSLayer:
             raise UpstreamFormatError(f"{self.url} answered in {stated}, not {self.srs_name}.")
         return [
             Feature(
-                {key: plain(value) for key, value in (item.get("properties") or {}).items()},
+                plain_tree(item.get("properties") or {}),
                 geojson_geometry(item.get("geometry"), self.srs_name, where=str(item.get("id"))),
                 item.get("id"),
             )
@@ -143,12 +147,14 @@ class WFSLayer:
     def features(self, bbox: BBox | None = None) -> Iterator[Feature]:
         expected = self.count(bbox)
         logger.info("%s %s: %d features to read", self.url, self.type_name, expected)
-        seen = 0
-        while seen < expected:
-            page = self._page(bbox, seen)
-            yield from page
-            seen += len(page)
-            if len(page) < self.page_size:
+        tally = Tally(self.url, expected, self.tolerance, what=self.type_name)
+        start = 0
+        while start < expected:
+            page = self._page(bbox, start)
+            if not page:
                 break
-        if seen < expected * (1 - self.tolerance):
-            raise IncompleteReadError(f"{self.url} said it had {expected} {self.type_name} and gave {seen}.")
+            for feature in page:
+                tally.add(feature.properties.get(self.sort_by))
+                yield feature
+            start += len(page)
+        tally.check()

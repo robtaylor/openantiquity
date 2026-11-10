@@ -9,19 +9,25 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
 import respx
+import time_machine
 from shapely.geometry import Point
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fieldclub.ingest import registry
 from fieldclub.ingest.base import SourceInfo
-from fieldclub.ingest.connectors.he_nhle_scheduled_monuments import HUB_EXPORT, ScheduledMonuments
+from fieldclub.ingest.connectors.he_nhle_scheduled_monuments import (
+    CURRENCY_STATEMENT,
+    HUB_EXPORT,
+    ScheduledMonuments,
+)
 from fieldclub.ingest.runner import IngestFailedError, run_connector
 from fieldclub.models import Record, Source
 from fieldclub.models.common import point_lon_lat
@@ -85,9 +91,29 @@ def test_the_source_carries_the_work_list_licence() -> None:
     assert info.reuse == entry["reuse"] == "open"
     assert info.category == entry["category"]
     assert info.access == "bulk"
-    assert "Open Government Licence v3.0" in info.licence
-    # The work-list's attribution with the year filled in.
-    assert info.attribution == entry["attribution"].replace("[year]", "2026")
+    assert info.licence == entry["licence"]
+    # The work-list's attribution as it stands, then the currency statement from its gotchas.
+    statement = next(note for note in entry["gotchas"] if "currency statement" in note)
+    assert CURRENCY_STATEMENT in statement
+    assert info.attribution == f"{entry['attribution']} {CURRENCY_STATEMENT}"
+
+
+@respx.mock
+def test_the_stored_attribution_is_dated_from_the_download(db: Session) -> None:
+    serve_hub(FIXTURE.read_bytes())
+    with time_machine.travel(datetime(2027, 1, 2, 9, tzinfo=UTC), tick=False):
+        run_connector(ScheduledMonuments())
+    # A day later the copy on disk is still young enough, so it was obtained on the 2nd.
+    with time_machine.travel(datetime(2027, 1, 3, 1, tzinfo=UTC), tick=False):
+        run_connector(ScheduledMonuments())
+    source = db.get(Source, "he-nhle-scheduled-monuments")
+    assert source is not None
+    assert source.attribution == (
+        "© Historic England 2027. Contains Ordnance Survey data © Crown copyright and database right 2027. "
+        "The Historic England Data contained in this material was obtained on 2 January 2027. "
+        "The most publicly available up to date Historic England Data can be obtained from "
+        "HistoricEngland.org.uk."
+    )
 
 
 @respx.mock

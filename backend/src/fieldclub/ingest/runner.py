@@ -58,10 +58,12 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from fieldclub.config import get_settings
 from fieldclub.db import SessionLocal
-from fieldclub.errors import AppError, ConflictError
-from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo
+from fieldclub.errors import ConflictError
+from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo, fill_attribution
+from fieldclub.ingest.errors import IngestError
 from fieldclub.models import IngestRun, Record, Source
 from fieldclub.models.common import SRID
+from fieldclub.services import record_tiles
 from fieldclub.vocab import IngestStatus, Period, RecordCategory
 
 logger = logging.getLogger(__name__)
@@ -92,11 +94,6 @@ _UPDATED_COLUMNS = (
     "source_updated_at",
     "ingested_at",
 )
-
-
-class IngestError(AppError):
-    code = "ingest_error"
-    message = "The ingest run failed."
 
 
 class InvalidRecordError(IngestError):
@@ -318,14 +315,17 @@ def _upsert_batch(db: Session, rows: list[dict[str, Any]], stats: RunStats) -> N
     stats.seen += len(rows)
 
 
-def upsert_source(db: Session, info: SourceInfo) -> None:
-    """Create or refresh the `sources` row. `enabled` is left alone once the row exists."""
+def upsert_source(db: Session, info: SourceInfo, obtained: datetime | None = None) -> None:
+    """Create or refresh the `sources` row. `enabled` is left alone once the row exists.
+
+    The attribution's `[year]` and `[date]` are filled from `obtained`, or from now.
+    """
     values = {
         "name": info.name,
         "publisher": info.publisher,
         "licence": info.licence,
         "licence_url": info.licence_url,
-        "attribution": info.attribution,
+        "attribution": fill_attribution(info.attribution, (obtained or datetime.now(UTC)).date()),
         "homepage": info.homepage,
         "coverage": info.coverage,
         "category": str(info.category),
@@ -417,6 +417,8 @@ def _finish(
     if status is IngestStatus.COMPLETED:
         values["last_ingest_at"] = now
     db.execute(update(Source).where(Source.key == source_key).values(**values))
+    # Low-zoom record tiles read stored counts. A failed run may have committed batches, so always.
+    record_tiles.refresh_counts(db, source_key)
     db.commit()
 
 
@@ -511,6 +513,9 @@ def run_connector(
                 raise
 
             stats.seconds = round(time.monotonic() - clock, 3)
+            if connector.obtained_at is not None:
+                # The attribution's date is when the data was obtained, which fetch() has now said.
+                upsert_source(db, info, connector.obtained_at)
             _finish(db, run_id, info.key, stats, IngestStatus.COMPLETED, None)
             logger.info("%s: run %d completed: %s", info.key, run_id, asdict(stats))
             db.refresh(run)

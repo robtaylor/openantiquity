@@ -18,7 +18,7 @@ import json
 import logging
 import math
 import warnings
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -32,7 +32,7 @@ from shapely.errors import ShapelyError
 from shapely.geometry import Point, shape
 from shapely.geometry.base import BaseGeometry
 
-from fieldclub.ingest.adapters.common import WGS84, Feature, UpstreamFormatError, plain, to_wgs84
+from fieldclub.ingest.adapters.common import WGS84, Feature, UpstreamFormatError, plain, plain_tree, to_wgs84
 from fieldclub.ingest.base import BBox
 
 logger = logging.getLogger(__name__)
@@ -163,21 +163,37 @@ def read_csv(
     assert (x is None) == (y is None), "give both x and y, or neither"
     with Path(path).open(encoding=encoding, newline="") as handle:
         reader = csv.DictReader(handle, delimiter=delimiter)
-        if reader.fieldnames is None:
-            return
-        missing = [column for column in (x, y) if column is not None and column not in reader.fieldnames]
-        if missing:
-            raise UpstreamFormatError(f"{Path(path).name} has no column {missing[0]!r}: {reader.fieldnames}")
-        for number, row in enumerate(reader, start=2):
-            if None in row:
-                raise UpstreamFormatError(f"{Path(path).name} line {number} has more cells than headings.")
-            properties = {key: (value if value != "" else None) for key, value in row.items()}
-            geometry: BaseGeometry | None = None
-            if x is not None and y is not None:
-                east, north = _number(row[x]), _number(row[y])
-                if east is not None and north is not None:
-                    geometry = to_wgs84(Point(east, north), crs)
-            yield Feature(properties, geometry)
+        try:
+            yield from _csv_rows(Path(path).name, reader, x, y, crs)
+        except UnicodeDecodeError as exc:
+            raise _not_encoded(path, encoding, exc) from None
+
+
+def _not_encoded(path: Path | str, encoding: str, exc: UnicodeDecodeError) -> UpstreamFormatError:
+    # Text is decoded a block at a time, so there is no line number worth giving.
+    return UpstreamFormatError(
+        f"{Path(path).name} isn't {encoding}: {exc.reason}. Pass encoding= to say what it is."
+    )
+
+
+def _csv_rows(
+    name: str, reader: csv.DictReader[str], x: str | None, y: str | None, crs: str
+) -> Iterator[Feature]:
+    if reader.fieldnames is None:
+        return
+    missing = [column for column in (x, y) if column is not None and column not in reader.fieldnames]
+    if missing:
+        raise UpstreamFormatError(f"{name} has no column {missing[0]!r}: {reader.fieldnames}")
+    for number, row in enumerate(reader, start=2):
+        if None in row:
+            raise UpstreamFormatError(f"{name} line {number} has more cells than headings.")
+        properties = {key: (value if value != "" else None) for key, value in row.items()}
+        geometry: BaseGeometry | None = None
+        if x is not None and y is not None:
+            east, north = _number(row[x]), _number(row[y])
+            if east is not None and north is not None:
+                geometry = to_wgs84(Point(east, north), crs)
+        yield Feature(properties, geometry)
 
 
 def read_ndjson(
@@ -192,25 +208,30 @@ def read_ndjson(
     lines are skipped. A line that isn't JSON stops the read with its number.
     """
     with Path(path).open(encoding=encoding) as handle:
-        for number, line in enumerate(handle, start=1):
-            if not line.strip():
-                continue
-            try:
-                item = json.loads(line)
-            except ValueError as exc:
-                raise UpstreamFormatError(f"{Path(path).name} line {number} is not JSON: {exc}") from None
-            if not isinstance(item, dict):
-                raise UpstreamFormatError(f"{Path(path).name} line {number} is not a JSON object.")
-            if item.get("type") != "Feature":
-                yield Feature(item, None)
-                continue
-            properties = item.get("properties") or {}
-            if not isinstance(properties, dict):
-                raise UpstreamFormatError(
-                    f"{Path(path).name} line {number} has properties that aren't an object."
-                )
-            geometry = geojson_geometry(item.get("geometry"), crs, where=f"line {number}")
-            yield Feature(properties, geometry, item.get("id"))
+        try:
+            yield from _ndjson_lines(Path(path).name, handle, crs)
+        except UnicodeDecodeError as exc:
+            raise _not_encoded(path, encoding, exc) from None
+
+
+def _ndjson_lines(name: str, handle: Iterable[str], crs: str) -> Iterator[Feature]:
+    for number, line in enumerate(handle, start=1):
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+        except ValueError as exc:
+            raise UpstreamFormatError(f"{name} line {number} is not JSON: {exc}") from None
+        if not isinstance(item, dict):
+            raise UpstreamFormatError(f"{name} line {number} is not a JSON object.")
+        if item.get("type") != "Feature":
+            yield Feature(plain_tree(item), None)
+            continue
+        properties = item.get("properties") or {}
+        if not isinstance(properties, dict):
+            raise UpstreamFormatError(f"{name} line {number} has properties that aren't an object.")
+        geometry = geojson_geometry(item.get("geometry"), crs, where=f"line {number}")
+        yield Feature(plain_tree(properties), geometry, item.get("id"))
 
 
 def geojson_geometry(value: Any, crs: str = "EPSG:4326", *, where: str = "a feature") -> BaseGeometry | None:

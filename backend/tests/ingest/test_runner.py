@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
@@ -775,6 +776,26 @@ def test_source_details_are_refreshed_but_enabled_is_left_alone(db: Session) -> 
     row = source(db)
     assert row.attribution == "Contains made-up data"
     assert row.enabled is False, "someone switched the source off, and a re-run must not switch it back on"
+
+
+def test_the_attribution_year_and_date_are_filled_in_when_stored(db: Session) -> None:
+    class Dated(FakeConnector):
+        source = dataclasses.replace(SOURCE, attribution="\u00a9 Someone [year], obtained [date]")
+
+    with time_machine.travel(datetime(2027, 1, 2, 9, tzinfo=UTC), tick=False):
+        run_connector(Dated([record("A")]))
+    assert source(db).attribution == "\u00a9 Someone 2027, obtained 2 January 2027"
+
+    # A connector that says when its data was obtained dates it from then instead.
+    class Cached(Dated):
+        def fetch(self, *, bbox=None, limit=None):
+            self.obtained_at = datetime(2026, 12, 31, 23, tzinfo=UTC)
+            yield from super().fetch(bbox=bbox, limit=limit)
+
+    with time_machine.travel(datetime(2027, 1, 2, 9, tzinfo=UTC), tick=False):
+        run_connector(Cached([record("A")]))
+    db.expire_all()
+    assert source(db).attribution == "\u00a9 Someone 2026, obtained 31 December 2026"
 
 
 def test_prepare_row_is_pure_and_shapes_the_upsert() -> None:

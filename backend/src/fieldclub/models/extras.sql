@@ -154,3 +154,7 @@ $$;
 -- Record tiles count records by the point they sit at, so the tile query
 -- filters on centroid and needs it indexed as geometry too.
 CREATE INDEX IF NOT EXISTS ix_records_centroid ON records USING GIST (centroid);
+
+-- Record search finds names that start with the query through this, in name
+-- order, so a common word is cut short by the index instead of ranked whole.
+CREATE INDEX IF NOT EXISTS ix_records_name_prefix ON records (lower(name) text_pattern_ops);

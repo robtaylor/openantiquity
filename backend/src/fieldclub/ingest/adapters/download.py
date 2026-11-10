@@ -90,7 +90,9 @@ def download(
 
     part = dest.with_name(dest.name + ".part")
     part_meta = _read_meta(part)
-    attempt = 0
+    # Kept apart, so a long wait for an export doesn't use up the retries for errors.
+    retries = 0
+    polls = 0
     waited = 0.0
     while True:
         have = part.stat().st_size if part.is_file() else 0
@@ -101,16 +103,16 @@ def download(
         try:
             done = _fetch(client, url, params, headers, part, have, part_meta)
         except _Retry as retry:
-            attempt += 1
-            if attempt > polite.retries:
+            retries += 1
+            if retries > polite.retries:
                 raise AdapterError(f"Download of {short_url(url)} kept failing: {retry.reason}") from None
-            wait = polite.backoff(attempt, retry.response)
+            wait = polite.backoff(retries, retry.response)
             logger.warning("Download of %s: %s, retrying in %.0f s", short_url(url), retry.reason, wait)
             polite.sleep(wait)
             continue
         except _Exporting:
-            wait = min(10.0 * 2 ** min(attempt, 4), 120.0)
-            attempt += 1
+            wait = min(10.0 * 2 ** min(polls, 4), 120.0)
+            polls += 1
             waited += wait
             if waited > max_wait_s:
                 raise AdapterError(
@@ -121,7 +123,7 @@ def download(
             continue
         if done:
             break
-        attempt = 0
+        retries = 0
 
     size = part.stat().st_size
     expected = part_meta.get("total")
