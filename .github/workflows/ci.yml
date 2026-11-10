@@ -22,9 +22,11 @@ jobs:
     timeout-minutes: 30
     services:
       # The same PostGIS build as infra/docker-compose.yml, on the same port,
-      # so the test fixtures' default server address works unchanged.
+      # so the test fixtures' default server address works unchanged. Pinned
+      # by digest so a re-pushed tag can't change the database under the tests;
+      # `docker buildx imagetools inspect imresamu/postgis:17-3.5` gives a new one.
       db:
-        image: imresamu/postgis:17-3.5
+        image: imresamu/postgis:17-3.5@sha256:35fe7dceda62bfe7d2965b0ba78d915ff9f901b5e0466d633ecc58421b5b5210
         env:
           POSTGRES_USER: fieldclub
           POSTGRES_PASSWORD: fieldclub
@@ -131,5 +133,28 @@ jobs:
           file: infra/Dockerfile
           platforms: linux/amd64
           push: false
+          load: true
+          tags: fieldclub:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      # Runs it as Cloud Run would, so a missing library or a bad entrypoint
+      # fails here: it must answer /healthz and serve the app at /, then stop
+      # well inside the ten seconds Cloud Run allows after SIGTERM.
+      - name: Start the image and check it answers
+        run: |
+          # No database here, so the schema is left alone, as it is in production.
+          docker run --detach --name fieldclub --publish 8080:8080 --env PORT=8080 \
+            --env FIELDCLUB_AUTO_CREATE_SCHEMA=false fieldclub:ci
+          for _ in $(seq 1 30); do
+            curl --fail --silent http://127.0.0.1:8080/healthz >/dev/null && break
+            sleep 1
+          done
+          curl --fail --silent --show-error http://127.0.0.1:8080/healthz
+          curl --fail --silent --show-error --output /dev/null http://127.0.0.1:8080/
+          started=$(date +%s)
+          docker stop --time 10 fieldclub
+          stopped_in=$(( $(date +%s) - started ))
+          echo "Stopped in ${stopped_in} s"
+          [ "$stopped_in" -lt 8 ]
+      - if: always()
+        run: docker logs fieldclub || true

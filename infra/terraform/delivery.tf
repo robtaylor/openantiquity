@@ -1,13 +1,15 @@
 # GitHub Actions reaches the project through workload identity federation:
 # the deploy workflow trades its short-lived GitHub token for a short-lived
-# Google one, so no key exists anywhere. Only workflows in the named
-# repository, running on main, may use it.
+# Google one, so no key exists anywhere. Only deploy.yml, started by
+# hand on main in the repository with the given id, may use it.
 #
 # The deployer pushes images and runs `terraform plan`. It can't apply: a
 # deploy is the owner's `terraform apply` after reading that plan.
 
 locals {
   federate = var.github_repository != ""
+  # The one workflow allowed to deploy, as GitHub names it in its token.
+  deploy_workflow = "${var.github_repository}/.github/workflows/deploy.yml@refs/heads/main"
   deployer_project_roles = [
     # terraform plan reads every resource here, their IAM policies included.
     "roles/viewer",
@@ -47,7 +49,24 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "attribute.repository" = "assertion.repository"
     "attribute.ref"        = "assertion.ref"
   }
-  attribute_condition = "assertion.repository == '${var.github_repository}' && assertion.ref == 'refs/heads/main'"
+  # The id as well as the name, because a name can be registered again by
+  # someone else. The workflow and the event as well as the branch, because
+  # other workflows on main, such as one started by pull_request_target, run
+  # with the same ref.
+  attribute_condition = join(" && ", [
+    "assertion.repository_id == '${var.github_repository_id}'",
+    "assertion.repository == '${var.github_repository}'",
+    "assertion.ref == 'refs/heads/main'",
+    "assertion.job_workflow_ref == '${local.deploy_workflow}'",
+    "assertion.event_name == 'workflow_dispatch'",
+  ])
+
+  lifecycle {
+    precondition {
+      condition     = var.github_repository_id != ""
+      error_message = "Set github_repository_id with github_repository."
+    }
+  }
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
@@ -79,11 +98,12 @@ resource "google_project_iam_member" "deployer" {
   member  = google_service_account.deployer[0].member
 }
 
-# The plan has to take the state lock, which is an object in the state bucket.
+# The plan only reads the state: the workflow runs it with -lock=false, so the
+# deployer needs no write access to the state bucket.
 resource "google_storage_bucket_iam_member" "deployer_state" {
   count = local.federate ? 1 : 0
 
   bucket = "${var.project_id}-tfstate"
-  role   = "roles/storage.objectUser"
+  role   = "roles/storage.objectViewer"
   member = google_service_account.deployer[0].member
 }

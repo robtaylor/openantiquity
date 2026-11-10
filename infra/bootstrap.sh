@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Make the bucket that holds Terraform's state for a Field Club project.
 #
-#   bash infra/bootstrap.sh <project-id>
+#   bash infra/bootstrap.sh <project-id> [region]
 #
 # Run once by the owner, after the project exists and has billing. Safe to run
 # again: each step checks first and changes nothing that is already right.
@@ -9,13 +9,14 @@
 # default project is never used.
 set -euo pipefail
 
-if [ $# -ne 1 ]; then
-  echo "usage: $0 <project-id>" >&2
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+  echo "usage: $0 <project-id> [region]" >&2
   exit 2
 fi
 
 project=$1
-region=europe-west2
+# The same default as var.region in infra/terraform/variables.tf.
+region=${2:-europe-west2}
 bucket="${project}-tfstate"
 
 if ! [[ $project =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]]; then

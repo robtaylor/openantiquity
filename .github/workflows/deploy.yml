@@ -24,7 +24,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  REGION: europe-west2
   PROJECT: ${{ vars.GCP_PROJECT_ID }}
 
 jobs:
@@ -32,7 +31,7 @@ jobs:
     name: Build, push and plan
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    # The identity pool only trusts main, so refuse anything else up front.
+    # The identity pool only trusts deploy.yml on main, so refuse anything else up front.
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -57,9 +56,28 @@ jobs:
           service_account: ${{ vars.GCP_DEPLOYER_SERVICE_ACCOUNT }}
           token_format: access_token
 
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.14.8"
+          terraform_wrapper: false
+
+      # The registry's region and path come from Terraform, so they can't
+      # drift from var.region and var.name. The plan only reads the state.
+      - name: Find the image repository
+        id: repo
+        working-directory: infra/terraform
+        env:
+          TFVARS: ${{ vars.TFVARS }}
+        run: |
+          printf '%s\n' "$TFVARS" > terraform.tfvars
+          terraform init -input=false -backend-config="bucket=${PROJECT}-tfstate"
+          repository=$(terraform output -raw image_repository)
+          echo "repository=${repository}" >> "$GITHUB_OUTPUT"
+          echo "registry=${repository%%/*}" >> "$GITHUB_OUTPUT"
+
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
-          registry: ${{ env.REGION }}-docker.pkg.dev
+          registry: ${{ steps.repo.outputs.registry }}
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
 
@@ -73,28 +91,22 @@ jobs:
           platforms: linux/amd64
           push: true
           provenance: false
-          tags: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT }}/fieldclub/fieldclub:${{ github.sha }}
+          tags: ${{ steps.repo.outputs.repository }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        with:
-          terraform_version: "1.14.8"
-          terraform_wrapper: false
-
+      # The summary lists only which resources would change and how, never
+      # their values: if the repository is public, anyone can read it. The
+      # owner sees the whole plan again when running `terraform apply`.
       - name: Terraform plan
         working-directory: infra/terraform
-        env:
-          TFVARS: ${{ vars.TFVARS }}
         run: |
-          printf '%s\n' "$TFVARS" > terraform.tfvars
-          terraform init -input=false -backend-config="bucket=${PROJECT}-tfstate"
-          terraform plan -input=false -lock-timeout=5m -var "image_tag=${GITHUB_SHA}" -out=tfplan
+          terraform plan -input=false -lock=false -var "image_tag=${GITHUB_SHA}" -out=tfplan >/dev/null
           {
             echo "## Terraform plan for ${GITHUB_SHA}"
             echo
             echo '```'
-            terraform show -no-color tfplan | tail -n 200
+            terraform show -no-color tfplan | grep -E '^ *# .* (will|must) be |^Plan: |^No changes' || true
             echo '```'
             echo
             echo "To deploy, from infra/terraform: terraform apply -var image_tag=${GITHUB_SHA}"
