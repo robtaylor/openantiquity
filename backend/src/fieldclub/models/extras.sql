@@ -114,3 +114,9 @@ CREATE OR REPLACE TRIGGER findings_location_public_check
 -- (fieldclub.auth.email_link). Added here too so that an existing
 -- development database gains the column.
 ALTER TABLE magic_links ADD COLUMN IF NOT EXISTS browser_hash text;
+
+-- Reputation awards are paid once per person, finding and reason
+-- (fieldclub.services.reputation). The model declares this constraint for a
+-- new database. This adds it to one built before the constraint existed.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_reputation_events_user_id_finding_id_reason
+    ON reputation_events (user_id, finding_id, reason);

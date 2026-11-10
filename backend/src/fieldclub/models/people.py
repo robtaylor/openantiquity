@@ -122,6 +122,9 @@ class ReputationEvent(Base):
     """One itemised award of points, so a person can see where each one came from."""
 
     __tablename__ = "reputation_events"
+    # Each award is paid once per finding. `services.reputation` inserts with
+    # ON CONFLICT DO NOTHING against this, so a repeat is skipped.
+    __table_args__ = (UniqueConstraint("user_id", "finding_id", "reason"),)
 
     id: Mapped[IdPk]
     created_at: Mapped[CreatedAt]
