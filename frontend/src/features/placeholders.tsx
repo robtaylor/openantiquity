@@ -1,7 +1,6 @@
 import {
   Activity,
   BookOpen,
-  CircleUser,
   Eye,
   HandHelping,
   Info,
@@ -90,12 +89,6 @@ export const PLACEHOLDER_ROUTES: PlaceholderRoute[] = [
     body: "New findings, findings moving up a step, and mentions in videos and articles will appear here as they happen.",
   },
   {
-    path: "/account",
-    title: "Account",
-    icon: CircleUser,
-    body: "Your name, sign-in and settings will live here. You can look at everything, and try marking and checking, without an account. Saving needs one.",
-  },
-  {
     path: "/u/:handle",
     title: "Profile",
     subtitle: (params) => `@${params.handle ?? ""}`,
@@ -116,7 +109,8 @@ export const PLACEHOLDER_ROUTES: PlaceholderRoute[] = [
   },
 ];
 
-function useDocumentTitle(title: string): void {
+/** Sets the window title to `title · Field Club` while the page is shown. */
+export function useDocumentTitle(title: string): void {
   useEffect(() => {
     document.title = `${title} · ${APP_NAME}`;
     return () => {

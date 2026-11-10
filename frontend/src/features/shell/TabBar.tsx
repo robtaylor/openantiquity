@@ -2,6 +2,7 @@ import { Ellipsis } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router";
 import { useDismiss } from "../../ui/useDismiss.js";
+import { AccountModeIcon } from "../account/AccountModeIcon.js";
 import { isModeActive, MODES, REFERENCE, TAB_BAR_MODES } from "./navigation.js";
 
 /** The phone tab bar: four modes and "More", which holds the rest. */
@@ -69,7 +70,7 @@ export function TabBar() {
                   className={active ? "fc-tabbar__item fc-tabbar__item--active" : "fc-tabbar__item"}
                   aria-current={active ? "page" : undefined}
                 >
-                  <Icon size={20} aria-hidden />
+                  {mode.id === "account" ? <AccountModeIcon icon={Icon} size={20} /> : <Icon size={20} aria-hidden />}
                   {mode.label}
                 </NavLink>
               );

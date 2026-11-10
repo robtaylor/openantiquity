@@ -1,4 +1,5 @@
 import { NavLink, useLocation } from "react-router";
+import { AccountModeIcon } from "../account/AccountModeIcon.js";
 import { isModeActive, MODES, type Mode, REFERENCE } from "./navigation.js";
 
 function RailLink({ mode, pathname, compact }: { mode: Mode; pathname: string; compact: boolean }) {
@@ -13,7 +14,7 @@ function RailLink({ mode, pathname, compact }: { mode: Mode; pathname: string; c
       // The compact rail scrolls, which clips the pop-out label, so the browser's tooltip stands in.
       title={compact ? mode.label : undefined}
     >
-      <Icon size={22} aria-hidden />
+      {mode.id === "account" ? <AccountModeIcon icon={Icon} size={22} /> : <Icon size={22} aria-hidden />}
       <span className="fc-rail__tip" aria-hidden="true">
         {mode.label}
       </span>

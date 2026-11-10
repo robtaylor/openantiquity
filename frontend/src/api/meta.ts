@@ -191,7 +191,15 @@ export interface SignInProvider {
 export interface Meta {
   app: { name: string; version: string; contribution_licence: string };
   /** Every provider, in the order the sign-in sheet shows them. Offer only the enabled ones. Saving anything needs an account. */
-  auth: { providers: SignInProvider[] };
+  auth: {
+    providers: SignInProvider[];
+    /**
+     * True when the server offers `POST /auth/dev-login`, which only a
+     * development or test server does. The backend doesn't send it yet, so
+     * the sign-in sheet offers the development sign-in only when it appears.
+     */
+    dev_login?: boolean;
+  };
   vocab: Vocab;
   layers: MetaLayers;
   sources: SourceSummary[];

@@ -25,10 +25,15 @@ export function metaResponse(meta: unknown = metaFixture): Response {
   return json(meta);
 }
 
+/** The answer `GET /auth/me` gives when nobody is signed in. */
+export function signedOutResponse(): Response {
+  return json({ error: { code: "unauthorised", message: "Sign in first." } }, 401);
+}
+
 /**
  * The fixtures' answer to a request: `/meta` and `/findings` from their
- * fixtures, and 404 for anything else, as a backend that has not built the
- * endpoint yet would say.
+ * fixtures, nobody signed in, and 404 for anything else, as a backend that
+ * has not built the endpoint yet would say.
  */
 export async function fixtureResponse(input: unknown): Promise<Response> {
   switch (requestPath(input)) {
@@ -36,6 +41,8 @@ export async function fixtureResponse(input: unknown): Promise<Response> {
       return metaResponse();
     case "/api/v1/findings":
       return json(findingsData);
+    case "/api/v1/auth/me":
+      return signedOutResponse();
     default:
       return json({ detail: "Not Found" }, 404);
   }

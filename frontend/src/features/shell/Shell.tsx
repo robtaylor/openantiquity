@@ -29,6 +29,11 @@ import { Skeleton } from "../../ui/Skeleton.js";
 import { ToastViewport } from "../../ui/Toast.js";
 import { toast } from "../../ui/toastStore.js";
 import { LAYOUT } from "../../ui/tokens.js";
+import { AccountLayer } from "../account/AccountLayer.js";
+import { AccountPage } from "../account/AccountPage.js";
+import { EmailLinkPage } from "../account/EmailLinkPage.js";
+import { EMAIL_LINK_PATH } from "../account/emailLink.js";
+import { DraftsBar } from "../drafts/DraftsBar.js";
 import { APP_NAME, NotFoundPanel, PLACEHOLDER_ROUTES, PlaceholderPanel } from "../placeholders.js";
 import { BrandMark, ModeRail } from "./ModeRail.js";
 import { PanelFrame } from "./PanelFrame.js";
@@ -235,6 +240,9 @@ function ReadyShell({ meta }: { meta: Meta }) {
             </IconButton>
             <CameraControls />
           </div>
+          <div className="fc-stage__drafts" inert={sheetFull}>
+            <DraftsBar />
+          </div>
           <div className="fc-stage__raking" inert={stageCovered}>
             <RakingControl meta={meta} />
           </div>
@@ -268,6 +276,8 @@ function ReadyShell({ meta }: { meta: Meta }) {
         ) : (
           <Routes>
             <Route path="/" element={null} />
+            <Route path="/account" element={<AccountPage />} />
+            <Route path={EMAIL_LINK_PATH} element={<EmailLinkPage />} />
             {PLACEHOLDER_ROUTES.map((route) => (
               <Route key={route.path} path={route.path} element={<PlaceholderPanel route={route} />} />
             ))}
@@ -289,6 +299,8 @@ function ReadyShell({ meta }: { meta: Meta }) {
       </PanelEnvironmentProvider>
 
       {isPhone ? <TabBar /> : null}
+
+      <AccountLayer meta={meta} />
 
       <ToastViewport />
     </div>

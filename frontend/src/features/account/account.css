@@ -1,0 +1,262 @@
+/* The sign-in and welcome sheets, the account page and the emailed-link page. */
+
+/* On a phone the two sheets rise from the foot of the screen. */
+@media (max-width: 719.98px) {
+  .fc-dialog.fc-account-sheet {
+    width: 100vw;
+    max-width: 100vw;
+    max-height: calc(100dvh - 24px);
+    margin: auto 0 0;
+    border-width: 1px 0 0;
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+.fc-account-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fc-account-why {
+  color: var(--text-muted);
+}
+
+.fc-account-notice {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--raised);
+}
+
+.fc-account-notice > svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.fc-account-notice--error {
+  border-color: rgb(217 84 77 / 0.6);
+}
+
+.fc-account-notice--error > svg {
+  color: #f0827c;
+}
+
+.fc-account-notice--info > svg {
+  color: var(--info);
+}
+
+.fc-account-notice__title {
+  display: block;
+  margin-bottom: 2px;
+  font-weight: 600;
+}
+
+.fc-account-notice p + p {
+  margin-top: 6px;
+}
+
+.fc-account-providers {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fc-account-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-account-or::before,
+.fc-account-or::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+
+.fc-account-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.fc-account-form__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fc-account-form__row > .fc-input {
+  flex: 1 1 180px;
+}
+
+.fc-account-textarea {
+  height: auto;
+  min-height: 96px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.fc-account-textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.fc-account-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.fc-account-check input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.fc-account-small {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-account-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.fc-account-section h3 {
+  font-size: 17px;
+}
+
+.fc-account-who {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.fc-account-who__names {
+  min-width: 0;
+}
+
+.fc-account-who__name {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.fc-account-who__handle {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.fc-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fc-account-link {
+  font-weight: 600;
+}
+
+.fc-account-rail-avatar {
+  display: inline-flex;
+}
+
+/* Provider buttons, each in its provider's own style. */
+.fc-provider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    filter var(--duration) var(--ease),
+    background-color var(--duration) var(--ease);
+}
+
+.fc-provider:hover {
+  filter: brightness(1.08);
+}
+
+.fc-provider__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  flex: none;
+}
+
+/* Google's dark button: https://developers.google.com/identity/branding-guidelines */
+.fc-provider--google {
+  background: #131314;
+  border-color: #8e918f;
+  color: #e3e3e3;
+  border-radius: 22px;
+  font-family: Roboto, var(--font-ui);
+  font-weight: 500;
+  font-size: 14px;
+}
+
+/* Sign in with Apple, white for a dark background. */
+.fc-provider--apple {
+  background: #ffffff;
+  color: #000000;
+  font-family: -apple-system, BlinkMacSystemFont, var(--font-ui);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* Microsoft's dark button. */
+.fc-provider--microsoft {
+  background: #2f2f2f;
+  border-color: #8c8c8c;
+  color: #ffffff;
+  border-radius: 0;
+  font-family: "Segoe UI", var(--font-ui);
+  font-size: 15px;
+}
+
+/* Facebook's blue button. */
+.fc-provider--facebook {
+  background: #1877f2;
+  color: #ffffff;
+  font-family: Helvetica, Arial, var(--font-ui);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.fc-provider--osm,
+.fc-provider--other {
+  background: var(--raised);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.fc-provider--osm:hover,
+.fc-provider--other:hover {
+  filter: none;
+  background: #2d323a;
+}

@@ -1,4 +1,4 @@
-import { test as base, expect } from "@playwright/test";
+import { test as base, type ConsoleMessage, expect } from "@playwright/test";
 import { type NetworkLog, stubNetwork } from "./network.js";
 
 /**
@@ -8,6 +8,20 @@ import { type NetworkLog, stubNetwork } from "./network.js";
  * things fail on purpose and so expect the warnings.
  */
 export type PageProblems = "all" | "page-errors";
+
+/**
+ * A browser logs every 4xx answer as a console error, and `GET /auth/me`
+ * answers 401 to everyone who isn't signed in. That one is expected.
+ */
+function isSignedOutAnswer(message: ConsoleMessage): boolean {
+  const { url } = message.location();
+  return (
+    message.text().startsWith("Failed to load resource") &&
+    message.text().includes("401") &&
+    url !== "" &&
+    new URL(url).pathname === "/api/v1/auth/me"
+  );
+}
 
 interface Fixtures {
   pageProblems: PageProblems;
@@ -31,7 +45,9 @@ export const test = base.extend<Fixtures>({
       );
       if (pageProblems === "all") {
         page.on("console", (message) => {
-          if (message.type() === "error") problems.push(`console error: ${message.text()}`);
+          if (message.type() === "error" && !isSignedOutAnswer(message)) {
+            problems.push(`console error: ${message.text()}`);
+          }
           if (message.type() === "warning" && message.text().startsWith("[map]")) {
             problems.push(`map warning: ${message.text()}`);
           }
