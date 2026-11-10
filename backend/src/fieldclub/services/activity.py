@@ -3,7 +3,8 @@
 `record()` does three things in the caller's transaction:
 
 1. inserts an `activity` row,
-2. creates a notification for everyone following the finding, except the actor,
+2. creates a notification for everyone following the finding, except the actor
+   and anyone named in `quiet_for`,
 3. queues a small JSON payload on the PostgreSQL channel `fieldclub_events`.
 
 PostgreSQL holds a notification until the transaction commits and discards it
@@ -21,8 +22,16 @@ position, because a finding that is open today may be restricted tomorrow and
 the row would not follow. A reader that shows where something happened gets
 the position from `sensitivity.visible_location` at the time it is read.
 
-This module only sends on the bus. The listener that fans payloads out to
-`GET /events/stream` clients is not built yet.
+`relocate` moves those squares when a finding moves, so the feed's area
+filter follows the finding.
+
+Nobody is notified of their own action. A second look is recorded with no
+actor (Decision 0008), so the person who answered is passed as `quiet_for`
+instead: they are left out of the notifications, and nothing that anyone else
+receives changes.
+
+This module only sends on the bus. `services.events` holds the listener that
+fans payloads out to `GET /events/stream` clients.
 """
 
 from __future__ import annotations
@@ -30,7 +39,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sqlalchemy import func, insert, literal, select
+from geoalchemy2 import WKBElement
+from sqlalchemy import func, insert, literal, select, update
 from sqlalchemy.orm import Session
 
 from fieldclub.models import Activity, Finding, Follow, Investigation, Notification, User
@@ -69,19 +79,19 @@ def record(
     finding: Finding | None = None,
     investigation: Investigation | None = None,
     data: dict[str, Any] | None = None,
+    *,
+    quiet_for: User | None = None,
 ) -> Activity:
     """Record that something happened. The caller commits.
 
     `actor` is None for things the system did, such as a mention found by the
-    channel scan. Followers are then all notified.
+    channel scan, and for anything a second look caused. Followers are then
+    all notified, except `quiet_for`: the person whose second look it was,
+    who must not be told of their own action but can't be named as its actor.
     """
     kind = ActivityKind(kind)
-    location = None
-    if finding is not None:
-        # Never the exact position, even for an open finding. See the module docstring.
-        centre = square_centre(finding)
-        if centre is not None:
-            location = db_point(*centre)
+    assert quiet_for is None or actor is None, "quiet_for is for events with no actor"
+    location = _square_point(finding) if finding is not None else None
 
     activity = Activity(
         kind=kind.value,
@@ -102,11 +112,29 @@ def record(
             literal(finding.id),
             literal(data, type_=JsonB),
         ).where(Follow.finding_id == finding.id)
-        if actor is not None:
-            followers = followers.where(Follow.user_id != actor.id)
+        for left_out in (actor, quiet_for):
+            if left_out is not None:
+                assert left_out.id is not None, "a user left out of notifications must be saved"
+                followers = followers.where(Follow.user_id != left_out.id)
         db.execute(
             insert(Notification).from_select(["user_id", "kind", "actor_id", "finding_id", "data"], followers)
         )
 
     db.execute(select(func.pg_notify(EVENT_CHANNEL, event_payload(activity, actor, finding, investigation))))
     return activity
+
+
+def _square_point(finding: Finding) -> WKBElement | None:
+    """The centre of the finding's 1 km square as a geometry value, or None off both grids.
+
+    Never the exact position, even for an open finding. See the module docstring.
+    """
+    centre = square_centre(finding)
+    return db_point(*centre) if centre is not None else None
+
+
+def relocate(db: Session, finding: Finding) -> None:
+    """Move the finding's activity to the square it is in now. Call it after a move. The caller commits."""
+    db.execute(
+        update(Activity).where(Activity.finding_id == finding.id).values(location=_square_point(finding))
+    )

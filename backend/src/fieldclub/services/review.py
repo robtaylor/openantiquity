@@ -192,11 +192,11 @@ def put_observation(db: Session, finding: Finding, user: User, answer: Answer) -
     observation.withdrawn_at = None
     db.flush()
     if is_new:
-        # Recorded before following, with no actor and no data: followers
-        # learn that someone answered, not who or how.
-        activity.record(db, ActivityKind.OBSERVATION_ADDED, None, finding)
+        # No actor and no data: followers learn that someone answered, not who
+        # or how. The answerer is left out of the notifications instead.
+        activity.record(db, ActivityKind.OBSERVATION_ADDED, None, finding, quiet_for=user)
     findings.follow(db, user, finding)
-    result = findings.reassess(db, finding, None)
+    result = findings.reassess(db, finding, None, quiet_for=user)
     db.refresh(observation)
     return AnswerResult(observation, result, compare(result, user, observation))
 
@@ -230,7 +230,7 @@ def delete_observation(db: Session, finding: Finding, user: User) -> Reassessmen
         raise ObservationNotFoundError()
     observation.withdrawn_at = datetime.now(UTC)
     db.flush()
-    return findings.reassess(db, finding, None)
+    return findings.reassess(db, finding, None, quiet_for=user)
 
 
 @dataclass(frozen=True)

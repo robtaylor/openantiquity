@@ -56,9 +56,9 @@ def test_spotted_to_seen_to_corroborated(db: Session, make_user: MakeUser) -> No
     assert second.reassessment.moved_up
     assert finding.tier == "seen"
     seen = _notified(db, "tier_changed")
-    # Everyone following is told, Cat too: a change caused by an answer is
-    # credited to nobody, so it doesn't say how Cat answered.
-    assert seen == {user.id: [{"from": "spotted", "to": "seen"}] for user in (ann, ben, cat)}
+    # Everyone following is told except Cat, whose answer it was. The change
+    # is credited to nobody, so it doesn't say how Cat answered.
+    assert seen == {user.id: [{"from": "spotted", "to": "seen"}] for user in (ann, ben)}
     assert _points(db) == [(ann.id, "tier_seen", 2.0)]
 
     # Two independent kinds of desk evidence, from two people who aren't the finder.
@@ -73,11 +73,11 @@ def test_spotted_to_seen_to_corroborated(db: Session, make_user: MakeUser) -> No
         user: [data for data in items if data["to"] == "corroborated"]
         for user, items in _notified(db, "tier_changed").items()
     }
-    # Cat added the evidence that moved it, so Cat isn't told.
+    # Cat added the evidence that moved it, so Cat isn't told, and she has
+    # never been told of a tier change: the first was her own answer's.
     assert corroborated == {
         ann.id: [{"from": "seen", "to": "corroborated"}],
         ben.id: [{"from": "seen", "to": "corroborated"}],
-        cat.id: [],
     }
     expected = sorted(
         [

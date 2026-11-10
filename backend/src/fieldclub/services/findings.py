@@ -450,14 +450,20 @@ class Reassessment:
 
 
 def reassess(
-    db: Session, finding: Finding, actor: User | None, *, state: FindingState | None = None
+    db: Session,
+    finding: Finding,
+    actor: User | None,
+    *,
+    state: FindingState | None = None,
+    quiet_for: User | None = None,
 ) -> Reassessment:
     """Recompute and store a finding's assessment. Call it holding `lock(db, finding)`.
 
     When the tier or state changes it records activity, which notifies
     followers, with `actor` as its actor. Pass None when the change came from
     a second look: a tier change credited to the person who just answered
-    would tell every follower how they answered (Decision 0008).
+    would tell every follower how they answered (Decision 0008). Pass that
+    person as `quiet_for` instead, so they aren't notified of their own action.
 
     Reputation awards are written every time: `reputation.awards` works out
     what is new and `record_awards` never pays twice.
@@ -489,6 +495,7 @@ def reassess(
             actor,
             finding,
             data={"from": tier_before.value, "to": new.tier.value},
+            quiet_for=quiet_for,
         )
     if new.state is not state_before:
         activity.record(
@@ -497,6 +504,7 @@ def reassess(
             actor,
             finding,
             data={"from": state_before.value, "to": new.state.value, "reason": finding.state_reason},
+            quiet_for=quiet_for,
         )
     recorded = reputation.record_awards(db, finding.id, reputation.awards(old, new))
     return Reassessment(finding, tier_before, state_before, new, recorded.awards)
@@ -614,6 +622,8 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
         finding.feature_class = FeatureClass(changes["feature_class"]).value
         class_changed = True
     db.flush()
+    if "location" in changes:
+        activity.relocate(db, finding)
     if class_changed:
         reassess(db, finding, actor)
     return finding
