@@ -169,6 +169,13 @@ def test_the_endpoint(client: TestClient, gazetteer: None) -> None:
     [item] = response.json()["items"]
     assert item["type"] == "gridref"
     assert len(item["bbox"]) == 4
+    assert item["source"] is None
+    record = next(item for item in client.get("/api/v1/geo/search", params={"q": "silbury"}).json()["items"])
+    assert record["type"] == "record"
+    assert record["source"]["key"] == "test-designations"
+    assert record["source"]["licence"]
+    assert record["source"]["attribution"]
+    assert record["source"]["reuse"] == "open"
     assert client.get("/api/v1/geo/search", params={"q": ""}).status_code == 422
     assert client.get("/api/v1/geo/search", params={"q": "x" * 201}).status_code == 422
     assert (

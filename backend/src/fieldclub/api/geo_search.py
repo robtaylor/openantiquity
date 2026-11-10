@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from fieldclub.api.deps import Db, OptionalUser
-from fieldclub.schemas.records import GeoResult, GeoResults
+from fieldclub.schemas.records import GeoResult, GeoResults, source_ref
 from fieldclub.services import records, search
 
 router = APIRouter(tags=["geo"])
@@ -34,6 +34,7 @@ def geo_search(
                 zoom=hit.zoom,
                 ref=hit.ref,
                 obscured=hit.obscured,
+                source=source_ref(hit.source) if hit.source is not None else None,
             )
             for hit in hits
         ]

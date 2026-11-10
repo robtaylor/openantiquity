@@ -131,6 +131,8 @@ class GeoResult(BaseModel):
     # The finding's public id or the record's id, for opening its page.
     ref: str | None = None
     obscured: bool = False
+    # For a record: its source key, licence, attribution and reuse class.
+    source: SourceRef | None = None
 
 
 class GeoResults(BaseModel):

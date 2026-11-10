@@ -25,7 +25,7 @@ from sqlalchemy import Integer, cast, func, literal, select
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
-from fieldclub.models import Place, User
+from fieldclub.models import Place, Source, User
 from fieldclub.schemas.records import GeoResultType
 from fieldclub.services import ids, records, sensitivity
 
@@ -59,6 +59,8 @@ class GeoHit:
     bbox: tuple[float, float, float, float] | None = None
     ref: str | None = None
     obscured: bool = False
+    # A record's source, so its licence and attribution go with it.
+    source: Source | None = None
 
 
 def _grid_detail(lon: float, lat: float) -> str | None:
@@ -152,14 +154,16 @@ def as_finding(db: Session, text: str, viewer: User | None) -> GeoHit | None:
         return None
     seen = sensitivity.visible_location(finding, viewer)
     bbox = gridref.parse_gridref(seen.square).polygon().bounds if seen.square else None
-    zoom = finding.view_state.get("zoom") if isinstance(finding.view_state, dict) else None
+    saved_zoom = finding.view_state.get("zoom") if isinstance(finding.view_state, dict) else None
+    exact_zoom = int(saved_zoom) if isinstance(saved_zoom, int | float) else 17
+    zoom = 14 if seen.obscured else exact_zoom
     return GeoHit(
         type="finding",
         label=finding.title,
         detail=f"Finding {finding.public_id}",
         lon=seen.lon,
         lat=seen.lat,
-        zoom=14 if seen.obscured else int(zoom) if isinstance(zoom, int | float) else 17,
+        zoom=zoom,
         bbox=bbox,
         ref=finding.public_id,
         obscured=seen.obscured,
@@ -215,6 +219,7 @@ def record_hits(db: Session, text: str, limit: int = RECORD_LIMIT) -> list[GeoHi
                 zoom=POINT_ZOOM,
                 bbox=None if shape.geom_type == "Point" else shape.bounds,
                 ref=str(record.id),
+                source=result.source,
             )
         )
     return hits

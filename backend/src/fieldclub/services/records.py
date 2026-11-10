@@ -28,6 +28,8 @@ from sqlalchemy.orm import Session
 
 from fieldclub import gridref
 from fieldclub.errors import BadRequestError, NotFoundError
+from fieldclub.ingest import runner
+from fieldclub.ingest.runner import IngestError
 from fieldclub.models import Finding, Record, Source, User
 from fieldclub.models.common import SRID
 from fieldclub.schemas.common import decode_cursor, encode_cursor
@@ -149,14 +151,11 @@ def _envelope(bbox: tuple[float, float, float, float]) -> ColumnElement[Any]:
 
 
 def check_bbox(bbox: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
-    west, south, east, north = bbox
-    if not all(math.isfinite(value) for value in bbox):
-        raise InvalidSearchError("A bbox must be four finite numbers.")
-    if not (-180 <= west < east <= 180 and -90 <= south < north <= 90):
-        raise InvalidSearchError(
-            "A bbox is west,south,east,north in degrees, with west < east and south < north."
-        )
-    return bbox
+    """The ingest runner's bbox check, raised as a search error."""
+    try:
+        return runner.check_bbox(bbox)
+    except IngestError as exc:
+        raise InvalidSearchError(exc.message) from None
 
 
 def _filters(
@@ -420,25 +419,3 @@ def _flat_distance(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
     dx = (lon2 - lon1) * METRES_PER_DEGREE * math.cos(math.radians((lat1 + lat2) / 2))
     dy = (lat2 - lat1) * METRES_PER_DEGREE
     return math.hypot(dx, dy)
-
-
-__all__ = [
-    "CLASS_TERMS",
-    "FindingNotFoundError",
-    "InvalidSearchError",
-    "RecordNotFoundError",
-    "RecordResult",
-    "Suggestion",
-    "SuggestionList",
-    "clean_query",
-    "get_record",
-    "list_sources",
-    "load_finding",
-    "nearby",
-    "prefix_tsquery",
-    "query_words",
-    "search",
-    "suggest_for_finding",
-    "type_fits",
-    "use_name_similarity",
-]
