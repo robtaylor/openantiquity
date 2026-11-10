@@ -91,6 +91,26 @@ class Settings(BaseSettings):
     # before it refuses to delete them. See fieldclub.ingest.runner.
     ingest_max_shrink: float = Field(default=0.25, ge=0, le=1)
 
+    # --- Terrain (Decision 0006) -----------------------------------------
+    # Elevation is read only from the mirror of cloud-optimised GeoTIFFs: a
+    # local folder, or `gs://bucket/prefix` in production. Relative paths are
+    # resolved against the repository root, where `var/lidar` lives.
+    terrain_mirror: str = "var/lidar/england/mirror"
+    # Defra's source tiles already on disk, converted instead of fetched. Empty to fetch everything.
+    terrain_source_dir: str = "var/lidar/england/dtm-2022"
+    # The national 10 m composite as a cloud-optimised GeoTIFF, for zoom 12 and below.
+    terrain_national: str = "var/lidar/england/dtm-2022-10m/england-dtm-2022-10m-cog.tif"
+    # Downloads from the bulk supply that may run at once in one process.
+    terrain_fetch_concurrency: int = Field(default=2, ge=1, le=8)
+    # Where downloads and conversions are staged before they enter the mirror.
+    terrain_work_dir: str = "var/lidar/england/work"
+
+    def terrain_path(self, value: str) -> str:
+        """A terrain location as given, or a relative local path resolved against the repository root."""
+        if not value or "://" in value or Path(value).is_absolute():
+            return value
+        return str(_REPO_ROOT / value)
+
     @model_validator(mode="after")
     def _check_consistency(self) -> Self:
         is_prod = self.env is Environment.PROD
@@ -163,3 +183,39 @@ def get_settings() -> Settings:
 def reset_settings() -> None:
     """Forget the cached settings so the next `get_settings()` re-reads the environment."""
     get_settings.cache_clear()
+
+
+# --- Defra bulk supply credentials (Decision 0006) ---------------------------
+# Named as Defra's ticket gave them, without the FIELDCLUB_ prefix. They are
+# read from the environment, then from `.env` in the working directory, then
+# from `.env` at the repository root, and nothing else is read from those files.
+
+
+class DefraSftpSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="", extra="ignore")
+
+    defra_sftp_host: str | None = None
+    defra_sftp_user: str | None = None
+    defra_sftp_password: SecretStr | None = None
+    defra_sftp_port: int = 22
+    # The pinned host key. A connection to a host whose key isn't in it is refused.
+    defra_sftp_known_hosts: Path = _REPO_ROOT / "var" / "defra_known_hosts"
+
+    @property
+    def missing(self) -> list[str]:
+        """The names of the credentials that aren't set."""
+        values = {
+            "DEFRA_SFTP_HOST": self.defra_sftp_host,
+            "DEFRA_SFTP_USER": self.defra_sftp_user,
+            "DEFRA_SFTP_PASSWORD": self.defra_sftp_password.get_secret_value()
+            if self.defra_sftp_password
+            else None,
+        }
+        return [name for name, value in values.items() if not value]
+
+
+def get_defra_sftp_settings() -> DefraSftpSettings:
+    """The Defra SFTP credentials. `FIELDCLUB_ENV_FILE=""` reads no file, as for `get_settings()`."""
+    env_file = os.environ.get("FIELDCLUB_ENV_FILE")
+    files: tuple[Path | str, ...] = (_REPO_ROOT / ".env", ".env") if env_file is None else (env_file,)
+    return DefraSftpSettings(_env_file=tuple(f for f in files if f) or None)  # pyright: ignore[reportCallIssue]

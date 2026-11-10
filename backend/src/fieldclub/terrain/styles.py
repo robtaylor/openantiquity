@@ -1,0 +1,132 @@
+"""The visualisations served as map tiles, with their parameters and versions.
+
+Radii are in ground metres and become pixels for each zoom level at the
+reference latitude (`grid.nominal_ground_resolution`). At zoom 16 a 512-pixel
+tile has pixels of about 0.73 m, close to the 1 m data, and the published
+radii apply as written. RVT's radii are pixel counts on a 1 m DTM, so its
+defaults of 10 and 20 pixels are 10 m and 20 m here, which is how the
+National Library of Scotland built its England Combined VAT. At lower zooms a
+radius in metres would shrink below a pixel, so each has a floor in pixels,
+which makes the kernel cover more ground as the map zooms out.
+
+A style's `version` is part of its cache key. Change it whenever anything
+that alters its pixels changes: a parameter, a stretch, a floor, the blend.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+
+import numpy as np
+
+from fieldclub.terrain import visualise as vis
+from fieldclub.terrain.grid import nominal_ground_resolution
+
+# Zoom levels the lidar styles and the elevation tiles are served at.
+MINZOOM = 7
+MAXZOOM = 16
+# From this zoom up, elevation comes from the 1 m mirror. Below it, from the
+# national 10 m composite. See `service.py` for the measurements behind it.
+FINE_MINZOOM = 13
+
+
+@dataclass(frozen=True)
+class Radius:
+    """A kernel radius in ground metres, and the fewest pixels it may become."""
+
+    metres: float
+    floor_px: int
+    ceiling_px: int = 1_000
+
+    def pixels(self, zoom: int) -> int:
+        wanted = round(self.metres / nominal_ground_resolution(zoom))
+        return int(min(self.ceiling_px, max(self.floor_px, wanted)))
+
+
+# VAT general and the sky-view style: RVT's default search radius, 10 px on 1 m.
+SVF_GENERAL = Radius(10, floor_px=5)
+# VAT flat: 20 px on 1 m, ignoring the nearest 40% (noise level 3).
+SVF_FLAT = Radius(20, floor_px=10)
+FLAT_NOISE_FRACTION = 0.4
+# Simple local relief: Kokalj and Hesse's 10 m for general terrain. RVT's
+# default of 20 px saturated Avebury's henge bank and ditch at the +/-2 m
+# stretch. RVT's own floor of 10 px made a 58 m radius at zoom 13, which
+# picked up whole dry valleys, so the floor is 3 px.
+SLRM = Radius(10, floor_px=3, ceiling_px=50)
+
+# RVT's three-band multiple-direction hillshade lights red, green and blue from these azimuths.
+MULTI_AZIMUTHS = (315.0, 22.5, 90.0)
+
+# Rendered values from 0 to 1, greyscale (H, W) or colour (H, W, 3), on the
+# buffered array. Arguments: buffered elevation, ground resolution per row, zoom.
+Renderer = Callable[[np.ndarray, np.ndarray, int], np.ndarray]
+
+
+@dataclass(frozen=True)
+class Style:
+    id: str
+    version: str
+    render: Renderer
+    radii: tuple[Radius, ...]
+
+    def buffer(self, zoom: int) -> int:
+        """Pixels of real data needed round the tile: the largest radius, plus one for the gradients."""
+        return max((radius.pixels(zoom) for radius in self.radii), default=0) + 1
+
+
+def _flat_radii(zoom: int) -> tuple[int, int]:
+    r_max = SVF_FLAT.pixels(zoom)
+    return r_max, max(1, round(FLAT_NOISE_FRACTION * r_max))
+
+
+def _composite(z: np.ndarray, res: np.ndarray, zoom: int) -> np.ndarray:
+    flat_max, flat_min = _flat_radii(zoom)
+    return vis.combined_vat(z, res, SVF_GENERAL.pixels(zoom), flat_max, flat_min)
+
+
+def _local_relief(z: np.ndarray, res: np.ndarray, zoom: int) -> np.ndarray:
+    # RVT's 8-bit stretch for SLRM.
+    return vis.stretch(vis.local_relief(z, SLRM.pixels(zoom)), -2.0, 2.0)
+
+
+def _sky_view(z: np.ndarray, res: np.ndarray, zoom: int) -> np.ndarray:
+    svf, _ = vis.sky_view_and_openness(z, res, SVF_GENERAL.pixels(zoom))
+    # The VAT general stretch. RVT's 8-bit default of 0.6375 to 1 left the
+    # Fyfield Down field systems near white, and VAT flat's 0.9 to 1 filled
+    # Avebury's henge ditch with solid black at zoom 16.
+    return vis.stretch(svf, 0.7, 1.0)
+
+
+def _openness(z: np.ndarray, res: np.ndarray, zoom: int) -> np.ndarray:
+    _, openness = vis.sky_view_and_openness(z, res, SVF_GENERAL.pixels(zoom))
+    # RVT's 8-bit stretch for positive openness.
+    return vis.stretch(openness, 60.0, 95.0)
+
+
+def _multi_shade(z: np.ndarray, res: np.ndarray, zoom: int) -> np.ndarray:
+    # RVT's sun elevation 35 and its red, green and blue azimuths, stretched 0 to 1.
+    return vis.multi_hillshade(z, res, MULTI_AZIMUTHS, 35.0)
+
+
+def _slope(z: np.ndarray, res: np.ndarray, zoom: int) -> np.ndarray:
+    # RVT's 8-bit stretch of 0 to 51 degrees, inverted as in VAT so steep ground is dark.
+    return vis.stretch(vis.slope(z, res), 0.0, 51.0, invert=True)
+
+
+STYLES: dict[str, Style] = {
+    style.id: style
+    for style in (
+        Style("composite", "1", _composite, (SVF_GENERAL, SVF_FLAT)),
+        Style("local_relief", "1", _local_relief, (SLRM,)),
+        Style("sky_view", "1", _sky_view, (SVF_GENERAL,)),
+        Style("multi_shade", "1", _multi_shade, ()),
+        Style("slope", "1", _slope, ()),
+        Style("openness", "1", _openness, (SVF_GENERAL,)),
+    )
+}
+
+
+def elevation_buffer(zoom: int) -> int:
+    """The buffer the cached elevation carries, enough for every style at this zoom."""
+    return max(style.buffer(zoom) for style in STYLES.values())
