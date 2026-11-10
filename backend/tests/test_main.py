@@ -351,7 +351,7 @@ SAME_EITHER_WAY = [
     # An unknown path under the API or the tiles is a 404, whatever the method.
     ("POST", "/api/v1/nope", 404, "not_found"),
     ("PUT", "/api/v1/nope", 404, "not_found"),
-    ("PATCH", "/api/v1/findings/ABC123", 404, "not_found"),
+    ("PATCH", "/api/v1/nope/ABC123", 404, "not_found"),
     ("DELETE", "/tiles/nope/1/2/3.png", 404, "not_found"),
     ("GET", "/api/v1/nope", 404, "not_found"),
     # A known path with the wrong method is a 405.
