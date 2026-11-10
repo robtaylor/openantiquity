@@ -1,5 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
-import { API_PORT, BACKEND_DIR, backendEnv, createDatabaseCommand, WEB_PORT } from "./e2e-full/support/env.js";
+import {
+  API_PORT,
+  BACKEND_DIR,
+  BACKEND_LOG,
+  backendEnv,
+  createDatabaseCommand,
+  WEB_PORT,
+} from "./e2e-full/support/env.js";
 
 /**
  * `pnpm e2e:full`: end-to-end tests against the real backend, for the flows
@@ -9,6 +16,8 @@ import { API_PORT, BACKEND_DIR, backendEnv, createDatabaseCommand, WEB_PORT } fr
  * the test environment with the development sign-in on, and the Vite server
  * on `FIELDCLUB_E2E_PORT` (default 5198) proxies `/api` to it. Outside tile
  * services and terrain tiles are stubbed, so no test reaches the internet.
+ * The backend's output goes to `BACKEND_LOG`, where the tests read the
+ * emailed sign-in links its log mailer writes.
  */
 export default defineConfig({
   testDir: "e2e-full",
@@ -37,7 +46,7 @@ export default defineConfig({
   webServer: [
     {
       // The database first, so the backend never starts without one.
-      command: `${createDatabaseCommand()} && uv run fieldclub-api`,
+      command: `${createDatabaseCommand()} && exec uv run fieldclub-api > ${JSON.stringify(BACKEND_LOG)} 2>&1`,
       cwd: BACKEND_DIR,
       url: `http://127.0.0.1:${API_PORT}/healthz`,
       env: backendEnv(),

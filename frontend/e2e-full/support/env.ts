@@ -21,6 +21,12 @@ export const API_PORT = Number(process.env.FIELDCLUB_E2E_API_PORT ?? 6198);
 process.env.FIELDCLUB_E2E_DATABASE ??= `fieldclub_e2e_${process.pid}`;
 export const DATABASE = process.env.FIELDCLUB_E2E_DATABASE;
 
+/**
+ * Where the backend's output goes. The log mailer writes each emailed
+ * sign-in link there, which is how the tests read their "inbox".
+ */
+export const BACKEND_LOG = join(tmpdir(), `fieldclub-e2e-backend-${API_PORT}.log`);
+
 const SERVER_URL =
   process.env.FIELDCLUB_TEST_SERVER_URL ?? "postgresql+psycopg://fieldclub:fieldclub@localhost:54329/fieldclub";
 
@@ -46,7 +52,8 @@ export function backendEnv(): Record<string, string> {
     FIELDCLUB_MAIL_BACKEND: "log",
     FIELDCLUB_VAR_DIR: join(tmpdir(), `fieldclub-e2e-var-${DATABASE}`),
     FIELDCLUB_FRONTEND_DIST: join(tmpdir(), "fieldclub-e2e-no-frontend"),
-    FIELDCLUB_LOG_LEVEL: "WARNING",
+    // INFO, so the log mailer's links reach BACKEND_LOG.
+    FIELDCLUB_LOG_LEVEL: "INFO",
   };
 }
 
