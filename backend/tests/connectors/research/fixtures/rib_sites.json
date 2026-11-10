@@ -1,0 +1,325 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -2.248916,
+     54.08081
+    ]
+   },
+   "properties": {
+    "id_code": 945,
+    "site_key": "site-victoria-cave",
+    "name": "Victoria Cave",
+    "name_latin": "",
+    "type": "Modern",
+    "region": "West Yorkshire",
+    "section": "England",
+    "popupContent": "<div><div class='popupContentHdr'>Victoria Cave</div><div class='popupContentBody'>West Yorkshire</div><div class='popupContentBody'>Go to <a href=\"/sites/victoria-cave\">Site Page</a>.</div>"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -2.097329,
+     54.306968
+    ]
+   },
+   "properties": {
+    "id_code": 102,
+    "site_key": "site-brough-by-bainbridge",
+    "name": "Brough-by-Bainbridge",
+    "name_latin": "Virosidum",
+    "type": "Fort",
+    "region": "North Yorkshire",
+    "section": "England",
+    "popupContent": "<div><div class='popupContentHdr'>Brough-by-Bainbridge (Virosidum)</div><div class='popupContentBody'>North Yorkshire</div><div class='popupContentBody'>Go to <a href=\"/sites/brough-by-bainbridge\">Site Page</a>.</div>"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -1.757728,
+     54.086688
+    ]
+   },
+   "properties": {
+    "id_code": 782,
+    "site_key": "site-pateley-bridge",
+    "name": "Pateley Bridge",
+    "name_latin": "",
+    "type": "Settlement",
+    "region": "North Yorkshire",
+    "section": "England",
+    "popupContent": "<div><div class='popupContentHdr'>Pateley Bridge</div><div class='popupContentBody'>North Yorkshire</div><div class='popupContentBody'>Go to <a href=\"/sites/pateley-bridge\">Site Page</a>.</div>"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -1.5,
+     54
+    ]
+   },
+   "properties": {
+    "id_code": 1019,
+    "site_key": "site-yorkshire",
+    "name": "Yorkshire",
+    "name_latin": "",
+    "type": "County",
+    "region": "",
+    "section": "England",
+    "popupContent": "<div><div class='popupContentHdr'>Yorkshire</div><div class='popupContentBody'></div><div class='popupContentBody'>Go to <a href=\"/sites/yorkshire\">Site Page</a>.</div>"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -1.380943,
+     54.091933
+    ]
+   },
+   "properties": {
+    "id_code": 98,
+    "site_key": "site-aldborough",
+    "name": "Aldborough",
+    "name_latin": "Isurium Brigantum",
+    "type": "Town",
+    "region": "North Yorkshire",
+    "section": "England",
+    "popupContent": "<div><div class='popupContentHdr'>Aldborough (Isurium Brigantum)</div><div class='popupContentBody'>North Yorkshire</div><div class='popupContentBody'>Go to <a href=\"/sites/aldborough\">Site Page</a>.</div>"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -1.428818,
+     53.876907
+    ]
+   },
+   "properties": {
+    "id_code": 247,
+    "site_key": "site-bardsey",
+    "name": "Bardsey",
+    "name_latin": "",
+    "type": "Quarry",
+    "region": "West Yorkshire",
+    "section": "England",
+    "popupContent": "<div><div class='popupContentHdr'>Bardsey</div><div class='popupContentBody'>West Yorkshire</div><div class='popupContentBody'>Go to <a href=\"/sites/bardsey\">Site Page</a>.</div>"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -1.238092,
+     54.231178
+    ]
+   },
+   "properties": {
+    "id_code": 248,
+    "site_key": "site-sutton-under-whitestonecliffe",
+    "name": "Sutton-under-Whitestonecliffe",
+    "name_latin": "",
+    "type": "Villa",
+    "region": "North Yorkshire",
+    "section": "England",
+    "popupContent": "<div><div class='popupContentHdr'>Sutton-under-Whitestonecliffe</div><div class='popupContentBody'>North Yorkshire</div><div class='popupContentBody'>Go to <a href=\"/sites/sutton-under-whitestonecliffe\">Site Page</a>.</div>"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -2.905,
+     54.7
+    ]
+   },
+   "properties": {
+    "id_code": 131,
+    "site_key": "site-cumbria-unknown",
+    "name": "Cumbria",
+    "name_latin": "",
+    "type": "Group",
+    "region": "Cumbria",
+    "section": "England",
+    "popupContent": "<div><div class='popupContentHdr'>Cumbria</div><div class='popupContentBody'>Cumbria</div><div class='popupContentBody'>Go to <a href=\"/sites/cumbria-unknown\">Site Page</a>.</div>"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -1.653264,
+     54.767276
+    ]
+   },
+   "properties": {
+    "id_code": 956,
+    "site_key": "site-weardale",
+    "name": "Weardale",
+    "name_latin": "",
+    "type": "Other",
+    "region": "County Durham",
+    "section": "England",
+    "popupContent": "<div><div class='popupContentHdr'>Weardale</div><div class='popupContentBody'>County Durham</div><div class='popupContentBody'>Go to <a href=\"/sites/weardale\">Site Page</a>.</div>"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -2.547,
+     53.367
+    ]
+   },
+   "properties": {
+    "id_code": 567,
+    "site_key": "site-grappenhall-and-thelwall",
+    "name": "Grappenhall and Thelwall",
+    "name_latin": "",
+    "type": "Parish",
+    "region": "Cheshire",
+    "section": "England",
+    "popupContent": "<div><div class='popupContentHdr'>Grappenhall and Thelwall</div><div class='popupContentBody'>Cheshire</div><div class='popupContentBody'>Go to <a href=\"/sites/grappenhall-and-thelwall\">Site Page</a>.</div>"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -2.029312,
+     54.978193
+    ]
+   },
+   "properties": {
+    "id_code": 141,
+    "site_key": "site-corbridge",
+    "name": "Corbridge",
+    "name_latin": "Coria",
+    "type": "Civil + Military",
+    "region": "Northumberland",
+    "section": "Hadrian's Wall",
+    "popupContent": "<div><div class='popupContentHdr'>Corbridge (Coria)</div><div class='popupContentBody'>Northumberland</div><div class='popupContentBody'>Go to <a href=\"/sites/corbridge\">Site Page</a>.</div>"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -2.350838,
+     54.990337
+    ]
+   },
+   "properties": {
+    "id_code": 251,
+    "site_key": "site-barcombe-hill",
+    "name": "Barcombe Hill",
+    "name_latin": "",
+    "type": "Signal Station",
+    "region": "Northumberland",
+    "section": "Hadrian's Wall",
+    "popupContent": "<div><div class='popupContentHdr'>Barcombe Hill</div><div class='popupContentBody'>Northumberland</div><div class='popupContentBody'>Go to <a href=\"/sites/barcombe-hill\">Site Page</a>.</div>"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -2.38725,
+     55.00164
+    ]
+   },
+   "properties": {
+    "id_code": 162,
+    "site_key": "site-hadrians-wall-housesteads-to-great-chesters",
+    "name": "Housesteads to Great Chesters",
+    "name_latin": "",
+    "type": "Sector",
+    "region": "Northumberland",
+    "section": "Hadrian's Wall",
+    "popupContent": "<div><div class='popupContentHdr'>Housesteads to Great Chesters</div><div class='popupContentBody'>Northumberland</div><div class='popupContentBody'>Go to <a href=\"/sites/hadrians-wall-housesteads-to-great-chesters\">Site Page</a>.</div>"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -2.891207,
+     53.190016
+    ]
+   },
+   "properties": {
+    "id_code": 80,
+    "site_key": "site-chester",
+    "name": "Chester",
+    "name_latin": "Deva",
+    "type": "Fortress",
+    "region": "Cheshire",
+    "section": "England",
+    "popupContent": "<div><div class='popupContentHdr'>Chester (Deva)</div><div class='popupContentBody'>Cheshire</div><div class='popupContentBody'>Go to <a href=\"/sites/chester\">Site Page</a>.</div>"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -2.643232,
+     52.674833
+    ]
+   },
+   "properties": {
+    "id_code": 58,
+    "site_key": "site-wroxeter",
+    "name": "Wroxeter",
+    "name_latin": "Viroconium",
+    "type": "City",
+    "region": "Shropshire",
+    "section": "England",
+    "popupContent": "<div><div class='popupContentHdr'>Wroxeter (Viroconium)</div><div class='popupContentBody'>Shropshire</div><div class='popupContentBody'>Go to <a href=\"/sites/wroxeter\">Site Page</a>.</div>"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     0.537722,
+     52.463978
+    ]
+   },
+   "properties": {
+    "id_code": 626,
+    "site_key": "site-hockwold-cum-wilton",
+    "name": "Hockwold-cum-Wilton",
+    "name_latin": "",
+    "type": "Temple",
+    "region": "Norfolk",
+    "section": "England",
+    "popupContent": "<div><div class='popupContentHdr'>Hockwold-cum-Wilton</div><div class='popupContentBody'>Norfolk</div><div class='popupContentBody'>Go to <a href=\"/sites/hockwold-cum-wilton\">Site Page</a>.</div>"
+   }
+  }
+ ]
+}
