@@ -129,12 +129,17 @@ Columns marked with `*` are required. Every table has `id BIGINT` and `created_a
 |-------|---------|
 | `investigations` | `public_id*` unique, `owner_id*`, `title*`, `summary`, `notes` markdown, `area` Geometry, `visibility*` (public, unlisted, private), `updated_at*` |
 | `investigation_members` | `investigation_id*`, `user_id*`, `role*` (owner, editor, viewer). Primary key on both |
-| `investigation_items` | `investigation_id*`, `kind*` (finding, record, view, note, reference, profile), `finding_id`, `record_id`, `title`, `note`, `data` jsonb, `position*`, `added_by*` |
+| `investigation_items` | `investigation_id*`, `kind*` (finding, record, view, note, reference, profile), `finding_id`, `record_id`, `title`, `note`, `data` jsonb, `position*`, `added_by*`. Unique on investigation and position, checked at commit |
 | `square_surveys` | `user_id*`, `square*` (1 km grid reference such as SU1069), `geom*` Polygon, `result*` (nothing, marked, skipped), `findings_count*`, `seconds`. Unique on user and square |
 | `activity` | `kind*`, `actor_id`, `finding_id`, `investigation_id`, `data` jsonb, `location` Point |
 | `notifications` | `user_id*`, `kind*`, `actor_id`, `finding_id`, `data` jsonb, `read_at` |
 | `reports` | `reporter_id*`, `target_kind*`, `target_id*`, `reason*`, `note`, `status*` (open, upheld, dismissed), `resolved_by`, `resolved_at` |
 | `watch_channels` | `provider*`, `channel_id*`, `title`, `last_checked_at`, `enabled*`. Channels scanned for links back to findings |
+
+<!-- Investigations and squares (track b2/investigations). -->
+Anyone with an investigation's id can read a public or unlisted one; a private one is found only by its owner, and everyone else gets `investigation_not_found`. The owner and editors change the title, summary, notes, area and items. Only the owner changes visibility, members and deletes it, and any other member can leave. Only public investigations are listed. Making one public records `investigation_published`, and making it unlisted or private deletes that row. Every change takes the investigation's row lock first, so membership and visibility can't race, and `investigation_items` has a deferred unique constraint on `(investigation_id, position)`. An item pointing at a withdrawn finding or a record no longer in the index is returned with `unavailable` set to `withdrawn` or `gone` and nothing of the target. So is one pointing at a hidden finding, with `hidden`, for anyone but the finder and moderators. Exports follow the download rule of Decision 0005 and leave such items out; the report is one HTML page with no scripts, served with a sandboxing `Content-Security-Policy`.
+
+A square survey counts towards coverage unless its result is `skipped`. `GET /squares/next` ranks the squares a person hasn't done near the point by how many people have had them, skips included, then by distance, and picks at random among the best eight, so people asking at once are spread out. A square has 1 m elevation when the 5 km tile of `terrain/catalogue.py` that holds it is listed.
 
 ### Indexes that matter
 
@@ -228,12 +233,12 @@ Rules every route follows, whichever area it belongs to:
 | Discussion | `GET` and `POST /findings/{public_id}/comments`, `DELETE /comments/{id}`, `PUT` and `DELETE /findings/{public_id}/follow` |
 | Mentions | `GET` and `POST /findings/{public_id}/mentions`, `DELETE /mentions/{id}`, `POST /mentions/preview`, `GET /mentions/recent` |
 | Review | `GET /review/next` (blind cards: place and view only, with no title, class, tier or other answers until the reviewer has answered), `GET /review/tasks` (open next steps grouped by code) |
-| Squares | `GET /squares/next`, `PUT /squares/{ref}`, `GET /squares/coverage?bbox=` |
+| Squares | `GET /squares/next?lon=&lat=&exclude=` (a 1 km square with 1 m elevation that few people have had, never one you have done), `PUT /squares/{ref}` (your result, one per person and square, a second replacing the first), `GET /squares/coverage?bbox=` (scans per square as GeoJSON, at most 2,500 km² per box) |
 | Records | `GET /records/search`, `GET /records/nearby`, `GET /records/{id}`, `GET /sources`, `GET /findings/{public_id}/suggested-records` |
 | Context | `GET /context/live-sources` (the sources the browser queries itself, with endpoint, query pattern, licence and attribution), `GET /context/links?lon=&lat=` (deep links to external viewers, filled in for that point and the nation it is in; until the nations are loaded, a point on the Irish Grid gets only the viewers that cover the wider world) |
 | Geo | `GET /geo/search?q=` (grid reference, coordinates, place, record or finding id), `GET /geo/point?lon=&lat=` (grid reference, nation, county, elevation, and the boundary sources to credit) |
 | Terrain | `POST /terrain/profile` (elevation along a line), `GET /terrain/coverage?bbox=` (the 5 km tiles that have 1 m elevation, as GeoJSON) |
-| Investigations | `GET` and `POST /investigations`, `GET`, `PATCH` and `DELETE /investigations/{public_id}`, items and members sub-resources, `GET /investigations/{public_id}/export?format=` |
+| Investigations | `GET /investigations` (`scope=public` or `mine`, `bbox` matching the area), `POST /investigations`, `GET`, `PATCH` and `DELETE /investigations/{public_id}`, `GET` and `POST /investigations/{public_id}/items`, `PATCH` and `DELETE /investigations/{public_id}/items/{id}`, `POST /investigations/{public_id}/items/{id}/move`, `GET /investigations/{public_id}/members`, `PUT` and `DELETE /investigations/{public_id}/members/{handle}`, `GET /investigations/{public_id}/export?format=geojson|csv|html` |
 | Exports | `GET /findings/{public_id}/export?format=geojson|csv`, `GET /findings/export` (the list's filters, a filtered set) |
 | People | `GET /users/{handle}`, `GET /users/{handle}/findings`, `GET /users/{handle}/contributions` (`kind=evidence|comment|mention`, or `second_look` on its own, which lists something only for the person themselves), `GET /users/{handle}/points` (the person's own itemised points only) |
 | Activity | `GET /activity` (filters: `bbox`, `kind`, `finding`, `investigation`, `person`), `GET /events/stream` (server-sent events; `bbox` or `finding`), `GET /notifications` (with `unread_count`), `POST /notifications/read` (`{ids}` or `{all, up_to}`) |
