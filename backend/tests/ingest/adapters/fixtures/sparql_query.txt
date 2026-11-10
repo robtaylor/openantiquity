@@ -1,0 +1,1 @@
+SELECT ?item ?itemLabel ?coord ?nhle WHERE { ?item wdt:P4102 ?hillfort ; wdt:P625 ?coord ; wdt:P1216 ?nhle . SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } ORDER BY ?item LIMIT 3
