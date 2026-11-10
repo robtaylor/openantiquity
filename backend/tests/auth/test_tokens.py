@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 import pytest
 
-from fieldclub.auth.tokens import MAX_TOKEN_LENGTH, hash_ip, hash_token, new_token
+from fieldclub.auth.tokens import MAX_TOKEN_LENGTH, hash_ip, hash_presented, hash_token, new_token
 
 
 def test_tokens_are_long_random_and_url_safe() -> None:
@@ -38,3 +38,11 @@ def test_ip_hash_is_keyed_by_the_server_secret(env: Callable[..., None]) -> None
     assert "203.0.113.5" not in first
     env(SECRET_KEY="another-secret")
     assert hash_ip("203.0.113.5") != first
+
+
+def test_a_presented_token_is_hashed_only_when_it_could_be_one_of_ours() -> None:
+    token = new_token()
+    assert hash_presented(token) == hash_token(token)
+    assert hash_presented("a" * MAX_TOKEN_LENGTH) == hash_token("a" * MAX_TOKEN_LENGTH)
+    for bad in (None, "", "a" * (MAX_TOKEN_LENGTH + 1)):
+        assert hash_presented(bad) is None

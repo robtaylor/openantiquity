@@ -7,7 +7,7 @@ How the pieces fit:
 
 - `tokens` makes opaque random tokens and hashes them. Only hashes are stored.
 - `sessions` creates, resolves and revokes browser sessions.
-- `cookies` puts a session token in the `fieldclub_session` cookie and takes it out.
+- `cookies` sets and clears the session, sign-in flow and emailed-link cookies.
 - `handles` generates handles and holds the rules for handles and display names.
 - `accounts` creates an account at first sign-in, finds or makes the test
   users behind `POST /auth/dev-login`, and deletes an account.

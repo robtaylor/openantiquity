@@ -114,6 +114,8 @@ class MagicLink(Base):
     user_id: Mapped[int | None] = fk("users.id", ondelete="CASCADE")
     expires_at: Mapped[datetime] = mapped_column(TimestampTz)
     used_at: Mapped[datetime | None] = mapped_column(TimestampTz)
+    # The hash of the random value in the cookie of the browser that asked for the link.
+    browser_hash: Mapped[str | None] = mapped_column(Text)
 
 
 class ReputationEvent(Base):

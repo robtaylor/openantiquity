@@ -28,6 +28,13 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def hash_presented(token: str | None) -> str | None:
+    """The hash of a token a browser sent, or None when it can't be one of ours (empty or overlong)."""
+    if not token or len(token) > MAX_TOKEN_LENGTH:
+        return None
+    return hash_token(token)
+
+
 def hash_ip(ip: str) -> str:
     """A keyed hash of an IP address, for rate limiting and session records.
 

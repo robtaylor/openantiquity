@@ -85,7 +85,13 @@ class SmtpMailer:
                     server.login(settings.smtp_username, settings.smtp_password.get_secret_value())
                 server.send_message(email)
         except (smtplib.SMTPException, OSError) as exc:
-            logger.error("Sending through %s failed: %s", settings.smtp_host, exc)
+            # The exception's text can quote the recipient, so only its kind is logged.
+            logger.error(
+                "Sending through %s failed: %s %s",
+                settings.smtp_host,
+                type(exc).__name__,
+                getattr(exc, "smtp_code", ""),
+            )
             raise MailNotSentError() from exc
         logger.info("Sent sign-in email through %s", settings.smtp_host)
 

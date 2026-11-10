@@ -124,7 +124,16 @@ CONTRACT_COLUMNS: dict[type, set[str]] = {
         "user_agent",
         "ip_hash",
     },
-    MagicLink: {"id", "created_at", "email", "token_hash", "user_id", "expires_at", "used_at"},
+    MagicLink: {
+        "id",
+        "created_at",
+        "email",
+        "token_hash",
+        "user_id",
+        "expires_at",
+        "used_at",
+        "browser_hash",
+    },
     ReputationEvent: {"id", "created_at", "user_id", "delta", "reason", "finding_id"},
     Source: {
         "key",

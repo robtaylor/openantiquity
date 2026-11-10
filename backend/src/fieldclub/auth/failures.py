@@ -7,7 +7,14 @@ The emailed link is an API call, so its failures are the usual JSON error.
 
 from __future__ import annotations
 
-from fieldclub.errors import AppError, BadRequestError, ForbiddenError, NotFoundError, UpstreamError
+from fieldclub.errors import (
+    AppError,
+    BadRequestError,
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    UpstreamError,
+)
 
 
 class ProviderUnavailableError(NotFoundError):
@@ -52,6 +59,30 @@ class LinkInvalidError(BadRequestError):
 
     code = "link_invalid"
     message = "This sign-in link has expired or has already been used. Ask for a new one."
+
+
+class LinkConfirmationRequiredError(ConflictError):
+    """A live link opened in a browser that didn't ask for it.
+
+    Nothing is spent. The app asks "Sign in as <masked address>?" and posts
+    again with `confirm`, and never confirms on the person's behalf: someone
+    can ask for a link to their own address and send it to somebody else.
+    """
+
+    code = "confirmation_required"
+    message = "This link was asked for in another browser. Confirm the address to sign in."
+
+
+class EmailUnavailableError(ConflictError):
+    """A proven address that the database would confuse with another account's.
+
+    Addresses are matched case-insensitively, and Postgres folds a few
+    non-ASCII capitals to ASCII letters (`İ` to `i`). Two such addresses are
+    different mailboxes, so neither may sign in to the other's account.
+    """
+
+    code = "email_unavailable"
+    message = "This address can't be used to sign in. Please use another address or a sign-in provider."
 
 
 class SignInFailedError(AppError):

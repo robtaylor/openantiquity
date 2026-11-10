@@ -101,10 +101,15 @@ class InvalidDisplayNameError(ValidationFailedError):
     )
 
 
+def constraint_name(exc: IntegrityError) -> str | None:
+    """The constraint an `IntegrityError` broke. Safe to log, unlike the message, which holds the values."""
+    diag = getattr(exc.orig, "diag", None)
+    return getattr(diag, "constraint_name", None)
+
+
 def is_unique_violation(exc: IntegrityError, constraint: str) -> bool:
     """Whether an `IntegrityError` is the named unique constraint being broken."""
-    diag = getattr(exc.orig, "diag", None)
-    return getattr(diag, "constraint_name", None) == constraint
+    return constraint_name(exc) == constraint
 
 
 def claim_handle(db: Session, user: User, handle: str | None = None) -> bool:

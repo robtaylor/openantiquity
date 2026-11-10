@@ -109,3 +109,8 @@ $$;
 CREATE OR REPLACE TRIGGER findings_location_public_check
     BEFORE INSERT OR UPDATE OF sensitivity, location, location_public ON findings
     FOR EACH ROW EXECUTE FUNCTION fieldclub_check_location_public();
+
+-- Accounts: an emailed link remembers the browser that asked for it
+-- (fieldclub.auth.email_link). Added here too so that an existing
+-- development database gains the column.
+ALTER TABLE magic_links ADD COLUMN IF NOT EXISTS browser_hash text;

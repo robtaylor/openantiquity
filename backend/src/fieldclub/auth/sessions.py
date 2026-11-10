@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from fieldclub.auth.tokens import MAX_TOKEN_LENGTH, hash_ip, hash_token, new_token
+from fieldclub.auth.tokens import MAX_TOKEN_LENGTH, hash_ip, hash_presented, hash_token, new_token
 from fieldclub.config import get_settings
 from fieldclub.models import User, UserSession
 
@@ -105,9 +105,13 @@ def resolve_session(db: Session, token: str | None, *, now: datetime | None = No
 
 def revoke_session(db: Session, token: str | None) -> bool:
     """End the session behind a token. Returns whether there was one. The caller commits."""
-    if not token or len(token) > MAX_TOKEN_LENGTH:
-        return False
-    result = db.execute(delete(UserSession).where(UserSession.token_hash == hash_token(token)))
+    token_hash = hash_presented(token)
+    return token_hash is not None and revoke_session_by_hash(db, token_hash)
+
+
+def revoke_session_by_hash(db: Session, token_hash: str) -> bool:
+    """End the session whose token has this hash. Returns whether there was one. The caller commits."""
+    result = db.execute(delete(UserSession).where(UserSession.token_hash == token_hash))
     return bool(result.rowcount)  # pyright: ignore[reportAttributeAccessIssue]
 
 

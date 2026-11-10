@@ -10,6 +10,7 @@ from collections.abc import Callable
 import pytest
 
 from fieldclub.auth.flow import FLOW_LIFETIME_S, Flow, new_flow, pkce_challenge, seal, state_matches, unseal
+from fieldclub.auth.tokens import hash_token
 
 NOW = 1_800_000_000.0
 
@@ -36,6 +37,17 @@ def test_the_challenge_is_s256_of_the_verifier() -> None:
 def test_a_sealed_flow_unseals_to_itself() -> None:
     flow = new_flow("apple", "/f/7K3QXM?layer=slope", now=NOW)
     assert unseal(seal(flow), now=NOW) == flow
+
+
+def test_a_flow_keeps_only_the_hash_of_the_session_presented_at_the_start() -> None:
+    token = "t" * 43
+    flow = new_flow("apple", "/" + "a" * 1999, presented_session=token, now=NOW)
+    assert flow.presented_session == hash_token(token)
+    sealed = seal(flow)
+    assert token not in sealed
+    assert unseal(sealed, now=NOW) == flow
+    for presented in (None, "", "x" * 129):
+        assert new_flow("apple", "/", presented_session=presented, now=NOW).presented_session is None
 
 
 def test_an_expired_flow_is_refused() -> None:

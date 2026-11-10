@@ -27,7 +27,7 @@ from fieldclub.auth.failures import FlowStateError, ProviderUnavailableError, Si
 from fieldclub.auth.flow import FLOW_COOKIE, new_flow, seal, state_matches, unseal
 from fieldclub.auth.mailer import get_mailer
 from fieldclub.auth.redirects import DEFAULT_NEXT, app_url, safe_next
-from fieldclub.auth.tokens import hash_token
+from fieldclub.auth.tokens import hash_token, new_token
 from fieldclub.config import SESSION_COOKIE, Settings
 from fieldclub.errors import AppError, NotFoundError
 from fieldclub.models import User
@@ -160,12 +160,13 @@ def handle_suggestion(db: Db) -> HandleSuggestion:
 # --------------------------------------------------------------------------
 
 
-def _begin_session(db: Db, user: User, request: Request) -> str:
+def _begin_session(db: Db, user: User, request: Request, *, previous_hash: str | None = None) -> str:
     """A new session for whoever just signed in, ending the one this browser presented."""
     return signin.begin_session(
         db,
         user,
         previous_token=request.cookies.get(SESSION_COOKIE),
+        previous_hash=previous_hash,
         user_agent=request.headers.get("user-agent"),
         ip=client_ip(request),
     )
@@ -187,13 +188,21 @@ def _flow_cookie_path(provider: SignInProvider) -> str:
     dependencies=[Depends(rate_limit("auth_oauth_start", 30, per_seconds=600))],
 )
 def oauth_start(
-    provider: str, settings: AppSettings, next_path: Annotated[str | None, Query(alias="next")] = None
+    provider: str,
+    request: Request,
+    settings: AppSettings,
+    next_path: Annotated[str | None, Query(alias="next")] = None,
 ) -> RedirectResponse:
-    """Send the browser to the provider. `next` is where to land afterwards: a path on this site."""
+    """Send the browser to the provider. `next` is where to land afterwards: a path on this site.
+
+    The start is a same-site navigation, so the session cookie is here even
+    for Apple, whose callback won't carry it. The flow remembers its hash so
+    that the callback can end it.
+    """
     target = safe_next(next_path)
     try:
         chosen = oauth.get_provider(provider, settings)
-        flow = new_flow(chosen.id.value, target)
+        flow = new_flow(chosen.id.value, target, presented_session=request.cookies.get(SESSION_COOKIE))
         url = chosen.authorization_url(settings, flow)
     except AppError as exc:
         logger.info("Sign-in with %.40r couldn't start: %s", provider, exc.code)
@@ -217,7 +226,8 @@ def _finish_oauth(
         if flow is None or flow.provider != chosen.id.value or not state_matches(flow, callback.state):
             raise FlowStateError()
         identity = chosen.complete(settings, flow, callback)
-        token = _begin_session(db, signin.user_for_identity(db, identity), request)
+        user = signin.user_for_identity(db, identity)
+        token = _begin_session(db, user, request, previous_hash=flow.presented_session)
         db.commit()
     except AppError as exc:
         db.rollback()
@@ -291,16 +301,21 @@ def oauth_callback_post(
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(rate_limit("auth_email_start", 10, per_seconds=3600))],
 )
-def email_start(body: EmailStart, db: Db, settings: AppSettings) -> EmailStarted:
-    """Email a one-time sign-in link. The answer is the same whether or not the address has an account."""
+def email_start(body: EmailStart, response: Response, db: Db, settings: AppSettings) -> EmailStarted:
+    """Email a one-time sign-in link, bound to this browser by a cookie.
+
+    The answer is the same whether or not the address has an account.
+    """
     mailer = get_mailer(settings)
     if mailer is None:
         raise ProviderUnavailableError()
     if settings.ratelimit_enabled:
-        _LINKS_PER_ADDRESS.hit(f"email:{hash_token(body.email.casefold())}")
-    token = email_link.create_link(db, body.email)
+        _LINKS_PER_ADDRESS.hit(f"email:{hash_token(email_link.rate_key(body.email))}")
+    browser = new_token()
+    token = email_link.create_link(db, body.email, browser=browser)
     db.commit()
     mailer.send(email_link.link_message(settings, body.email, token, safe_next(body.next)))
+    cookies.set_link_cookie(response, browser)
     return EmailStarted()
 
 
@@ -312,13 +327,20 @@ def email_start(body: EmailStart, db: Db, settings: AppSettings) -> EmailStarted
 def email_verify(
     body: EmailVerify, request: Request, response: Response, db: Db, settings: AppSettings
 ) -> Me:
-    """Spend an emailed link and sign in. Unknown, used and expired links all fail with `link_invalid`."""
+    """Spend an emailed link and sign in. Unknown, used and expired links all fail with `link_invalid`.
+
+    In a browser other than the one that asked for the link, this answers
+    `confirmation_required` with the masked address until posted with `confirm`.
+    """
     if settings.mail_backend is None:
         raise ProviderUnavailableError()
-    user = email_link.redeem(db, body.token)
+    user = email_link.redeem(
+        db, body.token, browser=request.cookies.get(email_link.LINK_COOKIE), confirmed=body.confirm
+    )
     token = _begin_session(db, user, request)
     db.commit()
     cookies.set_session_cookie(response, token)
+    cookies.clear_link_cookie(response)
     return Me.from_user(user)
 
 

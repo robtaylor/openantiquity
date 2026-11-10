@@ -26,7 +26,10 @@ provider refuses.
 Apple returns to the callback with a cross-site POST, and a SameSite=Lax
 cookie isn't sent on one. Apple's flow cookie is therefore SameSite=None and
 Secure. It is still bound to the callback path, and still useless without the
-matching `state`.
+matching `state`. The session cookie stays Lax, so it doesn't reach Apple's
+callback either. The flow therefore also records the hash of the session the
+browser presented at the start (`presented_session`), so the callback can end
+that session even when the browser no longer sends it.
 """
 
 from __future__ import annotations
@@ -39,6 +42,7 @@ import secrets
 import time
 from dataclasses import asdict, dataclass
 
+from fieldclub.auth.tokens import hash_presented
 from fieldclub.config import get_settings
 
 FLOW_COOKIE = "fieldclub_oauth"
@@ -56,6 +60,8 @@ class Flow:
     verifier: str
     next: str
     expires_at: int
+    # The SHA-256 of the session token the browser presented at the start, if any.
+    presented_session: str | None = None
 
     @property
     def challenge(self) -> str:
@@ -68,8 +74,14 @@ def pkce_challenge(verifier: str) -> str:
     return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
 
 
-def new_flow(provider: str, next_path: str, *, now: float | None = None) -> Flow:
-    """A fresh flow. The verifier is 64 characters, inside PKCE's 43 to 128."""
+def new_flow(
+    provider: str, next_path: str, *, presented_session: str | None = None, now: float | None = None
+) -> Flow:
+    """A fresh flow. The verifier is 64 characters, inside PKCE's 43 to 128.
+
+    `presented_session` is the session token the browser sent with the start,
+    and only its hash is kept.
+    """
     issued = time.time() if now is None else now
     return Flow(
         provider=provider,
@@ -78,6 +90,7 @@ def new_flow(provider: str, next_path: str, *, now: float | None = None) -> Flow
         verifier=secrets.token_urlsafe(48),
         next=next_path,
         expires_at=int(issued) + FLOW_LIFETIME_S,
+        presented_session=hash_presented(presented_session),
     )
 
 
@@ -118,6 +131,8 @@ def unseal(value: str | None, *, now: float | None = None) -> Flow | None:
         # Signed by us, so this means the format changed under a live cookie.
         return None
     if not all(isinstance(field, str) for field in (flow.provider, flow.state, flow.nonce, flow.verifier)):
+        return None
+    if flow.presented_session is not None and not isinstance(flow.presented_session, str):
         return None
     if not isinstance(flow.expires_at, int) or flow.expires_at <= (time.time() if now is None else now):
         return None

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import smtplib
 from collections.abc import Callable
@@ -16,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fieldclub.auth import email_link
-from fieldclub.auth.failures import LinkInvalidError
+from fieldclub.auth.failures import LinkConfirmationRequiredError, LinkInvalidError
 from fieldclub.auth.mailer import LogMailer, MailNotSentError, Message, SmtpMailer, get_mailer
 from fieldclub.auth.tokens import hash_token
 from fieldclub.config import SESSION_COOKIE
@@ -79,6 +80,9 @@ def test_an_unsafe_next_is_dropped_from_the_link(browser: TestClient) -> None:
 
 def _comparable(response) -> tuple[int, str, dict[str, str]]:
     headers = {k: v for k, v in response.headers.items() if k.lower() not in ("date", "content-length")}
+    # Each answer binds its own browser, so only the cookie's value may differ.
+    if "set-cookie" in headers:
+        headers["set-cookie"] = re.sub(r"=[^;]+;", "=<value>;", headers["set-cookie"], count=1)
     return response.status_code, response.text, headers
 
 
@@ -98,7 +102,7 @@ def test_the_answer_is_the_same_for_known_and_unknown_addresses(
     unknown = browser.post(START, json={"email": "nobody@example.org"})
     assert _comparable(known) == _comparable(unknown)
     assert known.status_code == 202
-    assert "set-cookie" not in known.headers
+    assert known.headers["set-cookie"].startswith(f"{email_link.LINK_COOKIE}=")
     # Both did the same work: one stored link and one email each.
     assert count(db, MagicLink) == 2
     assert [m.to for m in LogMailer.outbox] == ["known@example.org", "nobody@example.org"]
@@ -234,25 +238,115 @@ def test_the_link_ends_any_session_the_browser_had(
     assert db.scalars(select(UserSession).where(UserSession.token_hash == hash_token(before))).first() is None
 
 
-def test_two_links_for_the_same_new_address_make_one_account(browser: TestClient, db: Session) -> None:
+def test_asking_again_spends_the_earlier_links_for_that_address(browser: TestClient, db: Session) -> None:
     first = request_link(browser, "new@example.org")
-    second = request_link(browser, "new@example.org")
-    assert browser.post(VERIFY, json={"token": first}).status_code == 200
+    other = request_link(browser, "other@example.org")
+    second = request_link(browser, "NEW@example.org")
+    assert error_code(browser.post(VERIFY, json={"token": first})) == "link_invalid"
     assert browser.post(VERIFY, json={"token": second}).status_code == 200
+    assert count(db, User) == 1
+    # Another address's link is untouched (this browser's cookie now names the newest link only).
+    assert browser.post(VERIFY, json={"token": other, "confirm": True}).status_code == 200
+
+
+def test_a_dotted_capital_i_link_never_signs_in_to_the_ascii_account(
+    browser: TestClient, make_user: MakeUser, db: Session
+) -> None:
+    """U+0130 folds to ASCII "i" in Postgres lower(), so CITEXT matches the two addresses."""
+    make_user(handle="Victim", email="ivan@example.org", email_verified_at=VERIFIED_AT)
+    token = request_link(browser, "\u0130van@example.org")
+    assert LogMailer.outbox[-1].to == "\u0130van@example.org"
+    response = browser.post(VERIFY, json={"token": token})
+    assert response.status_code == 409
+    assert error_code(response) == "email_unavailable"
+    assert SESSION_COOKIE not in response.cookies
+    assert count(db, UserSession) == 0
     assert count(db, User) == 1
 
 
+# --------------------------------------------------------------------------
+# A link opened in a browser that didn't ask for it
+# --------------------------------------------------------------------------
+
+
+def test_a_link_from_another_browser_needs_confirming_and_is_not_spent(
+    browser: TestClient, app: FastAPI, client_for: ClientFor, db: Session
+) -> None:
+    """Someone asks for a link to their own address and sends it to a victim (login CSRF)."""
+    token = request_link(browser, "attacker@example.org")
+    victim = client_for(app)
+    response = victim.post(VERIFY, json={"token": token})
+    assert response.status_code == 409
+    assert error_code(response) == "confirmation_required"
+    assert response.json()["error"]["details"] == {"email": "a***@example.org"}
+    assert SESSION_COOKIE not in response.cookies
+    assert db.scalars(select(MagicLink)).one().used_at is None
+    assert count(db, User) == 0
+    # Someone who opened their own link on another device says yes.
+    confirmed = victim.post(VERIFY, json={"token": token, "confirm": True})
+    assert confirmed.status_code == 200
+    assert confirmed.json()["email"] == "attacker@example.org"
+
+
+def test_the_browser_that_asked_signs_in_without_confirming_and_its_cookie_is_cleared(
+    browser: TestClient, db: Session
+) -> None:
+    token = request_link(browser, "ann@example.org")
+    assert browser.cookies.get(email_link.LINK_COOKIE)
+    link = db.scalars(select(MagicLink)).one()
+    assert link.browser_hash == hash_token(browser.cookies[email_link.LINK_COOKIE])
+    response = browser.post(VERIFY, json={"token": token})
+    assert response.status_code == 200
+    assert email_link.LINK_COOKIE not in browser.cookies
+
+
+def test_the_link_cookie_is_scoped_to_verify_and_lasts_as_long_as_the_link(browser: TestClient) -> None:
+    response = browser.post(START, json={"email": "ann@example.org"})
+    cookie = response.headers["set-cookie"].lower()
+    assert f"path={VERIFY}" in cookie
+    assert "httponly" in cookie
+    assert "samesite=lax" in cookie
+    assert f"max-age={int(email_link.LINK_LIFETIME.total_seconds())}" in cookie
+
+
+def test_an_unknown_link_fails_the_same_whether_or_not_it_is_confirmed(
+    app: FastAPI, client_for: ClientFor, mail_on: None
+) -> None:
+    for body in ({"token": "a" * 43}, {"token": "a" * 43, "confirm": True}):
+        assert error_code(client_for(app).post(VERIFY, json=body)) == "link_invalid"
+
+
+@pytest.mark.parametrize(
+    ("email", "masked"),
+    [
+        ("ann@example.org", "a***@example.org"),
+        ("a@example.org", "a***@example.org"),
+        ("\u00e4sa@b\u00fccher.example", "\u00e4***@b\u00fccher.example"),
+    ],
+)
+def test_an_address_is_masked_to_its_first_letter_and_domain(email: str, masked: str) -> None:
+    assert email_link.masked(email) == masked
+
+
+def test_the_verify_path_the_cookie_names_is_the_routed_one(browser: TestClient) -> None:
+    assert email_link.VERIFY_PATH == VERIFY
+    assert VERIFY in browser.get("/api/openapi.json").json()["paths"]
+
+
 def test_redeem_spends_a_link_once_as_a_service(db: Session) -> None:
-    token = email_link.create_link(db, "ann@example.org")
+    token = email_link.create_link(db, "ann@example.org", browser="b" * 43)
     db.commit()
-    user = email_link.redeem(db, token)
+    for elsewhere in (None, "", "c" * 43, "x" * 200):
+        with pytest.raises(LinkConfirmationRequiredError):
+            email_link.redeem(db, token, browser=elsewhere)
+    user = email_link.redeem(db, token, browser="b" * 43)
     db.commit()
     assert user.email == "ann@example.org"
     with pytest.raises(LinkInvalidError):
-        email_link.redeem(db, token)
+        email_link.redeem(db, token, confirmed=True)
     for bad in (None, "", "x" * 200):
         with pytest.raises(LinkInvalidError):
-            email_link.redeem(db, bad)
+            email_link.redeem(db, bad, confirmed=True)
 
 
 # --------------------------------------------------------------------------
@@ -275,6 +369,32 @@ def test_an_address_gets_five_links_an_hour_whoever_asks(
     # Another address is unaffected.
     assert sixth.post(START, json={"email": "bob@example.org"}).status_code == 202
     assert len(LogMailer.outbox) == 6
+
+
+def test_plus_tags_share_their_mailboxs_budget(
+    app: FastAPI, client_for: ClientFor, mail_on: None, limits_on: None
+) -> None:
+    for number in range(5):
+        caller = client_for(app)
+        caller.headers["X-Forwarded-For"] = f"203.0.113.{number}"
+        assert caller.post(START, json={"email": f"ann+{number}@example.org"}).status_code == 202
+    sixth = client_for(app)
+    sixth.headers["X-Forwarded-For"] = "203.0.113.99"
+    assert sixth.post(START, json={"email": "Ann+other@example.org"}).status_code == 429
+    assert sixth.post(START, json={"email": "ann@example.org"}).status_code == 429
+
+
+@pytest.mark.parametrize(
+    ("email", "key"),
+    [
+        ("ann@example.org", "ann@example.org"),
+        ("Ann+Tag@Example.org", "ann@example.org"),
+        ("ann+a+b@example.org", "ann@example.org"),
+        ("+x@example.org", "@example.org"),
+    ],
+)
+def test_the_rate_key_of_an_address_drops_its_plus_tag(email: str, key: str) -> None:
+    assert email_link.rate_key(email) == key
 
 
 def test_a_caller_gets_ten_links_an_hour_whatever_the_address(
@@ -387,11 +507,17 @@ def test_smtp_sends_with_starttls_and_login(fake_smtp: type[FakeSmtp]) -> None:
     assert sent["From"] == "Field Club <signin@example.org>"
 
 
-def test_smtp_failure_is_an_upstream_error(fake_smtp: type[FakeSmtp]) -> None:
-    fake_smtp.fail_with = smtplib.SMTPRecipientsRefused({})
+def test_smtp_failure_is_an_upstream_error_and_logs_no_address(
+    fake_smtp: type[FakeSmtp], caplog: pytest.LogCaptureFixture
+) -> None:
+    fake_smtp.fail_with = smtplib.SMTPRecipientsRefused(
+        {"ann@example.org": (550, b"no mailbox ann@example.org")}
+    )
     mailer = SmtpMailer(settings(mail_backend="smtp", smtp_host="smtp.example", mail_from="a@example.org"))
-    with pytest.raises(MailNotSentError):
+    with caplog.at_level(logging.INFO, logger="fieldclub"), pytest.raises(MailNotSentError):
         mailer.send(Message(to="ann@example.org", subject="Hi", body="Link"))
+    assert "SMTPRecipientsRefused" in caplog.text
+    assert "ann@example.org" not in caplog.text
 
 
 def test_smtp_over_ssl_skips_starttls(fake_smtp: type[FakeSmtp]) -> None:

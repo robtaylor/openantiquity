@@ -113,3 +113,6 @@ class EmailVerify(RequestModel):
     """The token from the emailed link's fragment."""
 
     token: str = Field(min_length=1, max_length=128)
+    # The person said yes to "Sign in as <masked address>?". Needed only when the
+    # link is opened in a browser that didn't ask for it. Never sent unasked.
+    confirm: bool = False

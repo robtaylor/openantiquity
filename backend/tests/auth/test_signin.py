@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 
 import pytest
@@ -9,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fieldclub.auth import sessions, signin
-from fieldclub.auth.failures import AccountDeletedError
+from fieldclub.auth.failures import AccountDeletedError, EmailUnavailableError
 from fieldclub.auth.oauth import ProviderIdentity
 from fieldclub.errors import BannedError
 from fieldclub.models import AuthIdentity, User
@@ -147,6 +148,105 @@ def test_an_emailed_address_of_a_banned_or_deleted_account_is_refused(
     make_user(email="banned@example.org", banned_at=VERIFIED_AT)
     with pytest.raises(BannedError):
         signin.user_for_email(db, "banned@example.org", now=NOW)
+
+
+# --------------------------------------------------------------------------
+# Addresses that the database's case-insensitive match would confuse
+# --------------------------------------------------------------------------
+
+# U+0130 LATIN CAPITAL LETTER I WITH DOT ABOVE and U+212A KELVIN SIGN, which
+# Postgres lower() folds to ASCII "i" and "k".
+DOTTED_I = "\u0130van@example.org"
+KELVIN = "\u212aate@example.org"
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "same"),
+    [
+        ("ann@example.org", "ann@example.org", True),
+        ("Ann@Example.ORG", "ann@example.org", True),
+        (DOTTED_I, "ivan@example.org", False),
+        (KELVIN, "kate@example.org", False),
+        ("\u00c4sa@example.org", "\u00e4sa@example.org", False),
+        ("\u00e4sa@example.org", "\u00e4sa@example.org", True),
+    ],
+)
+def test_two_addresses_are_the_same_only_when_they_differ_in_ascii_case(
+    first: str, second: str, same: bool
+) -> None:
+    assert signin.same_address(first, second) is same
+    assert signin.same_address(second, first) is same
+
+
+@pytest.mark.parametrize(
+    ("held", "proved"),
+    [
+        pytest.param("ivan@example.org", DOTTED_I, id="dotted-i-to-ascii"),
+        pytest.param(DOTTED_I, "ivan@example.org", id="ascii-to-dotted-i"),
+    ],
+)
+def test_an_emailed_address_never_signs_in_to_an_account_it_only_folds_to(
+    held: str, proved: str, db: Session, make_user: MakeUser
+) -> None:
+    make_user(email=held, email_verified_at=VERIFIED_AT)
+    with pytest.raises(EmailUnavailableError):
+        signin.user_for_email(db, proved, now=NOW)
+    assert count(db, User) == 1
+
+
+@pytest.mark.parametrize("asserted", [DOTTED_I, KELVIN])
+def test_a_provider_address_never_links_to_an_account_it_only_folds_to(
+    asserted: str, db: Session, make_user: MakeUser
+) -> None:
+    victim = make_user(
+        email=asserted.replace("\u0130", "i").replace("\u212a", "k"), email_verified_at=VERIFIED_AT
+    )
+    user = signin.user_for_identity(db, google(email=asserted), now=NOW)
+    assert user.id != victim.id
+    # The database would call the address taken, so the new account has none.
+    assert user.email is None
+
+
+def test_an_address_taken_by_a_concurrent_sign_in_links_instead_of_failing(
+    db: Session, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Two providers make an account for the same new verified address at once."""
+    winner = signin.user_for_identity(db, google(), now=NOW)
+    db.commit()
+    real_find = signin._find_by_email
+    calls = {"n": 0}
+
+    def find_missing_once(session: Session, email: str):
+        calls["n"] += 1
+        return None if calls["n"] == 1 else real_find(session, email)
+
+    monkeypatch.setattr(signin, "_find_by_email", find_missing_once)
+    apple = ProviderIdentity(SignInProvider.APPLE, "a-1", email="ann@example.org", email_verified=True)
+    with caplog.at_level(logging.INFO, logger="fieldclub"):
+        user = signin.user_for_identity(db, apple, now=NOW)
+    assert user.id == winner.id
+    assert count(db, User) == 1
+    assert count(db, AuthIdentity) == 2
+    assert "ann@example.org" not in caplog.text
+
+
+def test_an_account_made_by_a_concurrent_link_is_found_and_no_address_is_logged(
+    db: Session, make_user: MakeUser, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    holder = make_user(email="ann@example.org", email_verified_at=VERIFIED_AT)
+    real_find = signin._find_by_email
+    calls = {"n": 0}
+
+    def find_missing_once(session: Session, email: str):
+        calls["n"] += 1
+        return None if calls["n"] == 1 else real_find(session, email)
+
+    monkeypatch.setattr(signin, "_find_by_email", find_missing_once)
+    with caplog.at_level(logging.INFO, logger="fieldclub"):
+        user = signin.user_for_email(db, "ann@example.org", now=NOW)
+    assert user.id == holder.id
+    assert "created by another request" in caplog.text
+    assert "ann@example.org" not in caplog.text
 
 
 def test_begin_session_ends_the_presented_session(db: Session, make_user: MakeUser) -> None:

@@ -849,6 +849,22 @@ def test_a_session_presented_before_sign_in_is_ended_not_reused(
     assert stale.get("/api/v1/auth/me").status_code == 401
 
 
+def test_apple_ends_the_session_the_browser_had_at_start_though_its_post_carries_no_cookie(
+    app: FastAPI, client_for: ClientFor, idps: Idps, make_user: MakeUser, db: Session
+) -> None:
+    """Apple's callback is a cross-site POST, which a SameSite=Lax session cookie doesn't reach."""
+    browser = client_for(app, make_user(handle="Someone"), with_header=False)
+    before = browser.cookies[SESSION_COOKIE]
+    started = start(browser, "apple")
+    code, state = idps["apple"].authorise(started.headers["location"], ANN["apple"])
+    # What the browser does on Apple's form post: the Lax session cookie stays home.
+    browser.cookies.delete(SESSION_COOKIE)
+    response = callback(browser, "apple", method="POST", code=code, state=state, user=APPLE_USER)
+    assert signin_error(response) is None
+    assert issued_session(response) != before
+    assert db.scalars(select(UserSession).where(UserSession.token_hash == hash_token(before))).first() is None
+
+
 def test_a_planted_session_token_is_never_adopted(app: FastAPI, client_for: ClientFor, idps: Idps) -> None:
     browser = client_for(app)
     planted = "planted-token-" + "x" * 30
