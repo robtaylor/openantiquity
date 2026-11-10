@@ -24,7 +24,7 @@ from dataclasses import dataclass
 
 from fastapi import Request
 
-from fieldclub.auth.deps import OptionalUser, client_ip
+from fieldclub.auth.deps import Contributor, OptionalUser, client_ip
 from fieldclub.auth.tokens import hash_ip
 from fieldclub.config import get_settings
 from fieldclub.errors import RateLimitedError
@@ -195,6 +195,21 @@ def rate_limit(name: str, capacity: float, per_seconds: float) -> Callable[..., 
     limiter = get_limiter(name, capacity, per_seconds)
 
     def dependency(request: Request, user: OptionalUser) -> None:
+        enforce(limiter, request, user)
+
+    return dependency
+
+
+def contributor_rate_limit(name: str, capacity: float, per_seconds: float) -> Callable[..., None]:
+    """`rate_limit` for a route only a contributor may use, counted per contributor.
+
+    The caller is checked first, so a request refused with a 401 or 403
+    spends nothing from any bucket. Shares a budget with `rate_limit` routes
+    of the same `name`.
+    """
+    limiter = get_limiter(name, capacity, per_seconds)
+
+    def dependency(request: Request, user: Contributor) -> None:
         enforce(limiter, request, user)
 
     return dependency

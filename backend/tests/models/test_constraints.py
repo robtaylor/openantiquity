@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 from shapely.geometry import MultiPolygon, Point, Polygon, box
-from sqlalchemy import func, insert, inspect, select, text
+from sqlalchemy import func, insert, inspect, select, text, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import DataError, IntegrityError, InternalError, ProgrammingError
 from sqlalchemy.orm import Session
@@ -520,7 +520,7 @@ def test_evidence_vote_is_one_per_person_and_plus_or_minus_one(
     )
 
 
-def test_mention_is_unique_per_finding_and_canonical_url(db: Session, make_finding: MakeFinding) -> None:
+def test_mention_is_unique_per_finding_and_match_key(db: Session, make_finding: MakeFinding) -> None:
     first, second = make_finding(), make_finding()
     url = "https://www.youtube.com/watch?v=abc"
     db.add(Mention(finding_id=first.id, kind="video", url=url + "&t=10", canonical_url=url))
@@ -530,8 +530,12 @@ def test_mention_is_unique_per_finding_and_canonical_url(db: Session, make_findi
     expect_violation(
         db,
         Mention(finding_id=first.id, kind="video", url=url, canonical_url=url),
-        match="uq_mentions_finding_id_canonical_url",
+        match="uq_mentions_finding_id_match_key",
     )
+    # A removal that doesn't block re-adding leaves the address free.
+    db.execute(update(Mention).where(Mention.finding_id == first.id).values(deleted_at=func.now()))
+    db.add(Mention(finding_id=first.id, kind="video", url=url, canonical_url=url))
+    db.commit()
     expect_violation(
         db,
         Mention(finding_id=first.id, kind="hologram", url="https://x.example", canonical_url="x"),

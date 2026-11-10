@@ -238,8 +238,11 @@ def test_hidden_withdrawn_and_removed_get_nothing(
         kind="video",
         url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         canonical_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        match_key="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         auto_detected=True,
         deleted_at=datetime(2026, 11, 2, tzinfo=UTC),
+        # A moderator removed it, so the scan mustn't bring it back.
+        blocks_readding=True,
     )
     db.add(removed)
     db.commit()

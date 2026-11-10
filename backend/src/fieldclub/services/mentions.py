@@ -1,6 +1,7 @@
 """Mentions: places a finding was talked about, such as a video, an article, a podcast or a paper.
 
-A finding has at most one mention per canonical address (`services.unfurl`).
+A finding has at most one live mention per address, compared by
+`unfurl.Address.match_key`.
 Adding one bumps the finding's `mention_count` and records `mention_added`,
 which tells everyone following the finding except whoever added it. Everyone
 who has helped with a finding follows it, the finder included, so they are
@@ -10,9 +11,17 @@ and no actor, so every follower is told.
 A mention is not evidence. Nothing here touches the confidence engine, and a
 mention never moves a finding's tier, state or score.
 
-A removed mention keeps its row with `deleted_at` set. It disappears from
-every list, and because the row still holds the address, neither the scan
-nor anyone else can add that address to that finding again.
+A removed mention keeps its row with `deleted_at` and `removed_by` set, and
+disappears from every list. Someone removing their own mention blocks
+nothing: anyone may add that address again, and so may the scan. A moderator
+removing someone else's mention, or one the scan found, sets
+`blocks_readding`, and then neither a member nor the scan can add that
+address to that finding again. Otherwise anyone could bury a finding's real
+video by adding it and removing it.
+
+Adding fetches the address, which can take seconds. `add` takes a
+`before_fetch` callback, and the router ends its transaction there, so no
+database connection is held while a stranger's server answers.
 
 Nothing here returns a position. The recent feed returns findings, and the
 schema gives each one the position its viewer may see through
@@ -24,16 +33,18 @@ Services flush and never commit.
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+import unicodedata
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from fieldclub.errors import ConflictError, ForbiddenError, NotFoundError
 from fieldclub.models import Finding, Mention, User
+from fieldclub.models.findings import MENTION_HOLDS_ADDRESS
 from fieldclub.schemas.common import int_from_cursor, paginate
 from fieldclub.services import activity, findings, unfurl
 from fieldclub.vocab import ActivityKind, FindingState, MentionKind
@@ -55,7 +66,7 @@ class MentionExistsError(ConflictError):
 
 class MentionRemovedError(ConflictError):
     code = "mention_removed"
-    message = "That mention was removed from this finding, so it can't be added again."
+    message = "A moderator removed that from this finding, so it can't be added again."
 
 
 class MentionForbiddenError(ForbiddenError):
@@ -88,9 +99,14 @@ def preview(url: str) -> Preview:
     return Preview(address, fetched.status, fetched.metadata)
 
 
-def _existing(db: Session, finding: Finding, canonical_url: str) -> Mention | None:
+def _holding(db: Session, finding: Finding, address: unfurl.Address) -> Mention | None:
+    """The mention that holds this address on the finding: a live one, or a removal that blocks it."""
     return db.scalar(
-        select(Mention).where(Mention.finding_id == finding.id, Mention.canonical_url == canonical_url)
+        select(Mention).where(
+            Mention.finding_id == finding.id,
+            Mention.match_key == address.match_key,
+            Mention.deleted_at.is_(None) | Mention.blocks_readding,
+        )
     )
 
 
@@ -115,6 +131,7 @@ def _insert(
             kind=draft.kind.value,
             url=draft.address.url,
             canonical_url=draft.address.canonical_url,
+            match_key=draft.address.match_key,
             provider=draft.address.provider,
             title=meta.title,
             author_name=meta.author_name,
@@ -124,7 +141,9 @@ def _insert(
             note=draft.note,
             auto_detected=auto_detected,
         )
-        .on_conflict_do_nothing(index_elements=["finding_id", "canonical_url"])
+        .on_conflict_do_nothing(
+            index_elements=["finding_id", "match_key"], index_where=text(MENTION_HOLDS_ADDRESS)
+        )
         .returning(Mention.id)
     )
     if new_id is None:
@@ -144,6 +163,14 @@ def _insert(
     return mention
 
 
+def _clean_note(note: str | None) -> str | None:
+    """A note, or None when it has nothing visible in it."""
+    if note is None:
+        return None
+    visible = "".join(char for char in note if unicodedata.category(char) != "Cf")
+    return note.strip() if visible.strip() else None
+
+
 def add(
     db: Session,
     finding: Finding,
@@ -153,33 +180,42 @@ def add(
     kind: MentionKind | None = None,
     start_seconds: int | None = None,
     note: str | None = None,
+    before_fetch: Callable[[], None] | None = None,
 ) -> Mention:
     """Add a mention a member found. The address is fetched for its title, unless that fails.
 
     Raises `MentionExistsError` or `MentionRemovedError` when the finding
-    already has this address, before anything is fetched.
+    already has this address, before anything is fetched. `before_fetch` is
+    called just before the fetch, for the caller to end its transaction. The
+    finding is read again after it, since it may have changed meanwhile.
     """
     findings.check_open(finding)
     address = unfurl.canonical(url)
-    _refuse_existing(_existing(db, finding, address.canonical_url))
+    _refuse_existing(_holding(db, finding, address))
+    if before_fetch is not None:
+        before_fetch()
     fetched = unfurl.unfurl(address)
+    db.refresh(finding)
+    if finding.hidden_at is not None and not findings.may_see_hidden(finding, user):
+        raise findings.FindingNotFoundError()
+    findings.check_open(finding)
     draft = Draft(
         address=address,
         kind=kind or address.kind,
         metadata=fetched.metadata,
         start_seconds=start_seconds if start_seconds is not None else address.start_seconds,
-        note=note or None,
+        note=_clean_note(note),
     )
     mention = _insert(db, finding, user, draft, auto_detected=False)
     if mention is None:
         # Someone else added it between the check and the insert.
-        _refuse_existing(_existing(db, finding, address.canonical_url))
+        _refuse_existing(_holding(db, finding, address))
         raise AssertionError("the insert conflicted, so the mention must exist")
     return mention
 
 
 def add_detected(db: Session, finding: Finding, draft: Draft) -> Mention | None:
-    """Add a mention the channel scan found, or None when the finding already has it (or had it)."""
+    """Add a mention the channel scan found, or None when the finding has it or a moderator removed it."""
     if finding.hidden_at is not None or finding.state == FindingState.WITHDRAWN.value:
         return None
     return _insert(db, finding, None, draft, auto_detected=True)
@@ -194,9 +230,13 @@ def remove(db: Session, mention_id: int, user: User) -> Mention:
     assert finding is not None, "a mention always belongs to a finding"
     if finding.hidden_at is not None and not findings.may_see_hidden(finding, user):
         raise MentionNotFoundError()
-    if not (user.has_id(mention.user_id) or findings.is_moderator(user)):
+    own = user.has_id(mention.user_id)
+    if not (own or findings.is_moderator(user)):
         raise MentionForbiddenError()
     mention.deleted_at = datetime.now(UTC)
+    mention.removed_by = user.id
+    # A moderator's removal of a mention that isn't theirs sticks.
+    mention.blocks_readding = not own
     db.execute(
         update(Finding)
         .where(Finding.id == finding.id)

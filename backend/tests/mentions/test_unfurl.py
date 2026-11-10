@@ -77,7 +77,8 @@ def test_an_article_comes_from_its_open_graph_tags(offline: respx.MockRouter) ->
     assert result.metadata == unfurl.Metadata(
         title='Amateurs spot "lost" enclosure near Avebury',
         author_name="Jo Bloggs",
-        thumbnail_url="https://images.wiltshire-gazette.example/2026/11/enclosure.jpg",
+        # A page's own image is never kept: it would tell the site who looked.
+        thumbnail_url=None,
         published_at=datetime(2026, 11, 3, 8, 30, tzinfo=UTC),
     )
 
@@ -99,8 +100,11 @@ def test_page_text_is_cleaned_before_it_is_kept() -> None:
     assert len(meta.author_name) == unfurl.AUTHOR_MAX
 
 
-def test_a_thumbnail_from_another_site_or_over_http_is_dropped() -> None:
+def test_a_pages_own_image_is_never_kept() -> None:
+    # The page's site is whichever site the member chose, so its image would
+    # tell that site the address of everyone who looks at the finding.
     for image in (
+        "https://images.wiltshire-gazette.example/2026/11/enclosure.jpg",
         "https://tracker.elsewhere.example/pixel.gif",
         "http://images.wiltshire-gazette.example/a.jpg",
         "https://images.wiltshire-gazette.example:8443/a.jpg",
@@ -148,3 +152,8 @@ def test_a_failure_is_cached_too(offline: respx.MockRouter) -> None:
     unfurl.unfurl(canonical(YOUTUBE_URL))
     unfurl.unfurl(canonical(YOUTUBE_URL))
     assert route.call_count == 1
+
+
+def test_every_format_character_is_taken_out_of_page_text() -> None:
+    assert unfurl.clean_text("a\ufeffb\nc\u00adx\u061cy\u202ez\u2066w", 100) == "ab cxyzw"
+    assert unfurl.clean_text("\u200b\u202e", 100) is None

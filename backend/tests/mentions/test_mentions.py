@@ -309,9 +309,64 @@ def test_the_adder_removes_their_mention(
     assert mention.id not in {m["id"] for m in listed}
     db.refresh(finding)
     assert finding.mention_count == 2
-    # Removed for good: it can't be added again.
+    # Removing your own mention blocks nothing: the adder can put it back.
     again = post(client_as(adder), finding, mention.url)
-    assert error_code(again) == "mention_removed"
+    assert again.status_code == 201
+    assert again.json()["id"] != mention.id
+    db.refresh(finding)
+    assert finding.mention_count == 3
+
+
+def test_adding_then_removing_a_mention_cant_bury_it(
+    client_as: ClientAs,
+    db: Session,
+    make_user: MakeUser,
+    make_finding: MakeFinding,
+    offline: respx.MockRouter,
+) -> None:
+    serve_youtube_oembed()
+    finding = make_finding()
+    griefer = client_as(make_user())
+    added = post(griefer, finding, YOUTUBE_URL)
+    assert added.status_code == 201
+    assert griefer.delete(f"{API}/mentions/{added.json()['id']}").status_code == 204
+    # Another member adds the same video, written another way.
+    again = post(client_as(make_user()), finding, "https://youtu.be/dQw4w9WgXcQ")
+    assert again.status_code == 201
+    listed = client_as(make_user()).get(f"{API}/findings/{finding.public_id}/mentions").json()["items"]
+    assert [m["id"] for m in listed] == [again.json()["id"]]
+    # And so can the channel scan, once a member's own removal is all there is.
+    removed = db.get(Mention, added.json()["id"])
+    assert removed is not None
+    assert removed.removed_by is not None
+    assert removed.blocks_readding is False
+
+
+def test_a_moderators_removal_sticks(
+    client_as: ClientAs,
+    db: Session,
+    make_user: MakeUser,
+    make_finding: MakeFinding,
+    offline: respx.MockRouter,
+) -> None:
+    serve_youtube_oembed()
+    serve_article()
+    finding = make_finding()
+    moderator = make_user("moderator")
+    added = post(client_as(make_user()), finding, YOUTUBE_URL)
+    assert client_as(moderator).delete(f"{API}/mentions/{added.json()['id']}").status_code == 204
+    for user in (make_user(), moderator):
+        again = post(client_as(user), finding, "https://youtu.be/dQw4w9WgXcQ")
+        assert error_code(again) == "mention_removed"
+    draft = mentions.Draft(
+        address=unfurl.canonical(YOUTUBE_URL), kind=MentionKind.VIDEO, metadata=unfurl.NOTHING
+    )
+    assert mentions.add_detected(db, finding, draft) is None
+    # A moderator removing a mention they added themselves blocks nothing.
+    own = post(client_as(moderator), finding, ARTICLE_URL)
+    assert own.status_code == 201
+    assert client_as(moderator).delete(f"{API}/mentions/{own.json()['id']}").status_code == 204
+    assert post(client_as(make_user()), finding, ARTICLE_URL).status_code == 201
 
 
 def test_a_moderator_removes_anyones_including_the_scans(

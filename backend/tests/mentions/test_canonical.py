@@ -235,3 +235,81 @@ def test_what_isnt_a_web_address_is_refused(link: str) -> None:
 )
 def test_start_times(text: str, seconds: int | None) -> None:
     assert parse_start(text) == seconds
+
+
+@pytest.mark.parametrize(
+    "link",
+    [
+        f"https://www.youtube.com/attribution_link?a=xyz&u=/watch%3Fv%3D{VIDEO}%26feature%3Dshare",
+        f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v%3D{VIDEO}&format=json",
+        f"https://www.youtube.com/watch?v={VIDEO}.",
+        f"https://youtu.be/{VIDEO}).",
+    ],
+)
+def test_wrapped_youtube_links_and_trailing_punctuation(link: str) -> None:
+    address = canonical(link)
+    assert address.canonical_url == WATCH
+    assert address.match_key == WATCH
+
+
+def test_a_wrapper_around_something_else_is_an_ordinary_page() -> None:
+    address = canonical("https://www.youtube.com/attribution_link?u=https://evil.example/")
+    assert address.provider == "youtube.com"
+    assert address.kind is MentionKind.ARTICLE
+
+
+@pytest.mark.parametrize(
+    "link",
+    [
+        "https://doi.org/10.5284/1040209?utm_source=x",
+        "https://doi.org/10.5284/1040209#section-2",
+        "https://doi.org/10.5284/1040209/",
+        "https://dx.doi.org/10.5284/1040209/?x=1#y",
+        "doi.org/10.5284/1040209?utm_source=x",
+    ],
+)
+def test_a_doi_address_loses_its_query_fragment_and_trailing_slash(link: str) -> None:
+    assert canonical(link).canonical_url == "https://doi.org/10.5284/1040209"
+
+
+def test_a_doi_with_brackets_is_still_a_valid_address() -> None:
+    address = canonical("10.1234/<script>alert(1)</script>[x]")
+    assert address.canonical_url == "https://doi.org/10.1234/%3Cscript%3Ealert(1)%3C/script%3E%5Bx%5D"
+
+
+BBC = "https://www.bbc.co.uk/news/articles/c1x2y3"
+
+
+@pytest.mark.parametrize(
+    "link",
+    [
+        BBC,
+        "http://www.bbc.co.uk/news/articles/c1x2y3",
+        "https://bbc.co.uk/news/articles/c1x2y3",
+        "http://bbc.co.uk/news/articles/c1x2y3/",
+        "https://www.bbc.co.uk/news/articles/c1x2y3/",
+        "https://www.bbc.co.uk/news/articles/%63%31x2y3",
+        "https://www.bbc.co.uk/news/articles/c1x2y3?at_medium=RSS&at_campaign=rss",
+    ],
+)
+def test_one_article_written_many_ways_has_one_match_key(link: str) -> None:
+    assert canonical(link).match_key == canonical(BBC).match_key == "//bbc.co.uk/news/articles/c1x2y3"
+
+
+def test_an_article_keeps_its_scheme_and_host_for_fetching_and_showing() -> None:
+    assert canonical("http://bbc.co.uk/news/x/").canonical_url == "http://bbc.co.uk/news/x/"
+
+
+def test_query_order_and_unreserved_escapes_dont_matter() -> None:
+    first = canonical("https://example.org/a%7Eb?b=2&a=1")
+    second = canonical("https://example.org/a~b?a=1&b=2")
+    assert first.canonical_url == second.canonical_url == "https://example.org/a~b?a=1&b=2"
+    # A reserved character stays escaped, in one spelling.
+    assert canonical("https://example.org/a%2fb").canonical_url == "https://example.org/a%2Fb"
+
+
+def test_paths_that_differ_are_different_things() -> None:
+    assert canonical("https://example.org/a").match_key != canonical("https://example.org/b").match_key
+    assert (
+        canonical("https://example.org/a?id=1").match_key != canonical("https://example.org/a?id=2").match_key
+    )

@@ -20,6 +20,7 @@ from sqlalchemy import (
     false,
     func,
     inspect,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.engine import Connection
@@ -265,12 +266,25 @@ class Comment(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(TimestampTz)
 
 
+# The mentions that hold their address on a finding: every live one, and a
+# removed one whose removal blocks adding it again.
+MENTION_HOLDS_ADDRESS = "deleted_at IS NULL OR blocks_readding"
+
+
 class Mention(Base):
     """Somewhere a finding was talked about: a video, an article, a podcast, a paper."""
 
     __tablename__ = "mentions"
     __table_args__ = (
-        UniqueConstraint("finding_id", "canonical_url"),
+        # One live mention per address on a finding. A removal that blocks
+        # adding the address again keeps its place here too.
+        Index(
+            "uq_mentions_finding_id_match_key",
+            "finding_id",
+            "match_key",
+            unique=True,
+            postgresql_where=text(MENTION_HOLDS_ADDRESS),
+        ),
         enum_check("kind", MentionKind),
     )
 
@@ -281,6 +295,11 @@ class Mention(Base):
     kind: Mapped[str] = mapped_column(Text)
     url: Mapped[str] = mapped_column(Text)
     canonical_url: Mapped[str] = mapped_column(Text)
+    # The canonical address less scheme, `www.` and trailing slash
+    # (`unfurl.Address.match_key`). Left out, the canonical address itself.
+    match_key: Mapped[str] = mapped_column(
+        Text, default=lambda context: context.get_current_parameters()["canonical_url"]
+    )
     provider: Mapped[str | None] = mapped_column(Text)
     title: Mapped[str | None] = mapped_column(Text)
     author_name: Mapped[str | None] = mapped_column(Text)
@@ -289,9 +308,13 @@ class Mention(Base):
     start_seconds: Mapped[int | None] = mapped_column(Integer)
     note: Mapped[str | None] = mapped_column(Text)
     auto_detected: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
-    # Removed by the person who added it or a moderator. The row stays, so the
-    # channel scan can't add the same link again.
+    # Removed by the person who added it or a moderator. The row stays as a record.
     deleted_at: Mapped[datetime | None] = mapped_column(TimestampTz)
+    removed_by: Mapped[int | None] = fk("users.id", ondelete="SET NULL")
+    # Set when a moderator removed someone else's mention, or one the channel
+    # scan found, so neither a member nor the scan can add that address again.
+    # A person removing their own mention blocks nothing.
+    blocks_readding: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
 
 class Follow(Base):

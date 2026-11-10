@@ -5,9 +5,15 @@ same thing. Every way of writing a YouTube link (watch, youtu.be, shorts,
 live, embed, any of its hostnames, with a start time or tracking parameters)
 becomes `https://www.youtube.com/watch?v=<id>` plus `start_seconds`. Vimeo
 links become `https://vimeo.com/<id>`. A DOI in any form becomes its doi.org
-address, in lower case because DOIs ignore case. Anything else keeps its path
-and meaningful query, with a lower-case host, no fragment and no tracking
-parameters.
+address, in lower case because DOIs ignore case, without any query, fragment
+or trailing slash. Anything else keeps its path and meaningful query, with a
+lower-case host, no fragment, no tracking parameters, the query sorted and
+unreserved characters no longer percent-encoded.
+
+Two addresses that differ only in `http` or `https`, a leading `www.` or a
+trailing slash are usually one page, but the canonical address keeps them,
+because it is the one fetched and shown. `Address.match_key` drops them, and
+a finding has at most one mention per match key.
 
 `unfurl()` fetches what is known about an address, without keys:
 
@@ -23,10 +29,16 @@ so a preview followed by a save fetches once. A failure is never an error to
 the caller: the mention is saved with the address alone.
 
 Text taken from a page is someone else's and is shown publicly, so it is
-stripped of control characters, its whitespace is collapsed and it is cut to
-length. A thumbnail is kept only on https, and only from the provider's own
-image hosts or the page's own site, so a mention can't make every viewer's
-browser call a stranger's server.
+stripped of control and format characters (bidi overrides, zero-width
+characters, soft hyphens), its whitespace is collapsed and it is cut to
+length. A thumbnail is kept only from YouTube's and Vimeo's image hosts, on
+https. A page's own image is never kept: its site is whatever site the member
+chose, so showing it would let a member see the address of everyone who
+looks at the finding.
+
+Fetches made for every caller together are capped by one budget for the
+process, spent only when the cache can't answer. When it is used up the
+address is left unfetched, as if the fetch had failed, and that isn't cached.
 """
 
 from __future__ import annotations
@@ -36,6 +48,7 @@ import logging
 import re
 import threading
 import time
+import unicodedata
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -47,7 +60,8 @@ from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsp
 import httpx
 
 from fieldclub import safe_fetch
-from fieldclub.errors import ValidationFailedError
+from fieldclub.errors import RateLimitedError, ValidationFailedError
+from fieldclub.ratelimit import enforce_key, get_limiter
 from fieldclub.schemas.text import has_unstorable_character
 from fieldclub.vocab import MentionKind
 
@@ -83,6 +97,19 @@ class Address:
     # The YouTube or Vimeo id, or the DOI.
     item_id: str | None = None
 
+    @property
+    def match_key(self) -> str:
+        """What two addresses of the same thing share: the canonical address, less what rarely matters.
+
+        For a page that is `http` or `https`, a leading `www.` and a trailing
+        slash. The provider forms are exact already.
+        """
+        if self.provider in _EXACT_PROVIDERS:
+            return self.canonical_url
+        split = urlsplit(self.canonical_url)
+        path = split.path.rstrip("/") or "/"
+        return urlunsplit(("", _without_www(split.netloc), path, split.query, ""))
+
 
 YOUTUBE_HOSTS = frozenset(
     {
@@ -99,6 +126,7 @@ YOUTUBE_HOSTS = frozenset(
 )
 VIMEO_HOSTS = frozenset({"vimeo.com", "www.vimeo.com", "player.vimeo.com"})
 DOI_HOSTS = frozenset({"doi.org", "dx.doi.org", "www.doi.org"})
+_EXACT_PROVIDERS = frozenset({"youtube", "vimeo", "doi"})
 
 _YOUTUBE_ID = re.compile(r"[A-Za-z0-9_-]{11}")
 # The path forms that carry an id: /shorts/<id>, /live/<id>, /embed/<id>, /v/<id>, /e/<id>.
@@ -111,10 +139,18 @@ _VIMEO_PATHS = (
 )
 _DOI = re.compile(r"10\.\d{4,9}/\S+")
 _DOI_PREFIX = re.compile(r"^(?:doi:\s*|https?://(?:dx\.|www\.)?doi\.org/)", re.IGNORECASE)
+_DOI_URL_PREFIX = re.compile(r"^https?://", re.IGNORECASE)
 _TIME_PART = re.compile(r"(\d+)([hms])")
 
-# Characters a DOI keeps unescaped in its doi.org address.
-_DOI_SAFE = "/:;()._-<>[]"
+# Characters a DOI keeps unescaped in its doi.org address. Angle and square
+# brackets are escaped, as doi.org does, so the address is always a valid URL.
+_DOI_SAFE = "/:;()._-"
+
+# RFC 3986 unreserved characters: escaping one changes nothing, so it is undone.
+_UNRESERVED = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+_PERCENT_ESCAPE = re.compile(r"%([0-9A-Fa-f]{2})")
+# What may trail a YouTube id when a link is pasted at the end of a sentence.
+_TRAILING_PUNCTUATION = ".,;:!?)]}'\""
 
 # Query parameters that only say where a click came from.
 _TRACKING_PREFIXES = ("utm_", "mtm_", "pk_", "hsa_", "_hs")
@@ -218,6 +254,21 @@ def _without_www(host: str) -> str:
     return host[4:] if host.startswith("www.") else host
 
 
+def has_format_character(text: str) -> bool:
+    """Whether `text` holds an invisible format character, such as a bidi override or a soft hyphen."""
+    return any(unicodedata.category(char) == "Cf" for char in text)
+
+
+def _unescape_unreserved(text: str) -> str:
+    """`%7Euser` as `~user`, and every other escape in upper case, so equal addresses are spelled alike."""
+
+    def one(match: re.Match[str]) -> str:
+        char = chr(int(match.group(1), 16))
+        return char if char in _UNRESERVED else match.group(0).upper()
+
+    return _PERCENT_ESCAPE.sub(one, text)
+
+
 def _is_tracking(key: str) -> bool:
     lowered = key.lower()
     return lowered in _TRACKING_PARAMS or lowered.startswith(_TRACKING_PREFIXES)
@@ -225,7 +276,7 @@ def _is_tracking(key: str) -> bool:
 
 def doi_address(doi: str) -> Address:
     """The doi.org address of a DOI, such as `10.5284/1040209`."""
-    doi = unquote(doi).strip().rstrip(".,;")
+    doi = unquote(doi).strip().rstrip(".,;/")
     if not _DOI.fullmatch(doi) or has_unstorable_character(doi):
         raise InvalidAddressError("That DOI isn't in the form 10.1234/something.")
     doi = doi.lower()
@@ -239,10 +290,10 @@ def _youtube(
     params = dict(query)
     video_id: str | None = None
     if host in ("youtu.be", "www.youtu.be"):
-        candidate = path.strip("/").split("/", 1)[0]
+        candidate = path.strip("/").split("/", 1)[0].rstrip(_TRAILING_PUNCTUATION)
         video_id = candidate if _YOUTUBE_ID.fullmatch(candidate) else None
     elif path.rstrip("/") == "/watch":
-        candidate = params.get("v", "")
+        candidate = params.get("v", "").rstrip(_TRAILING_PUNCTUATION)
         video_id = candidate if _YOUTUBE_ID.fullmatch(candidate) else None
     else:
         match = _YOUTUBE_PATH.match(path)
@@ -287,13 +338,29 @@ def _kind_for(host: str, path: str) -> MentionKind:
     return MentionKind.ARTICLE
 
 
-def canonical(raw: str) -> Address:
+def _wrapped_youtube_link(host: str, path: str, query: list[tuple[str, str]]) -> str | None:
+    """The link inside a YouTube wrapper: `/attribution_link?u=/watch?v=...` or `/oembed?url=...`."""
+    if host not in YOUTUBE_HOSTS:
+        return None
+    params = dict(query)
+    if path.rstrip("/") == "/attribution_link" and params.get("u", "").startswith("/"):
+        return "https://www.youtube.com" + params["u"]
+    if path.rstrip("/") == "/oembed" and "url" in params:
+        return params["url"]
+    return None
+
+
+def canonical(raw: str, *, _unwrapped: bool = False) -> Address:
     """The canonical form of an address someone typed, or `InvalidAddressError`."""
     text = raw.strip()
-    if not text or len(text) > URL_MAX or has_unstorable_character(text):
+    if not text or len(text) > URL_MAX or has_unstorable_character(text) or has_format_character(text):
         raise InvalidAddressError()
     if _DOI_PREFIX.match(text) or _DOI.fullmatch(text):
-        return doi_address(_DOI_PREFIX.sub("", text))
+        doi = _DOI_PREFIX.sub("", text)
+        if _DOI_URL_PREFIX.match(text):
+            # In a doi.org address a query or fragment is the address's, not the DOI's.
+            doi = re.split(r"[?#]", doi, maxsplit=1)[0]
+        return doi_address(doi)
     if any(char.isspace() for char in text):
         raise InvalidAddressError()
     if "://" not in text:
@@ -317,6 +384,16 @@ def canonical(raw: str) -> Address:
     query = parse_qsl(split.query, keep_blank_values=True)
     fragment = split.fragment
 
+    wrapped = None if _unwrapped else _wrapped_youtube_link(host, path, query)
+    if wrapped is not None:
+        try:
+            inner = canonical(wrapped, _unwrapped=True)
+        except InvalidAddressError:
+            inner = None
+        if inner is not None and inner.provider == "youtube":
+            return Address(
+                text, inner.canonical_url, inner.kind, inner.provider, inner.start_seconds, inner.item_id
+            )
     if host in YOUTUBE_HOSTS:
         found = _youtube(host, path, query, fragment)
         if found is not None:
@@ -338,9 +415,9 @@ def canonical(raw: str) -> Address:
         address = doi_address(path.lstrip("/"))
         return Address(text, address.canonical_url, address.kind, address.provider, item_id=address.item_id)
 
-    kept = [(key, value) for key, value in query if not _is_tracking(key)]
+    kept = sorted((key, value) for key, value in query if not _is_tracking(key))
     netloc = host if parsed.port is None else f"{host}:{parsed.port}"
-    canonical_url = urlunsplit((parsed.scheme, netloc, path, urlencode(kept), ""))
+    canonical_url = urlunsplit((parsed.scheme, netloc, _unescape_unreserved(path), urlencode(kept), ""))
     if len(canonical_url) > URL_MAX:
         raise InvalidAddressError()
     return Address(text, canonical_url, _kind_for(host, path), _without_www(host))
@@ -393,7 +470,12 @@ def clean_text(value: Any, limit: int) -> str | None:
     """Text from elsewhere, made safe to store and show: one line, no control characters, cut to length."""
     if not isinstance(value, str):
         return None
-    text = re.sub(r"[\x00-\x1f\x7f-\x9f\ud800-\udfff​-‏‪-‮⁦-⁩]", " ", value)
+    # Format characters (bidi controls, zero-width characters, soft hyphens) go;
+    # control characters and lone surrogates become spaces.
+    text = "".join(
+        "" if category == "Cf" else " " if category in ("Cc", "Cs") else char
+        for char, category in ((char, unicodedata.category(char)) for char in value)
+    )
     text = " ".join(text.split())
     if not text:
         return None
@@ -416,26 +498,6 @@ def video_thumbnail(value: Any) -> str | None:
     """A thumbnail address from a video provider, if it is on one of their image hosts."""
     url = _https_image(value)
     if url is None or not _VIDEO_IMAGE_HOSTS.fullmatch(url.host):
-        return None
-    return str(url)
-
-
-def _site(host: str) -> str:
-    """The part of a host name that names the site: `news.example.org` is `example.org`."""
-    labels = host.lower().split(".")
-    # `example.co.uk` keeps three labels.
-    keep = 3 if len(labels) >= 3 and len(labels[-1]) == 2 and len(labels[-2]) <= 3 else 2
-    return ".".join(labels[-keep:])
-
-
-def page_thumbnail(value: Any, page_url: str) -> str | None:
-    """A page's image, if it is on https and on the page's own site."""
-    url = _https_image(value)
-    try:
-        page_host = httpx.URL(page_url).host
-    except (httpx.InvalidURL, ValueError):
-        return None
-    if url is None or _site(url.host) != _site(page_host):
         return None
     return str(url)
 
@@ -575,7 +637,7 @@ class _HeadParser(HTMLParser):
 
 
 def page_metadata(html: str, page_url: str) -> Metadata:
-    """What a page's Open Graph tags, or failing them its title, say about it."""
+    """What a page's Open Graph tags, or failing them its title, say about it. Never its image."""
     parser = _HeadParser()
     try:
         # Fed in pieces, so parsing ends soon after the head does.
@@ -592,7 +654,6 @@ def page_metadata(html: str, page_url: str) -> Metadata:
     return Metadata(
         title=clean_text(meta.get("og:title") or meta.get("twitter:title") or parser.title, TITLE_MAX),
         author_name=clean_text(author or meta.get("og:site_name"), AUTHOR_MAX),
-        thumbnail_url=page_thumbnail(meta.get("og:image") or meta.get("twitter:image"), page_url),
         published_at=parse_date(
             meta.get("article:published_time") or meta.get("datepublished") or meta.get("date")
         ),
@@ -624,6 +685,9 @@ def _fetch(address: Address, resolver: safe_fetch.Resolver | None) -> Metadata:
 # broken site isn't asked again on every click but a passing fault clears.
 _TTL_S = {FetchStatus.OK: 3600.0, FetchStatus.REFUSED: 3600.0, FetchStatus.FAILED: 300.0}
 _CACHE_SIZE = 512
+
+# Fetches this process makes for everyone together, whoever asks.
+_all_fetches = get_limiter("mention-fetches-all", 600, per_seconds=3600)
 _cache: OrderedDict[str, tuple[float, Unfurled]] = OrderedDict()
 _cache_lock = threading.Lock()
 
@@ -641,6 +705,11 @@ def unfurl(address: Address, *, resolver: safe_fetch.Resolver | None = None) -> 
         if hit is not None and hit[0] > now:
             _cache.move_to_end(address.canonical_url)
             return hit[1]
+    try:
+        enforce_key(_all_fetches, "all")
+    except RateLimitedError:
+        logger.warning("The fetch budget is used up, so %s isn't fetched", address.canonical_url)
+        return Unfurled(FetchStatus.FAILED, NOTHING)
     try:
         result = Unfurled(FetchStatus.OK, _fetch(address, resolver))
     except safe_fetch.FetchRefusedError as exc:

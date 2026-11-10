@@ -1,16 +1,19 @@
 """Mentions of a finding, the preview that fetches a link's title, and the recent feed.
 
 `POST /mentions/preview` and `POST /findings/{public_id}/mentions` make this
-server fetch an address a member typed, so both are rate-limited per member
-and share one budget for the whole process as well.
+server fetch an address a member typed, so both are rate-limited per member,
+after the member is checked, and `services.unfurl` spends one budget for the
+whole process on each fetch the cache can't answer. Both end the request's
+transaction before fetching, so a slow upstream page never holds a database
+connection.
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Response, status
 
-from fieldclub.api.deps import Contributor, Db, OptionalUser, PageQuery, private, rate_limit
-from fieldclub.ratelimit import enforce_key, get_limiter
+from fieldclub.api.deps import Contributor, Db, OptionalUser, PageQuery, private
+from fieldclub.ratelimit import contributor_rate_limit
 from fieldclub.schemas.common import Page
 from fieldclub.schemas.mentions import (
     MentionedFinding,
@@ -24,22 +27,18 @@ from fieldclub.services import findings, mentions
 
 router = APIRouter(tags=["mentions"])
 
-# Fetches this process makes for everyone together, whoever asks.
-_all_fetches = get_limiter("mention-fetches-all", 600, per_seconds=3600)
-
-
-def fetch_budget() -> None:
-    """Spend one of the process's fetches, or a 429 when they're used up."""
-    enforce_key(_all_fetches, "all")
+_per_member = contributor_rate_limit("mentions", 30, per_seconds=3600)
 
 
 @router.post(
     "/mentions/preview",
     response_model=MentionPreviewOut,
-    dependencies=[Depends(rate_limit("mention-previews", 20, per_seconds=3600)), Depends(fetch_budget)],
+    dependencies=[Depends(contributor_rate_limit("mention-previews", 20, per_seconds=3600))],
 )
-def preview(body: MentionPreviewIn, user: Contributor) -> MentionPreviewOut:
+def preview(body: MentionPreviewIn, user: Contributor, db: Db) -> MentionPreviewOut:
     """What a mention of this address would show. Nothing is saved, and a failed fetch is not an error."""
+    # Nothing more is read, so the connection goes back to the pool before the fetch.
+    db.commit()
     return MentionPreviewOut.build(mentions.preview(body.url))
 
 
@@ -61,13 +60,21 @@ def list_mentions(public_id: str, page: PageQuery, db: Db, viewer: OptionalUser)
     "/findings/{public_id}/mentions",
     response_model=MentionOut,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(rate_limit("mentions", 30, per_seconds=3600)), Depends(fetch_budget)],
+    dependencies=[Depends(_per_member)],
 )
 def add_mention(public_id: str, body: MentionIn, user: Contributor, db: Db) -> MentionOut:
     """Say where a finding was talked about. Its finder and everyone who helped are told."""
     finding = findings.get_finding(db, public_id, user)
     mention = mentions.add(
-        db, finding, user, body.url, kind=body.kind, start_seconds=body.start_seconds, note=body.note
+        db,
+        finding,
+        user,
+        body.url,
+        kind=body.kind,
+        start_seconds=body.start_seconds,
+        note=body.note,
+        # The connection goes back to the pool while the address is fetched.
+        before_fetch=db.commit,
     )
     db.commit()
     return MentionOut.build(mention, user)
@@ -76,7 +83,7 @@ def add_mention(public_id: str, body: MentionIn, user: Contributor, db: Db) -> M
 @router.delete(
     "/mentions/{mention_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(rate_limit("mentions", 30, per_seconds=3600))],
+    dependencies=[Depends(_per_member)],
 )
 def delete_mention(mention_id: int, user: Contributor, db: Db) -> None:
     """Remove a mention you added. A moderator can remove anyone's."""
