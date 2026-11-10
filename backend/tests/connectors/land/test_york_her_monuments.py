@@ -183,6 +183,17 @@ def test_a_partial_run_never_stores_a_monument_cut_short_at_the_box(
 
 
 @respx.mock
+def test_the_layer_metadata_is_fetched_once_however_many_chunks_a_partial_run_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(york_her_monuments, "ID_CHUNK", 1)
+    service = RecordedService("york_her.json")
+    service.mount(HOST)
+    run_connector(connector(), bbox=CENTRE)
+    assert sorted(service.info_requests) == ["3", "4", "5"]
+
+
+@respx.mock
 def test_parts_that_disagree_about_the_monument_fail_the_run(db: Session) -> None:
     service = RecordedService("york_her.json")
     sewer = service.layers["4"]["features"][-1]

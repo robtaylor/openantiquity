@@ -36,7 +36,7 @@ from shapely.geometry.base import BaseGeometry
 
 from fieldclub.ingest.adapters import UpstreamFormatError
 from fieldclub.ingest.adapters.arcgis import ArcGISLayer
-from fieldclub.ingest.adapters.common import Feature, Polite
+from fieldclub.ingest.adapters.common import Feature, Polite, text_of
 from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo
 from fieldclub.ingest.registry import register
 from fieldclub.vocab import RecordCategory, SourceAccess, SourceReuse
@@ -89,11 +89,9 @@ class YorkHerMonuments(Connector):
     # Tests give it one that doesn't wait. A real run leaves a second between requests.
     polite: Polite | None = None
 
-    def _layers(self, polite: Polite, where: str = "1=1") -> list[ArcGISLayer]:
+    def _layers(self, polite: Polite) -> list[ArcGISLayer]:
         layers = [
-            ArcGISLayer(
-                f"{SERVICE}/{number}", client=self.http, polite=polite, where=where, by_object_id=True
-            )
+            ArcGISLayer(f"{SERVICE}/{number}", client=self.http, polite=polite, by_object_id=True)
             for number, _ in LAYERS
         ]
         for layer, (_, shape) in zip(layers, LAYERS, strict=True):
@@ -104,18 +102,22 @@ class YorkHerMonuments(Connector):
         # One `Polite` for every layer, so the gap between requests holds from one layer to the next.
         polite = self.polite or Polite()
         monuments: dict[str, Monument] = {}
+        # Built and checked once: each layer fetches its metadata the first time it is used.
+        layers = self._layers(polite)
         if bbox is None:
-            self._read(self._layers(polite), None, monuments)
+            self._read(layers, None, monuments)
         else:
             # Find the monuments with a part in the box, then read all of every one of them.
             found: dict[str, Monument] = {}
-            self._read(self._layers(polite), bbox, found)
+            self._read(layers, bbox, found)
             names = sorted(found)
             for start in range(0, len(names), ID_CHUNK):
                 where = "MonUID IN ({})".format(
                     ",".join(f"'{name}'" for name in names[start : start + ID_CHUNK])
                 )
-                self._read(self._layers(polite, where), None, monuments)
+                for layer in layers:
+                    layer.where = where
+                self._read(layers, None, monuments)
         for monument_id, monument in monuments.items():
             yield to_record(monument_id, monument)
 
@@ -129,7 +131,7 @@ class YorkHerMonuments(Connector):
 def add_part(monuments: dict[str, Monument], feature: Feature) -> None:
     """File one feature under its `MonUID`, checking that it names the same monument as the others."""
     properties = feature.properties
-    monument_id = str(properties["MonUID"] or "").strip()
+    monument_id = text_of(properties, "MonUID")
     if not MONUMENT_ID.fullmatch(monument_id):
         raise UpstreamFormatError(f"A York monument has the id {properties['MonUID']!r}.")
     if feature.geometry is None:
@@ -148,17 +150,15 @@ def to_record(monument_id: str, monument: Monument) -> RecordIn:
     """One monument, with all its parts, as a record."""
     properties = monument.properties
     parts = monument.parts
-    types = dict.fromkeys(
-        term.strip() for term in str(properties["MonType"] or "").split(";") if term.strip()
-    )
-    code = str(properties["RecordType"] or "").strip()
+    types = dict.fromkeys(term.strip() for term in text_of(properties, "MonType").split(";") if term.strip())
+    code = text_of(properties, "RecordType")
     return RecordIn(
         external_id=monument_id,
-        name=str(properties["Name"] or "").strip(),
+        name=text_of(properties, "Name"),
         geom=parts[0] if len(parts) == 1 else GeometryCollection(parts),
         record_type=RECORD_TYPES.get(code, code) or None,
         monument_types=list(types),
-        url=str(properties["URL"] or "").strip() or None,
+        url=text_of(properties, "URL") or None,
         # The layer's own object id changes when the layer is rebuilt, so it is not kept.
         raw={name: properties[name] for name in FIELDS} | {"parts": len(parts)},
     )

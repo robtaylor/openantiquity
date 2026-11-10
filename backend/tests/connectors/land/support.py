@@ -9,7 +9,7 @@ whether the layer pages) and the features as the server gave them with
 
 `RecordedService` answers the reader's requests the way the server does:
 a count, a page by offset ordered by object id, and the filters the connectors
-use, a box and a `MonUID IN (...)` list. Nothing in these tests calls a live service.
+use, a box and a `MonUID IN (...)` or `Name IN (...)` list. Nothing in these tests calls a live service.
 """
 
 from __future__ import annotations
@@ -58,6 +58,8 @@ class RecordedService:
     def __init__(self, name: str) -> None:
         self.fixture: dict[str, Any] = json.loads((FIXTURES / name).read_text(encoding="utf-8"))
         self.queries: list[dict[str, str]] = []
+        # The layer numbers whose metadata was asked for, one entry per request.
+        self.info_requests: list[str] = []
         self.short_offset_pages = False
         self.phantom_ids: dict[str, list[int]] = {}
 
@@ -83,6 +85,7 @@ class RecordedService:
         number = parts[-2] if is_query else parts[-1]
         layer = self.layers[number]
         if not is_query:
+            self.info_requests.append(number)
             return httpx.Response(200, json=layer["info"])
         self.queries.append(params)
         oid = self.oid_field(layer)
@@ -116,10 +119,11 @@ class RecordedService:
             inner = RecordedService.matching(layer, params | {"where": ranged.group(1)}, oid)
             return [f for f in inner if low <= f["attributes"][oid] <= high]
         if where != "1=1":
-            match = re.fullmatch(r"MonUID IN \((.*)\)", where)
+            match = re.fullmatch(r"(MonUID|Name) IN \((.*)\)", where)
             assert match, f"the recorded service does not understand {where!r}"
-            wanted = set(re.findall(r"'([^']+)'", match.group(1)))
-            features = [f for f in features if f["attributes"]["MonUID"] in wanted]
+            # Text values in single quotes, with a quote inside one doubled.
+            wanted = {value.replace("''", "'") for value in re.findall(r"'((?:[^']|'')+)'", match.group(2))}
+            features = [f for f in features if f["attributes"][match.group(1)] in wanted]
         if "geometry" in params:
             assert params["geometryType"] == "esriGeometryEnvelope"
             assert params["inSR"] == "4326"

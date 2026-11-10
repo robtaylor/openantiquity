@@ -14,10 +14,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fieldclub.ingest import registry
-from fieldclub.ingest.connectors.oxford_edinburgh_atlas_of_hillforts import AtlasOfHillforts
+from fieldclub.ingest.connectors.oxford_edinburgh_atlas_of_hillforts import (
+    DATING_PERIODS,
+    AtlasOfHillforts,
+)
 from fieldclub.ingest.runner import IngestFailedError, run_connector
 from fieldclub.models import Record, Source
 from fieldclub.models.common import point_lon_lat
+from fieldclub.vocab import Period
 from tests.connectors.land.support import RecordedService, no_wait, rows, worklist_entry
 
 KEY = "oxford-edinburgh-atlas-of-hillforts"
@@ -88,7 +92,16 @@ def test_dating_spans_map_onto_periods(db: Session) -> None:
     periods = {r.external_id: r.periods for r in db.scalars(select(Record))}
     assert periods["2"] == ["unknown"]  # dating evidence of "Unknown"
     assert periods["71"] == ["iron_age", "roman"]  # 400 BC to AD 400
-    assert periods["671"] == ["iron_age", "early_medieval"]  # 400 BC to AD 800, Ireland
+    assert periods["671"] == ["iron_age", "roman", "early_medieval"]  # 400 BC to AD 800, Ireland
+    assert periods["229"] == ["iron_age", "roman"]  # 400 BC to AD 50 crosses AD 43
+
+
+def test_a_span_that_straddles_periods_gives_all_of_them() -> None:
+    assert DATING_PERIODS["Dating_Evidence__Post_AD800"] == (
+        Period.EARLY_MEDIEVAL,
+        Period.MEDIEVAL,
+        Period.POST_MEDIEVAL,
+    )
 
 
 @respx.mock

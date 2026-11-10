@@ -1,6 +1,6 @@
 """The undesignated parklands connector, end to end against the recorded layer.
 
-The fixture is five parts of parks: Camerton Park, the two parts of Claverton
+The fixture is five parts of four parks: Camerton Park, the two parts of Claverton
 Manor, Lentongrove and Compton House. See `support.py` for how it was recorded.
 """
 
@@ -8,9 +8,13 @@ from __future__ import annotations
 
 import copy
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 import respx
+from geoalchemy2 import WKBElement
+from geoalchemy2.shape import to_shape
+from shapely import MultiPolygon
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -53,11 +57,11 @@ def test_the_source_carries_the_work_list_terms_unchanged() -> None:
 
 
 @respx.mock
-def test_a_run_stores_every_part_with_its_fields(db: Session) -> None:
+def test_a_run_stores_every_park_with_its_fields(db: Session) -> None:
     RecordedService("parklands.json").mount(HOST)
     run = run_connector(connector())
     assert run.stats is not None
-    assert run.stats["seen"] == 5
+    assert run.stats["seen"] == 4
 
     camerton = db.scalars(
         select(Record).where(Record.external_id == external_id("Camerton Park", "1", HER))
@@ -75,7 +79,7 @@ def test_a_run_stores_every_part_with_its_fields(db: Session) -> None:
 
     source = db.get(Source, KEY)
     assert source is not None
-    assert source.record_count == 5
+    assert source.record_count == 4
     assert source.licence == worklist_entry(KEY)["licence"]
     assert source.reuse == "open"
 
@@ -90,24 +94,79 @@ def test_the_initials_of_those_who_drew_and_edited_it_are_not_kept(db: Session) 
         assert "Editor" not in record.raw
 
 
+def moved(feature: dict[str, Any], *, objectid: int, east: float = 1.0) -> dict[str, Any]:
+    """A copy of a recorded part, with its own object id, shifted east by `east` degrees."""
+    part = copy.deepcopy(feature)
+    part["attributes"]["OBJECTID"] = objectid
+    part["geometry"]["rings"] = [[[x + east, y] for x, y in ring] for ring in part["geometry"]["rings"]]
+    return part
+
+
+def claverton(db: Session) -> list[Record]:
+    return list(db.scalars(select(Record).where(Record.name == "Claverton Manor").order_by(Record.id)))
+
+
 @respx.mock
-def test_two_parts_of_one_park_are_two_records(db: Session) -> None:
+def test_two_parts_of_one_park_are_one_record_with_every_part_in_its_geometry(db: Session) -> None:
     RecordedService("parklands.json").mount(HOST)
     run_connector(connector())
-    parts = db.scalars(select(Record).where(Record.name == "Claverton Manor")).all()
-    assert len(parts) == 2
-    assert {part.raw["Part_N"] for part in parts if part.raw} == {"1", "2"}
-    assert parts[0].external_id != parts[1].external_id
+    (park,) = claverton(db)
+    assert park.external_id == external_id("Claverton Manor", "1", HER)
+    assert park.raw is not None
+    assert park.raw["Parts"] == ["1", "2"]
+    assert "Part_N" not in park.raw
+    assert "OBJECTID" not in park.raw
+    assert isinstance(park.geom, WKBElement)
+    geometry = to_shape(park.geom)
+    assert isinstance(geometry, MultiPolygon)
+    assert len(geometry.geoms) == 2
 
 
 @respx.mock
-def test_a_comment_becomes_the_summary(db: Session) -> None:
+def test_search_finds_a_two_part_park_once(db: Session) -> None:
+    RecordedService("parklands.json").mount(HOST)
+    run_connector(connector())
+    hits = db.scalars(select(Record.name).where(Record.name.ilike("%claverton%"))).all()
+    assert hits == ["Claverton Manor"]
+
+
+@respx.mock
+def test_same_named_parks_far_apart_in_one_her_are_different_parks(db: Session) -> None:
+    service = RecordedService("parklands.json")
+    features = service.layers["0"]["features"]
+    features.append(moved(features[1], objectid=9001))  # a copy of part 1, 70 km east
+    service.mount(HOST)
+    run_connector(connector())
+    parks = claverton(db)
+    assert len(parks) == 2
+    assert len({park.external_id for park in parks}) == 2
+    assert sorted(to_shape(park.geom).geom_type for park in parks) == ["MultiPolygon", "Polygon"]
+    before = rows(db)
+    run_connector(connector())
+    assert rows(db) == before
+
+
+@respx.mock
+def test_a_comment_saying_the_parks_are_distinct_keeps_the_parts_apart(db: Session) -> None:
+    service = RecordedService("parklands.json")
+    service.layers["0"]["features"][2]["attributes"]["Comment"] = (
+        "Two disctinct parklands with the name 'Claverton Manor' present within the HER."
+    )
+    service.mount(HOST)
+    run_connector(connector())
+    assert len(claverton(db)) == 2
+
+
+@respx.mock
+def test_a_comment_is_a_mapping_note_kept_in_raw_not_the_summary(db: Session) -> None:
     service = RecordedService("parklands.json")
     service.layers["0"]["features"][0]["attributes"]["Comment"] = "Name uncertain - taken from a settlement."
     service.mount(HOST)
     run_connector(connector())
     camerton = db.scalars(select(Record).where(Record.name == "Camerton Park")).one()
-    assert camerton.summary == "Name uncertain - taken from a settlement."
+    assert camerton.summary is None
+    assert camerton.raw is not None
+    assert camerton.raw["Comment"] == "Name uncertain - taken from a settlement."
 
 
 def test_the_id_ignores_case_and_spacing() -> None:
@@ -123,10 +182,10 @@ def test_running_twice_gives_the_same_rows(db: Session) -> None:
     before = rows(db)
     second = run_connector(connector())
     assert rows(db) == before
-    assert len(before) == 5
+    assert len(before) == 4
     assert first.stats is not None
     assert second.stats is not None
-    assert (second.stats["inserted"], second.stats["updated"], second.stats["deleted"]) == (0, 5, 0)
+    assert (second.stats["inserted"], second.stats["updated"], second.stats["deleted"]) == (0, 4, 0)
 
 
 @respx.mock
@@ -136,26 +195,24 @@ def test_a_partial_run_by_bbox(db: Session) -> None:
     run = run_connector(connector(), bbox=BATH)
     assert run.stats is not None
     assert not run.stats["full"]
-    assert sorted(db.scalars(select(Record.name)).all()) == [
-        "Camerton Park",
-        "Claverton Manor",
-        "Claverton Manor",
-    ]
-    assert all(query["geometry"] == "-2.5,51.3,-2.3,51.4" for query in service.queries)
+    assert sorted(db.scalars(select(Record.name)).all()) == ["Camerton Park", "Claverton Manor"]
+    assert any(query["geometry"] == "-2.5,51.3,-2.3,51.4" for query in service.queries)
 
 
 @respx.mock
-def test_two_parts_with_one_name_part_and_her_fail_the_run(db: Session) -> None:
+def test_a_partial_run_never_stores_a_park_cut_short_at_the_box(db: Session) -> None:
+    RecordedService("parklands.json").mount(HOST)
+    run_connector(connector())
+    full = rows(db)
     service = RecordedService("parklands.json")
-    features = service.layers["0"]["features"]
-    twin = copy.deepcopy(features[0])
-    twin["attributes"]["OBJECTID"] = 9999
-    features.append(twin)
+    respx.mock.routes.clear()
     service.mount(HOST)
-    with pytest.raises(
-        IngestFailedError, match="Two parklands share the name, part and HER of 'Camerton Park'"
-    ):
-        run_connector(connector())
+    # A box round the second part of Claverton Manor alone.
+    ring = service.layers["0"]["features"][2]["geometry"]["rings"][0]
+    xs, ys = [x for x, _ in ring], [y for _, y in ring]
+    run_connector(connector(), bbox=(min(xs), min(ys), max(xs), max(ys)))
+    assert rows(db) == full
+    assert any(query["where"] == "Name IN ('Claverton Manor')" for query in service.queries)
 
 
 @respx.mock

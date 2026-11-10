@@ -11,6 +11,7 @@ import copy
 
 import pytest
 import respx
+from shapely.geometry import Point
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -18,7 +19,7 @@ from fieldclub.ingest import registry
 from fieldclub.ingest.connectors.hull_beresford_lost_villages import (
     BeresfordLostVillages,
     external_id,
-    precision_of,
+    placed,
 )
 from fieldclub.ingest.runner import IngestFailedError, run_connector
 from fieldclub.models import Record, Source
@@ -73,7 +74,7 @@ def test_a_run_stores_every_site_with_the_non_commercial_terms(db: Session) -> N
     assert cainhoe.summary is not None
     assert cainhoe.summary.startswith("The settlement of Cainhoe is thought to be located")
     lon, lat = point_lon_lat(cainhoe.centroid)
-    assert (round(lon, 3), round(lat, 3)) == (-0.401, 52.024)
+    assert (round(lon, 3), round(lat, 3)) == (-0.4, 52.025)
     assert cainhoe.raw is not None
     assert cainhoe.raw["Site_status"] == "Scheduled 1009248 (Castle)"
     assert cainhoe.raw["NMR_no"] == "1091365"
@@ -92,8 +93,42 @@ def test_site_types_are_spelled_out_where_the_codes_are_known(db: Session) -> No
     RecordedService("lost_villages.json").mount(HOST)
     run_connector(connector())
     assert stored(db, "Nuthill", "TA 215300").record_type == "Deserted medieval hamlet"
-    assert stored(db, "Etonbury", "TL 197383").record_type == "Doubtful"
-    assert stored(db, "Astwick", "TL 213385").record_type == "Shrunken"
+    assert stored(db, "Etonbury", "TL 197383").record_type == "Deserted medieval village (doubtful)"
+    assert stored(db, "Astwick", "TL 213385").record_type == "Shrunken medieval village"
+
+
+@respx.mock
+def test_a_doubtful_site_is_not_dated_to_the_middle_ages(db: Session) -> None:
+    RecordedService("lost_villages.json").mount(HOST)
+    run_connector(connector())
+    assert stored(db, "Etonbury", "TL 197383").periods in (None, [])
+    assert stored(db, "Cainhoe", "TL 098374").periods == ["medieval"]
+
+
+@respx.mock
+def test_a_site_is_placed_by_its_grid_reference_not_by_the_layers_geometry(
+    db: Session, caplog: pytest.LogCaptureFixture
+) -> None:
+    service = RecordedService("lost_villages.json")
+    # Cainhoe's longitude with its sign flipped, and Astwick (Bedfordshire) put in Powys.
+    for feature in service.layers["0"]["features"]:
+        if feature["attributes"]["Site_name"] == "Cainhoe":
+            feature["geometry"] = {"x": 0.401118, "y": 52.02417}
+        if feature["attributes"]["Grid_reference"] == "TL 213385":
+            feature["geometry"] = {"x": -3.058, "y": 52.027}
+    service.mount(HOST)
+    with caplog.at_level("WARNING", logger="fieldclub.ingest.connectors.hull_beresford_lost_villages"):
+        run_connector(connector())
+    cainhoe = stored(db, "Cainhoe", "TL 098374")
+    lon, lat = point_lon_lat(cainhoe.centroid)
+    assert (round(lon, 3), round(lat, 3)) == (-0.4, 52.025)
+    lon, lat = point_lon_lat(stored(db, "Astwick", "TL 213385").centroid)
+    assert (round(lon, 3), round(lat, 3)) == (-0.232, 52.032)
+    assert sorted(record.getMessage().split(" (")[0] for record in caplog.records) == [
+        "Lost village Astwick",
+        "Lost village Cainhoe",
+    ]
+    assert "which is used" in caplog.text
 
 
 @respx.mock
@@ -114,15 +149,21 @@ def test_the_id_ignores_case_spacing_and_the_layer_numbering() -> None:
 
 
 def test_precision_follows_the_figures_of_the_grid_reference() -> None:
-    assert precision_of("TL 213385") == 100
-    assert precision_of("TL213385") == 100
-    assert precision_of("TL 21303850") == 10
-    assert precision_of("TL 2138") == 1000
-    assert precision_of("TL 2130038500") == 1
-    assert precision_of("SP 28 65") == 1000  # spaced in the middle, as some are
-    assert precision_of("SZ 3175 9825") == 10
-    assert precision_of("TL 6626426") == 100  # seven figures say nothing
-    assert precision_of("somewhere near the church") == 100  # what the work-list says of the layer
+    here = Point(-0.2, 52.0)
+    assert placed("TL 213385", here)[1] == 100
+    assert placed("TL213385", here)[1] == 100
+    assert placed("TL 21303850", here)[1] == 10
+    assert placed("TL 2138", here)[1] == 1000
+    assert placed("TL 2130038500", here)[1] == 1
+    assert placed("SP 28 65", here)[1] == 1000  # spaced in the middle, as some are
+    assert placed("SZ 3175 9825", here)[1] == 10
+    assert placed("TL 6626426", here)[1] == 100  # seven figures say nothing
+    assert placed("somewhere near the church", here)[1] == 100  # what the work-list says of the layer
+
+
+def test_a_grid_reference_that_does_not_parse_leaves_the_layers_geometry() -> None:
+    here = Point(-0.2, 52.0)
+    assert placed("somewhere near the church", here) == (here, 100.0, None)
 
 
 @respx.mock

@@ -48,10 +48,10 @@ DATING_PERIODS = {
     "Dating_Evidence__Pre_1200BC": (Period.PREHISTORIC,),
     "Dating_Evidence__1200BC___800BC": (Period.BRONZE_AGE,),
     "Dating_Evidence__800BC___400BC": (Period.IRON_AGE,),
-    "Dating_Evidence__400BC___AD50": (Period.IRON_AGE,),
+    "Dating_Evidence__400BC___AD50": (Period.IRON_AGE, Period.ROMAN),
     "Dating_Evidence__AD50___AD400": (Period.ROMAN,),
     "Dating_Evidence__AD400___AD800": (Period.EARLY_MEDIEVAL,),
-    "Dating_Evidence__Post_AD800": (Period.EARLY_MEDIEVAL, Period.MEDIEVAL),
+    "Dating_Evidence__Post_AD800": (Period.EARLY_MEDIEVAL, Period.MEDIEVAL, Period.POST_MEDIEVAL),
     "Dating_Evidence__Unknown": (Period.UNKNOWN,),
 }
 FIELDS = (
