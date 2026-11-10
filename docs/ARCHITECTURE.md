@@ -26,7 +26,7 @@ backend/
     config.py               Settings (pydantic-settings, env prefix FIELDCLUB_)
     db.py                   engine, SessionLocal, get_db dependency, Base
     errors.py               AppError hierarchy and the JSON error handler
-    main.py                 create_app(): routers auto-registered from fieldclub.api
+    main.py                 create_app(): routers auto-registered from fieldclub.api, the middleware
     vocab.py                feature classes, periods, evidence kinds, tiers, checks
     layers.py               map layer catalogue served by /meta
     storage.py              Storage protocol, LocalStorage, GcsStorage
@@ -39,9 +39,9 @@ backend/
     services/               business logic with no FastAPI imports
     auth/                   sessions, the welcome step, magic links, OAuth
     terrain/                elevation sources, visualisations, tile rendering, cache
-    ingest/                 connector base, registry, CLI, connectors/
-    jobs/                   scheduled work (channel scan, source refresh)
-  tests/                    mirrors src layout; conftest.py owns the database fixtures
+    ingest/                 connector base, registry, runner, CLI, adapters/, connectors/
+    jobs/                   scheduled work (channel scan, source refresh), not built yet
+  tests/                    mirrors src layout; conftest.py owns the database fixtures, test_routes.py lists every route
 frontend/
   src/
     api/                    typed client generated from the OpenAPI schema
@@ -53,14 +53,17 @@ infra/
   Dockerfile                multi-stage build: frontend, then backend serving it
   terraform/                Cloud Run, Cloud SQL, buckets, secrets, scheduler
 docs/
-  DESIGN.md  ARCHITECTURE.md  DATA_SOURCES.md  adr/
+  DESIGN.md  ARCHITECTURE.md  UI.md  prose-style.md
+  architecture/             area docs, and decision records in decisions/
+  sources/                  the source catalogue and its work-lists
+  plans/  handoffs/
 ```
 
 ## Conventions
 
 - Database access goes through SQLAlchemy sessions from `get_db`. Write explicit `select()` statements. Don't rely on lazy-loaded relationships.
 - Services take a `Session` and plain values, and return models or dataclasses. Routers translate between HTTP and services. Services never import FastAPI.
-- Every error raised on purpose is a subclass of `AppError` with a stable `code`. The handler returns `{"error": {"code": ..., "message": ...}}`.
+- Every error raised on purpose is a subclass of `AppError` with a stable `code`. The handler returns `{"error": {"code": ..., "message": ...}}`. An error raised by more than one module lives in `errors.py`, and a router defines none.
 - Enumerations are `StrEnum` classes in `vocab.py`, stored as `TEXT`. No native PostgreSQL enums.
 - Primary keys are `BIGINT` identity columns. Public URLs use `findings.public_id`, `investigations.public_id` and `users.handle`, never raw ids.
 - All geometry is stored in EPSG:4326. Distance queries cast to `geography`. The functional indexes below make those casts indexable.
@@ -82,7 +85,7 @@ Columns marked with `*` are required. Every table has `id BIGINT` and `created_a
 | `auth_identities` | `user_id*`, `provider*`, `subject*`, `email`, unique on provider and subject |
 | `sessions` | `user_id*`, `token_hash*` unique, `expires_at*`, `last_used_at`, `user_agent`, `ip_hash` |
 | `magic_links` | `email*`, `token_hash*` unique, `user_id`, `expires_at*`, `used_at`, `browser_hash` |
-| `reputation_events` | `user_id*`, `delta*`, `reason*`, `finding_id` |
+| `reputation_events` | `user_id*`, `delta*`, `reason*`, `finding_id`. Unique on user, finding and reason, so an award is never paid twice |
 
 ### Findings
 
@@ -95,7 +98,7 @@ Columns marked with `*` are required. Every table has `id BIGINT` and `created_a
 | `comments` | `finding_id*`, `user_id*`, `body*`, `parent_id`, `edited_at`, `deleted_at` |
 | `mentions` | `finding_id*`, `user_id`, `kind*` (video, article, podcast, paper, broadcast, social), `url*`, `canonical_url*`, `provider`, `title`, `author_name`, `thumbnail_url`, `published_at`, `start_seconds`, `note`, `auto_detected*`. Unique on finding and canonical URL |
 | `follows` | `user_id*`, `finding_id*`. Primary key on both |
-| `media` | `user_id*`, `storage_key*`, `content_type*`, `width`, `height`, `bytes*`, `sha256*`, `approved_at`, `approved_by` |
+| `media` | `user_id*`, `storage_key*` unique, `content_type*`, `width`, `height`, `bytes*`, `sha256*`, `approved_at`, `approved_by` |
 
 `view_state` records what the finder was looking at: `{layer, zoom, bearing, pitch, sun_azimuth, sun_altitude, exaggeration}`. Opening a finding restores it, so everyone starts from the same picture.
 
@@ -112,7 +115,7 @@ Columns marked with `*` are required. Every table has `id BIGINT` and `created_a
 
 `sources.reuse` classes each source by what its licence allows, per Decision 0004. Field Club is non-commercial, so `non_commercial` sources are ingested. Exports carry the licence per record.
 
-`sources.access` follows Decision 0007. A `bulk` source is stored in `records`. A `live` source is queried by the browser when someone looks at an area and is never stored on our servers. A `deeplink` source is only linked. A finding linked to a live or deep-link record stores the record's identifier and address in the evidence row and nothing else.
+`sources.access` follows Decision 0007. A `bulk` source is stored in `records`. A `live` source is queried by the browser when someone looks at an area and is never stored on our servers. A `deeplink` source is only linked. A finding linked to a live or deep-link record stores the record's identifier and address in the evidence row and nothing else. Evidence linking a stored record keeps its identifier (`reference`), address (`url`) and source key as well as `record_id`, so when a full ingest removes the record and `record_id` is emptied, the evidence stays a working reference.
 
 `records.category` is one of `designation`, `monument`, `find`, `event`, `document`, `community`, `map_label`. It drives map layers and filters. `precision_m` records how exact the position is. A Portable Antiquities find published to a 1 km square has `precision_m = 1000`.
 
@@ -131,7 +134,7 @@ Columns marked with `*` are required. Every table has `id BIGINT` and `created_a
 
 ### Indexes that matter
 
-- `GIST (location)`, `GIST ((location::geography))`, `GIST (location_public)` and `GIST ((location_public::geography))` on `findings`.
+- `GIST (location)`, `GIST ((location::geography))`, `GIST (location_public)` and `GIST ((location_public::geography))` on `findings`. Also `GIN (open_steps)` for the help-wanted lists and `(created_at, id)` for the newest-first list.
 - `GIST (geom)`, `GIST ((centroid::geography))`, `GIN (search)` and a trigram `GIN (name gin_trgm_ops)` on `records`. Also `GIST (centroid)` for the record tiles and `(lower(name) text_pattern_ops)` for names that start with the search text.
 - Trigram `GIN (name gin_trgm_ops)` and `GIST (geom)` on `places`.
 - `(finding_id)` on every child table of findings. `(user_id, read_at)` on `notifications`. `(created_at DESC)` on `activity`.
@@ -182,13 +185,34 @@ A finding's state is separate from its tier.
 
 `next_steps` lists the unmet requirements of the next tier as `{code, prompt, ...}`. Codes are `need_observers`, `need_strand`, `need_class_agreement`, `need_check`, `need_trusted_review`, `need_ground`, `need_official`. The same codes drive the help-wanted queue, so a finding's open steps are exactly the tasks offered to other people.
 
+### Finer rules
+
+The module docstring of `services/confidence.py` gives the reasoning for each of these.
+
+- The finder's own observation is ignored for everything. Their class counts once, through the finding's feature class.
+- Only a "yes" with no explanation counts as seeing it: towards `seen`, as an observer or a reviewer, for class support and for the checks. A "yes" that gives an explanation counts only as that explanation's weight, as every answer's explanation does.
+- Votes by an item's own contributor and by the finder are ignored. Independence is required of contradicting evidence as well as supporting evidence.
+- A field item points the way its `outcome` says, and `inconclusive` is neutral. Without an outcome, and for every other kind, its `stance` decides. Only independent field items count towards "ground items disagree" and the ruling-out on the ground. A finder's own field item needs someone else's endorsement to reach Checked on the ground, even when the finder is trusted.
+- A verifier is an expert, moderator or admin who is neither the finder nor the item's contributor, on an official item that stands and supports.
+- Every two-thirds figure is exactly 2/3. The disputed band is open at both ends, so a ratio of 2/3 is Seen. Contradicting strands make a finding disputed only when there is at least one.
+- State precedence is withdrawn, ruled out, disputed, known, open. A ruled-out rule that holds at Checked on the ground or above makes the finding disputed, with that rule's reason. When several ruled-out rules hold, the reason is `ground_check`, then the heaviest explanation, then `not_visible`.
+- A withdrawn finding keeps its tier, scores that tier's base and has no next steps. A ruled-out one scores 0 and has none either. The score is rounded down.
+
 ### Reputation
 
-Points are written to `reputation_events`, so a person can see where each one came from. A finding reaching seen earns its finder 2, corroborated 5, probable 10, ground checked 20, confirmed 30. An observation that matches the outcome when a finding reaches corroborated or ruled out earns 1. An evidence item endorsed by two other people earns 1. A finding that turns out to match a known record earns 1. There are no penalties. A member who reaches 50 points becomes eligible for trusted, and a moderator makes the promotion. It isn't automatic: trusted users see restricted positions (Decision 0005), and three colluding accounts can take a finding to Checked on the ground, worth 27 points to its finder.
+Points are written to `reputation_events`, so a person can see where each one came from. A finding reaching seen earns its finder 2, corroborated 5, probable 10, ground checked 20, confirmed 30. An observation that matches the outcome when a finding reaches corroborated or ruled out earns 1. An evidence item endorsed by two other people earns 1. A finding that turns out to match a known record earns 1. There are no penalties. A finding earns the points of every tier whose rule it newly meets, not only the one it lands on, and each award is paid once however often a finding drops and climbs back. A ruled-out or withdrawn finding earns nothing while it stays so. An answer matches corroborated when it counts as seeing it, and ruled out when it says "no" or gives an explanation. The two endorsers are people other than the contributor and the finder. A member who reaches 50 points becomes eligible for trusted, and a moderator makes the promotion. It isn't automatic: trusted users see restricted positions (Decision 0005), and three colluding accounts can take a finding to Checked on the ground, worth 27 points to its finder.
 
 ## API
 
-All paths are under `/api/v1`. Bodies are JSON. The session is a `fieldclub_session` cookie, HttpOnly and SameSite=Lax. Every mutating request must carry the header `X-FieldClub-Client: web`, which a cross-site form can't send. Lists are paged with `limit` and an opaque `cursor`.
+All paths are under `/api/v1`. Bodies are JSON. The session is a `fieldclub_session` cookie, HttpOnly and SameSite=Lax. Every mutating request must carry the header `X-FieldClub-Client: web`, which a cross-site form can't send. The one exemption is the exact path `POST /auth/oauth/apple/callback` (see Accounts).
+
+Rules every route follows, whichever area it belongs to:
+
+- Every write is rate-limited. One that stores a contribution needs a signed-in account that has finished the welcome step, or answers `onboarding_required`. Every route has a response model, so the generated client covers it.
+- Lists are paged with `limit` and an opaque `cursor`. Each list keeps its own cursor: a key for a list whose order is fixed, an offset for one whose order moves as people answer. No offset goes past 2,000. A cursor that is wrong in any way is 400 `invalid_cursor`, and a `limit` above the list's maximum is 422 `validation_error`.
+- A `bbox` is `west,south,east,north` in degrees, four finite numbers with west < east and south < north. Anything else is 400 `invalid_bbox`, and `fieldclub-ingest --bbox` takes the same boxes.
+- A filter with several values is a repeated parameter, `category=a&category=b`, and an unknown value is 422 `validation_error`. The record tile address is the exception: its `category` is comma-separated, because a tile address is a template.
+- A response that sets no cache policy of its own is sent `private, no-cache` with `Vary: Cookie`, because most answers depend on who is asking. Only answers that are the same for everyone, such as tiles and the context catalogue, are publicly cacheable.
 
 | Area | Endpoints |
 |------|-----------|
@@ -202,7 +226,7 @@ All paths are under `/api/v1`. Bodies are JSON. The session is a `fieldclub_sess
 | Review | `GET /review/next` (blind cards: place and view only, with no title, class, tier or other answers until the reviewer has answered), `GET /review/tasks` (open next steps grouped by code) |
 | Squares | `GET /squares/next`, `PUT /squares/{ref}`, `GET /squares/coverage?bbox=` |
 | Records | `GET /records/search`, `GET /records/nearby`, `GET /records/{id}`, `GET /sources`, `GET /findings/{public_id}/suggested-records` |
-| Context | `GET /context/live-sources` (the sources the browser queries itself, with endpoint, query pattern, licence and attribution), `GET /context/links?lon=&lat=` (deep links to external viewers, filled in for that point) |
+| Context | `GET /context/live-sources` (the sources the browser queries itself, with endpoint, query pattern, licence and attribution), `GET /context/links?lon=&lat=` (deep links to external viewers, filled in for that point and the nation it is in; until the nations are loaded, a point on the Irish Grid gets only the viewers that cover the wider world) |
 | Geo | `GET /geo/search?q=` (grid reference, coordinates, place, record or finding id), `GET /geo/point?lon=&lat=` (grid reference, nation, elevation) |
 | Terrain | `POST /terrain/profile` (elevation along a line), `GET /terrain/coverage?bbox=` (the 5 km tiles that have 1 m elevation, as GeoJSON) |
 | Investigations | `GET` and `POST /investigations`, `GET`, `PATCH` and `DELETE /investigations/{public_id}`, items and members sub-resources, `GET /investigations/{public_id}/export?format=` |
@@ -212,13 +236,17 @@ All paths are under `/api/v1`. Bodies are JSON. The session is a `fieldclub_sess
 | Media | `POST /media`, `GET /media/{id}` |
 | Moderation | `POST /reports`, `GET /mod/reports`, `POST /mod/reports/{id}/resolve`, `POST /mod/findings/{public_id}/hide`, `PUT /mod/users/{handle}/role`, `PUT /mod/findings/{public_id}/sensitivity` |
 
+Mentions, Squares, Investigations, People, Activity, Media and Moderation aren't built yet. A finding is looked up the same way everywhere (`services.findings.get_finding`): a hidden one is found only by its finder and moderators, and anything else gets 404 `finding_not_found`. Lists, the search box and suggestions leave hidden and withdrawn findings out as `GET /findings` does.
+
 Tile endpoints sit outside `/api/v1` so a CDN can cache them by path:
 
 | Path | Returns |
 |------|---------|
 | `/tiles/lidar/{style}/{z}/{x}/{y}.png?v=` | A rendered terrain visualisation, 512 px |
 | `/tiles/dem/{z}/{x}/{y}.png?v=` | Elevation in Terrarium encoding, 512 px, for client-side shading and 3D |
-| `/tiles/records/{z}/{x}/{y}.mvt` | Records as vector tiles. Aggregated counts at low zoom, features at high zoom |
+| `/tiles/records/{z}/{x}/{y}.mvt?v=` | Records as vector tiles. Aggregated counts below zoom 12, features from 12 up |
+
+Every tile carries an ETag and answers `If-None-Match` with 304. A tile off the map is 404 `tile_not_found`. The addresses in `/meta` carry `?v=`, a token of everything that could change the tile: for terrain, the style version, the elevation format and the data editions; for records, the last completed ingest run and the enabled sources. A tile asked for with the current token is sent as immutable, so an ingest or a new edition reaches every browser at once.
 
 ### Accounts
 
@@ -228,12 +256,11 @@ People can still try the tool before joining. Marking a finding, answering a sec
 
 Sign-in is by provider, with no passwords. Google, Apple, Microsoft and Facebook are the main ones, and OpenStreetMap is offered too because many contributors have an account there. Each provider is enabled only when its credentials are configured. An emailed one-time link is the fallback for people who use none of them. Providers run as a server-side authorisation-code flow with `state` and PKCE. The callback verifies the identity, finds or creates the user, sets the session cookie and redirects to the `next` path it was given, which must be a relative path on this site.
 
-<!-- Sign-in mechanics (track b1/accounts). -->
-The state, OpenID Connect nonce and PKCE verifier of one provider sign-in travel in `fieldclub_oauth`, an HMAC-signed, HttpOnly cookie that lasts ten minutes, is scoped to that provider's callback path and is cleared by the callback. A cookie rather than a server-side row binds the flow to the browser that started it, which stops a callback address being replayed into someone else's browser, and costs no write per click. Google, Microsoft, Apple and OpenStreetMap go through one OpenID Connect client that caches each provider's discovery document and key set, fetches the key set again when a token names an unknown key (at most once a minute), and accepts only RS256 and ES256 signatures. Facebook is plain OAuth 2 with a profile call. Apple returns with a cross-site POST that can't carry the client header, so `POST /auth/oauth/apple/callback` is the one path exempt from it, and its flow cookie is SameSite=None. A failed callback redirects to the `next` path with `?signin_error=` and a short code such as `state_mismatch`, `invalid_token`, `provider_error`, `cancelled`, `banned` or `account_deleted`. Every sign-in issues a new session and ends any session the browser presented. Apple's cross-site POST doesn't carry the SameSite=Lax session cookie, so the flow cookie also holds the hash of the session presented at the start, and the callback ends that one too. Only Google's, Apple's and OpenStreetMap's verified addresses count as verified, and Microsoft's only with the domain-owner flag (`xms_edov`), because a Microsoft directory can set any address. An address goes on an account only when it is verified and nobody else holds it. Addresses are CITEXT, and Postgres `lower()` folds a few non-ASCII capitals to ASCII letters (`İ` to `i`), so an address the database matches counts as the same only when the two differ in nothing but ASCII case. Otherwise a link answers `email_unavailable` and a provider identity gets an account of its own, without the address.
+The state, OpenID Connect nonce and PKCE verifier of one provider sign-in travel in `fieldclub_oauth`, an HMAC-signed, HttpOnly cookie that lasts ten minutes, is scoped to that provider's callback path and is cleared by the callback. A cookie rather than a server-side row binds the flow to the browser that started it, which stops a callback address being replayed into someone else's browser, and costs no write per click. Google, Microsoft, Apple and OpenStreetMap go through one OpenID Connect client that caches each provider's discovery document and key set, fetches the key set again when a token names an unknown key (at most once a minute), and accepts only RS256 and ES256 signatures. Facebook is plain OAuth 2 with a profile call. Apple returns with a cross-site POST that can't carry the client header, so `POST /auth/oauth/apple/callback` is the one path exempt from it, and its flow cookie is SameSite=None. A sign-in that fails at the start or the callback redirects to the `next` path with `?signin_error=` and a short code: `state_mismatch`, `invalid_token`, `provider_error`, `cancelled`, `banned`, `account_deleted`, `provider_unavailable` (a provider that isn't offered), `email_unavailable` or `signin_failed` (anything unexpected). Every sign-in issues a new session and ends any session the browser presented. Apple's cross-site POST doesn't carry the SameSite=Lax session cookie, so the flow cookie also holds the hash of the session presented at the start, and the callback ends that one too. Only Google's and Apple's verified addresses count as verified, and Microsoft's only with the domain-owner flag (`xms_edov`), because a Microsoft directory can set any address. OpenStreetMap is asked for no address, and Facebook never says one is verified, so neither links accounts. An address goes on an account only when it is verified and nobody else holds it. Addresses are CITEXT, and Postgres `lower()` folds a few non-ASCII capitals to ASCII letters (`İ` to `i`), so an address the database matches counts as the same only when the two differ in nothing but ASCII case. Otherwise a link answers `email_unavailable` and a provider identity gets an account of its own, without the address.
 
 The `next` path must start with exactly one slash and contain no backslash, no control or invisible character and no `.` or `..` segment, in any percent-decoded form. The frontend uses a `next` it receives (from `?next=` on the link page, or the target of a `signin_error` redirect) only through same-origin router navigation, never by assigning it to `location`.
 
-`POST /auth/email/start` stores a SHA-256 of a fresh token and emails the link for any well-formed address, without looking the address up, so the answer never says whether an account has it. Asking again spends the address's earlier unspent links, so only the newest works. Five links an hour per mailbox, counting `ann+tag@` as `ann@`, and ten per caller. The token is in the link's fragment, so it stays out of server logs. `POST /auth/email/verify` spends it with one conditional update: a link works once, within fifteen minutes, and an unknown, spent or expired link all fail with `link_invalid`. `start` sets `fieldclub_email_link`, an HttpOnly cookie scoped to the verify path that lasts as long as the link, holding a random value whose hash is stored on the link. Verify signs in at once only when that cookie comes back. In any other browser it answers 409 `confirmation_required` with `details.email` masked (`a***@example.org`), spends nothing, and signs in when posted again with `confirm: true`. The link page must show the masked address and ask "Sign in as …?", and never confirm on the person's behalf: otherwise someone could send their own link to a victim and sign the victim in to the sender's account. `FIELDCLUB_MAIL_BACKEND` chooses `log` (development and tests only) or `smtp`.
+`POST /auth/email/start` stores a SHA-256 of a fresh token and emails the link for any well-formed address, without looking the address up, so the answer never says whether an account has it. Asking again spends the address's earlier unspent links, so only the newest works. Five links an hour per mailbox, counting `ann+tag@` as `ann@`, and ten per caller. The token is in the link's fragment, so it stays out of server logs. `POST /auth/email/verify` spends it with one conditional update: a link works once, within fifteen minutes, and an unknown, spent or expired link all fail with `link_invalid`. `start` sets `fieldclub_email_link`, an HttpOnly cookie scoped to the verify path that lasts as long as the link, holding a random value whose hash is stored on the link. Verify signs in at once only when that cookie comes back. In any other browser it answers 409 `confirmation_required` with `details.email` masked (`a***@example.org`), spends nothing, and signs in when posted again with `confirm: true`. The link page must show the masked address and ask "Sign in as …?", and never confirm on the person's behalf: otherwise someone could send their own link to a victim and sign the victim in to the sender's account. A link that can't be sent answers 502 `mail_not_sent`. `FIELDCLUB_MAIL_BACKEND` chooses `log` (development and tests only) or `smtp`.
 
 A first sign-in creates the user with a display name from the provider and a generated handle such as `QuietBarrow42`. A welcome sheet lets them change both. A second provider that asserts the same verified email is linked to the same user. An unverified email never links accounts.
 
@@ -241,7 +268,7 @@ Contributors must be 16 or over. The welcome sheet asks for an age band, 16 to 1
 
 There is no private messaging and no private channel between members. A private investigation has exactly one member. Adding a collaborator requires making it public or unlisted, and moderators can read unlisted investigations. An uploaded photo is shown to other people only after a moderator or trusted member approves it. The people who may approve photos see unapproved ones, so they can judge them, and nobody approves their own.
 
-`POST /auth/dev-login` signs in as a named test user. It exists only when `FIELDCLUB_ENV` is `dev` or `test` and is how local development and end-to-end tests get a session.
+`POST /auth/dev-login` signs in as a named test user, through the same path as every other sign-in, so it ends the session the browser presented. It exists only when `FIELDCLUB_ENV` is `dev` or `test` and `FIELDCLUB_DEV_LOGIN` is on, and is how local development and end-to-end tests get a session.
 
 `DELETE /auth/me` removes the email, identities and sessions and marks the user deleted. Their contributions stay, credited to "former member", because they were published under an open licence and other people's work builds on them.
 
@@ -271,26 +298,29 @@ There is no private messaging and no private channel between members. A private 
         "group": "lidar", "type": "raster",
         "tiles": ["/tiles/lidar/composite/{z}/{x}/{y}.png?v=3f2a9c01b7de"],
         "tile_size": 512, "minzoom": 7, "maxzoom": 16,
-        "attribution": "...", "bounds": null, "default": true
+        "attribution": "...", "licence": "Open Government Licence v3.0", "licence_url": "...", "reuse": "open",
+        "bounds": null, "default": true
       },
-      {"id": "raking", "title": "Raking light", "group": "lidar", "type": "raking", "description": "...", "attribution": "..."}
+      {"id": "raking", "title": "Raking light", "group": "lidar", "type": "raking", "description": "...", "attribution": "...", "licence": "...", "licence_url": "...", "reuse": "open"}
     ],
     "dem": {
       "tiles": ["/tiles/dem/{z}/{x}/{y}.png?v=8c41d07e5a26"], "tile_size": 512, "encoding": "terrarium",
-      "minzoom": 7, "maxzoom": 16, "attribution": "..."
+      "minzoom": 7, "maxzoom": 16, "attribution": "...", "licence": "...", "licence_url": "...", "reuse": "open"
     },
     "overlays": [
-      {"id": "osm", "title": "OpenStreetMap", "type": "openmaptiles", "tilejson": "...", "glyphs": "...", "default_opacity": 0.8, "attribution": "..."},
-      {"id": "records", "title": "Heritage records", "type": "records", "tiles": ["/tiles/records/{z}/{x}/{y}.mvt"]},
+      {"id": "osm", "title": "OpenStreetMap", "type": "openmaptiles", "tilejson": "...", "glyphs": "...", "default_opacity": 0.8, "attribution": "...", "licence": "Open Database License 1.0", "licence_url": "...", "reuse": "share_alike"},
+      {"id": "records", "title": "Heritage records", "type": "records", "tiles": ["/tiles/records/{z}/{x}/{y}.mvt?v=5be0c2d19a47"]},
       {"id": "findings", "title": "Findings", "type": "findings"},
       {"id": "coverage", "title": "Scan coverage", "type": "coverage"}
     ],
     "initial_view": {"center": [-1.8542, 51.4286], "zoom": 14}
   },
-  "sources": [{"key": "nhle-scheduled", "name": "...", "publisher": "...", "licence": "...", "attribution": "...", "homepage": "...", "category": "designation", "record_count": 0}],
+  "sources": [{"key": "nhle-scheduled", "name": "...", "publisher": "...", "licence": "...", "licence_url": "...", "attribution": "...", "reuse": "open", "homepage": "...", "coverage": "...", "category": "designation", "access": "bulk", "record_count": 0, "last_ingest_at": null}],
   "notices": {"field_visit": {"england": ["..."], "scotland": ["..."], "wales": ["..."], "northern_ireland": ["..."]}, "field_visit_16_17": "...", "sensitivity": "..."}
 }
 ```
+
+`sources` is the same list, in the same order and shape, as `GET /sources`: every enabled source by name. Every layer someone else publishes carries its attribution, licence and reuse class, as a source does (Decision 0004). Records carry their source's terms per feature, and findings are under the contribution licence.
 
 A view layer of type `raster` is a tiled image. `group` is one of `lidar`, `imagery`, `historic`, `map`, `geology`. The single `raking` view is drawn in the browser as a hillshade of the `dem` source, with the sun position under the user's control. Any view can be the main layer or the comparison layer. Overlays stack above with their own opacity. The `osm` overlay is an OpenMapTiles-schema vector source that the frontend styles as thin lines and labels.
 
@@ -306,7 +336,7 @@ See Decision 0005. A finding's `sensitivity` is `open`, `protected` or `restrict
 
 A generalised finding is returned with `obscured: true`, the square's reference, and no outline. The default level comes from the feature class: round barrow, long barrow, ritual monument and settlement earthworks default to `protected`, everything else to `open`. The finder, a trusted user or a moderator can raise a level. Only a moderator can lower one. A new finding starts at the higher of its class default and the level requested, and a request below the default is honoured only from a moderator (`starting_sensitivity`). Changing the feature class to one with a higher default raises the level to that default. It never lowers a level, and a change between classes with the same default leaves the level alone (`level_after_class_change`, applied when the finding is saved). Experts and admins count as trusted here, and admins as moderators.
 
-One function in `services/sensitivity.py` decides what a viewer sees, and every route that returns a finding goes through it. Queries on behalf of signed-out visitors filter and sort on `location_public` only. Downloads use the generalised position for protected and restricted findings unless the person downloading is the finder or trusted.
+One function in `services/sensitivity.py` decides what a viewer sees, and every route that returns a finding goes through it. Queries on behalf of signed-out visitors filter and sort on `location_public` only. Downloads use the generalised position for protected and restricted findings unless the person downloading is the finder or trusted (`sensitivity.downloads_exact`, beside the other viewer rules). Suggested records and the search box start from the position the viewer may see, so for someone who sees only the square, distances, order and the set returned are the same wherever in the square the finding lies. `tests/test_routes.py` lists every route the app serves and names the test in `tests/findings/test_leaks.py` that tries each one carrying a position as every viewer against every level, and fails when a route has no row.
 
 Findings reach the map through `GET /findings?bbox=&format=geojson`, not through cacheable tiles, because the answer depends on the viewer. The `bbox` matches the position the viewer is allowed to see, so an obscured finding matches by the centre of its square. The frontend widens the box it asks for by 500 m on each side so that a square covering the view is returned even when its centre is off screen.
 
@@ -318,6 +348,7 @@ Decision 0008 makes second looks blind. These rules keep each answer independent
 - Answers, evidence and votes come only from someone who sees the finding's exact position. Anyone else gets `location_hidden`. Comments stay open to every contributor.
 - `observation_added`, and a tier or state change that an answer or its withdrawal causes, are recorded with no actor, so followers can't tell how anyone answered.
 - A viewer who may not see the answers gets the next steps that second looks meet without `people`, `weight_needed` or a number in the prompt.
+- Nothing derived from other people's answers reaches someone who may not see them. Suggested records weigh a record's fit with the community class only for the finder and people who have answered, so neither `type_fit` nor the order gives the class away.
 
 Known limits, accepted for now. A review card carries the finding's `public_id`, because the answer is sent to it, so a reviewer who opens the finding's page first sees the claim there, as Decision 0008 allows. The queue's order follows how many answers a finding needs, which depends on other people's answers. The review queue and the help-wanted lists page by an offset held in the cursor, because their order changes as people answer, so a card can move between pages or appear twice.
 
@@ -329,20 +360,21 @@ An event caused by a second look has no actor (see Second looks above).
 
 Activity kinds: `finding_created`, `tier_changed`, `state_changed`, `observation_added`, `evidence_added`, `comment_added`, `mention_added`, `followup_logged`, `investigation_published`.
 
+The payload carries ids only, and `activity.location` is the centre of the finding's 1 km square, never an exact position. The listener and `GET /events/stream` aren't built yet.
+
 ## Terrain service
 
-The shape is fixed. The sources are filled in from `docs/DATA_SOURCES.md`.
+The shape is fixed. The sources are filled in from the catalogue in `docs/sources/`, `lidar.md` and `lidar-england-bulk-supply.md` among them.
 
 `terrain/sources.py` defines `ElevationSource.read(bounds_3857, width, height) -> float32 array` with NaN for no data. There's one implementation per upstream service and a `Mosaic` that asks sources in priority order and fills gaps. `terrain/render.py` asks the mosaic for a tile's bounds plus a buffer, so neighbourhood filters have real data at tile edges, then crops. The buffered elevation array is cached once per tile, so switching style doesn't hit the upstream again. Rendered tiles are cached too. Both caches use `Storage`, which is local disk in development and a bucket in production.
 
 `terrain/visualise.py` holds the pure numpy functions: hillshade, multi-directional hillshade, slope, local relief, sky-view factor, openness, and the blends. Each takes elevation and ground resolution in metres and returns an array with a fixed stretch, so adjacent tiles always match. Kernel sizes are given in metres and converted to pixels per zoom.
 
-<!-- Terrain (b1/terrain) -->
-Elevation is read only from the mirror (`terrain/mirror.py`): one COG per 5 km tile, LERC_ZSTD at 1 cm, 512-pixel blocks, overviews at 2, 4 and 8 m, in a local folder or under `gs://`. A tile that isn't mirrored is converted from Defra's source file on disk if it is there, or fetched from the SFTP bulk supply (`terrain/sftp.py`), once however many requests want it. `terrain/catalogue.py` lists the 5,877 tiles, so a tile that doesn't exist costs no network call. From zoom 13 up, map tiles read the 1 m mirror and fetch what is missing. Below 13 they read the national 10 m composite, or, until it is built, the overviews of tiles already mirrored, uncached. `fieldclub-terrain` mirrors tiles, warms the tile cache and reports on both. The styles, their parameters and versions are in `terrain/styles.py`. Terrain tile URLs carry `?v=`, a token of the style version, the elevation format and the data editions: a tile asked for with the current token is sent as immutable, one from a source that is still filling as `no-cache`, and `tests/terrain/test_versions.py` fails when pixels change without a version.
+Elevation is read only from the mirror (`terrain/mirror.py`): one COG per 5 km tile, LERC_ZSTD at 1 cm, 512-pixel blocks, overviews at 2, 4 and 8 m, in a local folder or under `gs://`. A tile that isn't mirrored is converted from Defra's source file on disk if it is there, or fetched from the SFTP bulk supply (`terrain/sftp.py`), once however many requests want it. `terrain/catalogue.py` lists the 5,877 tiles, so a tile that doesn't exist costs no network call. From zoom 13 up, map tiles read the 1 m mirror and fetch what is missing. Below 13 they read the national 10 m composite, or, until it is built, the overviews of tiles already mirrored, uncached. `fieldclub-terrain mirror|warm|national|info` mirrors tiles, warms the tile cache, builds the national composite and reports on the mirror. The terrain folders default to places under `FIELDCLUB_VAR_DIR`. The styles, their parameters and versions are in `terrain/styles.py`. Terrain tile URLs carry `?v=`, a token of the style version, the elevation format and the data editions: a tile asked for with the current token is sent as immutable, one from a source that is still filling as `no-cache`, and `tests/terrain/test_versions.py` fails when pixels change without a version.
 
 ## Ingest
 
-A connector subclasses `ingest.base.Connector`, declares its `Source` row, and implements `fetch() -> Iterator[RecordIn]`. The runner batches upserts on `(source_key, external_id)`, removes rows that vanished upstream when a full run completes, and writes an `ingest_runs` row. `uv run fieldclub-ingest list|run <key> [--bbox] [--limit]` drives it. Runs are idempotent. Connectors hold no credentials. A source that needs a key reads it from settings and is skipped when the key is absent.
+A connector subclasses `ingest.base.Connector`, declares its `Source` row, and implements `fetch() -> Iterator[RecordIn]`. The runner upserts the `sources` row first, batches upserts on `(source_key, external_id)`, removes rows that vanished upstream when a full run completes, writes an `ingest_runs` row and rebuilds the source's `record_cell_counts`. A full run has no `bbox` and no `limit`. A run that yields nothing fails, and so does a full run that would remove more than `FIELDCLUB_INGEST_MAX_SHRINK` of what is stored, unless it is run with `--allow-shrink`. `uv run fieldclub-ingest list|run <key> [--bbox] [--limit] [--allow-shrink]` drives it. Runs are idempotent. Connectors hold no credentials. A source that needs a key reads it from settings and is skipped when the key is absent.
 
 ## Frontend
 
