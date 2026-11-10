@@ -30,7 +30,7 @@ from fieldclub.errors import BadRequestError
 from fieldclub.gridref import GridRefError, GridSystem, to_grid
 from fieldclub.storage import Storage, get_storage
 from fieldclub.terrain import sftp
-from fieldclub.terrain.catalogue import Catalogue, england_catalogue
+from fieldclub.terrain.catalogue import ENGLAND_EDITION, Catalogue, england_catalogue
 from fieldclub.terrain.cog import COG_FORMAT
 from fieldclub.terrain.errors import ElevationUnavailableError
 from fieldclub.terrain.mirror import (
@@ -54,6 +54,10 @@ from fieldclub.terrain.styles import FINE_MINZOOM
 logger = logging.getLogger(__name__)
 
 NATIONAL_EDITION = f"england-dtm-2022-10m.{COG_FORMAT}"
+# What `build_terrain`'s tiles are drawn from, the mirror's and the national
+# composite's editions, known without building it so `/meta` can version the
+# tile URLs (`render.tile_version`).
+TILE_EDITIONS = (f"{ENGLAND_EDITION}.{COG_FORMAT}", NATIONAL_EDITION)
 NATIONAL_RESOLUTION_M = 10.0
 FINE_RESOLUTION_M = 1.0
 
@@ -91,7 +95,9 @@ class Terrain:
         self.fine = mirror_source(mirror)
         self.fine_mirrored = mirror_source(mirror, fetch=False)
         self.national = national
-        self.renderer = TileRenderer(self.source_for_zoom, storage)
+        self.renderer = TileRenderer(
+            self.source_for_zoom, storage, editions=(self.fine.edition, national.edition)
+        )
 
     @property
     def catalogue(self) -> Catalogue:
@@ -203,7 +209,13 @@ def build_terrain(settings: Settings | None = None, *, storage: Storage | None =
     settings = settings or get_settings()
     path, exists = national_location(settings)
     national = file_source(NATIONAL_EDITION, path, exists=exists)
-    return Terrain(build_mirror(settings), national, storage or get_storage("tiles"), national_exists=exists)
+    terrain = Terrain(
+        build_mirror(settings), national, storage or get_storage("tiles"), national_exists=exists
+    )
+    assert terrain.renderer.editions == TILE_EDITIONS, (
+        f"the tiles are drawn from {terrain.renderer.editions}, but /meta versions them for {TILE_EDITIONS}"
+    )
+    return terrain
 
 
 @lru_cache(maxsize=1)

@@ -15,14 +15,16 @@ from pyproj import Transformer
 from shapely.geometry import MultiPolygon, box
 from sqlalchemy.orm import Session
 
+from fieldclub.layers import build_layers
 from fieldclub.models import AdminArea
 from fieldclub.models.common import to_db_geometry
+from fieldclub.schemas.meta import RasterView
 from fieldclub.storage import LocalStorage
 from fieldclub.terrain.cog import to_cog
 from fieldclub.terrain.grid import tile_at
 from fieldclub.terrain.mirror import LocalMirrorStore, LocalSourceFetcher, Mirror
 from fieldclub.terrain.render import terrarium_decode
-from fieldclub.terrain.service import Terrain, get_terrain
+from fieldclub.terrain.service import Terrain, build_terrain, get_terrain
 from fieldclub.terrain.sources import file_source
 from tests.helpers import error_code
 from tests.terrain.fakes import catalogue_of, write_source_tile
@@ -70,15 +72,37 @@ def api(app: FastAPI, terrain: Terrain) -> Iterator[TestClient]:
 # --------------------------------------------------------------------------
 
 
-def test_a_lidar_tile_is_a_512_pixel_png_with_immutable_caching(api: TestClient) -> None:
+IMMUTABLE = "public, max-age=31536000, immutable"
+
+
+def test_a_lidar_tile_is_a_512_pixel_png_with_immutable_caching(api: TestClient, terrain: Terrain) -> None:
     x, y = tile_at(*INSIDE, 15)
-    response = api.get(f"/tiles/lidar/composite/15/{x}/{y}.png")
+    version = terrain.renderer.version("composite")
+    response = api.get(f"/tiles/lidar/composite/15/{x}/{y}.png?v={version}")
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/png"
-    assert response.headers["cache-control"] == "public, max-age=31536000, immutable"
+    assert response.headers["cache-control"] == IMMUTABLE
     assert response.headers["etag"].startswith('"')
     image = Image.open(io.BytesIO(response.content))
     assert image.size == (512, 512)
+
+
+def test_the_meta_tile_urls_carry_the_versions_the_served_tiles_have(tmp_path: Path) -> None:
+    renderer = build_terrain(storage=LocalStorage(tmp_path)).renderer
+    layers = build_layers()
+    views = {view.id: view for view in layers.views if isinstance(view, RasterView)}
+    for style in ("composite", "local_relief", "sky_view", "multi_shade", "slope"):
+        tiles = views[style].tiles
+        assert tiles == [f"/tiles/lidar/{style}/{{z}}/{{x}}/{{y}}.png?v={renderer.version(style)}"]
+    assert layers.dem.tiles == [f"/tiles/dem/{{z}}/{{x}}/{{y}}.png?v={renderer.version('dem')}"]
+
+
+@pytest.mark.parametrize("query", ["", "?v=old"])
+def test_a_tile_without_the_current_version_is_cached_for_an_hour(api: TestClient, query: str) -> None:
+    x, y = tile_at(*INSIDE, 15)
+    response = api.get(f"/tiles/lidar/composite/15/{x}/{y}.png{query}")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, max-age=3600"
 
 
 def test_an_unchanged_tile_is_answered_not_modified(api: TestClient) -> None:
@@ -124,11 +148,11 @@ def test_bad_tile_addresses_are_refused(api: TestClient, path: str, status: int,
     assert error_code(response) == code
 
 
-def test_dem_tiles_are_terrarium_with_opaque_pixels(api: TestClient) -> None:
+def test_dem_tiles_are_terrarium_with_opaque_pixels(api: TestClient, terrain: Terrain) -> None:
     x, y = tile_at(*INSIDE, 15)
-    response = api.get(f"/tiles/dem/15/{x}/{y}.png")
+    response = api.get(f"/tiles/dem/15/{x}/{y}.png?v={terrain.renderer.version('dem')}")
     assert response.status_code == 200
-    assert response.headers["cache-control"] == "public, max-age=31536000, immutable"
+    assert response.headers["cache-control"] == IMMUTABLE
     image = Image.open(io.BytesIO(response.content))
     assert image.mode == "RGB"
     heights = terrarium_decode(np.asarray(image))
@@ -138,13 +162,32 @@ def test_dem_tiles_are_terrarium_with_opaque_pixels(api: TestClient) -> None:
 def test_low_zooms_without_the_national_composite_read_the_mirror_uncached(
     api: TestClient, terrain: Terrain, tmp_path: Path
 ) -> None:
-    terrain.mirror.ensure("SU16nw")
     x, y = tile_at(*INSIDE, 12)
-    response = api.get(f"/tiles/lidar/composite/12/{x}/{y}.png")
+    version = terrain.renderer.version("composite")
+    path = f"/tiles/lidar/composite/12/{x}/{y}.png?v={version}"
+    empty = api.get(path)
+    assert empty.headers["cache-control"] == "no-cache"
+    terrain.mirror.ensure("SU16nw")
+    response = api.get(path, headers={"If-None-Match": empty.headers["etag"]})
+    # The same URL draws differently as the mirror fills, so it is never immutable.
     assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-cache"
+    assert response.headers["etag"] != empty.headers["etag"]
     alpha = np.asarray(Image.open(io.BytesIO(response.content)).convert("LA"))[..., -1]
     assert alpha.max() == 255
     assert not list((tmp_path / "tiles").rglob("*.png"))
+    dem = api.get(f"/tiles/dem/12/{x}/{y}.png?v={terrain.renderer.version('dem')}")
+    assert dem.headers["cache-control"] == "no-cache"
+
+
+def test_a_tile_on_the_far_side_of_the_world_is_transparent_and_fetches_nothing(
+    api: TestClient, terrain: Terrain
+) -> None:
+    x, y = tile_at(179.9, 0.0, 7)
+    response = api.get(f"/tiles/lidar/composite/7/{x}/{y}.png")
+    assert response.status_code == 200
+    assert np.asarray(Image.open(io.BytesIO(response.content)))[..., -1].max() == 0
+    assert terrain.mirror.store.names() == []
 
 
 # --------------------------------------------------------------------------

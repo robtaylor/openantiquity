@@ -35,6 +35,8 @@ from fieldclub.schemas.meta import (
     View,
 )
 from fieldclub.terrain.grid import TILE_SIZE
+from fieldclub.terrain.render import DEM_KIND, tile_version
+from fieldclub.terrain.service import TILE_EDITIONS
 from fieldclub.terrain.styles import MAXZOOM, MINZOOM
 
 # --- Terrain (b1/terrain): the zoom range comes from what the terrain service serves.
@@ -43,6 +45,12 @@ from fieldclub.terrain.styles import MAXZOOM, MINZOOM
 # so one attribution covers them.
 LIDAR_MINZOOM = MINZOOM
 LIDAR_MAXZOOM = MAXZOOM
+
+
+def terrain_tiles(path: str, kind: str) -> str:
+    """A terrain tile URL with the version token that lets the tile be cached as immutable."""
+    return f"{path}/{{z}}/{{x}}/{{y}}.png?v={tile_version(kind, TILE_EDITIONS)}"
+
 
 OGL_V3_URL = "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
 
@@ -64,7 +72,7 @@ OPENFREEMAP_ATTRIBUTION = (
     'Data from <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
 )
 
-# Styles drawn by /tiles/lidar/{style}/{z}/{x}/{y}.png: id, title, description.
+# Styles drawn by /tiles/lidar/{style}/{z}/{x}/{y}.png?v=: id, title, description.
 LIDAR_STYLES: tuple[tuple[str, str, str], ...] = (
     (
         "composite",
@@ -102,7 +110,7 @@ def lidar_view(style: str, title: str, description: str) -> RasterView:
         title=title,
         description=description,
         group="lidar",
-        tiles=[f"/tiles/lidar/{style}/{{z}}/{{x}}/{{y}}.png"],
+        tiles=[terrain_tiles(f"/tiles/lidar/{style}", style)],
         tile_size=TILE_SIZE,
         minzoom=LIDAR_MINZOOM,
         maxzoom=LIDAR_MAXZOOM,
@@ -137,7 +145,7 @@ VIEWS: list[View] = [
 ]
 
 DEM = DemSource(
-    tiles=["/tiles/dem/{z}/{x}/{y}.png"],
+    tiles=[terrain_tiles("/tiles/dem", DEM_KIND)],
     tile_size=TILE_SIZE,
     encoding="terrarium",
     minzoom=LIDAR_MINZOOM,

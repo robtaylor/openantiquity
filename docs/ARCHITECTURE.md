@@ -214,8 +214,8 @@ Tile endpoints sit outside `/api/v1` so a CDN can cache them by path:
 
 | Path | Returns |
 |------|---------|
-| `/tiles/lidar/{style}/{z}/{x}/{y}.png` | A rendered terrain visualisation, 512 px |
-| `/tiles/dem/{z}/{x}/{y}.png` | Elevation in Terrarium encoding, 512 px, for client-side shading and 3D |
+| `/tiles/lidar/{style}/{z}/{x}/{y}.png?v=` | A rendered terrain visualisation, 512 px |
+| `/tiles/dem/{z}/{x}/{y}.png?v=` | Elevation in Terrarium encoding, 512 px, for client-side shading and 3D |
 | `/tiles/records/{z}/{x}/{y}.mvt` | Records as vector tiles. Aggregated counts at low zoom, features at high zoom |
 
 ### Accounts
@@ -260,14 +260,14 @@ There is no private messaging and no private channel between members. A private 
       {
         "id": "composite", "title": "Composite", "description": "...",
         "group": "lidar", "type": "raster",
-        "tiles": ["/tiles/lidar/composite/{z}/{x}/{y}.png"],
+        "tiles": ["/tiles/lidar/composite/{z}/{x}/{y}.png?v=3f2a9c01b7de"],
         "tile_size": 512, "minzoom": 7, "maxzoom": 16,
         "attribution": "...", "bounds": null, "default": true
       },
       {"id": "raking", "title": "Raking light", "group": "lidar", "type": "raking", "description": "...", "attribution": "..."}
     ],
     "dem": {
-      "tiles": ["/tiles/dem/{z}/{x}/{y}.png"], "tile_size": 512, "encoding": "terrarium",
+      "tiles": ["/tiles/dem/{z}/{x}/{y}.png?v=8c41d07e5a26"], "tile_size": 512, "encoding": "terrarium",
       "minzoom": 7, "maxzoom": 16, "attribution": "..."
     },
     "overlays": [
@@ -316,7 +316,7 @@ The shape is fixed. The sources are filled in from `docs/DATA_SOURCES.md`.
 `terrain/visualise.py` holds the pure numpy functions: hillshade, multi-directional hillshade, slope, local relief, sky-view factor, openness, and the blends. Each takes elevation and ground resolution in metres and returns an array with a fixed stretch, so adjacent tiles always match. Kernel sizes are given in metres and converted to pixels per zoom.
 
 <!-- Terrain (b1/terrain) -->
-Elevation is read only from the mirror (`terrain/mirror.py`): one COG per 5 km tile, LERC_ZSTD at 1 cm, 512-pixel blocks, overviews at 2, 4 and 8 m, in a local folder or under `gs://`. A tile that isn't mirrored is converted from Defra's source file on disk if it is there, or fetched from the SFTP bulk supply (`terrain/sftp.py`), once however many requests want it. `terrain/catalogue.py` lists the 5,877 tiles, so a tile that doesn't exist costs no network call. From zoom 13 up, map tiles read the 1 m mirror and fetch what is missing. Below 13 they read the national 10 m composite, or, until it is built, the overviews of tiles already mirrored, uncached. `fieldclub-terrain` mirrors tiles, warms the tile cache and reports on both. The styles, their parameters and versions are in `terrain/styles.py`.
+Elevation is read only from the mirror (`terrain/mirror.py`): one COG per 5 km tile, LERC_ZSTD at 1 cm, 512-pixel blocks, overviews at 2, 4 and 8 m, in a local folder or under `gs://`. A tile that isn't mirrored is converted from Defra's source file on disk if it is there, or fetched from the SFTP bulk supply (`terrain/sftp.py`), once however many requests want it. `terrain/catalogue.py` lists the 5,877 tiles, so a tile that doesn't exist costs no network call. From zoom 13 up, map tiles read the 1 m mirror and fetch what is missing. Below 13 they read the national 10 m composite, or, until it is built, the overviews of tiles already mirrored, uncached. `fieldclub-terrain` mirrors tiles, warms the tile cache and reports on both. The styles, their parameters and versions are in `terrain/styles.py`. Terrain tile URLs carry `?v=`, a token of the style version, the elevation format and the data editions: a tile asked for with the current token is sent as immutable, one from a source that is still filling as `no-cache`, and `tests/terrain/test_versions.py` fails when pixels change without a version.
 
 ## Ingest
 

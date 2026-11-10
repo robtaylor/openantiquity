@@ -8,20 +8,30 @@ and the edition. Nothing is cached when elevation can't be read: an error
 propagates and the next request tries again.
 
 Tiles with no data at all are a fully transparent PNG for the styles. The
-Terrarium tile has alpha 255 everywhere, as MapLibre expects, and encodes
-`NODATA_ELEVATION_M` where there is no data.
+Terrarium tile has alpha 255 everywhere, as MapLibre expects. A gap in the
+data no wider than twice the tile's buffer takes the height of the nearest
+pixel with data, and anything further from data encodes `NODATA_ELEVATION_M`.
+
+Every key carries `ELEVATION_FORMAT`, so a change to how elevation is read
+(`sources.py`, the projection lattice, the sampler) renews every tile, and a
+style's `version`, so a change to a style renews its tiles. `tile_version`
+folds both, with the editions, into the token the tile URLs carry.
+`tests/terrain/test_versions.py` fails when pixels change and these don't.
 """
 
 from __future__ import annotations
 
+import hashlib
 import io
 import logging
 import zlib
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from functools import cache
 
 import numpy as np
 from PIL import Image
+from scipy.ndimage import distance_transform_edt
 
 from fieldclub.errors import NotFoundError
 from fieldclub.storage import Storage, StorageNotFoundError
@@ -31,13 +41,14 @@ from fieldclub.terrain.styles import MAXZOOM, MINZOOM, STYLES, Style, elevation_
 
 logger = logging.getLogger(__name__)
 
-# What a Terrarium tile says where there is no data: sea level, which is what
+# What a Terrarium tile says far from any data: sea level, which is what
 # most of England's no-data is. MapLibre needs a number for every pixel.
 NODATA_ELEVATION_M = 0.0
 TERRARIUM_OFFSET = 32768.0
-DEM_VERSION = "1"
-# Bumped when the cached elevation's layout changes.
-ELEVATION_FORMAT = "e1"
+DEM_VERSION = "2"
+# Bumped when the cached elevation's layout or values change: e2 is the B-spline sampler.
+ELEVATION_FORMAT = "e2"
+DEM_KIND = "dem"
 _EMPTY = b"empty"
 _PNG_LEVEL = 6
 
@@ -53,6 +64,23 @@ def terrarium_encode(elevation: np.ndarray) -> np.ndarray:
     steps = np.clip(np.round((values + TERRARIUM_OFFSET) * 256), 0, 2**24 - 1).astype(np.uint32)
     rgb = np.stack([(steps >> 16) & 255, (steps >> 8) & 255, steps & 255], axis=-1)
     return rgb.astype(np.uint8)
+
+
+def fill_near_gaps(elevation: np.ndarray, reach: int) -> np.ndarray:
+    """No-data within `reach` pixels of data takes the nearest data's height. The rest stays NaN.
+
+    Every pixel with data within `reach` of a tile pixel lies in the tile's
+    buffered window when `reach` is no more than the buffer, so neighbouring
+    tiles fill a shared gap alike.
+    """
+    gaps = ~np.isfinite(elevation)
+    if not gaps.any() or gaps.all():
+        return elevation
+    found = distance_transform_edt(gaps, return_indices=True)
+    assert isinstance(found, tuple), "distance_transform_edt returns distances and indices"
+    distance, (rows, cols) = found
+    filled = elevation[rows, cols]
+    return np.where(gaps & (distance > reach), np.float32(np.nan), filled).astype(np.float32)
 
 
 def terrarium_decode(rgb: np.ndarray) -> np.ndarray:
@@ -95,6 +123,24 @@ def _decode_array(data: bytes) -> np.ndarray:
     return np.load(io.BytesIO(zlib.decompress(data)), allow_pickle=False)
 
 
+def tile_version(kind: str, editions: Sequence[str]) -> str:
+    """The token a tile URL carries: it changes whenever a tile of this kind could.
+
+    `kind` is a style id or `DEM_KIND`. A response is immutable only for a URL
+    with the current token.
+    """
+    version = DEM_VERSION if kind == DEM_KIND else style(kind).version
+    parts = [kind, version, ELEVATION_FORMAT, *editions]
+    return hashlib.sha256("/".join(parts).encode()).hexdigest()[:12]
+
+
+@dataclass(frozen=True)
+class RenderedTile:
+    png: bytes
+    # False when the same URL may draw differently later, so it mustn't be cached for long.
+    cacheable: bool
+
+
 def style(style_id: str) -> Style:
     found = STYLES.get(style_id)
     if found is None:
@@ -110,12 +156,26 @@ def render_values(style: Style, elevation: np.ndarray, window: Window, crop: int
 
 
 class TileRenderer:
-    def __init__(self, source_for_zoom: Callable[[int], ElevationSource], storage: Storage) -> None:
+    def __init__(
+        self,
+        source_for_zoom: Callable[[int], ElevationSource],
+        storage: Storage,
+        *,
+        editions: Sequence[str],
+    ) -> None:
+        """`editions` lists every edition `source_for_zoom` may return, for `tile_version`."""
+        assert editions, "a renderer draws from at least one edition"
         self._source_for_zoom = source_for_zoom
         self.storage = storage
+        self.editions = tuple(editions)
 
     def edition(self, zoom: int) -> str:
-        return self._source_for_zoom(zoom).edition
+        edition = self._source_for_zoom(zoom).edition
+        assert edition in self.editions, f"{edition} isn't one of {self.editions}"
+        return edition
+
+    def version(self, kind: str) -> str:
+        return tile_version(kind, self.editions)
 
     def elevation(self, z: int, x: int, y: int) -> tuple[np.ndarray | None, Window]:
         """The tile's buffered elevation, None when it has no data, and the buffered window."""
@@ -141,10 +201,10 @@ class TileRenderer:
         assert array.shape == (window.height, window.width), f"cached {array.shape} for {window}"
         return array, window
 
-    def lidar_png(self, style_id: str, z: int, x: int, y: int) -> bytes:
+    def lidar_png(self, style_id: str, z: int, x: int, y: int) -> RenderedTile:
         found = style(style_id)
         check_tile(z, x, y, minzoom=MINZOOM, maxzoom=MAXZOOM)
-        key = f"lidar/{found.id}/v{found.version}/{self.edition(z)}/{z}/{x}/{y}.png"
+        key = f"lidar/{found.id}/v{found.version}/{ELEVATION_FORMAT}/{self.edition(z)}/{z}/{x}/{y}.png"
         return self._cached(z, key, lambda: self._render_lidar(found, z, x, y))
 
     def _render_lidar(self, found: Style, z: int, x: int, y: int) -> bytes:
@@ -156,9 +216,9 @@ class TileRenderer:
             return transparent_png()
         return to_png(to_pixels(values))
 
-    def dem_png(self, z: int, x: int, y: int) -> bytes:
+    def dem_png(self, z: int, x: int, y: int) -> RenderedTile:
         check_tile(z, x, y, minzoom=MINZOOM, maxzoom=MAXZOOM)
-        key = f"dem/v{DEM_VERSION}/{self.edition(z)}/{z}/{x}/{y}.png"
+        key = f"dem/v{DEM_VERSION}/{ELEVATION_FORMAT}/{self.edition(z)}/{z}/{x}/{y}.png"
         return self._cached(z, key, lambda: self._render_dem(z, x, y))
 
     def _render_dem(self, z: int, x: int, y: int) -> bytes:
@@ -167,20 +227,21 @@ class TileRenderer:
         if elevation is None:
             elevation = np.full((TILE_SIZE, TILE_SIZE), np.nan, dtype=np.float32)
         else:
+            elevation = fill_near_gaps(elevation, buffer)
             elevation = elevation[buffer : buffer + TILE_SIZE, buffer : buffer + TILE_SIZE]
         return to_png(terrarium_encode(elevation))
 
-    def _cached(self, zoom: int, key: str, make: Callable[[], bytes]) -> bytes:
+    def _cached(self, zoom: int, key: str, make: Callable[[], bytes]) -> RenderedTile:
         cacheable = self._source_for_zoom(zoom).cacheable
         if cacheable:
             try:
-                return self.storage.get(key)
+                return RenderedTile(self.storage.get(key), cacheable=True)
             except StorageNotFoundError:
                 pass
         data = make()
         if cacheable:
             self.storage.put(key, data, "image/png")
-        return data
+        return RenderedTile(data, cacheable=cacheable)
 
     def render_window(self, style_id: str, window: Window) -> np.ndarray:
         """A style over any window of a zoom level's grid, with no caching. For checks and tests."""

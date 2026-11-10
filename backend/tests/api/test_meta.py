@@ -137,7 +137,7 @@ def test_layers(meta: dict) -> None:
         "raking",
     ]
     composite = layers["views"][0]
-    assert composite["tiles"] == ["/tiles/lidar/composite/{z}/{x}/{y}.png"]
+    assert composite["tiles"][0].startswith("/tiles/lidar/composite/{z}/{x}/{y}.png?v=")
     assert (composite["bounds"], composite["default"]) == (None, True)
     raking = layers["views"][5]
     assert set(raking) == {"id", "title", "group", "type", "description", "attribution"}

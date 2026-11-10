@@ -8,6 +8,8 @@ import pytest
 
 from fieldclub import layers
 from fieldclub.schemas.meta import CoverageOverlay, RakingView, RasterView
+from fieldclub.terrain.render import tile_version
+from fieldclub.terrain.service import TILE_EDITIONS
 
 
 @pytest.fixture
@@ -56,7 +58,9 @@ def test_composite_matches_the_documented_shape_exactly() -> None:
         "description": composite["description"],
         "group": "lidar",
         "type": "raster",
-        "tiles": ["/tiles/lidar/composite/{z}/{x}/{y}.png"],
+        "tiles": [
+            f"/tiles/lidar/composite/{{z}}/{{x}}/{{y}}.png?v={tile_version('composite', TILE_EDITIONS)}"
+        ],
         "tile_size": 512,
         "minzoom": 7,
         "maxzoom": 16,
@@ -74,7 +78,8 @@ def test_lidar_raster_views_are_served_by_the_lidar_tile_endpoint() -> None:
         view = views[style]
         assert view["type"] == "raster"
         assert view["group"] == "lidar"
-        assert view["tiles"] == [f"/tiles/lidar/{style}/{{z}}/{{x}}/{{y}}.png"]
+        version = tile_version(style, TILE_EDITIONS)
+        assert view["tiles"] == [f"/tiles/lidar/{style}/{{z}}/{{x}}/{{y}}.png?v={version}"]
         assert view["tile_size"] == 512
         assert view["default"] is (style == "composite")
 
@@ -100,7 +105,7 @@ def test_openstreetmap_standard_is_a_raster_view_in_the_map_group() -> None:
 def test_dem_source() -> None:
     dem = dump()["dem"]
     assert dem == {
-        "tiles": ["/tiles/dem/{z}/{x}/{y}.png"],
+        "tiles": [f"/tiles/dem/{{z}}/{{x}}/{{y}}.png?v={tile_version('dem', TILE_EDITIONS)}"],
         "tile_size": 512,
         "encoding": "terrarium",
         "minzoom": 7,
