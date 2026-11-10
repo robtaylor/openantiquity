@@ -141,7 +141,7 @@ Columns marked with `*` are required. Every table has `id BIGINT` and `created_a
 - `GIST (location)`, `GIST ((location::geography))`, `GIST (location_public)` and `GIST ((location_public::geography))` on `findings`. Also `GIN (open_steps)` for the help-wanted lists and `(created_at, id)` for the newest-first list.
 - `GIST (geom)`, `GIST ((centroid::geography))`, `GIN (search)` and a trigram `GIN (name gin_trgm_ops)` on `records`. Also `GIST (centroid)` for the record tiles and `(lower(name) text_pattern_ops)` for names that start with the search text.
 - Trigram `GIN (name gin_trgm_ops)` and `GIST (geom)` on `places`.
-- `(finding_id)` on every child table of findings. `(user_id, read_at)` on `notifications`. `(created_at DESC)` on `activity`.
+- `(finding_id)` on every child table of findings. `(user_id, read_at)` on `notifications`. `(created_at DESC)` and `GIST (location)` on `activity`: the feed's box filter uses the second.
 
 ## Confidence engine
 
@@ -235,8 +235,8 @@ Rules every route follows, whichever area it belongs to:
 | Terrain | `POST /terrain/profile` (elevation along a line), `GET /terrain/coverage?bbox=` (the 5 km tiles that have 1 m elevation, as GeoJSON) |
 | Investigations | `GET` and `POST /investigations`, `GET`, `PATCH` and `DELETE /investigations/{public_id}`, items and members sub-resources, `GET /investigations/{public_id}/export?format=` |
 | Exports | `GET /findings/{public_id}/export?format=geojson|csv`, `GET /findings/export` (the list's filters, a filtered set) |
-| People | `GET /users/{handle}`, `GET /users/{handle}/findings`, `GET /users/{handle}/contributions` |
-| Activity | `GET /activity`, `GET /events/stream` (server-sent events), `GET /notifications`, `POST /notifications/read` |
+| People | `GET /users/{handle}`, `GET /users/{handle}/findings`, `GET /users/{handle}/contributions` (`kind=evidence|comment|mention`, or `second_look` on its own), `GET /users/{handle}/points` (the person's own itemised points only) |
+| Activity | `GET /activity` (filters: `bbox`, `kind`, `finding`, `investigation`, `person`), `GET /events/stream` (server-sent events; `bbox` or `finding`), `GET /notifications` (with `unread_count`), `POST /notifications/read` (`{ids}` or `{all, up_to}`) |
 | Media | `POST /media`, `GET /media/{id}` |
 | Moderation | `POST /reports`, `GET /mod/reports`, `POST /mod/reports/{id}/resolve`, `POST /mod/findings/{public_id}/hide`, `PUT /mod/users/{handle}/role`, `PUT /mod/findings/{public_id}/sensitivity` |
 
@@ -362,6 +362,14 @@ Known limits, accepted for now. A review card carries the finding's `public_id`,
 `services/activity.py` has `record(db, kind, actor, finding=None, investigation=None, data=None)`. It inserts an `activity` row, creates notifications for the finding's followers, and after commit sends a small payload through PostgreSQL `NOTIFY fieldclub_events`. One listener per process fans payloads out to connected event-stream clients. Because the bus is PostgreSQL, it works across Cloud Run instances.
 
 An event caused by a second look has no actor (see Second looks above).
+
+Nobody is notified of their own action. A second look's events have no actor, so `record` takes the answerer as `quiet_for` and leaves them out of the notifications instead. `activity.location` is the centre of the finding's 1 km square for every finding, and `activity.relocate` moves it when the finding moves.
+
+`GET /activity` and `GET /notifications` list an event only while what it is about can still be seen: not on a finding that is hidden from the viewer or withdrawn, not on an investigation that isn't public, not by a banned account, and not about a comment, evidence or mention (`data.comment_id`, `evidence_id`, `mention_id`) that has been deleted. A deleted actor is shown as no one. Both are newest first by id. The feed's `bbox` matches `activity.location`, so a shrinking box can find no more than the square, which everyone may see, and each item's finding carries its position as the viewer may see it.
+
+The event stream is the one `async` endpoint, served on the event loop (`services/events.py`). Each process runs one hub: a psycopg `AsyncConnection` holds the `LISTEN`, and each client is an async generator waiting on its own bounded queue, so a client costs a coroutine and holds no worker thread and no database connection. Before announcing an event the hub checks, once per event and in a worker thread, that a signed-out visitor's feed lists it, and reads its square for clients filtering by box. The square never leaves the server: a client receives `{id, kind, finding, investigation, actor}` and refetches through the API. A client that falls `FIELDCLUB_EVENTS_QUEUE_SIZE` events behind is dropped with a `dropped` event. The listener reconnects after a failure and sends `resync`, because events sent meanwhile are lost. Streams send a `: ping` comment every `FIELDCLUB_EVENTS_HEARTBEAT_S` and end after `FIELDCLUB_EVENTS_MAX_STREAM_S`. One address may hold `FIELDCLUB_EVENTS_MAX_PER_ADDRESS` streams, and a process `FIELDCLUB_EVENTS_MAX_STREAMS`, beyond which the answer is 429 `too_many_streams`. `fieldclub-api` ends every stream with `closed` before uvicorn waits for open responses, so shutdown doesn't wait for them.
+
+A profile lists second looks only as `second_look`, without a date and in the findings' order, because a date beside a finding's tier history would show whose answer moved it. The reputation others see leaves out the points answers earned (`observation_corroborated`, `observation_ruled_out`), and the itemised points are the person's alone. Profiles of deleted and banned accounts answer `user_not_found`. A handle-only account (16 to 17, or no band yet) shows no bio either.
 
 Activity kinds: `finding_created`, `tier_changed`, `state_changed`, `observation_added`, `evidence_added`, `comment_added`, `mention_added`, `followup_logged`, `investigation_published`.
 
