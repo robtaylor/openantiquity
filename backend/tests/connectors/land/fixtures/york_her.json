@@ -1,0 +1,910 @@
+{
+ "recorded": "LV_LeisureCulture MapServer layers 3, 4 and 5 on maps.york.gov.uk, 2026-11-10. For each layer query?where=MonUID IN (MYO1, MYO104, MYO1004, MYO167, MYO1090, MYO2076), outSR=4326, geometryPrecision=6.",
+ "layers": {
+  "3": {
+   "info": {
+    "name": "Archaeological monuments",
+    "type": "Feature Layer",
+    "geometryType": "esriGeometryPoint",
+    "maxRecordCount": 1000,
+    "fields": [
+     {
+      "name": "MonUID",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "RecordType",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Name",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "MonType",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "MI_PRINX",
+      "type": "esriFieldTypeOID"
+     },
+     {
+      "name": "Geom",
+      "type": "esriFieldTypeGeometry"
+     },
+     {
+      "name": "URL",
+      "type": "esriFieldTypeString"
+     }
+    ],
+    "advancedQueryCapabilities": {
+     "supportsPagination": true
+    }
+   },
+   "features": [
+    {
+     "attributes": {
+      "MonUID": "MYO1",
+      "RecordType": "MON",
+      "Name": "Eboracum (Roman York)",
+      "MonType": "SETTLEMENT; MUNICIPIUM; COLONIA",
+      "MI_PRINX": 5615,
+      "URL": "https://her.york.gov.uk/monument/MYO1"
+     },
+     "geometry": {
+      "x": -1.084892,
+      "y": 53.960844
+     }
+    },
+    {
+     "attributes": {
+      "MonUID": "MYO1004",
+      "RecordType": "BLD",
+      "Name": "CHURCH OF ALL SAINTS PAVEMENT",
+      "MonType": "GRAVE SLAB; PARISH CHURCH; PARISH CHURCH; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; PARISH CHURCH; COMMEMORATIVE BRASS; COMMEMORATIVE BRASS; PARISH CHURCH; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; PARISH CHURCH; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; PARISH CHURCH; PARISH CHURCH; COMMEMORATIVE MONUMENT; PARISH CHURCH",
+      "MI_PRINX": 5622,
+      "URL": "https://her.york.gov.uk/monument/MYO1004"
+     },
+     "geometry": {
+      "x": -1.080673,
+      "y": 53.958211
+     }
+    },
+    {
+     "attributes": {
+      "MonUID": "MYO104",
+      "RecordType": "MON",
+      "Name": "Siwards How",
+      "MonType": "BARROW; WINDMILL MOUND",
+      "MI_PRINX": 5661,
+      "URL": "https://her.york.gov.uk/monument/MYO104"
+     },
+     "geometry": {
+      "x": -1.053951,
+      "y": 53.950208
+     }
+    },
+    {
+     "attributes": {
+      "MonUID": "MYO1090",
+      "RecordType": null,
+      "Name": "YORK CITY WALLS Tower 19 (ANGLIAN TOWER)",
+      "MonType": "TOWER; TOWER; TUNNEL; TOWER",
+      "MI_PRINX": 5717,
+      "URL": "https://her.york.gov.uk/monument/MYO1090"
+     },
+     "geometry": {
+      "x": -1.086325,
+      "y": 53.96184
+     }
+    },
+    {
+     "attributes": {
+      "MonUID": "MYO167",
+      "RecordType": "MON",
+      "Name": "Fishponds Poppleton Moated Site",
+      "MonType": "SETTLEMENT; FIELD SYSTEM; DITCH; BANK (EARTHWORK); FISHPOND; MOAT; BUILDING PLATFORM",
+      "MI_PRINX": 6361,
+      "URL": "https://her.york.gov.uk/monument/MYO167"
+     },
+     "geometry": {
+      "x": -1.140633,
+      "y": 53.989687
+     }
+    }
+   ]
+  },
+  "4": {
+   "info": {
+    "name": "Archaeological monuments (linear)",
+    "type": "Feature Layer",
+    "geometryType": "esriGeometryPolyline",
+    "maxRecordCount": 1000,
+    "fields": [
+     {
+      "name": "MonUID",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "RecordType",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Name",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "MonType",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "MI_PRINX",
+      "type": "esriFieldTypeOID"
+     },
+     {
+      "name": "Geom",
+      "type": "esriFieldTypeGeometry"
+     },
+     {
+      "name": "URL",
+      "type": "esriFieldTypeString"
+     }
+    ],
+    "advancedQueryCapabilities": {
+     "supportsPagination": true
+    }
+   },
+   "features": [
+    {
+     "attributes": {
+      "MonUID": "MYO167",
+      "RecordType": "MON",
+      "Name": "Fishponds Poppleton Moated Site",
+      "MonType": "SETTLEMENT; FIELD SYSTEM; DITCH; BANK (EARTHWORK); FISHPOND; MOAT; BUILDING PLATFORM",
+      "MI_PRINX": 2101,
+      "URL": "https://her.york.gov.uk/monument/MYO167"
+     },
+     "geometry": {
+      "paths": [
+       [
+        [
+         -1.140679,
+         53.989602
+        ],
+        [
+         -1.140159,
+         53.989736
+        ],
+        [
+         -1.139899,
+         53.989829
+        ],
+        [
+         -1.139648,
+         53.989889
+        ],
+        [
+         -1.13972,
+         53.989909
+        ],
+        [
+         -1.139963,
+         53.989877
+        ],
+        [
+         -1.140327,
+         53.989851
+        ],
+        [
+         -1.140715,
+         53.989778
+        ],
+        [
+         -1.140716,
+         53.98975
+        ],
+        [
+         -1.140671,
+         53.989607
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "attributes": {
+      "MonUID": "MYO2076",
+      "RecordType": "MON",
+      "Name": "Church Street Roman Sewer",
+      "MonType": "SEWER",
+      "MI_PRINX": 2104,
+      "URL": "https://her.york.gov.uk/monument/MYO2076"
+     },
+     "geometry": {
+      "paths": [
+       [
+        [
+         -1.081584,
+         53.960311
+        ],
+        [
+         -1.081065,
+         53.960055
+        ],
+        [
+         -1.08093,
+         53.960142
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "attributes": {
+      "MonUID": "MYO2076",
+      "RecordType": "MON",
+      "Name": "Church Street Roman Sewer",
+      "MonType": "SEWER",
+      "MI_PRINX": 2105,
+      "URL": "https://her.york.gov.uk/monument/MYO2076"
+     },
+     "geometry": {
+      "paths": [
+       [
+        [
+         -1.081504,
+         53.96027
+        ],
+        [
+         -1.08148,
+         53.960286
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "attributes": {
+      "MonUID": "MYO2076",
+      "RecordType": "MON",
+      "Name": "Church Street Roman Sewer",
+      "MonType": "SEWER",
+      "MI_PRINX": 2106,
+      "URL": "https://her.york.gov.uk/monument/MYO2076"
+     },
+     "geometry": {
+      "paths": [
+       [
+        [
+         -1.081468,
+         53.960251
+        ],
+        [
+         -1.081509,
+         53.960218
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "attributes": {
+      "MonUID": "MYO2076",
+      "RecordType": "MON",
+      "Name": "Church Street Roman Sewer",
+      "MonType": "SEWER",
+      "MI_PRINX": 2107,
+      "URL": "https://her.york.gov.uk/monument/MYO2076"
+     },
+     "geometry": {
+      "paths": [
+       [
+        [
+         -1.081401,
+         53.960219
+        ],
+        [
+         -1.081376,
+         53.960231
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "attributes": {
+      "MonUID": "MYO2076",
+      "RecordType": "MON",
+      "Name": "Church Street Roman Sewer",
+      "MonType": "SEWER",
+      "MI_PRINX": 2108,
+      "URL": "https://her.york.gov.uk/monument/MYO2076"
+     },
+     "geometry": {
+      "paths": [
+       [
+        [
+         -1.081321,
+         53.960181
+        ],
+        [
+         -1.081296,
+         53.960197
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "attributes": {
+      "MonUID": "MYO2076",
+      "RecordType": "MON",
+      "Name": "Church Street Roman Sewer",
+      "MonType": "SEWER",
+      "MI_PRINX": 2109,
+      "URL": "https://her.york.gov.uk/monument/MYO2076"
+     },
+     "geometry": {
+      "paths": [
+       [
+        [
+         -1.081197,
+         53.960118
+        ],
+        [
+         -1.081185,
+         53.960099
+        ],
+        [
+         -1.081078,
+         53.960048
+        ],
+        [
+         -1.081061,
+         53.960057
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "attributes": {
+      "MonUID": "MYO2076",
+      "RecordType": "MON",
+      "Name": "Church Street Roman Sewer",
+      "MonType": "SEWER",
+      "MI_PRINX": 2110,
+      "URL": "https://her.york.gov.uk/monument/MYO2076"
+     },
+     "geometry": {
+      "paths": [
+       [
+        [
+         -1.0813,
+         53.960043
+        ],
+        [
+         -1.081201,
+         53.96012
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "attributes": {
+      "MonUID": "MYO2076",
+      "RecordType": "MON",
+      "Name": "Church Street Roman Sewer",
+      "MonType": "SEWER",
+      "MI_PRINX": 2111,
+      "URL": "https://her.york.gov.uk/monument/MYO2076"
+     },
+     "geometry": {
+      "paths": [
+       [
+        [
+         -1.081089,
+         53.960067
+        ],
+        [
+         -1.080959,
+         53.960149
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "attributes": {
+      "MonUID": "MYO2076",
+      "RecordType": "MON",
+      "Name": "Church Street Roman Sewer",
+      "MonType": "SEWER",
+      "MI_PRINX": 2112,
+      "URL": "https://her.york.gov.uk/monument/MYO2076"
+     },
+     "geometry": {
+      "paths": [
+       [
+        [
+         -1.081353,
+         53.960195
+        ],
+        [
+         -1.081377,
+         53.960176
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "attributes": {
+      "MonUID": "MYO2076",
+      "RecordType": "MON",
+      "Name": "Church Street Roman Sewer",
+      "MonType": "SEWER",
+      "MI_PRINX": 2113,
+      "URL": "https://her.york.gov.uk/monument/MYO2076"
+     },
+     "geometry": {
+      "paths": [
+       [
+        [
+         -1.081109,
+         53.960077
+        ],
+        [
+         -1.080974,
+         53.960161
+        ]
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  "5": {
+   "info": {
+    "name": "Archaeological monuments (areas)",
+    "type": "Feature Layer",
+    "geometryType": "esriGeometryPolygon",
+    "maxRecordCount": 1000,
+    "fields": [
+     {
+      "name": "MonUID",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "RecordType",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Name",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "MonType",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "MI_PRINX",
+      "type": "esriFieldTypeOID"
+     },
+     {
+      "name": "Geom",
+      "type": "esriFieldTypeGeometry"
+     },
+     {
+      "name": "URL",
+      "type": "esriFieldTypeString"
+     }
+    ],
+    "advancedQueryCapabilities": {
+     "supportsPagination": true
+    }
+   },
+   "features": [
+    {
+     "attributes": {
+      "MonUID": "MYO1004",
+      "RecordType": "BLD",
+      "Name": "CHURCH OF ALL SAINTS PAVEMENT",
+      "MonType": "GRAVE SLAB; PARISH CHURCH; PARISH CHURCH; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; PARISH CHURCH; COMMEMORATIVE BRASS; COMMEMORATIVE BRASS; PARISH CHURCH; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; PARISH CHURCH; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; PARISH CHURCH; PARISH CHURCH; COMMEMORATIVE MONUMENT; PARISH CHURCH",
+      "MI_PRINX": 2,
+      "URL": "https://her.york.gov.uk/monument/MYO1004"
+     },
+     "geometry": {
+      "rings": [
+       [
+        [
+         -1.08092,
+         53.958179
+        ],
+        [
+         -1.080619,
+         53.958291
+        ],
+        [
+         -1.080619,
+         53.958297
+        ],
+        [
+         -1.080606,
+         53.958297
+        ],
+        [
+         -1.080603,
+         53.958285
+        ],
+        [
+         -1.080583,
+         53.958265
+        ],
+        [
+         -1.080573,
+         53.958269
+        ],
+        [
+         -1.080562,
+         53.95826
+        ],
+        [
+         -1.080572,
+         53.958256
+        ],
+        [
+         -1.080533,
+         53.958215
+        ],
+        [
+         -1.080523,
+         53.958221
+        ],
+        [
+         -1.080512,
+         53.95821
+        ],
+        [
+         -1.080525,
+         53.958206
+        ],
+        [
+         -1.080501,
+         53.958184
+        ],
+        [
+         -1.080489,
+         53.958187
+        ],
+        [
+         -1.080481,
+         53.958182
+        ],
+        [
+         -1.080549,
+         53.958157
+        ],
+        [
+         -1.080543,
+         53.95815
+        ],
+        [
+         -1.080555,
+         53.958145
+        ],
+        [
+         -1.080563,
+         53.958151
+        ],
+        [
+         -1.080611,
+         53.958137
+        ],
+        [
+         -1.080603,
+         53.958131
+        ],
+        [
+         -1.080618,
+         53.958126
+        ],
+        [
+         -1.080621,
+         53.95813
+        ],
+        [
+         -1.080661,
+         53.958117
+        ],
+        [
+         -1.080653,
+         53.95811
+        ],
+        [
+         -1.080666,
+         53.958104
+        ],
+        [
+         -1.080673,
+         53.958111
+        ],
+        [
+         -1.08071,
+         53.958099
+        ],
+        [
+         -1.080685,
+         53.95807
+        ],
+        [
+         -1.080667,
+         53.95807
+        ],
+        [
+         -1.080667,
+         53.958063
+        ],
+        [
+         -1.080682,
+         53.958064
+        ],
+        [
+         -1.080721,
+         53.95805
+        ],
+        [
+         -1.080721,
+         53.958043
+        ],
+        [
+         -1.080734,
+         53.958042
+        ],
+        [
+         -1.080734,
+         53.958046
+        ],
+        [
+         -1.080756,
+         53.958036
+        ],
+        [
+         -1.080783,
+         53.958062
+        ],
+        [
+         -1.0808,
+         53.958062
+        ],
+        [
+         -1.0808,
+         53.958076
+        ],
+        [
+         -1.080814,
+         53.958092
+        ],
+        [
+         -1.080826,
+         53.958088
+        ],
+        [
+         -1.080832,
+         53.958095
+        ],
+        [
+         -1.080839,
+         53.958091
+        ],
+        [
+         -1.080849,
+         53.958098
+        ],
+        [
+         -1.080842,
+         53.958103
+        ],
+        [
+         -1.080883,
+         53.958141
+        ],
+        [
+         -1.080889,
+         53.958137
+        ],
+        [
+         -1.080901,
+         53.958146
+        ],
+        [
+         -1.080889,
+         53.958148
+        ],
+        [
+         -1.08092,
+         53.958179
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "attributes": {
+      "MonUID": "MYO1004",
+      "RecordType": "BLD",
+      "Name": "CHURCH OF ALL SAINTS PAVEMENT",
+      "MonType": "GRAVE SLAB; PARISH CHURCH; PARISH CHURCH; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; PARISH CHURCH; COMMEMORATIVE BRASS; COMMEMORATIVE BRASS; PARISH CHURCH; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; PARISH CHURCH; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; COMMEMORATIVE MONUMENT; PARISH CHURCH; PARISH CHURCH; COMMEMORATIVE MONUMENT; PARISH CHURCH",
+      "MI_PRINX": 3,
+      "URL": "https://her.york.gov.uk/monument/MYO1004"
+     },
+     "geometry": {
+      "rings": [
+       [
+        [
+         -1.080603,
+         53.958292
+        ],
+        [
+         -1.080454,
+         53.958342
+        ],
+        [
+         -1.080294,
+         53.958234
+        ],
+        [
+         -1.080453,
+         53.958153
+        ],
+        [
+         -1.080453,
+         53.958152
+        ],
+        [
+         -1.080603,
+         53.958292
+        ]
+       ],
+       [
+        [
+         -1.080454,
+         53.958342
+        ],
+        [
+         -1.080454,
+         53.958342
+        ],
+        [
+         -1.080449,
+         53.958343
+        ],
+        [
+         -1.080454,
+         53.958342
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "attributes": {
+      "MonUID": "MYO104",
+      "RecordType": "MON",
+      "Name": "Siwards How",
+      "MonType": "BARROW; WINDMILL MOUND",
+      "MI_PRINX": 4,
+      "URL": "https://her.york.gov.uk/monument/MYO104"
+     },
+     "geometry": {
+      "rings": [
+       [
+        [
+         -1.054051,
+         53.950038
+        ],
+        [
+         -1.054146,
+         53.950115
+        ],
+        [
+         -1.054201,
+         53.950191
+        ],
+        [
+         -1.0542,
+         53.950248
+        ],
+        [
+         -1.054141,
+         53.950343
+        ],
+        [
+         -1.054035,
+         53.950395
+        ],
+        [
+         -1.05389,
+         53.950393
+        ],
+        [
+         -1.053754,
+         53.95034
+        ],
+        [
+         -1.053675,
+         53.950301
+        ],
+        [
+         -1.053652,
+         53.950244
+        ],
+        [
+         -1.053654,
+         53.950139
+        ],
+        [
+         -1.053688,
+         53.950078
+        ],
+        [
+         -1.053802,
+         53.950027
+        ],
+        [
+         -1.053899,
+         53.949999
+        ],
+        [
+         -1.054028,
+         53.950024
+        ],
+        [
+         -1.054051,
+         53.950038
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "attributes": {
+      "MonUID": "MYO167",
+      "RecordType": "MON",
+      "Name": "Fishponds Poppleton Moated Site",
+      "MonType": "SETTLEMENT; FIELD SYSTEM; DITCH; BANK (EARTHWORK); FISHPOND; MOAT; BUILDING PLATFORM",
+      "MI_PRINX": 28,
+      "URL": "https://her.york.gov.uk/monument/MYO167"
+     },
+     "geometry": {
+      "rings": [
+       [
+        [
+         -1.14076,
+         53.989588
+        ],
+        [
+         -1.140752,
+         53.989945
+        ],
+        [
+         -1.139526,
+         53.989936
+        ],
+        [
+         -1.139533,
+         53.989579
+        ],
+        [
+         -1.14076,
+         53.989588
+        ]
+       ]
+      ]
+     }
+    }
+   ]
+  }
+ }
+}

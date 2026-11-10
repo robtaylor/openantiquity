@@ -1,0 +1,2406 @@
+{
+ "recorded": "Atlas_of_Hillforts FeatureServer layer 0 on services1.arcgis.com, 2026-11-10. Six hillforts from query?where=1=1 (first three by OBJECTID) and from one query each for Scotland, Wales and Ireland, outSR=4326. Attributes that were null are left out.",
+ "layers": {
+  "0": {
+   "info": {
+    "name": "Hillforts",
+    "type": "Feature Layer",
+    "geometryType": "esriGeometryPoint",
+    "objectIdField": "OBJECTID",
+    "maxRecordCount": 2000,
+    "fields": [
+     {
+      "name": "OBJECTID",
+      "type": "esriFieldTypeOID"
+     },
+     {
+      "name": "Atlas_Number",
+      "type": "esriFieldTypeInteger"
+     },
+     {
+      "name": "Country_Code",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Country",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Site_Name",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Name",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Alternative_Name_s_",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Display_Name",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "HER",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "HER_Primary_Record_Number",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "HER_Second_Identifier",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "NMR_Record_Number",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "NMR_Monument_Number",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Scheduled_Monument_Number",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Summary_Description",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Boundary",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Coordinate_System",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "X_Coordinate",
+      "type": "esriFieldTypeInteger"
+     },
+     {
+      "name": "Y_Coordinate",
+      "type": "esriFieldTypeInteger"
+     },
+     {
+      "name": "Citizen_Science",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Individual_Group",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Reliability_of_Data",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Data_Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Reliability_of_Interpretation",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interpretation_Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "NGR",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "X__EPSG__3857_",
+      "type": "esriFieldTypeInteger"
+     },
+     {
+      "name": "Y__EPSG__3857_",
+      "type": "esriFieldTypeInteger"
+     },
+     {
+      "name": "Longitude",
+      "type": "esriFieldTypeDouble"
+     },
+     {
+      "name": "Latitude",
+      "type": "esriFieldTypeDouble"
+     },
+     {
+      "name": "Current_County_or_Unitary_Autho",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Historic_County",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Current_Parish_Community_Counci",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Monument_Condition__Extant",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Monument_Condition__Cropmark",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Monument_Condition__Likely_Dest",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Monument_Condition__Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Land_Use__Woodland",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Land_Use__Commercial_Forestry_P",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Land_Use__Parkland",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Land_Use__Pasture__Grazing_",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Land_Use__Arable",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Land_Use__Scrub_Bracken",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Land_Use__Bare_Outcrop",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Land_Use__Heather_Moorland",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Land_Use__Heath",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Land_Use__Built_up",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Land_Use__Coastal_Grassland",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Land_Use__Other",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Land_Use__Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Hillfort_Type__Contour_Fort",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Hillfort_Type__Partial_Contour_",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Hillfort_Type__Promontory_Fort",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Hillfort_Type__Hillslope_Fort",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Hillfort_Type__Level_Terrain_Fo",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Hillfort_Type__Marsh_Fort",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Hillfort_Type__Multiple_Enclosu",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Hillfort_Type__Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Topographic_Position__Hilltop",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Topographic_Position__Coastal_P",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Topographic_Position__Inland_Pr",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Topographic_Position__Valley_Bo",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Topographic_Position__Knoll_Hil",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Topographic_Position__Ridge",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Topographic_Position__Cliff_Pla",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Topographic_Position__Hillslope",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Topographic_Position__Lowland",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Topographic_Position__Spur",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Topographic_Position__Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Dominant_Topographic_Feature",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Aspect__North",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Aspect__Northeast",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Aspect__East",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Aspect__Southeast",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Aspect__South",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Aspect__Southwest",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Aspect__West",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Aspect__Northwest",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Aspect__Level",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Altitude__m_",
+      "type": "esriFieldTypeDouble"
+     },
+     {
+      "name": "Boundary_Type",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Boundary_Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Second_Country",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Second_HER",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Second_HER_Primary_Record_Numbe",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Second_Current_County_or_Unitar",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Second_Historic_County",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Second_Current_Parish_Community",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Dating_Evidence__Pre_1200BC",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Dating_Evidence__1200BC___800BC",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Dating_Evidence__800BC___400BC",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Dating_Evidence__400BC___AD50",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Dating_Evidence__AD50___AD400",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Dating_Evidence__AD400___AD800",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Dating_Evidence__Post_AD800",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Dating_Evidence__Unknown",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Dating_Evidence__Reliability",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Dating_Evidence__Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Pre_Hillfort_Activity",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Pre_Hillfort_Activity_Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Post_Hillfort_Activity",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Post_Hillfort_Activity_Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Investigations_Summary",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Summary",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Water_Source__None",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Water_Source__Spring",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Water_Source__Stream",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Water_Source__Pool",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Water_Source__Flush",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Water_Source__Well_Cistern",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Water_Source__Other",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Water_Source__Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Surface__No_Known_Feat",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Surface__Round_Stone_S",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Surface__Rectangular_S",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Surface__Curvilinear_P",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Surface__Other_Roundho",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Surface__Pits",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Surface__Quarry_Hollow",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Surface__Other",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Surface_Evidence__Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Excavation__No_Known_E",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Excavation__Pits",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Excavation__Postholes",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Excavation__Roundhouse",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Excavation__Rectangula",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Excavation__Roads_Trac",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Excavation__Quarry_Hol",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Excavation__Other",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Excavation__Nothing_Fo",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Excavation__Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Geophysics__No_Known_G",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Geophysics__Pits",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Geophysics__Roundhouse",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Geophysics__Rectangula",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Geophysics__Roads_Trac",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Geophysics__Quarry_Hol",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Geophysics__Other",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Geophysics__Nothing_Fo",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Geophysics__Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Finds__No_Known_Finds",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Finds__Pottery",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Finds__Metal",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Finds__Metalworking",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Finds__Human_Bones",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Finds__Animal_Bones",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Finds__Lithics",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Finds__Evironmental",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Finds__Other",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Finds__Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Aerial__APs_Not_Checke",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Aerial__None",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Aerial__Roundhouses",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Aerial__Rectangular_St",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior__Aerial_Pits",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Aerial__Postholes",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Aerial__Roads_Tracks",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Aerial__Other",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Interior_Aerial__Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Total_Number_of_Breaks_Through_",
+      "type": "esriFieldTypeInteger"
+     },
+     {
+      "name": "Entrances_Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Number_of_Possible_Original_Ent",
+      "type": "esriFieldTypeInteger"
+     },
+     {
+      "name": "Original_Entrances_Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Guard_Chambers",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Chevaux_de_Frise",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Chevaux_de_Frise_Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Entrances_Summary",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Works_Summary",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosed_Area_1__ha_",
+      "type": "esriFieldTypeDouble"
+     },
+     {
+      "name": "Enclosed_Area_2__ha_",
+      "type": "esriFieldTypeDouble"
+     },
+     {
+      "name": "Enclosed_Area_3__ha_",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosed_Area_4__ha_",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Total_Enclosed_Area__ha_",
+      "type": "esriFieldTypeDouble"
+     },
+     {
+      "name": "Total_Footprint_Area__ha_",
+      "type": "esriFieldTypeDouble"
+     },
+     {
+      "name": "Multi_period_Enclosure_System",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Works_Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Ramparts_Form_a_Complete_Circui",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Ramparts_Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Number_of_Ramparts",
+      "type": "esriFieldTypeInteger"
+     },
+     {
+      "name": "Number_of_Ramparts_NE_Quadrant",
+      "type": "esriFieldTypeInteger"
+     },
+     {
+      "name": "Number_of_Ramparts_SE_Quadrant",
+      "type": "esriFieldTypeInteger"
+     },
+     {
+      "name": "Number_of_Ramparts_SW_Quadrant",
+      "type": "esriFieldTypeInteger"
+     },
+     {
+      "name": "Number_of_Ramparts_NW_Quadrant",
+      "type": "esriFieldTypeInteger"
+     },
+     {
+      "name": "Number_of_Ramparts_by_Quadrant_",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Current_Morphology__Partial_Uni",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Current_Morphology__Univallate",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Current_Morphology__Partial_Biv",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Current_Morphology__Bivallate",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Current_Morphology__Partial_Mul",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Current_Morphology__Multivallat",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Current_Morphology__Unknown",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Detailed_Morphology__Partial_Un",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Detailed_Morphology__Univallate",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Detailed_Morphology__Partial_Bi",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Detailed_Morphology__Bivallate",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Detailed_Morphology__Partial_Mu",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Detailed_Morphology__Multivalla",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Surface__None",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Surface__Earthen_Bank",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Surface__Stone_Wall",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Surface__Rubble",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Surface__Wall_walk",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Surface__Evidence_of_",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Surface__Vitrificatio",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Surface__Other_Burnin",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Surface__Palisade",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Surface__Counter_Scar",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Surface__Berm",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Surface__Unfinished",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Surface__Other",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Surface__Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Excavated__None",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Excavated__Earthen_Ba",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Excavated__Stone_Wall",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Excavated__Murus_Dupl",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Excavated__Timber_fra",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Excavated__Timber_lac",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Excavated__Vitrificat",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Excavated__Other_Burn",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Excavated__Palisade",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Excavated__Counter_Sc",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Excavated__Berm",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Excavated__Unfinished",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Excavated__No_Known_E",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Enclosing_Excavated__Other",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Excavated_Evidence__Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Gang_Working",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Gang_Working_Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Ditches",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Number_of_Ditches",
+      "type": "esriFieldTypeInteger"
+     },
+     {
+      "name": "Ditches_Comments",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Annex",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Annex_Summary",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "References_",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Atlas_URL",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Wikidata_URL",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "NMR_Resource",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "NMR_URL",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "HER_Resource",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "HER_URL",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Dating_Evidence",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Investigations",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Entrances",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Record_URL",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "x",
+      "type": "esriFieldTypeDouble"
+     },
+     {
+      "name": "y",
+      "type": "esriFieldTypeDouble"
+     },
+     {
+      "name": "Image",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "LiDAR",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Image_Caption",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Image_Credit",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Image_HTML",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Image_URL",
+      "type": "esriFieldTypeString"
+     },
+     {
+      "name": "Atlas_ID",
+      "type": "esriFieldTypeString"
+     }
+    ],
+    "advancedQueryCapabilities": {
+     "supportsPagination": true
+    }
+   },
+   "features": [
+    {
+     "attributes": {
+      "OBJECTID": 1,
+      "Atlas_Number": 1,
+      "Country_Code": "EN",
+      "Country": "England",
+      "Site_Name": "EN0001 Aconbury Camp, Herefordshire",
+      "Name": "Aconbury Camp",
+      "Alternative_Name_s_": "Aconbury Beacon",
+      "Display_Name": "Aconbury Camp, Herefordshire (Aconbury Beacon)",
+      "HER": "Herefordshire",
+      "HER_Primary_Record_Number": "MHE413",
+      "HER_Second_Identifier": "910",
+      "NMR_Record_Number": "SO 53 SW 1",
+      "NMR_Monument_Number": "110371",
+      "Scheduled_Monument_Number": "1001754",
+      "Summary_Description": "Large, wooded, univallate, partial contour hillfort located on Aconbury HIll, following the contours but sloping to the W, and on the interfluve above the Rivers Wye and Severn. Precipitous slopes to the W and N. Rampart surrounds camp, with a surviving main ditch to the S and E, elsewhere not visible, although it is possible that the steep slopes on the N and W precluded a ditch here. Internal area c. 7.1ha and footprint 9.3ha. The rampart rampart reaches up to 4.5m in the S where the ditch is up to 1.5m deep and is impressive on the W overlooking steep slopes. Possible internal revetments within ramparts. Berm on N and W. Internal quarry scoops, especially on the S and N side. Slight investigations 1948-51 found occupation similar to Sutton Walls hillfort (Atlas No 0031) and Dinedor Camp (Atlas No 0013), with pottery similar to the former site. Two original entrances and four modern gaps. Occupied during the Civil War in 1642 and 1645. Mixed woodland since 19th century with internal tracks. Bracken, bramble, sapling and coppice re-growth. Visitor erosion of paths where cross rampart, with horse and quad bikes. Some quarrying. On 1st Ed. OS map (1888).",
+      "Boundary": "No",
+      "Coordinate_System": "OSGB36",
+      "X_Coordinate": 350350,
+      "Y_Coordinate": 233050,
+      "Citizen_Science": "No",
+      "Reliability_of_Data": "Confirmed",
+      "Reliability_of_Interpretation": "Confirmed",
+      "NGR": "SO 503330",
+      "X__EPSG__3857_": -303295,
+      "Y__EPSG__3857_": 6798973,
+      "Longitude": -2.724548210189332,
+      "Latitude": 51.99362825518932,
+      "Current_County_or_Unitary_Autho": "Herefordshire",
+      "Historic_County": "Herefordshire",
+      "Current_Parish_Community_Counci": "Aconbury",
+      "Monument_Condition__Extant": "Yes",
+      "Monument_Condition__Cropmark": "No",
+      "Monument_Condition__Likely_Dest": "No",
+      "Monument_Condition__Comments": "Main ditch gone on N and W sides. Visitor erosion of paths where cross rampart, with horse and quad bikes. Vegetation re-growth. Some quarrying.",
+      "Land_Use__Woodland": "Yes",
+      "Land_Use__Commercial_Forestry_P": "No",
+      "Land_Use__Parkland": "No",
+      "Land_Use__Pasture__Grazing_": "No",
+      "Land_Use__Arable": "No",
+      "Land_Use__Scrub_Bracken": "Yes",
+      "Land_Use__Bare_Outcrop": "No",
+      "Land_Use__Heather_Moorland": "No",
+      "Land_Use__Heath": "No",
+      "Land_Use__Built_up": "No",
+      "Land_Use__Coastal_Grassland": "No",
+      "Land_Use__Other": "Yes",
+      "Land_Use__Comments": "Mixed woodland since 19th century with internal tracks. Bracken, bramble, sapling and coppice re-growth. Some quarrying.",
+      "Hillfort_Type__Contour_Fort": "No",
+      "Hillfort_Type__Partial_Contour_": "Yes",
+      "Hillfort_Type__Promontory_Fort": "Yes",
+      "Hillfort_Type__Hillslope_Fort": "No",
+      "Hillfort_Type__Level_Terrain_Fo": "No",
+      "Hillfort_Type__Marsh_Fort": "No",
+      "Hillfort_Type__Multiple_Enclosu": "No",
+      "Hillfort_Type__Comments": "Partial contour fort following the natural contours and which also appears to cut off a promontory, but sloping to the W. Located above the River Wye and Hereford to the E and the valley of the Worm Brook to the W, on the interfluve between the Rivers Wye and Severn catchments. Precipitous slopes to the W and N.",
+      "Topographic_Position__Hilltop": "Yes",
+      "Topographic_Position__Coastal_P": "No",
+      "Topographic_Position__Inland_Pr": "Yes",
+      "Topographic_Position__Valley_Bo": "No",
+      "Topographic_Position__Knoll_Hil": "No",
+      "Topographic_Position__Ridge": "No",
+      "Topographic_Position__Cliff_Pla": "No",
+      "Topographic_Position__Hillslope": "No",
+      "Topographic_Position__Lowland": "No",
+      "Topographic_Position__Spur": "No",
+      "Dominant_Topographic_Feature": "Hill top, part promontory.",
+      "Aspect__North": "No",
+      "Aspect__Northeast": "No",
+      "Aspect__East": "No",
+      "Aspect__Southeast": "No",
+      "Aspect__South": "No",
+      "Aspect__Southwest": "No",
+      "Aspect__West": "Yes",
+      "Aspect__Northwest": "No",
+      "Aspect__Level": "No",
+      "Altitude__m_": 276,
+      "Dating_Evidence__Pre_1200BC": "No",
+      "Dating_Evidence__1200BC___800BC": "No",
+      "Dating_Evidence__800BC___400BC": "Yes",
+      "Dating_Evidence__400BC___AD50": "Yes",
+      "Dating_Evidence__AD50___AD400": "Yes",
+      "Dating_Evidence__AD400___AD800": "No",
+      "Dating_Evidence__Post_AD800": "No",
+      "Dating_Evidence__Unknown": "No",
+      "Dating_Evidence__Reliability": "C - Low",
+      "Dating_Evidence__Comments": "The finding of Iron Age and Roman pottery suggests late Iron Age to Roman period occupation. Sherds similar to Sutton Walls (Atlas No 0031).",
+      "Pre_Hillfort_Activity": "No",
+      "Post_Hillfort_Activity": "Yes",
+      "Post_Hillfort_Activity_Comments": "Evidence of Civil War occupation and possible damage.",
+      "Investigations_Summary": "In Aubrey's Monumenta Britannica (1665-1693). On 1st Ed. OS map (1888). Surface examination 1948-51 as part of wider investigations by Kenyon (1953) following Sutton Walls excavations. Herefordshire Council survey 2012.",
+      "Interior_Summary": "Little information about interior was gleaned from the investigations, but Kenyon suggested that occupation of the site was similar to that found at Sutton Walls and Dinedor Camp. Internal quarry scoops, especially on the N and S sides",
+      "Water_Source__None": "Yes",
+      "Water_Source__Spring": "No",
+      "Water_Source__Stream": "No",
+      "Water_Source__Pool": "No",
+      "Water_Source__Flush": "No",
+      "Water_Source__Well_Cistern": "No",
+      "Water_Source__Other": "No",
+      "Water_Source__Comments": "Spring 0.3km located outside the hillfort",
+      "Interior_Surface__No_Known_Feat": "No",
+      "Interior_Surface__Round_Stone_S": "No",
+      "Interior_Surface__Rectangular_S": "No",
+      "Interior_Surface__Curvilinear_P": "No",
+      "Interior_Surface__Other_Roundho": "No",
+      "Interior_Surface__Pits": "No",
+      "Interior_Surface__Quarry_Hollow": "Yes",
+      "Interior_Surface__Other": "No",
+      "Surface_Evidence__Comments": "Little information is available from surface evidence, but there are internal quarry scoops, especially on the N and S sides.",
+      "Interior_Excavation__No_Known_E": "Yes",
+      "Interior_Excavation__Pits": "No",
+      "Interior_Excavation__Postholes": "No",
+      "Interior_Excavation__Roundhouse": "No",
+      "Interior_Excavation__Rectangula": "No",
+      "Interior_Excavation__Roads_Trac": "No",
+      "Interior_Excavation__Quarry_Hol": "No",
+      "Interior_Excavation__Other": "No",
+      "Interior_Excavation__Nothing_Fo": "No",
+      "Interior_Geophysics__No_Known_G": "Yes",
+      "Interior_Geophysics__Pits": "No",
+      "Interior_Geophysics__Roundhouse": "No",
+      "Interior_Geophysics__Rectangula": "No",
+      "Interior_Geophysics__Roads_Trac": "No",
+      "Interior_Geophysics__Quarry_Hol": "No",
+      "Interior_Geophysics__Other": "No",
+      "Interior_Geophysics__Nothing_Fo": "No",
+      "Finds__No_Known_Finds": "No",
+      "Finds__Pottery": "Yes",
+      "Finds__Metal": "No",
+      "Finds__Metalworking": "No",
+      "Finds__Human_Bones": "No",
+      "Finds__Animal_Bones": "No",
+      "Finds__Lithics": "No",
+      "Finds__Evironmental": "No",
+      "Finds__Other": "No",
+      "Finds__Comments": "Quantity of Iron Age sherds similar to those found at Sutton Walls, with possible Roman sherds.",
+      "Interior_Aerial__APs_Not_Checke": "Yes",
+      "Interior_Aerial__None": "No",
+      "Interior_Aerial__Roundhouses": "No",
+      "Interior_Aerial__Rectangular_St": "No",
+      "Interior__Aerial_Pits": "No",
+      "Interior_Aerial__Postholes": "No",
+      "Interior_Aerial__Roads_Tracks": "No",
+      "Interior_Aerial__Other": "No",
+      "Total_Number_of_Breaks_Through_": 6,
+      "Entrances_Comments": "Two original and four modern gaps.",
+      "Number_of_Possible_Original_Ent": 2,
+      "Original_Entrances_Comments": "Two original inturned entrances at SE and SW corners. Probably modern entrances to S and N.",
+      "Guard_Chambers": "No",
+      "Chevaux_de_Frise": "No",
+      "Entrances_Summary": "Two original entrances; the SE inturned. The SW is more complex, where the S rampart curves behind the W rampart, which itself extends S, so increasing the nature of the defences of what is possibly the principal entrance. There is a possible external ramp.",
+      "Enclosing_Works_Summary": "Univallate hillfort with complete circuit, but the ditch is only visible on S and E sides, destroyed, or never built, elsewhere. The rampart reaches up to 4.5m high to S, where ditch to 1.5m, but only 0.5m in W.",
+      "Enclosed_Area_1__ha_": 7.1,
+      "Total_Enclosed_Area__ha_": 7.1,
+      "Total_Footprint_Area__ha_": 9.3,
+      "Multi_period_Enclosure_System": "No",
+      "Enclosing_Works_Comments": "Univallate hillfort with complete circuit.",
+      "Ramparts_Form_a_Complete_Circui": "Yes",
+      "Ramparts_Comments": "Single rampart continues around circuit.",
+      "Number_of_Ramparts": 1,
+      "Number_of_Ramparts_NE_Quadrant": 1,
+      "Number_of_Ramparts_SE_Quadrant": 1,
+      "Number_of_Ramparts_SW_Quadrant": 1,
+      "Number_of_Ramparts_NW_Quadrant": 1,
+      "Current_Morphology__Partial_Uni": "No",
+      "Current_Morphology__Univallate": "Yes",
+      "Current_Morphology__Partial_Biv": "No",
+      "Current_Morphology__Bivallate": "No",
+      "Current_Morphology__Partial_Mul": "No",
+      "Current_Morphology__Multivallat": "No",
+      "Current_Morphology__Unknown": "No",
+      "Detailed_Morphology__Partial_Un": "No",
+      "Detailed_Morphology__Univallate": "No",
+      "Detailed_Morphology__Partial_Bi": "No",
+      "Detailed_Morphology__Bivallate": "No",
+      "Detailed_Morphology__Partial_Mu": "No",
+      "Detailed_Morphology__Multivalla": "No",
+      "Enclosing_Surface__None": "No",
+      "Enclosing_Surface__Earthen_Bank": "Yes",
+      "Enclosing_Surface__Stone_Wall": "No",
+      "Enclosing_Surface__Rubble": "No",
+      "Enclosing_Surface__Wall_walk": "No",
+      "Enclosing_Surface__Evidence_of_": "No",
+      "Enclosing_Surface__Vitrificatio": "No",
+      "Enclosing_Surface__Other_Burnin": "No",
+      "Enclosing_Surface__Palisade": "No",
+      "Enclosing_Surface__Counter_Scar": "No",
+      "Enclosing_Surface__Berm": "Yes",
+      "Enclosing_Surface__Unfinished": "No",
+      "Enclosing_Surface__Other": "Yes",
+      "Enclosing_Surface__Comments": "Little surface evidence of features and the bank is possibly earthen. A berm exists to the N and W, created at the base of the rampart. Possible internal revetments were found within the ramparts.",
+      "Enclosing_Excavated__None": "No",
+      "Enclosing_Excavated__Earthen_Ba": "No",
+      "Enclosing_Excavated__Stone_Wall": "No",
+      "Enclosing_Excavated__Murus_Dupl": "No",
+      "Enclosing_Excavated__Timber_fra": "No",
+      "Enclosing_Excavated__Timber_lac": "No",
+      "Enclosing_Excavated__Vitrificat": "No",
+      "Enclosing_Excavated__Other_Burn": "No",
+      "Enclosing_Excavated__Palisade": "No",
+      "Enclosing_Excavated__Counter_Sc": "No",
+      "Enclosing_Excavated__Berm": "No",
+      "Enclosing_Excavated__Unfinished": "No",
+      "Enclosing_Excavated__No_Known_E": "No",
+      "Enclosing_Excavated__Other": "No",
+      "Gang_Working": "No",
+      "Ditches": "Yes",
+      "Number_of_Ditches": 1,
+      "Ditches_Comments": "Main ditch only present on the S and E sides, elsewhere destroyed or never constructed.",
+      "Annex": "No",
+      "References_": "Dorling, P. and Wigley, A. 2012. Assessment of the archaeological and conservation status of major later prehistoric enclosures in Herefordshire and Shropshire, EH PNUM, Version 3.2, Hereford and Shrewsbury: Herefordshire Council/Shropshire Council. \r\rKenyon, K.M. 1953. Excavations at Sutton Walls, Herefordshire 1948-51, Archaeol J, 110, 25-6.\r\rPage, W. 1908. The Victoria County History of the County of Herefordshire, 1, 201-2, London: St Catherine Press.\r\rRCHME 1930. An Inventory of the Historical Monuments in Herefordshire, 1, SW, 13-14, London: HMSO. \r\rStanford, S. C. (ed.) 1976. Guide to Prehistoric and Roman Sites in Herefordshire. Woolhope Naturalists' Field Club Archaeological Research Section, 12-13.",
+      "Atlas_URL": "https://experience.arcgis.com/experience/40ccda26452f427a9f081506958e1d81/#data_s=id%3Aacf7b6cc651c4bc1a392992140d959ca-1cbc55d5d6c9413a8e28ea115b03f70f%3A1&widget_23=active_datasource_id:acf7b6cc651c4bc1a392992140d959ca,center:-303295%2C6798973%2C102100,scale:10000,rotation:0",
+      "Wikidata_URL": "https://www.wikidata.org/entity/Q31113987",
+      "Dating_Evidence": "Artefactual",
+      "Investigations": "1st Identified Map Depiction (1888); Other (1951); Other (2012); 1st Identified Written Reference (1665-1693)",
+      "Entrances": "In-turned (South east); In-turned (South west); Other Forms (South west)",
+      "Record_URL": "https://hillforts.arch.ox.ac.uk/records/EN0001.html",
+      "x": -303295.3194000013,
+      "y": 6798973.4432,
+      "Image": "EN0001",
+      "LiDAR": "Yes",
+      "Image_Caption": "LiDAR 1m DTM Hillshade",
+      "Image_Credit": "Environment Agency copyright and/or database right 2022. All rights reserved.",
+      "Image_URL": "https://hillforts.arch.ox.ac.uk/lidar/EN0001.png",
+      "Atlas_ID": "EN0001"
+     },
+     "geometry": {
+      "x": -2.7245482099999663,
+      "y": 51.99362825500004
+     }
+    },
+    {
+     "attributes": {
+      "OBJECTID": 2,
+      "Atlas_Number": 2,
+      "Country_Code": "EN",
+      "Country": "England",
+      "Site_Name": "EN0002 Bach Camp, Herefordshire",
+      "Name": "Bach Camp",
+      "Display_Name": "Bach Camp, Herefordshire",
+      "HER": "Herefordshire",
+      "HER_Primary_Record_Number": "MHE52",
+      "HER_Second_Identifier": "344",
+      "NMR_Record_Number": "SO 56 SW 3",
+      "NMR_Monument_Number": "110884",
+      "Scheduled_Monument_Number": "1007316",
+      "Summary_Description": "Univallate, contour hillfort located on summit of rounded hill at watershed of Whyle Brook and tributary and overlooking confluence, with River Lugg valley to W. Steep surrounding slopes. Irregular shaped with area c. 4.1ha, defined differentially by single rampart to 5.1m high, with part-buried outer ditch and counterscarp bank to N, E and possibly S, rising to 1.8m. Counterscarp bank is complex and difficult to unravel and probably also existed on W. Mostly removed by cultivation and on E merges into a berm before reappearing; possibly result of landslip or not finished. Three entrances, simple gap possibly modern to N, that to NW complex with possible hornwork, and that on S inturned. Potatoes once grown on the site, but now under management agreement. Natural and animal erosion with sheep scrapes. General improvement as part of management agreements. Public Right of Way and permissive paths. Past tree removal is causing erosion around the stumps. Undated. On 1st Ed. OS map (1888).",
+      "Boundary": "No",
+      "Coordinate_System": "OSGB36",
+      "X_Coordinate": 354700,
+      "Y_Coordinate": 260200,
+      "Citizen_Science": "No",
+      "Reliability_of_Data": "Confirmed",
+      "Reliability_of_Interpretation": "Confirmed",
+      "NGR": "SO 547602",
+      "X__EPSG__3857_": -296646,
+      "Y__EPSG__3857_": 6843289,
+      "Longitude": -2.6648189224193426,
+      "Latitude": 52.238082103131894,
+      "Current_County_or_Unitary_Autho": "Herefordshire",
+      "Historic_County": "Herefordshire",
+      "Current_Parish_Community_Counci": "Kimbolton",
+      "Monument_Condition__Extant": "Yes",
+      "Monument_Condition__Cropmark": "No",
+      "Monument_Condition__Likely_Dest": "No",
+      "Monument_Condition__Comments": "Natural and animal erosion with sheep scrapes. General improvement as part of management agreements. Public Right of Way and permissive paths. Past tree removal is causing erosion around the stumps. Site now under management agreements.",
+      "Land_Use__Woodland": "No",
+      "Land_Use__Commercial_Forestry_P": "No",
+      "Land_Use__Parkland": "No",
+      "Land_Use__Pasture__Grazing_": "Yes",
+      "Land_Use__Arable": "No",
+      "Land_Use__Scrub_Bracken": "Yes",
+      "Land_Use__Bare_Outcrop": "No",
+      "Land_Use__Heather_Moorland": "No",
+      "Land_Use__Heath": "No",
+      "Land_Use__Built_up": "No",
+      "Land_Use__Coastal_Grassland": "No",
+      "Land_Use__Other": "No",
+      "Land_Use__Comments": "Potatoes once grown on the site, but vegetation now managed.",
+      "Hillfort_Type__Contour_Fort": "Yes",
+      "Hillfort_Type__Partial_Contour_": "No",
+      "Hillfort_Type__Promontory_Fort": "No",
+      "Hillfort_Type__Hillslope_Fort": "No",
+      "Hillfort_Type__Level_Terrain_Fo": "No",
+      "Hillfort_Type__Marsh_Fort": "No",
+      "Hillfort_Type__Multiple_Enclosu": "No",
+      "Hillfort_Type__Comments": "Univallate, contour hillfort located on summit of rounded hill at watershed of Whyle Brook and tributary and overlooking confluence, with River Lugg valley to W. Steep surrounding slopes.",
+      "Topographic_Position__Hilltop": "Yes",
+      "Topographic_Position__Coastal_P": "No",
+      "Topographic_Position__Inland_Pr": "No",
+      "Topographic_Position__Valley_Bo": "No",
+      "Topographic_Position__Knoll_Hil": "No",
+      "Topographic_Position__Ridge": "No",
+      "Topographic_Position__Cliff_Pla": "No",
+      "Topographic_Position__Hillslope": "No",
+      "Topographic_Position__Lowland": "No",
+      "Topographic_Position__Spur": "Yes",
+      "Dominant_Topographic_Feature": "Hill top spur.",
+      "Aspect__North": "No",
+      "Aspect__Northeast": "No",
+      "Aspect__East": "No",
+      "Aspect__Southeast": "No",
+      "Aspect__South": "No",
+      "Aspect__Southwest": "No",
+      "Aspect__West": "No",
+      "Aspect__Northwest": "No",
+      "Aspect__Level": "Yes",
+      "Altitude__m_": 150,
+      "Dating_Evidence__Pre_1200BC": "No",
+      "Dating_Evidence__1200BC___800BC": "No",
+      "Dating_Evidence__800BC___400BC": "No",
+      "Dating_Evidence__400BC___AD50": "No",
+      "Dating_Evidence__AD50___AD400": "No",
+      "Dating_Evidence__AD400___AD800": "No",
+      "Dating_Evidence__Post_AD800": "No",
+      "Dating_Evidence__Unknown": "Yes",
+      "Dating_Evidence__Reliability": "D - None",
+      "Dating_Evidence__Comments": "None",
+      "Pre_Hillfort_Activity": "No",
+      "Post_Hillfort_Activity": "No",
+      "Investigations_Summary": "On 1st Ed. OS map (1888). Herefordshire Aerial Archaeological Survey 2002-2006. Herefordshire Council survey 2012.",
+      "Interior_Summary": "None",
+      "Water_Source__None": "Yes",
+      "Water_Source__Spring": "No",
+      "Water_Source__Stream": "No",
+      "Water_Source__Pool": "No",
+      "Water_Source__Flush": "No",
+      "Water_Source__Well_Cistern": "No",
+      "Water_Source__Other": "No",
+      "Water_Source__Comments": "Stream 0.1km located outside hillfort",
+      "Interior_Surface__No_Known_Feat": "Yes",
+      "Interior_Surface__Round_Stone_S": "No",
+      "Interior_Surface__Rectangular_S": "No",
+      "Interior_Surface__Curvilinear_P": "No",
+      "Interior_Surface__Other_Roundho": "No",
+      "Interior_Surface__Pits": "No",
+      "Interior_Surface__Quarry_Hollow": "No",
+      "Interior_Surface__Other": "No",
+      "Interior_Excavation__No_Known_E": "Yes",
+      "Interior_Excavation__Pits": "No",
+      "Interior_Excavation__Postholes": "No",
+      "Interior_Excavation__Roundhouse": "No",
+      "Interior_Excavation__Rectangula": "No",
+      "Interior_Excavation__Roads_Trac": "No",
+      "Interior_Excavation__Quarry_Hol": "No",
+      "Interior_Excavation__Other": "No",
+      "Interior_Excavation__Nothing_Fo": "No",
+      "Interior_Geophysics__No_Known_G": "Yes",
+      "Interior_Geophysics__Pits": "No",
+      "Interior_Geophysics__Roundhouse": "No",
+      "Interior_Geophysics__Rectangula": "No",
+      "Interior_Geophysics__Roads_Trac": "No",
+      "Interior_Geophysics__Quarry_Hol": "No",
+      "Interior_Geophysics__Other": "No",
+      "Interior_Geophysics__Nothing_Fo": "No",
+      "Finds__No_Known_Finds": "Yes",
+      "Finds__Pottery": "No",
+      "Finds__Metal": "No",
+      "Finds__Metalworking": "No",
+      "Finds__Human_Bones": "No",
+      "Finds__Animal_Bones": "No",
+      "Finds__Lithics": "No",
+      "Finds__Evironmental": "No",
+      "Finds__Other": "No",
+      "Interior_Aerial__APs_Not_Checke": "Yes",
+      "Interior_Aerial__None": "No",
+      "Interior_Aerial__Roundhouses": "No",
+      "Interior_Aerial__Rectangular_St": "No",
+      "Interior__Aerial_Pits": "No",
+      "Interior_Aerial__Postholes": "No",
+      "Interior_Aerial__Roads_Tracks": "No",
+      "Interior_Aerial__Other": "No",
+      "Total_Number_of_Breaks_Through_": 3,
+      "Entrances_Comments": "N entrance damaged by wagon access and possibly modern.",
+      "Number_of_Possible_Original_Ent": 2,
+      "Original_Entrances_Comments": "S entrance original, that on the NW possibly  original and more complex with dry-stone revetment.",
+      "Guard_Chambers": "No",
+      "Chevaux_de_Frise": "No",
+      "Entrances_Summary": "Entrances difficult to unravel. The S entrance is inturned and slightly offset. That on the NW is more complex, although a simple gap in the inner rampart, it is cut back to form a broad inner traverse with ditch and possible hornwork. There has also been quarrying here. N entrance damaged by wagon access and possibly modern.",
+      "Enclosing_Works_Summary": "Defined differentially by single rampart to 5.1m high, with part-buried outer ditch and counterscarp bank to N, E and possibly S, rising to 1.8m. Counterscarp bank is complex and difficult to unravel and probably also existed on W. Mostly removed by cultivation and on E merges into a berm before re-appearing; possibly result of landslip or not finished.",
+      "Enclosed_Area_1__ha_": 4.1,
+      "Total_Enclosed_Area__ha_": 4.1,
+      "Multi_period_Enclosure_System": "No",
+      "Ramparts_Form_a_Complete_Circui": "Yes",
+      "Ramparts_Comments": "The ramparts are irregular which makes assessment difficult, but generally complete the circuit.",
+      "Number_of_Ramparts": 1,
+      "Number_of_Ramparts_NE_Quadrant": 1,
+      "Number_of_Ramparts_SE_Quadrant": 1,
+      "Number_of_Ramparts_SW_Quadrant": 1,
+      "Number_of_Ramparts_NW_Quadrant": 1,
+      "Current_Morphology__Partial_Uni": "No",
+      "Current_Morphology__Univallate": "Yes",
+      "Current_Morphology__Partial_Biv": "No",
+      "Current_Morphology__Bivallate": "No",
+      "Current_Morphology__Partial_Mul": "No",
+      "Current_Morphology__Multivallat": "No",
+      "Current_Morphology__Unknown": "No",
+      "Detailed_Morphology__Partial_Un": "No",
+      "Detailed_Morphology__Univallate": "No",
+      "Detailed_Morphology__Partial_Bi": "No",
+      "Detailed_Morphology__Bivallate": "No",
+      "Detailed_Morphology__Partial_Mu": "No",
+      "Detailed_Morphology__Multivalla": "No",
+      "Enclosing_Surface__None": "No",
+      "Enclosing_Surface__Earthen_Bank": "Yes",
+      "Enclosing_Surface__Stone_Wall": "No",
+      "Enclosing_Surface__Rubble": "No",
+      "Enclosing_Surface__Wall_walk": "No",
+      "Enclosing_Surface__Evidence_of_": "No",
+      "Enclosing_Surface__Vitrificatio": "No",
+      "Enclosing_Surface__Other_Burnin": "No",
+      "Enclosing_Surface__Palisade": "No",
+      "Enclosing_Surface__Counter_Scar": "Yes",
+      "Enclosing_Surface__Berm": "Yes",
+      "Enclosing_Surface__Unfinished": "Yes",
+      "Enclosing_Surface__Other": "No",
+      "Enclosing_Surface__Comments": "Bank possibly earthen. Counterscarp bank complex and difficult to unravel and probably also existed on W. Mostly removed by cultivation, and on E merges into a berm before reappearing; possibly result of landslip or not finished.",
+      "Enclosing_Excavated__None": "No",
+      "Enclosing_Excavated__Earthen_Ba": "No",
+      "Enclosing_Excavated__Stone_Wall": "No",
+      "Enclosing_Excavated__Murus_Dupl": "No",
+      "Enclosing_Excavated__Timber_fra": "No",
+      "Enclosing_Excavated__Timber_lac": "No",
+      "Enclosing_Excavated__Vitrificat": "No",
+      "Enclosing_Excavated__Other_Burn": "No",
+      "Enclosing_Excavated__Palisade": "No",
+      "Enclosing_Excavated__Counter_Sc": "No",
+      "Enclosing_Excavated__Berm": "No",
+      "Enclosing_Excavated__Unfinished": "No",
+      "Enclosing_Excavated__No_Known_E": "Yes",
+      "Enclosing_Excavated__Other": "No",
+      "Excavated_Evidence__Comments": "None",
+      "Gang_Working": "No",
+      "Ditches": "Yes",
+      "Number_of_Ditches": 1,
+      "Annex": "No",
+      "References_": "Dorling, P. and Wigley, A. 2012. Assessment of the archaeological and conservation status of major later prehistoric enclosures in Herefordshire and Shropshire, EH PNUM, Version 3.2, Hereford and Shrewsbury: Herefordshire Council/Shropshire Council. \r\rPage, W. ed. 1908.The Victoria County History of the County of Herefordshire, 1, 214-15, London: St Catherine Press.\r\rRCHME 1934. An Inventory of the Historical Monuments in Herefordshire, 3, 79, London: HMSO.",
+      "Atlas_URL": "https://experience.arcgis.com/experience/40ccda26452f427a9f081506958e1d81/#data_s=id%3Aacf7b6cc651c4bc1a392992140d959ca-1cbc55d5d6c9413a8e28ea115b03f70f%3A2&widget_23=active_datasource_id:acf7b6cc651c4bc1a392992140d959ca,center:-296646%2C6843289%2C102100,scale:10000,rotation:0",
+      "Wikidata_URL": "https://www.wikidata.org/entity/Q31113996",
+      "Investigations": "1st Identified Map Depiction (1888); Other (2012); Other (2002-2006)",
+      "Entrances": "In-turned (South); Simple Gap (North west); Hornwork (North west)",
+      "Record_URL": "https://hillforts.arch.ox.ac.uk/records/EN0002.html",
+      "x": -296646.28550000116,
+      "y": 6843288.7619,
+      "Image": "EN0002",
+      "LiDAR": "Yes",
+      "Image_Caption": "LiDAR 1m DTM Hillshade",
+      "Image_Credit": "Environment Agency copyright and/or database right 2022. All rights reserved.",
+      "Image_URL": "https://hillforts.arch.ox.ac.uk/lidar/EN0002.png",
+      "Atlas_ID": "EN0002"
+     },
+     "geometry": {
+      "x": -2.664818921999938,
+      "y": 52.23808210300007
+     }
+    },
+    {
+     "attributes": {
+      "OBJECTID": 3,
+      "Atlas_Number": 3,
+      "Country_Code": "EN",
+      "Country": "England",
+      "Site_Name": "EN0003 Backbury Camp, Herefordshire",
+      "Name": "Backbury Camp",
+      "Alternative_Name_s_": "Ethelbert's Camp",
+      "Display_Name": "Backbury Camp, Herefordshire (Ethelbert's Camp)",
+      "HER": "Herefordshire",
+      "HER_Primary_Record_Number": "MHE411",
+      "HER_Second_Identifier": "908",
+      "NMR_Record_Number": "SO 53 NE 2",
+      "NMR_Monument_Number": "110051",
+      "Scheduled_Monument_Number": "1003534",
+      "Summary_Description": "Multivallate, contour hillfort with three banks and ditches, situated on prominent hill summit above important confluences of  Rivers Wye and Lugg and Frome and Lugg. Steep surrounding slopes, precipitous on S. Internal area c. 2.8ha. Ramparts continuous on N side, but, although damaged, inner and outer ramparts continuous on W side. Damaged and discontinuous on E and S, probably result of an ancient landslip. Two possibly original entrances in evidence. 'Adam's Rocks' lie in S interior. Spurious association with St. Ethelbert, and not referred to as 'Backbury' until 1926. Although the circuit continuous in part, the site is generally damaged and tree covered. An access track runs NE to SW passing through the NW entrance. On 1st Ed. OS map (1888). Undated.",
+      "Boundary": "No",
+      "Coordinate_System": "OSGB36",
+      "X_Coordinate": 358700,
+      "Y_Coordinate": 238900,
+      "Citizen_Science": "No",
+      "Reliability_of_Data": "Confirmed",
+      "Reliability_of_Interpretation": "Confirmed",
+      "NGR": "SO 587389",
+      "X__EPSG__3857_": -289837,
+      "Y__EPSG__3857_": 6808611,
+      "Longitude": -2.6036508282115807,
+      "Latitude": 52.046907055121885,
+      "Current_County_or_Unitary_Autho": "Herefordshire",
+      "Historic_County": "Herefordshire",
+      "Current_Parish_Community_Counci": "Dormington",
+      "Monument_Condition__Extant": "Yes",
+      "Monument_Condition__Cropmark": "No",
+      "Monument_Condition__Likely_Dest": "No",
+      "Monument_Condition__Comments": "Although the circuit continuous in part, the site is generally damaged and tree covered. An ancient landslip seems to have taken the defences on the E and S. An access track runs NE to SW passing through the NW entrance.",
+      "Land_Use__Woodland": "Yes",
+      "Land_Use__Commercial_Forestry_P": "No",
+      "Land_Use__Parkland": "No",
+      "Land_Use__Pasture__Grazing_": "No",
+      "Land_Use__Arable": "No",
+      "Land_Use__Scrub_Bracken": "No",
+      "Land_Use__Bare_Outcrop": "No",
+      "Land_Use__Heather_Moorland": "No",
+      "Land_Use__Heath": "No",
+      "Land_Use__Built_up": "No",
+      "Land_Use__Coastal_Grassland": "No",
+      "Land_Use__Other": "No",
+      "Land_Use__Comments": "A wooded private site with access problems.",
+      "Hillfort_Type__Contour_Fort": "No",
+      "Hillfort_Type__Partial_Contour_": "Yes",
+      "Hillfort_Type__Promontory_Fort": "No",
+      "Hillfort_Type__Hillslope_Fort": "No",
+      "Hillfort_Type__Level_Terrain_Fo": "No",
+      "Hillfort_Type__Marsh_Fort": "No",
+      "Hillfort_Type__Multiple_Enclosu": "No",
+      "Hillfort_Type__Comments": "Located part on slopes, part level ground. Sited on top slopes of a prominent hill above important confluences of the Rivers Wye and Lugg and Frome and Lugg",
+      "Topographic_Position__Hilltop": "Yes",
+      "Topographic_Position__Coastal_P": "No",
+      "Topographic_Position__Inland_Pr": "No",
+      "Topographic_Position__Valley_Bo": "No",
+      "Topographic_Position__Knoll_Hil": "No",
+      "Topographic_Position__Ridge": "No",
+      "Topographic_Position__Cliff_Pla": "No",
+      "Topographic_Position__Hillslope": "Yes",
+      "Topographic_Position__Lowland": "No",
+      "Topographic_Position__Spur": "No",
+      "Dominant_Topographic_Feature": "Hilltop including the Adam's Rocks outcrop",
+      "Aspect__North": "No",
+      "Aspect__Northeast": "No",
+      "Aspect__East": "No",
+      "Aspect__Southeast": "Yes",
+      "Aspect__South": "Yes",
+      "Aspect__Southwest": "No",
+      "Aspect__West": "No",
+      "Aspect__Northwest": "No",
+      "Aspect__Level": "Yes",
+      "Altitude__m_": 225,
+      "Dating_Evidence__Pre_1200BC": "No",
+      "Dating_Evidence__1200BC___800BC": "No",
+      "Dating_Evidence__800BC___400BC": "No",
+      "Dating_Evidence__400BC___AD50": "No",
+      "Dating_Evidence__AD50___AD400": "No",
+      "Dating_Evidence__AD400___AD800": "No",
+      "Dating_Evidence__Post_AD800": "No",
+      "Dating_Evidence__Unknown": "Yes",
+      "Dating_Evidence__Reliability": "D - None",
+      "Dating_Evidence__Comments": "The chance finding of a number of cloudy blue flints, two burnt flints and a core from the W rampart does not indicate dating.",
+      "Pre_Hillfort_Activity": "No",
+      "Pre_Hillfort_Activity_Comments": "None",
+      "Post_Hillfort_Activity": "No",
+      "Post_Hillfort_Activity_Comments": "None",
+      "Investigations_Summary": "On 1st Ed. OS map (1888). Herefordshire Council survey 2012.",
+      "Interior_Summary": "A number of cloudy blue flints, two burnt flints and a core come from the W rampart, otherwise no evidence.",
+      "Water_Source__None": "Yes",
+      "Water_Source__Spring": "No",
+      "Water_Source__Stream": "No",
+      "Water_Source__Pool": "No",
+      "Water_Source__Flush": "No",
+      "Water_Source__Well_Cistern": "No",
+      "Water_Source__Other": "No",
+      "Water_Source__Comments": "Stream 0.7km located outside the hillfort.",
+      "Interior_Surface__No_Known_Feat": "Yes",
+      "Interior_Surface__Round_Stone_S": "No",
+      "Interior_Surface__Rectangular_S": "No",
+      "Interior_Surface__Curvilinear_P": "No",
+      "Interior_Surface__Other_Roundho": "No",
+      "Interior_Surface__Pits": "No",
+      "Interior_Surface__Quarry_Hollow": "No",
+      "Interior_Surface__Other": "No",
+      "Interior_Excavation__No_Known_E": "Yes",
+      "Interior_Excavation__Pits": "No",
+      "Interior_Excavation__Postholes": "No",
+      "Interior_Excavation__Roundhouse": "No",
+      "Interior_Excavation__Rectangula": "No",
+      "Interior_Excavation__Roads_Trac": "No",
+      "Interior_Excavation__Quarry_Hol": "No",
+      "Interior_Excavation__Other": "No",
+      "Interior_Excavation__Nothing_Fo": "No",
+      "Interior_Geophysics__No_Known_G": "Yes",
+      "Interior_Geophysics__Pits": "No",
+      "Interior_Geophysics__Roundhouse": "No",
+      "Interior_Geophysics__Rectangula": "No",
+      "Interior_Geophysics__Roads_Trac": "No",
+      "Interior_Geophysics__Quarry_Hol": "No",
+      "Interior_Geophysics__Other": "No",
+      "Interior_Geophysics__Nothing_Fo": "No",
+      "Finds__No_Known_Finds": "No",
+      "Finds__Pottery": "No",
+      "Finds__Metal": "No",
+      "Finds__Metalworking": "No",
+      "Finds__Human_Bones": "No",
+      "Finds__Animal_Bones": "No",
+      "Finds__Lithics": "Yes",
+      "Finds__Evironmental": "No",
+      "Finds__Other": "No",
+      "Finds__Comments": "A number of cloudy blue flints, two burnt flints and a core come from the W rampart.",
+      "Interior_Aerial__APs_Not_Checke": "Yes",
+      "Interior_Aerial__None": "No",
+      "Interior_Aerial__Roundhouses": "No",
+      "Interior_Aerial__Rectangular_St": "No",
+      "Interior__Aerial_Pits": "No",
+      "Interior_Aerial__Postholes": "No",
+      "Interior_Aerial__Roads_Tracks": "No",
+      "Interior_Aerial__Other": "No",
+      "Total_Number_of_Breaks_Through_": 2,
+      "Entrances_Comments": "Entrances intact",
+      "Number_of_Possible_Original_Ent": 2,
+      "Original_Entrances_Comments": "Interesting inturn to N entrance",
+      "Guard_Chambers": "No",
+      "Chevaux_de_Frise": "No",
+      "Entrances_Summary": "The curving N entrance is complex with inturn and banks. That to the SW is simple cutting through the ramparts with a natural causeway.",
+      "Enclosing_Works_Summary": "Three ramparts and ditches on the N. Although damaged, inner and outer ramparts continuous on the W side, the outer altered and reduced. Also damaged because of an ancient landslide, the ramparts are discontinuous on the E and S.",
+      "Enclosed_Area_1__ha_": 2.8,
+      "Total_Enclosed_Area__ha_": 2.8,
+      "Multi_period_Enclosure_System": "No",
+      "Ramparts_Form_a_Complete_Circui": "No",
+      "Ramparts_Comments": "Ramparts damaged and discontinuous. On the W the inner and outer ramparts are continuous, the latter altered and reduced.",
+      "Number_of_Ramparts": 3,
+      "Number_of_Ramparts_NE_Quadrant": 3,
+      "Number_of_Ramparts_SE_Quadrant": 1,
+      "Number_of_Ramparts_SW_Quadrant": 2,
+      "Number_of_Ramparts_NW_Quadrant": 3,
+      "Current_Morphology__Partial_Uni": "Yes",
+      "Current_Morphology__Univallate": "No",
+      "Current_Morphology__Partial_Biv": "Yes",
+      "Current_Morphology__Bivallate": "No",
+      "Current_Morphology__Partial_Mul": "Yes",
+      "Current_Morphology__Multivallat": "No",
+      "Current_Morphology__Unknown": "No",
+      "Detailed_Morphology__Partial_Un": "No",
+      "Detailed_Morphology__Univallate": "No",
+      "Detailed_Morphology__Partial_Bi": "No",
+      "Detailed_Morphology__Bivallate": "No",
+      "Detailed_Morphology__Partial_Mu": "No",
+      "Detailed_Morphology__Multivalla": "No",
+      "Enclosing_Surface__None": "No",
+      "Enclosing_Surface__Earthen_Bank": "Yes",
+      "Enclosing_Surface__Stone_Wall": "No",
+      "Enclosing_Surface__Rubble": "No",
+      "Enclosing_Surface__Wall_walk": "No",
+      "Enclosing_Surface__Evidence_of_": "No",
+      "Enclosing_Surface__Vitrificatio": "No",
+      "Enclosing_Surface__Other_Burnin": "No",
+      "Enclosing_Surface__Palisade": "No",
+      "Enclosing_Surface__Counter_Scar": "No",
+      "Enclosing_Surface__Berm": "No",
+      "Enclosing_Surface__Unfinished": "No",
+      "Enclosing_Surface__Other": "No",
+      "Enclosing_Excavated__None": "No",
+      "Enclosing_Excavated__Earthen_Ba": "No",
+      "Enclosing_Excavated__Stone_Wall": "No",
+      "Enclosing_Excavated__Murus_Dupl": "No",
+      "Enclosing_Excavated__Timber_fra": "No",
+      "Enclosing_Excavated__Timber_lac": "No",
+      "Enclosing_Excavated__Vitrificat": "No",
+      "Enclosing_Excavated__Other_Burn": "No",
+      "Enclosing_Excavated__Palisade": "No",
+      "Enclosing_Excavated__Counter_Sc": "No",
+      "Enclosing_Excavated__Berm": "No",
+      "Enclosing_Excavated__Unfinished": "No",
+      "Enclosing_Excavated__No_Known_E": "Yes",
+      "Enclosing_Excavated__Other": "No",
+      "Excavated_Evidence__Comments": "None",
+      "Gang_Working": "No",
+      "Ditches": "Yes",
+      "Number_of_Ditches": 2,
+      "Ditches_Comments": "Ditches in evidence in the N, but absent or discontinuous elsewhere.",
+      "Annex": "No",
+      "References_": "Cooke, W.H. 1882. Collections towards the history and antiquities of the county of Herefordshire in continuation of Duncumb's History; Vol 3 Greytree Hundred. Book in Hereford Library. III. \r\rDorling, P. and Wigley, A. 2012. Assessment of the archaeological and conservation status of major later prehistoric enclosures in Herefordshire and Shropshire, EH PNUM, Version 3.2, Hereford and Shrewsbury: Herefordshire Council/Shropshire Council.\r\rPage, W. ed.1908. The Victoria County History of the County of Herefordshire, 1, 209-10, London: St Catherine Press.  \r\rRCHME 1934. An Inventory of the Historical Monuments in Herefordshire, 1, 71-2, London: HMSO.\r\rStanford, S. C. (ed.) 1976. Guide to Prehistoric and Roman Sites in Herefordshire. Woolhope Naturalists' Field Club Archaeological Research Section, 17-18.",
+      "Atlas_URL": "https://experience.arcgis.com/experience/40ccda26452f427a9f081506958e1d81/#data_s=id%3Aacf7b6cc651c4bc1a392992140d959ca-1cbc55d5d6c9413a8e28ea115b03f70f%3A3&widget_23=active_datasource_id:acf7b6cc651c4bc1a392992140d959ca,center:-289837%2C6808611%2C102100,scale:10000,rotation:0",
+      "Wikidata_URL": "https://www.wikidata.org/entity/Q31114017",
+      "Investigations": "1st Identified Map Depiction (1888); Other (2012)",
+      "Entrances": "In-turned (North); Oblique (North); Simple Gap (South west)",
+      "Record_URL": "https://hillforts.arch.ox.ac.uk/records/EN0003.html",
+      "x": -289837.0843999982,
+      "y": 6808611.2993,
+      "Image": "EN0003",
+      "LiDAR": "Yes",
+      "Image_Caption": "LiDAR 1m DTM Hillshade",
+      "Image_Credit": "Environment Agency copyright and/or database right 2022. All rights reserved.",
+      "Image_URL": "https://hillforts.arch.ox.ac.uk/lidar/EN0003.png",
+      "Atlas_ID": "EN0003"
+     },
+     "geometry": {
+      "x": -2.6036508279999566,
+      "y": 52.04690705500007
+     }
+    },
+    {
+     "attributes": {
+      "OBJECTID": 223,
+      "Atlas_Number": 229,
+      "Country_Code": "SC",
+      "Country": "Scotland",
+      "Site_Name": "SC0229 Carghidown Castle, Wigtownshire",
+      "Name": "Carghidown Castle",
+      "Display_Name": "Carghidown Castle, Wigtownshire",
+      "HER": "Dumfries & Galloway",
+      "HER_Primary_Record_Number": "MDG2770",
+      "NMR_Record_Number": "NX 43 NW 8",
+      "NMR_Monument_Number": "63132",
+      "Summary_Description": "This small promontory work is situated on the exposed SW coast of the Machars and its extent has evidently been severely reduced by erosion, now measuring no more than 0.04ha in extent internally. The ground drops into the promontory from the NE and consequently the bank drawn across its neck, which in excavation was 3m thick and up to 0.6m high and was fronted by a steep-sided external ditch 3m broad and over 1.5m deep, does not form an impressive barrier when approached from the landward side. The entrance lay between the eastern terminal of the rampart and the cliff-edge on the E. Prior to excavation, the interior, which measured about 28.5m from NE to SW by 24m transversely when described by the OS in 1973, contained two scooped platforms, both of which seem to have been the stances for round-houses. In 2004 excavation of the platform at the seaward tip of the promontory revealed a complex fourfold sequence in which an earth and stone wall had been replaced in timber and the floor had been relaid on several occasions. The five c-14 dates, which broadly span the period 360 BC - AD 60 come from this sequence, but in some instances probably from contexts with mixed charcoal assemblages. Apart from a number of coarse stone tools, the finds include three lead beads, which are very unusual items from any Iron Age sites in Scotland.",
+      "Boundary": "No",
+      "Coordinate_System": "OSGB36",
+      "X_Coordinate": 243560,
+      "Y_Coordinate": 535070,
+      "Citizen_Science": "No",
+      "Reliability_of_Data": "Confirmed",
+      "Reliability_of_Interpretation": "Confirmed",
+      "Interpretation_Comments": "Though the bank and ditch across its neck are of relatively slight proportions and it has probably never reached the 0.2ha threshold, its position is typical of other small promontory forts.",
+      "NGR": "NX 4356 3507",
+      "X__EPSG__3857_": -492969,
+      "Y__EPSG__3857_": 7301225,
+      "Longitude": -4.4284193701125645,
+      "Latitude": 54.68632691312481,
+      "Current_County_or_Unitary_Autho": "Dumfries & Galloway",
+      "Historic_County": "Wigtownshire",
+      "Current_Parish_Community_Counci": "Whithorn",
+      "Monument_Condition__Extant": "Yes",
+      "Monument_Condition__Cropmark": "No",
+      "Monument_Condition__Likely_Dest": "No",
+      "Land_Use__Woodland": "No",
+      "Land_Use__Commercial_Forestry_P": "No",
+      "Land_Use__Parkland": "No",
+      "Land_Use__Pasture__Grazing_": "Yes",
+      "Land_Use__Arable": "No",
+      "Land_Use__Scrub_Bracken": "No",
+      "Land_Use__Bare_Outcrop": "No",
+      "Land_Use__Heather_Moorland": "No",
+      "Land_Use__Heath": "No",
+      "Land_Use__Built_up": "No",
+      "Land_Use__Coastal_Grassland": "Yes",
+      "Land_Use__Other": "No",
+      "Hillfort_Type__Contour_Fort": "No",
+      "Hillfort_Type__Partial_Contour_": "No",
+      "Hillfort_Type__Promontory_Fort": "Yes",
+      "Hillfort_Type__Hillslope_Fort": "No",
+      "Hillfort_Type__Level_Terrain_Fo": "No",
+      "Hillfort_Type__Marsh_Fort": "No",
+      "Hillfort_Type__Multiple_Enclosu": "No",
+      "Topographic_Position__Hilltop": "No",
+      "Topographic_Position__Coastal_P": "Yes",
+      "Topographic_Position__Inland_Pr": "No",
+      "Topographic_Position__Valley_Bo": "No",
+      "Topographic_Position__Knoll_Hil": "No",
+      "Topographic_Position__Ridge": "No",
+      "Topographic_Position__Cliff_Pla": "No",
+      "Topographic_Position__Hillslope": "No",
+      "Topographic_Position__Lowland": "No",
+      "Topographic_Position__Spur": "No",
+      "Aspect__North": "No",
+      "Aspect__Northeast": "No",
+      "Aspect__East": "No",
+      "Aspect__Southeast": "No",
+      "Aspect__South": "No",
+      "Aspect__Southwest": "Yes",
+      "Aspect__West": "No",
+      "Aspect__Northwest": "No",
+      "Aspect__Level": "No",
+      "Altitude__m_": 25,
+      "Dating_Evidence__Pre_1200BC": "No",
+      "Dating_Evidence__1200BC___800BC": "No",
+      "Dating_Evidence__800BC___400BC": "No",
+      "Dating_Evidence__400BC___AD50": "Yes",
+      "Dating_Evidence__AD50___AD400": "No",
+      "Dating_Evidence__AD400___AD800": "No",
+      "Dating_Evidence__Post_AD800": "No",
+      "Dating_Evidence__Unknown": "No",
+      "Dating_Evidence__Reliability": "B - Medium",
+      "Dating_Evidence__Comments": "Five C14 dates from contexts bracketing a fourfold sequence in a single round-house within the interior, but by Toolis's own commentary 'do not illuminate the stratigraphic sequence very well' (2007, 301). No dates from the perimeter, though it appears stratigraphically as an addition to an already occupied settlement.",
+      "Pre_Hillfort_Activity": "No",
+      "Post_Hillfort_Activity": "No",
+      "Investigations_Summary": "Named in 1849 for the 1st edition of the OS 6-inch map (Wigtownshire 1850, sheet 37), and described in 1870 as 'covering 1/2 acre' (M'Kerlie 1870, 489), the first real depiction is in 1894 on the 25-inch (Wigtownshire 1895, sheet 35.15), subsequently clarified in 1906 (Wigtownshire 1908, sheet 35.15). It escaped the RCAHMS County Inventory of 1912. It was re-surveyed by the OS at 1:2500 in 1973 and evaluated for coastal erosion in 1996 (Toolis 2003, 46-7), subsequently leading to a programme of geophysical survey and excavation in 2003-4 (Toolis 2003-4).",
+      "Interior_Summary": "Two stone-walled round-houses",
+      "Water_Source__None": "Yes",
+      "Water_Source__Spring": "No",
+      "Water_Source__Stream": "No",
+      "Water_Source__Pool": "No",
+      "Water_Source__Flush": "No",
+      "Water_Source__Well_Cistern": "No",
+      "Water_Source__Other": "No",
+      "Interior_Surface__No_Known_Feat": "No",
+      "Interior_Surface__Round_Stone_S": "Yes",
+      "Interior_Surface__Rectangular_S": "No",
+      "Interior_Surface__Curvilinear_P": "No",
+      "Interior_Surface__Other_Roundho": "No",
+      "Interior_Surface__Pits": "No",
+      "Interior_Surface__Quarry_Hollow": "No",
+      "Interior_Surface__Other": "No",
+      "Interior_Excavation__No_Known_E": "No",
+      "Interior_Excavation__Pits": "No",
+      "Interior_Excavation__Postholes": "Yes",
+      "Interior_Excavation__Roundhouse": "Yes",
+      "Interior_Excavation__Rectangula": "No",
+      "Interior_Excavation__Roads_Trac": "No",
+      "Interior_Excavation__Quarry_Hol": "No",
+      "Interior_Excavation__Other": "No",
+      "Interior_Excavation__Nothing_Fo": "No",
+      "Interior_Excavation__Comments": "Four phases identified within one of the round-houses",
+      "Interior_Geophysics__No_Known_G": "No",
+      "Interior_Geophysics__Pits": "No",
+      "Interior_Geophysics__Roundhouse": "No",
+      "Interior_Geophysics__Rectangula": "No",
+      "Interior_Geophysics__Roads_Trac": "No",
+      "Interior_Geophysics__Quarry_Hol": "No",
+      "Interior_Geophysics__Other": "Yes",
+      "Interior_Geophysics__Nothing_Fo": "No",
+      "Interior_Geophysics__Comments": "Content unknown",
+      "Finds__No_Known_Finds": "No",
+      "Finds__Pottery": "No",
+      "Finds__Metal": "Yes",
+      "Finds__Metalworking": "No",
+      "Finds__Human_Bones": "No",
+      "Finds__Animal_Bones": "No",
+      "Finds__Lithics": "No",
+      "Finds__Evironmental": "No",
+      "Finds__Other": "Yes",
+      "Finds__Comments": "Three lead beads. Saddle quern. Coarse stone tools",
+      "Interior_Aerial__APs_Not_Checke": "Yes",
+      "Interior_Aerial__None": "No",
+      "Interior_Aerial__Roundhouses": "No",
+      "Interior_Aerial__Rectangular_St": "No",
+      "Interior__Aerial_Pits": "No",
+      "Interior_Aerial__Postholes": "No",
+      "Interior_Aerial__Roads_Tracks": "No",
+      "Interior_Aerial__Other": "No",
+      "Total_Number_of_Breaks_Through_": 1,
+      "Number_of_Possible_Original_Ent": 1,
+      "Guard_Chambers": "No",
+      "Chevaux_de_Frise": "No",
+      "Entrances_Summary": "See main summary",
+      "Enclosing_Works_Summary": "Rampart and external ditch cutting off the promontory.",
+      "Enclosed_Area_1__ha_": 0.04,
+      "Total_Enclosed_Area__ha_": 0.04,
+      "Multi_period_Enclosure_System": "No",
+      "Enclosing_Works_Comments": "Clearly heavily eroded",
+      "Ramparts_Form_a_Complete_Circui": "No",
+      "Number_of_Ramparts": 1,
+      "Number_of_Ramparts_NE_Quadrant": 1,
+      "Number_of_Ramparts_SE_Quadrant": 0,
+      "Number_of_Ramparts_SW_Quadrant": 0,
+      "Number_of_Ramparts_NW_Quadrant": 0,
+      "Current_Morphology__Partial_Uni": "Yes",
+      "Current_Morphology__Univallate": "No",
+      "Current_Morphology__Partial_Biv": "No",
+      "Current_Morphology__Bivallate": "No",
+      "Current_Morphology__Partial_Mul": "No",
+      "Current_Morphology__Multivallat": "No",
+      "Current_Morphology__Unknown": "No",
+      "Detailed_Morphology__Partial_Un": "No",
+      "Detailed_Morphology__Univallate": "No",
+      "Detailed_Morphology__Partial_Bi": "No",
+      "Detailed_Morphology__Bivallate": "No",
+      "Detailed_Morphology__Partial_Mu": "No",
+      "Detailed_Morphology__Multivalla": "No",
+      "Enclosing_Surface__None": "No",
+      "Enclosing_Surface__Earthen_Bank": "Yes",
+      "Enclosing_Surface__Stone_Wall": "No",
+      "Enclosing_Surface__Rubble": "No",
+      "Enclosing_Surface__Wall_walk": "No",
+      "Enclosing_Surface__Evidence_of_": "No",
+      "Enclosing_Surface__Vitrificatio": "No",
+      "Enclosing_Surface__Other_Burnin": "No",
+      "Enclosing_Surface__Palisade": "No",
+      "Enclosing_Surface__Counter_Scar": "No",
+      "Enclosing_Surface__Berm": "No",
+      "Enclosing_Surface__Unfinished": "No",
+      "Enclosing_Surface__Other": "No",
+      "Enclosing_Excavated__None": "No",
+      "Enclosing_Excavated__Earthen_Ba": "Yes",
+      "Enclosing_Excavated__Stone_Wall": "No",
+      "Enclosing_Excavated__Murus_Dupl": "No",
+      "Enclosing_Excavated__Timber_fra": "No",
+      "Enclosing_Excavated__Timber_lac": "No",
+      "Enclosing_Excavated__Vitrificat": "No",
+      "Enclosing_Excavated__Other_Burn": "No",
+      "Enclosing_Excavated__Palisade": "No",
+      "Enclosing_Excavated__Counter_Sc": "No",
+      "Enclosing_Excavated__Berm": "No",
+      "Enclosing_Excavated__Unfinished": "No",
+      "Enclosing_Excavated__No_Known_E": "No",
+      "Enclosing_Excavated__Other": "No",
+      "Excavated_Evidence__Comments": "Reported to have had a rubble cap which had collapsed into the ditch (Toolis 2004)",
+      "Gang_Working": "No",
+      "Ditches": "Yes",
+      "Number_of_Ditches": 1,
+      "Annex": "No",
+      "References_": "M'Kerlie, P H (1870) History of the lands and their owners in Galloway, , vol.1 Edinburgh\rToolis, R (2003) 'Carghidown (Whithorn parish), promontory fort', Discovery Excav Scot 4, 51 \rToolis, R (2004) 'Carghidown (Whithorn parish), promontory fort', Discovery Excav Scot 5, 40 \rToolis, R (2007) 'Intermittent occupation and forced abandonment: excavation of an Iron Age promontory fort at Carghidown, Dumfries and Galloway'. Proc Soc Antiq Scot 137, 265-318",
+      "Atlas_URL": "https://experience.arcgis.com/experience/40ccda26452f427a9f081506958e1d81/#data_s=id%3Aacf7b6cc651c4bc1a392992140d959ca-1cbc55d5d6c9413a8e28ea115b03f70f%3A223&widget_23=active_datasource_id:acf7b6cc651c4bc1a392992140d959ca,center:-492969%2C7301225%2C102100,scale:10000,rotation:0",
+      "Wikidata_URL": "https://www.wikidata.org/entity/Q31057084",
+      "NMR_Resource": "Canmore",
+      "NMR_URL": "https://canmore.org.uk/site/63132",
+      "Dating_Evidence": "C14",
+      "Investigations": "1st Identified Map Depiction (1849); Other (1894); Other (1973); Earthwork Survey (1996); Geophysical Survey (2003); Excavation (2004)",
+      "Entrances": "Simple Gap (North east)",
+      "Record_URL": "https://hillforts.arch.ox.ac.uk/records/SC0229.html",
+      "x": -492969.3892999999,
+      "y": 7301225.016400002,
+      "Image": "SC0229",
+      "LiDAR": "No",
+      "Image_Caption": "Satellite Imagery",
+      "Image_Credit": "Maxar, Microsoft.",
+      "Image_URL": "https://hillforts.arch.ox.ac.uk/images/SC0229.png",
+      "Atlas_ID": "SC0229"
+     },
+     "geometry": {
+      "x": -4.428419,
+      "y": 54.686327
+     }
+    },
+    {
+     "attributes": {
+      "OBJECTID": 71,
+      "Atlas_Number": 71,
+      "Country_Code": "WA",
+      "Country": "Wales",
+      "Site_Name": "WA0071 Llanymynech Hill, Montgomeryshire",
+      "Name": "Llanymynech Hill",
+      "Display_Name": "Llanymynech Hill, Montgomeryshire",
+      "HER": "Clwyd Powys",
+      "HER_Primary_Record_Number": "50650",
+      "NMR_Record_Number": "SJ 22 SE",
+      "NMR_Monument_Number": "92487",
+      "Scheduled_Monument_Number": "100478 (England)",
+      "Summary_Description": "Very large contour hillfort, at c. 57ha one of the largest in Britain. Straddles the England /Wales border where the Afon Vyrnwy, Tanat and Cain reach the Severn plain at Llanymynech. Sides steep so little defence needed, but mineral extraction (important copper source in Iron Age to Roman periods), later quarrying and golf course development have obscured many features. To N, Blodwell Rock (Atlas No 0041). Moderate, low single rampart on S and W, later incorporated into construction of Offa's Dyke, and gaps here modern. On N and E c. 300m of double and triple (in places) ramparts visible.  Near middle of N rampart inturned entrance, cut off by later banks and ditches, now damaged, and, now obscured by buildings and gardens. Remains of another entrance on NE side. Two other gaps on S and W, with no inturns, probably modern, and probably more. Golf course in interior and public footpaths over site. Important site for extraction of copper, zinc and lead ores from Iron Age to Roman period, but golf course has obscured many associated features. Pipe trench for reservoir 1981 produced hearth, pit and charcoal, giving C14 dates of 2020 BP (162 BC- AD 53) and 2170 BP (363 BC-119 BC). Copper alloy from layers here showed hillfort in existence before late 2nd century BC, metallurgy subsequently taking place, probably involving ores from Llanymynech itself, with possible production of brass. Also evidence to suggest that ores mined and used for manufacture of bronze weapons and implements from later Bronze Age onwards, and a cave known as the 'Ogof' inside the hillfort probably a Roman mine. Numerous observations on site by CPAT and other bodies from 1970's onwards. Folklore connections with Caratacus. On 1st Ed. OS map (1875).",
+      "Boundary": "Yes",
+      "Coordinate_System": "OSGB36",
+      "X_Coordinate": 326479,
+      "Y_Coordinate": 322138,
+      "Citizen_Science": "No",
+      "Reliability_of_Data": "Confirmed",
+      "Reliability_of_Interpretation": "Confirmed",
+      "NGR": "SJ264221",
+      "X__EPSG__3857_": -344171,
+      "Y__EPSG__3857_": 6944572,
+      "Longitude": -3.0917436816086865,
+      "Latitude": 52.79176006007023,
+      "Current_County_or_Unitary_Autho": "Powys",
+      "Historic_County": "Montgomeryshire",
+      "Current_Parish_Community_Counci": "Carreghofa",
+      "Monument_Condition__Extant": "Yes",
+      "Monument_Condition__Cropmark": "No",
+      "Monument_Condition__Likely_Dest": "Yes",
+      "Monument_Condition__Comments": "Site much damaged by houses, gardens and quarrying. Golf course in interior and public footpaths over site. Past mineral extraction from prehistoric times on part of site, but golf course has obscured many features.",
+      "Land_Use__Woodland": "No",
+      "Land_Use__Commercial_Forestry_P": "No",
+      "Land_Use__Parkland": "Yes",
+      "Land_Use__Pasture__Grazing_": "No",
+      "Land_Use__Arable": "No",
+      "Land_Use__Scrub_Bracken": "Yes",
+      "Land_Use__Bare_Outcrop": "No",
+      "Land_Use__Heather_Moorland": "No",
+      "Land_Use__Heath": "No",
+      "Land_Use__Built_up": "Yes",
+      "Land_Use__Coastal_Grassland": "No",
+      "Land_Use__Other": "Yes",
+      "Land_Use__Comments": "Golf course and buildings, scrub and bare rock.",
+      "Hillfort_Type__Contour_Fort": "Yes",
+      "Hillfort_Type__Partial_Contour_": "No",
+      "Hillfort_Type__Promontory_Fort": "No",
+      "Hillfort_Type__Hillslope_Fort": "No",
+      "Hillfort_Type__Level_Terrain_Fo": "No",
+      "Hillfort_Type__Marsh_Fort": "No",
+      "Hillfort_Type__Multiple_Enclosu": "No",
+      "Hillfort_Type__Comments": "Very large contour hillfort, at c. 57ha one of the largest in Britain. Straddles the England /Wales border where the Afon Vyrnwy, Tanat and Cain reach the Severn plain. Sides steep so little defence needed.",
+      "Topographic_Position__Hilltop": "Yes",
+      "Topographic_Position__Coastal_P": "No",
+      "Topographic_Position__Inland_Pr": "No",
+      "Topographic_Position__Valley_Bo": "No",
+      "Topographic_Position__Knoll_Hil": "No",
+      "Topographic_Position__Ridge": "No",
+      "Topographic_Position__Cliff_Pla": "No",
+      "Topographic_Position__Hillslope": "No",
+      "Topographic_Position__Lowland": "No",
+      "Topographic_Position__Spur": "No",
+      "Dominant_Topographic_Feature": "Hill top",
+      "Aspect__North": "No",
+      "Aspect__Northeast": "No",
+      "Aspect__East": "No",
+      "Aspect__Southeast": "No",
+      "Aspect__South": "No",
+      "Aspect__Southwest": "No",
+      "Aspect__West": "No",
+      "Aspect__Northwest": "No",
+      "Aspect__Level": "Yes",
+      "Altitude__m_": 200,
+      "Boundary_Type": "National",
+      "Boundary_Comments": "Part of site in Wales (Powys), part in England (Shropshire).",
+      "Second_Country": "England",
+      "Second_HER": "Shropshire",
+      "Second_HER_Primary_Record_Numbe": "MSA828",
+      "Second_Current_County_or_Unitar": "Shropshire",
+      "Second_Historic_County": "Shropshire",
+      "Second_Current_Parish_Community": "Llanymynech and Pant",
+      "Dating_Evidence__Pre_1200BC": "No",
+      "Dating_Evidence__1200BC___800BC": "No",
+      "Dating_Evidence__800BC___400BC": "No",
+      "Dating_Evidence__400BC___AD50": "Yes",
+      "Dating_Evidence__AD50___AD400": "Yes",
+      "Dating_Evidence__AD400___AD800": "No",
+      "Dating_Evidence__Post_AD800": "No",
+      "Dating_Evidence__Unknown": "No",
+      "Dating_Evidence__Reliability": "B - Medium",
+      "Dating_Evidence__Comments": "Charcoal from pit gave C14 dates of 2020 BP (162 BC-AD 53) and 2170 BP (363 BC-119 BC). Copper alloy from layers showed hillfort in existence before late 2nd century BC. Evidence that ores mined and used for manufacture of bronze weapons and implements from later Bronze Age onwards and cave known as the 'Ogof' inside the hillfort probably a Roman mine. Hoard of 33 coins dating between 30 BC and AD 161 from the Ogof.",
+      "Pre_Hillfort_Activity": "Yes",
+      "Pre_Hillfort_Activity_Comments": "Evidence to suggest that ores mined and used for manufacture of bronze weapons and implements from later Bronze Age onwards.",
+      "Post_Hillfort_Activity": "Yes",
+      "Post_Hillfort_Activity_Comments": "Cave known as the Ogof inside the hillfort probably Roman mine. Hoard of 33 coins dating between 30 BC and AD 161 from the Ogof.",
+      "Investigations_Summary": "Finds and antiquarian references from 18th century - no details. On 1st Ed. OS map (1875). CPAT observations during construction of service pipes for new reservoir at site 1981. CPAT trench over middle rampart as part of Severn Trent works 1995. CPAT detailed measured survey of local Llanymynech Heritage Area 2004. Numerous observations and watching briefs by CPAT and other bodies from 1970's onwards.",
+      "Interior_Summary": "Pipe trench for reservoir 1981 produced hearth, pit and charcoal. Hoard of 33 coins dating between 30 BC and AD 161 from the Ogof. Hollows visible, buts site features much obscured by golf course and uncertain.",
+      "Water_Source__None": "No",
+      "Water_Source__Spring": "Yes",
+      "Water_Source__Stream": "No",
+      "Water_Source__Pool": "No",
+      "Water_Source__Flush": "No",
+      "Water_Source__Well_Cistern": "No",
+      "Water_Source__Other": "No",
+      "Water_Source__Comments": "Spring on site.",
+      "Interior_Surface__No_Known_Feat": "No",
+      "Interior_Surface__Round_Stone_S": "No",
+      "Interior_Surface__Rectangular_S": "No",
+      "Interior_Surface__Curvilinear_P": "No",
+      "Interior_Surface__Other_Roundho": "No",
+      "Interior_Surface__Pits": "No",
+      "Interior_Surface__Quarry_Hollow": "No",
+      "Interior_Surface__Other": "Yes",
+      "Surface_Evidence__Comments": "Hollows visible, buts site features much obscured by golf course and uncertain.",
+      "Interior_Excavation__No_Known_E": "No",
+      "Interior_Excavation__Pits": "Yes",
+      "Interior_Excavation__Postholes": "No",
+      "Interior_Excavation__Roundhouse": "No",
+      "Interior_Excavation__Rectangula": "No",
+      "Interior_Excavation__Roads_Trac": "No",
+      "Interior_Excavation__Quarry_Hol": "No",
+      "Interior_Excavation__Other": "Yes",
+      "Interior_Excavation__Nothing_Fo": "No",
+      "Interior_Excavation__Comments": "Pipe trench for reservoir 1981 produced hearth, pit and charcoal.",
+      "Interior_Geophysics__No_Known_G": "Yes",
+      "Interior_Geophysics__Pits": "No",
+      "Interior_Geophysics__Roundhouse": "No",
+      "Interior_Geophysics__Rectangula": "No",
+      "Interior_Geophysics__Roads_Trac": "No",
+      "Interior_Geophysics__Quarry_Hol": "No",
+      "Interior_Geophysics__Other": "No",
+      "Interior_Geophysics__Nothing_Fo": "No",
+      "Finds__No_Known_Finds": "No",
+      "Finds__Pottery": "No",
+      "Finds__Metal": "No",
+      "Finds__Metalworking": "No",
+      "Finds__Human_Bones": "No",
+      "Finds__Animal_Bones": "No",
+      "Finds__Lithics": "No",
+      "Finds__Evironmental": "Yes",
+      "Finds__Other": "Yes",
+      "Finds__Comments": "Pipe trench for reservoir 1981 produced hearth, pit and charcoal. Hoard of 33 coins dating between 30 BC and AD 161 from the Ogof.",
+      "Interior_Aerial__APs_Not_Checke": "Yes",
+      "Interior_Aerial__None": "No",
+      "Interior_Aerial__Roundhouses": "No",
+      "Interior_Aerial__Rectangular_St": "No",
+      "Interior__Aerial_Pits": "No",
+      "Interior_Aerial__Postholes": "No",
+      "Interior_Aerial__Roads_Tracks": "No",
+      "Interior_Aerial__Other": "No",
+      "Total_Number_of_Breaks_Through_": 5,
+      "Entrances_Comments": "Three gaps on S and W with no inturns probably modern. Probably more but not determined.",
+      "Number_of_Possible_Original_Ent": 2,
+      "Guard_Chambers": "No",
+      "Chevaux_de_Frise": "No",
+      "Entrances_Summary": "Near middle of N rampart inturned entrance, cut off by later banks and ditches, now damaged, and, now obscured by buildings and gardens. Remains of another on NE side. Two other gaps on S and W, with no inturns, probably modern and probably more gaps.",
+      "Enclosing_Works_Summary": "Moderate, low single rampart on S and W, later incorporated into construction of Offa's Dyke and gaps here modern. On N and E c. 300m of double and triple (in places) ramparts visible. Pipe trench excavation produced loose limestone rubble construction and vertically faced at rear.",
+      "Enclosed_Area_1__ha_": 57,
+      "Total_Enclosed_Area__ha_": 57,
+      "Multi_period_Enclosure_System": "No",
+      "Ramparts_Form_a_Complete_Circui": "Yes",
+      "Ramparts_Comments": "Difficult to ascertain in detail.",
+      "Number_of_Ramparts": 2,
+      "Number_of_Ramparts_NE_Quadrant": 2,
+      "Number_of_Ramparts_SE_Quadrant": 2,
+      "Number_of_Ramparts_SW_Quadrant": 1,
+      "Number_of_Ramparts_NW_Quadrant": 1,
+      "Current_Morphology__Partial_Uni": "Yes",
+      "Current_Morphology__Univallate": "No",
+      "Current_Morphology__Partial_Biv": "Yes",
+      "Current_Morphology__Bivallate": "No",
+      "Current_Morphology__Partial_Mul": "No",
+      "Current_Morphology__Multivallat": "No",
+      "Current_Morphology__Unknown": "No",
+      "Detailed_Morphology__Partial_Un": "No",
+      "Detailed_Morphology__Univallate": "No",
+      "Detailed_Morphology__Partial_Bi": "No",
+      "Detailed_Morphology__Bivallate": "No",
+      "Detailed_Morphology__Partial_Mu": "No",
+      "Detailed_Morphology__Multivalla": "No",
+      "Enclosing_Surface__None": "No",
+      "Enclosing_Surface__Earthen_Bank": "Yes",
+      "Enclosing_Surface__Stone_Wall": "No",
+      "Enclosing_Surface__Rubble": "Yes",
+      "Enclosing_Surface__Wall_walk": "No",
+      "Enclosing_Surface__Evidence_of_": "No",
+      "Enclosing_Surface__Vitrificatio": "No",
+      "Enclosing_Surface__Other_Burnin": "No",
+      "Enclosing_Surface__Palisade": "No",
+      "Enclosing_Surface__Counter_Scar": "No",
+      "Enclosing_Surface__Berm": "No",
+      "Enclosing_Surface__Unfinished": "No",
+      "Enclosing_Surface__Other": "No",
+      "Enclosing_Excavated__None": "No",
+      "Enclosing_Excavated__Earthen_Ba": "Yes",
+      "Enclosing_Excavated__Stone_Wall": "Yes",
+      "Enclosing_Excavated__Murus_Dupl": "No",
+      "Enclosing_Excavated__Timber_fra": "No",
+      "Enclosing_Excavated__Timber_lac": "No",
+      "Enclosing_Excavated__Vitrificat": "No",
+      "Enclosing_Excavated__Other_Burn": "No",
+      "Enclosing_Excavated__Palisade": "No",
+      "Enclosing_Excavated__Counter_Sc": "Yes",
+      "Enclosing_Excavated__Berm": "No",
+      "Enclosing_Excavated__Unfinished": "No",
+      "Enclosing_Excavated__No_Known_E": "No",
+      "Enclosing_Excavated__Other": "No",
+      "Excavated_Evidence__Comments": "Pipe trench excavation produced loose limestone rubble construction and vertically faced at rear.",
+      "Gang_Working": "No",
+      "Ditches": "Yes",
+      "Ditches_Comments": "Total number of ditches not defined.",
+      "Annex": "No",
+      "References_": "Barnwell, E. L. 1870. The early antiquities of the county of Montgomeryshire, The Montgomeryshire Collections, 3, 415-52.\r\rFox, C. and Hemp, W. J. 1926. Llanymynech and Blodwell Hillforts, Arch Camb, 81, 395-400.\r\rJones, N. W., Silvester, R. J. and Britnell, W. J. 2003. Montgomery Canal Conservation Management Strategy. Landscape Archaeology Assessment, Unpublished report, Welshpool: CPAT.\r\rJones, N. W., Hankinson, R. and Silvester, R. J. 2012. Llanymynech Hill: Cultural Heritage and Management, Unpublished report, Welshpool: CPAT.\r    \rMusson, C. R. 1981. Llanymynech Hillfort, Arch in Wales, 21, 31.\r\rMusson, C. 2012. Montgomeryshire hillforts and enclosures from the air, in Britnell, W.J. and Silvester, R.J. (eds) Reflections on the past. Essays in honour of Frances Lynch. Cambrian Archaeological Association, 351-368.\r\rMusson, C. R. and Northover, J. P. 1989. Llanymynech Hillfort, Powys and Shropshire: observations on construction work 1981, The Montgomeryshire Collections, 77, 15-26.\r\rRoyal Commission on the Ancient and Historical Monuments and Constructions in Wales and Monmouthshire, 1911. An Inventory of the Ancient Monuments in Wales and Monmouthshire, I, County of Montgomery, London: HMSO.",
+      "Atlas_URL": "https://experience.arcgis.com/experience/40ccda26452f427a9f081506958e1d81/#data_s=id%3Aacf7b6cc651c4bc1a392992140d959ca-1cbc55d5d6c9413a8e28ea115b03f70f%3A71&widget_23=active_datasource_id:acf7b6cc651c4bc1a392992140d959ca,center:-344171%2C6944572%2C102100,scale:10000,rotation:0",
+      "Wikidata_URL": "https://www.wikidata.org/entity/Q31061588",
+      "Dating_Evidence": "Other",
+      "Investigations": "1st Identified Map Depiction (1875); Excavation (1981); Excavation (1995); Other (2004); 1st Identified Written Reference (1701-1800); 1st Identified Written Reference (1701-1800); Other (1970-None)",
+      "Entrances": "In-turned (North); Simple Gap (North east)",
+      "Record_URL": "https://hillforts.arch.ox.ac.uk/records/WA0071.html",
+      "x": -344171.3322999999,
+      "y": 6944571.675800003,
+      "Image": "WA0071",
+      "LiDAR": "Yes",
+      "Image_Caption": "LiDAR 1m DTM Hillshade",
+      "Image_Credit": "Contains public sector information licensed under the Open Government Licence v3.0. http://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+      "Image_URL": "https://hillforts.arch.ox.ac.uk/lidar/WA0071.png",
+      "Atlas_ID": "WA0071"
+     },
+     "geometry": {
+      "x": -3.091744,
+      "y": 52.79176
+     }
+    },
+    {
+     "attributes": {
+      "OBJECTID": 650,
+      "Atlas_Number": 671,
+      "Country_Code": "IR",
+      "Country": "Republic of Ireland",
+      "Site_Name": "IR0671 Knockanacuig, Kerry",
+      "Name": "Knockanacuig",
+      "Alternative_Name_s_": "Lohercannan",
+      "Display_Name": "Knockanacuig, Kerry (Lohercannan)",
+      "HER": "Archaeological Survey of Ireland SMR Database",
+      "HER_Primary_Record_Number": "KE029-112",
+      "NMR_Record_Number": "KE 029",
+      "Summary_Description": "Situated on the summit of a low hill on the W edge of Tralee town, a circular multivallate hillfort, the inner line of which is possibly an early medieval ringfort and encloses an internal area of only 0.2ha, though the outer has a total footprint of 1.7ha. Although at only 30m OD, the site affords panoramic views in all directions, with particular emphasis on views of Tralee Bay. The site has been heavily disturbed and partially destroyed by housing developments. The possible Early Medieval ringfort at the centre of the hillfort and a possible prehistoric mound have been completely destroyed. Excavation reveals that the enclosing elements of the hillfort comprise a bank with external ditch (Dunne and Bartlett 2009, 226 _ 227). A possible entrance was excavated by Dunne and Bartlett (2009, 227), however, information regarding its location is unavailable. The site was described in the minutes of the County Kerry Field Club in November 1940 (Connolly 2008). A large mound, up to 5m in height, surrounded by a small enclosure was recorded. This is also depicted in first and second edition Ordnance Survey mapping. There is no surface indication of other internal features and excavation revealed only a single pit dated to the Early Medieval period. A single radiocarbon sample from the basal fill of the outer enclosing elements returned a Mid _ Late Iron Age date. Building development and road construction have heavily disturbed the site. First depicted by first edition OS mapping. Excavated by Dunne and Bartlett (2009, 226 - 227) in 2006.",
+      "Boundary": "Yes",
+      "Coordinate_System": "IRENET95",
+      "X_Coordinate": 481947,
+      "Y_Coordinate": 614652,
+      "Citizen_Science": "No",
+      "Reliability_of_Data": "Confirmed",
+      "Reliability_of_Interpretation": "Confirmed",
+      "X__EPSG__3857_": -1083113,
+      "Y__EPSG__3857_": 6849252,
+      "Longitude": -9.729768982786675,
+      "Latitude": 52.27087355185952,
+      "Current_County_or_Unitary_Autho": "Kerry",
+      "Historic_County": "Kerry",
+      "Current_Parish_Community_Counci": "Knockanacuig",
+      "Monument_Condition__Extant": "Yes",
+      "Monument_Condition__Cropmark": "No",
+      "Monument_Condition__Likely_Dest": "Yes",
+      "Monument_Condition__Comments": "Partially extant, preserved within a modern field system. The NE of the inner enclosing element has been destroyed and the outer enclosure has been completely leveled.",
+      "Land_Use__Woodland": "No",
+      "Land_Use__Commercial_Forestry_P": "No",
+      "Land_Use__Parkland": "No",
+      "Land_Use__Pasture__Grazing_": "Yes",
+      "Land_Use__Arable": "No",
+      "Land_Use__Scrub_Bracken": "No",
+      "Land_Use__Bare_Outcrop": "No",
+      "Land_Use__Heather_Moorland": "No",
+      "Land_Use__Heath": "No",
+      "Land_Use__Built_up": "Yes",
+      "Land_Use__Coastal_Grassland": "No",
+      "Land_Use__Other": "No",
+      "Land_Use__Comments": "Building development and road construction have heavily disturbed the site.",
+      "Hillfort_Type__Contour_Fort": "Yes",
+      "Hillfort_Type__Partial_Contour_": "No",
+      "Hillfort_Type__Promontory_Fort": "No",
+      "Hillfort_Type__Hillslope_Fort": "No",
+      "Hillfort_Type__Level_Terrain_Fo": "No",
+      "Hillfort_Type__Marsh_Fort": "No",
+      "Hillfort_Type__Multiple_Enclosu": "No",
+      "Hillfort_Type__Comments": "Situated on the summit of a low hill to the immediate W of Tralee town. Although only at 30m OD, the site affords panoramic views, with particular emphasis on views of Tralee Bay.",
+      "Topographic_Position__Hilltop": "Yes",
+      "Topographic_Position__Coastal_P": "No",
+      "Topographic_Position__Inland_Pr": "No",
+      "Topographic_Position__Valley_Bo": "No",
+      "Topographic_Position__Knoll_Hil": "No",
+      "Topographic_Position__Ridge": "No",
+      "Topographic_Position__Cliff_Pla": "No",
+      "Topographic_Position__Hillslope": "No",
+      "Topographic_Position__Lowland": "No",
+      "Topographic_Position__Spur": "No",
+      "Dominant_Topographic_Feature": "Low-lying hilltop",
+      "Aspect__North": "No",
+      "Aspect__Northeast": "No",
+      "Aspect__East": "No",
+      "Aspect__Southeast": "No",
+      "Aspect__South": "No",
+      "Aspect__Southwest": "No",
+      "Aspect__West": "No",
+      "Aspect__Northwest": "No",
+      "Aspect__Level": "Yes",
+      "Altitude__m_": 30,
+      "Boundary_Type": "Parish/Townland",
+      "Boundary_Comments": "The hillfort is positioned at the junction of four modern townlands; Farranstephen, Knockanacuig, Lohercannan and Ballyvelly.",
+      "Second_Current_Parish_Community": "Farranstephen and Ballyvelly.",
+      "Dating_Evidence__Pre_1200BC": "No",
+      "Dating_Evidence__1200BC___800BC": "No",
+      "Dating_Evidence__800BC___400BC": "No",
+      "Dating_Evidence__400BC___AD50": "Yes",
+      "Dating_Evidence__AD50___AD400": "No",
+      "Dating_Evidence__AD400___AD800": "Yes",
+      "Dating_Evidence__Post_AD800": "No",
+      "Dating_Evidence__Unknown": "No",
+      "Dating_Evidence__Reliability": "B - Medium",
+      "Dating_Evidence__Comments": "A single date of 90 Cal. BC to Cal. AD 79 was obtained from the basal fill of the outer hillfort ditch. The fill of a pit located within the interior of the hillfort returned a data of Cal. AD 398 - 544 (Dunne and Bartlett 2009, 227).",
+      "Pre_Hillfort_Activity": "Yes",
+      "Pre_Hillfort_Activity_Comments": "Large, dome shaped mound 5m in maximum height (Connelly 2008). This has been levelled.",
+      "Post_Hillfort_Activity": "Yes",
+      "Post_Hillfort_Activity_Comments": "Early Medieval pit feature in hillfort interior. A possible Early Medieval ringfort was positioned at the center of the hillfort and surrounded a large mound of probably prehistoric date (Connelly 2008). Both have subsequently been destroyed. Dunne and Bartlett (2009, 227) have suggested that the ringfort formed part of an earlier multiple enclosure hillfort.",
+      "Investigations_Summary": "First depicted by first edition OS mapping. Excavated by Dunne and Bartlett (2009, 226 - 227) in 2006.",
+      "Interior_Summary": "Excavated pit feature dated to the Early Medieval period. Enclosure (possible Early Medieval ringfort) surrounded a mound of probably prehistoric date.",
+      "Water_Source__None": "Yes",
+      "Water_Source__Spring": "No",
+      "Water_Source__Stream": "No",
+      "Water_Source__Pool": "No",
+      "Water_Source__Flush": "No",
+      "Water_Source__Well_Cistern": "No",
+      "Water_Source__Other": "No",
+      "Interior_Surface__No_Known_Feat": "Yes",
+      "Interior_Surface__Round_Stone_S": "No",
+      "Interior_Surface__Rectangular_S": "No",
+      "Interior_Surface__Curvilinear_P": "No",
+      "Interior_Surface__Other_Roundho": "No",
+      "Interior_Surface__Pits": "No",
+      "Interior_Surface__Quarry_Hollow": "No",
+      "Interior_Surface__Other": "No",
+      "Interior_Excavation__No_Known_E": "No",
+      "Interior_Excavation__Pits": "Yes",
+      "Interior_Excavation__Postholes": "No",
+      "Interior_Excavation__Roundhouse": "No",
+      "Interior_Excavation__Rectangula": "No",
+      "Interior_Excavation__Roads_Trac": "No",
+      "Interior_Excavation__Quarry_Hol": "No",
+      "Interior_Excavation__Other": "No",
+      "Interior_Excavation__Nothing_Fo": "No",
+      "Interior_Excavation__Comments": "A single pit dated to the Early Medieval period.",
+      "Interior_Geophysics__No_Known_G": "Yes",
+      "Interior_Geophysics__Pits": "No",
+      "Interior_Geophysics__Roundhouse": "No",
+      "Interior_Geophysics__Rectangula": "No",
+      "Interior_Geophysics__Roads_Trac": "No",
+      "Interior_Geophysics__Quarry_Hol": "No",
+      "Interior_Geophysics__Other": "No",
+      "Interior_Geophysics__Nothing_Fo": "No",
+      "Finds__No_Known_Finds": "Yes",
+      "Finds__Pottery": "No",
+      "Finds__Metal": "No",
+      "Finds__Metalworking": "No",
+      "Finds__Human_Bones": "No",
+      "Finds__Animal_Bones": "No",
+      "Finds__Lithics": "No",
+      "Finds__Evironmental": "No",
+      "Finds__Other": "No",
+      "Interior_Aerial__APs_Not_Checke": "No",
+      "Interior_Aerial__None": "Yes",
+      "Interior_Aerial__Roundhouses": "No",
+      "Interior_Aerial__Rectangular_St": "No",
+      "Interior__Aerial_Pits": "No",
+      "Interior_Aerial__Postholes": "No",
+      "Interior_Aerial__Roads_Tracks": "No",
+      "Interior_Aerial__Other": "No",
+      "Interior_Aerial__Comments": "NO APPARENT FEATURES",
+      "Total_Number_of_Breaks_Through_": 1,
+      "Number_of_Possible_Original_Ent": 1,
+      "Guard_Chambers": "No",
+      "Chevaux_de_Frise": "No",
+      "Entrances_Summary": "Entrance excavated by Dunne and Bartlett (2009, 226 - 227). Precise location and information regarding the possible entrance has not been published.",
+      "Enclosing_Works_Summary": "The enclosing elements of the hillfort comprise a bank with external ditch (Dunne and Bartlett 2009, 226 _ 227). The ditch was V-shaped with steeply sloping sides and a rounded base. It is 2.2m deep and approximately 5.2m wide (Dunne and Bartlett 2009, 227). Excavation suggested a substantial re-cut of the ditch occurred. This comprised a U-shaped ditch 1.2m in depth.",
+      "Enclosed_Area_1__ha_": 0.16,
+      "Enclosed_Area_2__ha_": 1.67,
+      "Total_Enclosed_Area__ha_": 1.67,
+      "Total_Footprint_Area__ha_": 1.67,
+      "Multi_period_Enclosure_System": "No",
+      "Ramparts_Form_a_Complete_Circui": "Yes",
+      "Ramparts_Comments": "Early aerial photographs of the site clearly show that the inner and outer enclosing elements both formed complete circuits (see Connelly 2008). Perimeter of the Inner ringfort omitted below",
+      "Number_of_Ramparts": 1,
+      "Number_of_Ramparts_NE_Quadrant": 1,
+      "Number_of_Ramparts_SE_Quadrant": 1,
+      "Number_of_Ramparts_SW_Quadrant": 1,
+      "Number_of_Ramparts_NW_Quadrant": 1,
+      "Current_Morphology__Partial_Uni": "No",
+      "Current_Morphology__Univallate": "Yes",
+      "Current_Morphology__Partial_Biv": "No",
+      "Current_Morphology__Bivallate": "No",
+      "Current_Morphology__Partial_Mul": "No",
+      "Current_Morphology__Multivallat": "No",
+      "Current_Morphology__Unknown": "No",
+      "Detailed_Morphology__Partial_Un": "No",
+      "Detailed_Morphology__Univallate": "No",
+      "Detailed_Morphology__Partial_Bi": "No",
+      "Detailed_Morphology__Bivallate": "No",
+      "Detailed_Morphology__Partial_Mu": "No",
+      "Detailed_Morphology__Multivalla": "No",
+      "Enclosing_Surface__None": "No",
+      "Enclosing_Surface__Earthen_Bank": "Yes",
+      "Enclosing_Surface__Stone_Wall": "No",
+      "Enclosing_Surface__Rubble": "No",
+      "Enclosing_Surface__Wall_walk": "No",
+      "Enclosing_Surface__Evidence_of_": "No",
+      "Enclosing_Surface__Vitrificatio": "No",
+      "Enclosing_Surface__Other_Burnin": "No",
+      "Enclosing_Surface__Palisade": "No",
+      "Enclosing_Surface__Counter_Scar": "No",
+      "Enclosing_Surface__Berm": "No",
+      "Enclosing_Surface__Unfinished": "No",
+      "Enclosing_Surface__Other": "No",
+      "Enclosing_Excavated__None": "No",
+      "Enclosing_Excavated__Earthen_Ba": "Yes",
+      "Enclosing_Excavated__Stone_Wall": "No",
+      "Enclosing_Excavated__Murus_Dupl": "No",
+      "Enclosing_Excavated__Timber_fra": "No",
+      "Enclosing_Excavated__Timber_lac": "No",
+      "Enclosing_Excavated__Vitrificat": "No",
+      "Enclosing_Excavated__Other_Burn": "No",
+      "Enclosing_Excavated__Palisade": "No",
+      "Enclosing_Excavated__Counter_Sc": "No",
+      "Enclosing_Excavated__Berm": "No",
+      "Enclosing_Excavated__Unfinished": "No",
+      "Enclosing_Excavated__No_Known_E": "No",
+      "Enclosing_Excavated__Other": "Yes",
+      "Excavated_Evidence__Comments": "Bank and external ditch",
+      "Gang_Working": "No",
+      "Ditches": "Yes",
+      "Number_of_Ditches": 1,
+      "Ditches_Comments": "Ditches identified through excavation (see Dunne and Bartlett 2009, 226 - 227). Ditch of ringfort omitted",
+      "Annex": "No",
+      "Annex_Summary": "None",
+      "References_": "Connelly, M. 2008. The Prehistoric Settlement of the Lee Valley, Tralee, Co. Kerry: A Landscape Perspective. Unpublished PhD Thesis, University College Cork, Ireland. \r\rDunne, L. and Bartlett, T. 2009. Excavations at Knockanacuig/Lohercannan, Co. Kerry. In Bennett, I. (ed) Excavations Bulletin 2006. Wordwell, Dublin.",
+      "Atlas_URL": "https://experience.arcgis.com/experience/40ccda26452f427a9f081506958e1d81/#data_s=id%3Aacf7b6cc651c4bc1a392992140d959ca-1cbc55d5d6c9413a8e28ea115b03f70f%3A650&widget_23=active_datasource_id:acf7b6cc651c4bc1a392992140d959ca,center:-1083113%2C6849252%2C102100,scale:10000,rotation:0",
+      "Wikidata_URL": "https://www.wikidata.org/entity/Q31082199",
+      "Dating_Evidence": "C14",
+      "Investigations": "1st Identified Map Depiction (1842); Excavation (2006)",
+      "Record_URL": "https://hillforts.arch.ox.ac.uk/records/IR0671.html",
+      "x": -1083112.9287,
+      "y": 6849251.8345,
+      "Image": "IR0671",
+      "LiDAR": "No",
+      "Image_Caption": "Satellite Imagery",
+      "Image_Credit": "Maxar, Microsoft.",
+      "Image_URL": "https://hillforts.arch.ox.ac.uk/images/IR0671.png",
+      "Atlas_ID": "IR0671"
+     },
+     "geometry": {
+      "x": -9.729769,
+      "y": 52.270874
+     }
+    }
+   ]
+  }
+ }
+}
