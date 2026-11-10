@@ -8,6 +8,7 @@ from geoalchemy2 import WKBElement
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     ForeignKey,
     Index,
     Integer,
@@ -65,7 +66,11 @@ class Investigation(Base):
 
 class InvestigationMember(Base):
     __tablename__ = "investigation_members"
-    __table_args__ = (enum_check("role", InvestigationRole),)
+    __table_args__ = (
+        enum_check("role", InvestigationRole),
+        # The owner is a member from the start. Anyone else is invited and joins on accepting.
+        CheckConstraint("role <> 'owner' OR accepted_at IS NOT NULL", name="owner_accepted"),
+    )
 
     investigation_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("investigations.id", ondelete="CASCADE"), primary_key=True
@@ -75,6 +80,8 @@ class InvestigationMember(Base):
     )
     role: Mapped[str] = mapped_column(Text)
     created_at: Mapped[CreatedAt]
+    # Null while the person hasn't accepted the invitation.
+    accepted_at: Mapped[datetime | None] = mapped_column(TimestampTz)
 
 
 class InvestigationItem(Base):

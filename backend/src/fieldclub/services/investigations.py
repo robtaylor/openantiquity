@@ -22,9 +22,22 @@ A banned or deleted account counts as signed out. Anyone a page doesn't let
 read an investigation gets `investigation_not_found`, so an id says nothing
 about a private one. A member can leave; only the owner removes others.
 
-Only a public investigation is ever in a list or a feed. Making one public
-records `investigation_published`; making it unlisted or private again
+Nobody is made a member without saying yes. The owner invites a contributor
+by handle, which writes their row with `accepted_at` null. Until they accept
+they have no role, the investigation isn't in their `mine` list, and they
+can decline by leaving. Someone who hasn't finished the welcome step can't
+be invited.
+
+Only a public investigation is in the public list or a feed. Making one
+public records `investigation_published`; making it unlisted or private again
 removes that row, so no feed built from `activity` can show it afterwards.
+Moderators can list every unlisted investigation (`Scope.UNLISTED`), so
+collaborators never have a channel moderators can't find (Decision 0009,
+rule 5).
+
+When an account is deleted (`forget_account`) its private investigations go
+with it, since nobody else could ever read them. A shared one passes to its
+longest-standing editor, or stays, readable and unmanaged, when it has none.
 
 Every change takes the investigation's row lock first (`load(..., lock=True)`).
 That serialises membership against visibility, and every change to the
@@ -52,7 +65,10 @@ from typing import Any
 from sqlalchemy import delete, func, select, tuple_
 from sqlalchemy.orm import Session
 
+from fieldclub.auth import onboarding
+from fieldclub.config import get_settings
 from fieldclub.errors import (
+    AppError,
     ConflictError,
     ForbiddenError,
     NotFoundError,
@@ -70,7 +86,14 @@ from fieldclub.models import (
     User,
 )
 from fieldclub.models.common import to_db_geometry
-from fieldclub.schemas.common import InvalidCursorError, decode_cursor, int_from_cursor, offset_page, paginate
+from fieldclub.schemas.common import (
+    InvalidCursorError,
+    cursor_int,
+    decode_cursor,
+    int_from_cursor,
+    offset_page,
+    paginate,
+)
 from fieldclub.schemas.text import has_unstorable_character
 from fieldclub.services import activity, findings, geo, ids, records, sensitivity
 from fieldclub.services.records import RecordResult
@@ -122,6 +145,16 @@ class MemberNotFoundError(NotFoundError):
 class UserNotFoundError(NotFoundError):
     code = "user_not_found"
     message = "There's nobody with that handle."
+
+
+class InvitationNotFoundError(NotFoundError):
+    code = "invitation_not_found"
+    message = "You have no invitation to this investigation waiting."
+
+
+class ModeratorOnlyError(ForbiddenError):
+    code = "investigation_moderator_only"
+    message = "Only moderators can list unlisted investigations."
 
 
 class OwnerMembershipError(ConflictError):
@@ -198,7 +231,10 @@ def create_investigation(
     )
     db.add(
         InvestigationMember(
-            investigation_id=investigation.id, user_id=owner.id, role=InvestigationRole.OWNER.value
+            investigation_id=investigation.id,
+            user_id=owner.id,
+            role=InvestigationRole.OWNER.value,
+            accepted_at=func.now(),
         )
     )
     db.flush()
@@ -222,11 +258,17 @@ def _others(db: Session, investigation: Investigation) -> int:
 
 
 def add_member(
-    db: Session, investigation: Investigation, user: User, role: InvestigationRole | str
+    db: Session,
+    investigation: Investigation,
+    user: User,
+    role: InvestigationRole | str,
+    *,
+    accepted: bool = True,
 ) -> InvestigationMember | None:
     """Add a collaborator, or raise `PrivateInvestigationError` if it is private.
 
-    Adding the owner changes nothing and returns None. The caller commits.
+    With `accepted` false the row is an invitation the person has yet to
+    accept. Adding the owner changes nothing and returns None. The caller commits.
     """
     role = InvestigationRole(role)
     if role is InvestigationRole.OWNER:
@@ -235,7 +277,12 @@ def add_member(
         return None
     if Visibility(investigation.visibility) is Visibility.PRIVATE:
         raise PrivateInvestigationError()
-    member = InvestigationMember(investigation_id=investigation.id, user_id=user.id, role=role.value)
+    member = InvestigationMember(
+        investigation_id=investigation.id,
+        user_id=user.id,
+        role=role.value,
+        accepted_at=func.now() if accepted else None,
+    )
     db.add(member)
     db.flush()
     return member
@@ -267,7 +314,7 @@ def change_visibility(
 def check_members(db: Session, investigation: Investigation) -> None:
     """Assert the membership rule holds for one investigation."""
     rows = db.execute(
-        select(InvestigationMember.user_id, InvestigationMember.role).where(
+        select(InvestigationMember.user_id, InvestigationMember.role, InvestigationMember.accepted_at).where(
             InvestigationMember.investigation_id == investigation.id
         )
     ).all()
@@ -275,10 +322,13 @@ def check_members(db: Session, investigation: Investigation) -> None:
         assert len(rows) == 1, (
             f"private investigation {investigation.public_id} must have exactly one member, has {len(rows)}"
         )
-    owners = [user_id for user_id, role in rows if role == InvestigationRole.OWNER.value]
-    assert owners == [investigation.owner_id], (
+    owners = [
+        (user_id, accepted) for user_id, role, accepted in rows if role == InvestigationRole.OWNER.value
+    ]
+    assert [user_id for user_id, _ in owners] == [investigation.owner_id], (
         f"investigation {investigation.public_id} must have its owner as an owner member, found {owners}"
     )
+    assert owners[0][1] is not None, f"the owner of {investigation.public_id} must have accepted"
 
 
 # --------------------------------------------------------------------------
@@ -294,10 +344,14 @@ class Need(StrEnum):
 
 @dataclass(frozen=True)
 class Access:
-    """An investigation and the viewer's role in it, None for someone who isn't a member."""
+    """An investigation and the viewer's role in it, None for someone who isn't a member.
+
+    `invited` is the role a pending invitation offers the viewer, if there is one.
+    """
 
     investigation: Investigation
     role: InvestigationRole | None
+    invited: InvestigationRole | None = None
 
     @property
     def may_edit(self) -> bool:
@@ -308,17 +362,27 @@ class Access:
         return self.role is InvestigationRole.OWNER
 
 
-def role_of(db: Session, investigation: Investigation, viewer: User | None) -> InvestigationRole | None:
-    """The viewer's role in the investigation. A banned or deleted account has none."""
+def membership(db: Session, investigation: Investigation, viewer: User | None) -> InvestigationMember | None:
+    """The viewer's row, accepted or not. A banned or deleted account has none."""
     active = sensitivity.active_viewer(viewer)
     if active is None:
         return None
-    role = db.scalar(
-        select(InvestigationMember.role).where(
-            InvestigationMember.investigation_id == investigation.id, InvestigationMember.user_id == active.id
-        )
-    )
-    return InvestigationRole(role) if role is not None else None
+    return db.get(InvestigationMember, (investigation.id, active.id))
+
+
+def access_for(db: Session, investigation: Investigation, viewer: User | None) -> Access:
+    """The viewer's role, or the role an invitation they haven't accepted offers them."""
+    member = membership(db, investigation, viewer)
+    if member is None:
+        return Access(investigation, None)
+    if member.accepted_at is None:
+        return Access(investigation, None, invited=InvestigationRole(member.role))
+    return Access(investigation, InvestigationRole(member.role))
+
+
+def role_of(db: Session, investigation: Investigation, viewer: User | None) -> InvestigationRole | None:
+    """The viewer's role in the investigation. An invitation not yet accepted gives none."""
+    return access_for(db, investigation, viewer).role
 
 
 def may_read(investigation: Investigation, role: InvestigationRole | None) -> bool:
@@ -345,7 +409,7 @@ def load(
     investigation = db.scalar(query)
     if investigation is None:
         raise InvestigationNotFoundError()
-    access = Access(investigation, role_of(db, investigation, viewer))
+    access = access_for(db, investigation, viewer)
     if not may_read(investigation, access.role):
         raise InvestigationNotFoundError()
     if need is Need.EDIT and not access.may_edit:
@@ -407,6 +471,10 @@ class Scope(StrEnum):
     PUBLIC = "public"
     # Every investigation the viewer belongs to, whatever its visibility.
     MINE = "mine"
+    # The ones the viewer has been invited to and hasn't yet accepted.
+    INVITED = "invited"
+    # Every unlisted investigation, for moderators only.
+    UNLISTED = "unlisted"
 
 
 @dataclass(frozen=True)
@@ -436,26 +504,35 @@ def list_investigations(
 ) -> tuple[list[Listed], str | None]:
     """A page of investigations, most recently changed first.
 
-    `bbox` matches the area the investigation's editors drew. Unlisted and
-    private investigations are only ever listed for their own members.
+    `bbox` matches the area the investigation's editors drew. A private
+    investigation is only ever listed for its owner, and an unlisted one for
+    its members, the people invited to it, and moderators.
     """
     query = select(Investigation, User, _item_count()).join(User, User.id == Investigation.owner_id)
-    if scope is Scope.MINE:
+    if scope is Scope.PUBLIC:
+        query = query.where(Investigation.visibility == Visibility.PUBLIC.value)
+    else:
         active = sensitivity.active_viewer(viewer)
         if active is None:
             raise UnauthorisedError()
-        query = query.join(
-            InvestigationMember,
-            (InvestigationMember.investigation_id == Investigation.id)
-            & (InvestigationMember.user_id == active.id),
-        )
-    else:
-        query = query.where(Investigation.visibility == Visibility.PUBLIC.value)
+        if scope is Scope.UNLISTED:
+            if not findings.is_moderator(active):
+                raise ModeratorOnlyError()
+            query = query.where(Investigation.visibility == Visibility.UNLISTED.value)
+        else:
+            accepted = InvestigationMember.accepted_at.is_not(None)
+            query = query.join(
+                InvestigationMember,
+                (InvestigationMember.investigation_id == Investigation.id)
+                & (InvestigationMember.user_id == active.id)
+                & (accepted if scope is Scope.MINE else ~accepted),
+            )
     if bbox is not None:
         query = query.where(func.ST_Intersects(Investigation.area, geo.envelope(bbox)))
     if cursor is not None:
         value, last_id = decode_cursor(cursor, 2)
-        if not isinstance(value, str) or not isinstance(last_id, int) or isinstance(last_id, bool):
+        last_id = cursor_int(last_id)
+        if not isinstance(value, str):
             raise InvalidCursorError()
         try:
             after = datetime.fromisoformat(value)
@@ -482,7 +559,10 @@ def counts(db: Session, investigation: Investigation) -> Counts:
     members = db.scalar(
         select(func.count())
         .select_from(InvestigationMember)
-        .where(InvestigationMember.investigation_id == investigation.id)
+        .where(
+            InvestigationMember.investigation_id == investigation.id,
+            InvestigationMember.accepted_at.is_not(None),
+        )
     )
     assert items is not None
     assert members is not None
@@ -498,16 +578,21 @@ def counts(db: Session, investigation: Investigation) -> Counts:
 class MemberView:
     user: User
     role: InvestigationRole
+    # When they were invited, or added as the owner.
     joined_at: datetime
+    # False while the invitation waits for an answer.
+    accepted: bool = True
 
 
 def list_members(
     db: Session, investigation: Investigation, *, limit: int, cursor: str | None = None
 ) -> tuple[list[MemberView], str | None]:
-    """The owner first, then everyone else in the order they joined."""
+    """The owner first, then everyone else in the order they were invited, invitations included."""
     offset = 0 if cursor is None else int_from_cursor(cursor)
     rows = db.execute(
-        select(User, InvestigationMember.role, InvestigationMember.created_at)
+        select(
+            User, InvestigationMember.role, InvestigationMember.created_at, InvestigationMember.accepted_at
+        )
         .join(InvestigationMember, InvestigationMember.user_id == User.id)
         .where(InvestigationMember.investigation_id == investigation.id)
         .order_by(
@@ -518,26 +603,52 @@ def list_members(
         .offset(offset)
         .limit(limit + 1)
     ).all()
-    views = [MemberView(user, InvestigationRole(role), joined) for user, role, joined in rows]
+    views = [
+        MemberView(user, InvestigationRole(role), joined, accepted is not None)
+        for user, role, joined, accepted in rows
+    ]
     return offset_page(views, offset, limit, max_offset=MAX_MEMBERS)
 
 
 def find_user(db: Session, handle: str) -> User:
-    """The active account with this handle, or `UserNotFoundError`."""
+    """The contributor with this handle, or `UserNotFoundError`.
+
+    Someone banned, deleted, or who hasn't finished the welcome step and so
+    has no age band (Decision 0009, rule 2) can't be invited, and is not found.
+    """
     if has_unstorable_character(handle):
         raise UserNotFoundError()
     user = db.scalar(select(User).where(User.handle == handle))
     if user is None or not user.is_active:
         raise UserNotFoundError()
+    try:
+        onboarding.check_contributor(user, get_settings())
+    except AppError:
+        raise UserNotFoundError() from None
+    return user
+
+
+def find_member(db: Session, investigation: Investigation, handle: str) -> User:
+    """The member, or invited person, with this handle, whatever state their account is in."""
+    if has_unstorable_character(handle):
+        raise MemberNotFoundError()
+    user = db.scalar(
+        select(User)
+        .join(InvestigationMember, InvestigationMember.user_id == User.id)
+        .where(InvestigationMember.investigation_id == investigation.id, User.handle == handle)
+    )
+    if user is None:
+        raise MemberNotFoundError()
     return user
 
 
 def put_member(
     db: Session, access: Access, user: User, role: InvestigationRole | str
 ) -> tuple[InvestigationMember, bool]:
-    """Add `user` with `role`, or change the role they have. True when they were added.
+    """Invite `user` with `role`, or change the role they have or were offered. True when invited.
 
     The owner's call, under the lock. A private investigation takes nobody.
+    The person is a member once they accept (`accept_invitation`).
     """
     role = InvestigationRole(role)
     investigation = access.investigation
@@ -552,21 +663,39 @@ def put_member(
         return existing, False
     if _others(db, investigation) + 1 >= MAX_MEMBERS:
         raise TooManyMembersError()
-    member = add_member(db, investigation, user, role)
+    member = add_member(db, investigation, user, role, accepted=False)
     assert member is not None, "the owner was handled above"
     return member, True
 
 
-def remove_member(db: Session, access: Access, actor: User, user: User) -> None:
-    """Remove a member. The owner removes anyone else; anyone else can leave."""
+def accept_invitation(db: Session, access: Access, user: User) -> InvestigationMember:
+    """Make the invitation `user` holds a membership. The caller holds the lock and commits."""
+    member = db.get(InvestigationMember, (access.investigation.id, user.id))
+    if member is None or member.accepted_at is not None:
+        raise InvitationNotFoundError()
+    member.accepted_at = func.now()
+    db.flush()
+    return member
+
+
+def remove_member(db: Session, access: Access, actor: User, handle: str) -> None:
+    """Remove a member or an invitation by handle.
+
+    The owner removes anyone else; anyone else can leave or decline.
+    """
     investigation = access.investigation
+    try:
+        user = find_member(db, investigation, handle)
+    except MemberNotFoundError:
+        if not access.is_owner:
+            raise OwnerOnlyError() from None
+        raise
     if user.id == investigation.owner_id:
         raise OwnerMembershipError()
     if not (access.is_owner or actor.has_id(user.id)):
         raise OwnerOnlyError()
     member = db.get(InvestigationMember, (investigation.id, user.id))
-    if member is None:
-        raise MemberNotFoundError()
+    assert member is not None, "find_member found them through their row"
     db.delete(member)
     db.flush()
 
@@ -741,8 +870,7 @@ def list_items(
     query = select(InvestigationItem).where(InvestigationItem.investigation_id == investigation.id)
     if cursor is not None:
         position, last_id = decode_cursor(cursor, 2)
-        if not all(isinstance(value, int) and not isinstance(value, bool) for value in (position, last_id)):
-            raise InvalidCursorError()
+        position, last_id = cursor_int(position), cursor_int(last_id)
         query = query.where(tuple_(InvestigationItem.position, InvestigationItem.id) > (position, last_id))
     rows = db.scalars(query.order_by(InvestigationItem.position, InvestigationItem.id).limit(limit + 1)).all()
     return paginate(rows, limit, lambda item: [item.position, item.id])
@@ -836,3 +964,52 @@ def item_views(db: Session, items: Sequence[InvestigationItem], viewer: User | N
         else:
             views.append(ItemView(item, added_by))
     return views
+
+
+# --------------------------------------------------------------------------
+# Account deletion
+# --------------------------------------------------------------------------
+
+
+def forget_account(db: Session, user: User) -> None:
+    """Deal with a person's investigations when their account is deleted. The caller commits.
+
+    Their private investigations are deleted, since nobody else could ever
+    read them again. Each shared one they own passes to its longest-standing
+    editor. One with no editor keeps its owner and stays readable, but
+    nobody can manage it any more. Their memberships and invitations elsewhere go.
+    """
+    owned = db.scalars(select(Investigation).where(Investigation.owner_id == user.id).with_for_update()).all()
+    for investigation in owned:
+        if Visibility(investigation.visibility) is Visibility.PRIVATE:
+            db.delete(investigation)
+            continue
+        heir = db.scalar(
+            select(InvestigationMember)
+            .where(
+                InvestigationMember.investigation_id == investigation.id,
+                InvestigationMember.role == InvestigationRole.EDITOR.value,
+                InvestigationMember.accepted_at.is_not(None),
+            )
+            .order_by(InvestigationMember.accepted_at, InvestigationMember.user_id)
+            .limit(1)
+        )
+        if heir is None:
+            continue
+        db.execute(
+            delete(InvestigationMember).where(
+                InvestigationMember.investigation_id == investigation.id,
+                InvestigationMember.user_id == user.id,
+            )
+        )
+        heir.role = InvestigationRole.OWNER.value
+        investigation.owner_id = heir.user_id
+        db.flush()
+        check_members(db, investigation)
+    db.execute(
+        delete(InvestigationMember).where(
+            InvestigationMember.user_id == user.id,
+            InvestigationMember.role != InvestigationRole.OWNER.value,
+        )
+    )
+    db.flush()

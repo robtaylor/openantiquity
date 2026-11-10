@@ -15,7 +15,14 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, UrlConstraints
 
 from fieldclub.models import Investigation, User
-from fieldclub.schemas.common import ApiModel, GeoJSONGeometry, PublicUser, RequestModel, geojson_geometry
+from fieldclub.schemas.common import (
+    MAX_ID,
+    ApiModel,
+    GeoJSONGeometry,
+    PublicUser,
+    RequestModel,
+    geojson_geometry,
+)
 from fieldclub.schemas.findings import FindingSummary, ViewState
 from fieldclub.schemas.records import RecordSummary, record_summary
 from fieldclub.services.investigations import ItemView, Listed, MemberView, Unavailable
@@ -91,7 +98,7 @@ class FindingItemIn(RequestModel):
 
 class RecordItemIn(RequestModel):
     kind: Literal[InvestigationItemKind.RECORD]
-    record_id: int = Field(ge=1)
+    record_id: int = Field(ge=1, le=MAX_ID)
     title: ItemTitle = None
     note: ItemNote = None
 
@@ -171,7 +178,7 @@ class ItemUpdate(RequestModel):
 class ItemMove(RequestModel):
     """Where to put the item: straight after the item `after`, or first when it is null."""
 
-    after: int | None = Field(ge=1)
+    after: int | None = Field(ge=1, le=MAX_ID)
 
 
 # --------------------------------------------------------------------------
@@ -244,6 +251,8 @@ class InvestigationDetail(InvestigationSummary):
     member_count: int
     # Your role, or null when you aren't a member.
     my_role: InvestigationRole | None
+    # The role you've been invited to take, until you accept or decline. Null otherwise.
+    invited_as: InvestigationRole | None
 
     @classmethod
     def build(
@@ -254,23 +263,33 @@ class InvestigationDetail(InvestigationSummary):
         item_count: int,
         member_count: int,
         role: InvestigationRole | None,
+        invited_as: InvestigationRole | None = None,
     ) -> InvestigationDetail:
         return cls(
             **_summary_fields(investigation, owner, item_count),
             notes=investigation.notes,
             member_count=member_count,
             my_role=role,
+            invited_as=invited_as,
         )
 
 
 class MemberOut(ApiModel):
     user: PublicUser
     role: InvestigationRole
+    # When they were invited, or for the owner when the investigation began.
     joined_at: datetime
+    # True until the person accepts the invitation. Until then they can't edit.
+    pending: bool
 
     @classmethod
     def build(cls, view: MemberView) -> MemberOut:
-        return cls(user=PublicUser.from_user(view.user), role=view.role, joined_at=view.joined_at)
+        return cls(
+            user=PublicUser.from_user(view.user),
+            role=view.role,
+            joined_at=view.joined_at,
+            pending=not view.accepted,
+        )
 
 
 class InvestigationItemOut(ApiModel):

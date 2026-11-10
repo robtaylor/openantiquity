@@ -24,7 +24,7 @@ from fieldclub.auth.handles import (
 )
 from fieldclub.errors import AppError
 from fieldclub.models import AuthIdentity, Follow, MagicLink, Notification, User
-from fieldclub.services import ids
+from fieldclub.services import ids, investigations
 from fieldclub.vocab import Role
 
 logger = logging.getLogger(__name__)
@@ -166,6 +166,8 @@ def delete_account(db: Session, user: User, *, now: datetime | None = None) -> N
     # Without the follows, events would go on writing notifications nobody can read.
     db.execute(delete(Follow).where(Follow.user_id == user.id))
     db.execute(delete(Notification).where(Notification.user_id == user.id))
+    # Private investigations go; shared ones pass to an editor (see `forget_account`).
+    investigations.forget_account(db, user)
 
     user.email = None
     user.email_verified_at = None

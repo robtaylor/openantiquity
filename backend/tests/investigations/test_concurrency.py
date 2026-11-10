@@ -150,4 +150,5 @@ def test_adding_a_member_while_making_it_private_lets_only_the_first_through(
     assert stored is not None
     assert stored.visibility == ("unlisted" if adding_first else "private")
     investigations.check_members(db, stored)
-    assert investigations.counts(db, stored).members == (2 if adding_first else 1)
+    members, _ = investigations.list_members(db, stored, limit=10)
+    assert len(members) == (2 if adding_first else 1)

@@ -29,8 +29,9 @@ MAX_CURSOR_CHARS = 512
 # The furthest any list paged by offset goes. Nobody reads 2,000 results, and
 # an unbounded offset makes the database walk past every row before it.
 MAX_OFFSET = 2000
-# The largest id or offset a cursor may hold: PostgreSQL's BIGINT.
-_MAX_CURSOR_INT = 2**63 - 1
+# The largest id or offset a cursor may hold, and the largest id a path or body
+# may name: PostgreSQL's BIGINT. Above it PostgreSQL raises rather than finds nothing.
+MAX_ID = 2**63 - 1
 
 # A source's stored record count. A source that has never been ingested has none, which reads as 0.
 RecordCount = Annotated[int, BeforeValidator(lambda value: value or 0)]
@@ -113,7 +114,7 @@ def decode_cursor(cursor: str, length: int | None = None) -> list[Any]:
 
 def cursor_int(value: Any) -> int:
     """A value from a cursor that must be a whole number a BIGINT column can hold, not negative."""
-    if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= _MAX_CURSOR_INT:
+    if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= MAX_ID:
         raise InvalidCursorError()
     return value
 

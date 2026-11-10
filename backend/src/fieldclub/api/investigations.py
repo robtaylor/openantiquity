@@ -13,11 +13,11 @@ import shapely
 from fastapi import APIRouter, Depends, Path, Query, Response, status
 from shapely.geometry.base import BaseGeometry
 
-from fieldclub.api.deps import Contributor, Db, OptionalUser, PageQuery, private, rate_limit
+from fieldclub.api.deps import Contributor, CurrentUser, Db, OptionalUser, PageQuery, private, rate_limit
 from fieldclub.api.findings import parse_bbox
 from fieldclub.errors import ValidationFailedError
 from fieldclub.models import User
-from fieldclub.schemas.common import GeoJSONGeometry, Page, from_geojson
+from fieldclub.schemas.common import MAX_ID, GeoJSONGeometry, Page, from_geojson
 from fieldclub.schemas.investigations import (
     AREA_MAX_POINTS,
     InvestigationCreate,
@@ -44,6 +44,8 @@ EXPORT_LIMIT = Depends(rate_limit("investigations_export", 60, per_seconds=3600)
 AREA_TYPES = ("Polygon", "MultiPolygon")
 HANDLE_MAX = 64
 
+ItemId = Annotated[int, Path(ge=1, le=MAX_ID)]
+
 
 def _area(geometry: GeoJSONGeometry | None) -> BaseGeometry | None:
     if geometry is None:
@@ -61,7 +63,12 @@ def _detail(db: Db, access: Access) -> InvestigationDetail:
     owner = db.get(User, investigation.owner_id)
     assert owner is not None
     return InvestigationDetail.build(
-        investigation, owner, item_count=counts.items, member_count=counts.members, role=access.role
+        investigation,
+        owner,
+        item_count=counts.items,
+        member_count=counts.members,
+        role=access.role,
+        invited_as=access.invited,
     )
 
 
@@ -85,7 +92,12 @@ def list_investigations(
     scope: Scope = Scope.PUBLIC,
     bbox: Annotated[str | None, Query(max_length=200, description="west,south,east,north")] = None,
 ) -> Page[InvestigationSummary]:
-    """Public investigations, or with `scope=mine` every one you belong to. `bbox` matches their area."""
+    """Public investigations. `bbox` matches their area.
+
+    `scope=mine` lists every one you belong to, `scope=invited` the ones
+    you've been invited to and haven't answered, and `scope=unlisted` every
+    unlisted one, for moderators only (`investigation_moderator_only`).
+    """
     rows, next_cursor = investigations.list_investigations(
         db, viewer, scope, bbox=parse_bbox(bbox), limit=page.limit, cursor=page.cursor
     )
@@ -213,7 +225,7 @@ def add_item(
     dependencies=[EDIT_LIMIT],
 )
 def update_item(
-    public_id: str, item_id: int, body: ItemUpdate, user: Contributor, db: Db, response: Response
+    public_id: str, item_id: ItemId, body: ItemUpdate, user: Contributor, db: Db, response: Response
 ) -> InvestigationItemOut:
     """Change an item's title, note or content. What it points at stays."""
     access = investigations.load(db, public_id, user, Need.EDIT, lock=True)
@@ -229,7 +241,7 @@ def update_item(
     dependencies=[EDIT_LIMIT],
 )
 def move_item(
-    public_id: str, item_id: int, body: ItemMove, user: Contributor, db: Db, response: Response
+    public_id: str, item_id: ItemId, body: ItemMove, user: Contributor, db: Db, response: Response
 ) -> InvestigationItemOut:
     """Put an item straight after another, or first with `after: null`. Places are renumbered from 0."""
     access = investigations.load(db, public_id, user, Need.EDIT, lock=True)
@@ -244,7 +256,7 @@ def move_item(
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[EDIT_LIMIT],
 )
-def remove_item(public_id: str, item_id: int, user: Contributor, db: Db) -> None:
+def remove_item(public_id: str, item_id: ItemId, user: Contributor, db: Db) -> None:
     access = investigations.load(db, public_id, user, Need.EDIT, lock=True)
     investigations.remove_item(db, access, item_id)
     db.commit()
@@ -279,9 +291,11 @@ def list_members(
 def put_member(
     public_id: str, handle: Handle, body: MemberIn, user: Contributor, db: Db, response: Response
 ) -> MemberOut:
-    """Add someone by handle as an editor or viewer, or change their role. The owner's call.
+    """Invite a contributor by handle as an editor or viewer, or change their role. The owner's call.
 
-    A private investigation takes nobody: make it public or unlisted first.
+    The person is a member once they accept (`POST .../invitation`); until
+    then the member list shows them as `pending`. A private investigation
+    takes nobody: make it public or unlisted first.
     """
     access = investigations.load(db, public_id, user, Need.OWN, lock=True)
     person = investigations.find_user(db, handle)
@@ -289,7 +303,21 @@ def put_member(
     db.commit()
     response.status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
     private(response)
-    return MemberOut.build(investigations.MemberView(person, body.role, member.created_at))
+    return MemberOut.build(
+        investigations.MemberView(person, body.role, member.created_at, member.accepted_at is not None)
+    )
+
+
+@router.post(
+    "/investigations/{public_id}/invitation", response_model=InvestigationDetail, dependencies=[EDIT_LIMIT]
+)
+def accept_invitation(public_id: str, user: Contributor, db: Db, response: Response) -> InvestigationDetail:
+    """Accept your invitation, and become a member with the role offered. Decline by leaving."""
+    access = investigations.load(db, public_id, user, lock=True)
+    member = investigations.accept_invitation(db, access, user)
+    db.commit()
+    private(response)
+    return _detail(db, Access(access.investigation, InvestigationRole(member.role)))
 
 
 @router.delete(
@@ -297,10 +325,13 @@ def put_member(
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[EDIT_LIMIT],
 )
-def remove_member(public_id: str, handle: Handle, user: Contributor, db: Db) -> None:
-    """Remove a member (the owner), or leave (anyone else)."""
+def remove_member(public_id: str, handle: Handle, user: CurrentUser, db: Db) -> None:
+    """Remove a member or withdraw an invitation (the owner), or leave or decline (anyone else).
+
+    Leaving needs only a session, so someone who hasn't finished the welcome step can still go.
+    """
     access = investigations.load(db, public_id, user, lock=True)
-    investigations.remove_member(db, access, user, investigations.find_user(db, handle))
+    investigations.remove_member(db, access, user, handle)
     db.commit()
 
 

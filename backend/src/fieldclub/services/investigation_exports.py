@@ -88,7 +88,8 @@ def gather(
     return InvestigationExport(
         investigation=investigation,
         owner=owner,
-        members=members,
+        # Invitations nobody has accepted aren't part of the work.
+        members=[member for member in members if member.accepted],
         entries=entries,
         exported_at=now or datetime.now(UTC),
         url=f"{base}/i/{investigation.public_id}",
