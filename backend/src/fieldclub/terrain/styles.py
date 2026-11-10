@@ -9,8 +9,11 @@ National Library of Scotland built its England Combined VAT. At lower zooms a
 radius in metres would shrink below a pixel, so each has a floor in pixels,
 which makes the kernel cover more ground as the map zooms out.
 
-A style's `version` is part of its cache key. Change it whenever anything
-that alters its pixels changes: a parameter, a stretch, a floor, the blend.
+A style's `version` is part of its cache key and its tile URL. Change it
+whenever anything that alters its pixels changes: a parameter, a stretch, a
+floor, the blend, or the shared code in `visualise.py` and `grid.py`.
+`tests/terrain/test_versions.py` fails when the pixels change and the
+version doesn't.
 """
 
 from __future__ import annotations
@@ -85,9 +88,26 @@ def _composite(z: np.ndarray, res: np.ndarray, zoom: int) -> np.ndarray:
     return vis.combined_vat(z, res, SVF_GENERAL.pixels(zoom), flat_max, flat_min)
 
 
+# RVT's 8-bit stretch for SLRM, +/-2 m, applies at the published 10 m radius.
+SLRM_STRETCH_M = 2.0
+
+
+def local_relief_stretch(zoom: int) -> float:
+    """The half-range of the local relief stretch, in metres, for the radius used at a zoom.
+
+    Below zoom 15 the pixel floor makes the radius cover more ground, and
+    relief grows about in proportion to it: over the same 2 km of real ground
+    the 5-95% spread was 0.09 of the stretch at zoom 16, 0.14 at 13 and over
+    0.84 at 11, where 8% of pixels clipped. So the stretch widens with the
+    radius, which keeps the contrast steady across zooms.
+    """
+    radius_m = SLRM.pixels(zoom) * nominal_ground_resolution(zoom)
+    return SLRM_STRETCH_M * radius_m / SLRM.metres
+
+
 def _local_relief(z: np.ndarray, res: np.ndarray, zoom: int) -> np.ndarray:
-    # RVT's 8-bit stretch for SLRM.
-    return vis.stretch(vis.local_relief(z, SLRM.pixels(zoom)), -2.0, 2.0)
+    half = local_relief_stretch(zoom)
+    return vis.stretch(vis.local_relief(z, SLRM.pixels(zoom)), -half, half)
 
 
 def _sky_view(z: np.ndarray, res: np.ndarray, zoom: int) -> np.ndarray:
@@ -117,12 +137,12 @@ def _slope(z: np.ndarray, res: np.ndarray, zoom: int) -> np.ndarray:
 STYLES: dict[str, Style] = {
     style.id: style
     for style in (
-        Style("composite", "1", _composite, (SVF_GENERAL, SVF_FLAT)),
-        Style("local_relief", "1", _local_relief, (SLRM,)),
-        Style("sky_view", "1", _sky_view, (SVF_GENERAL,)),
+        Style("composite", "2", _composite, (SVF_GENERAL, SVF_FLAT)),
+        Style("local_relief", "2", _local_relief, (SLRM,)),
+        Style("sky_view", "2", _sky_view, (SVF_GENERAL,)),
         Style("multi_shade", "1", _multi_shade, ()),
         Style("slope", "1", _slope, ()),
-        Style("openness", "1", _openness, (SVF_GENERAL,)),
+        Style("openness", "2", _openness, (SVF_GENERAL,)),
     )
 }
 

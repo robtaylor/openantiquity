@@ -123,6 +123,10 @@ def sky_view_and_openness(
     between `r_min` and `r_max` pixels away is found. Sky-view factor is the
     mean of 1 - sin(max(g, 0)), and positive openness is 90 minus the mean of
     g, so a ditch is dark in sky-view and a bank or mound bright.
+
+    A ray with no data anywhere along it, as next to a coast or the edge of
+    coverage, says nothing about the horizon, so the means are over the rays
+    that have some. A pixel with none is NaN.
     """
     z = np.asarray(z, dtype=np.float32)
     height, width = z.shape
@@ -130,6 +134,7 @@ def sky_view_and_openness(
     padded = np.pad(z, r_max, constant_values=np.nan)
     svf = np.zeros(z.shape, dtype=np.float32)
     angle_sum = np.zeros(z.shape, dtype=np.float32)
+    seen = np.zeros(z.shape, dtype=np.int32)
     steepest = np.empty(z.shape, dtype=np.float32)
     rise = np.empty(z.shape, dtype=np.float32)
     for index in range(directions):
@@ -140,15 +145,17 @@ def sky_view_and_openness(
             rise *= np.float32(1 / distance)
             # fmax ignores NaN, so a neighbour with no data doesn't count.
             np.fmax(steepest, rise, out=steepest)
+        # Still -inf where every point along the ray had no data.
+        has_horizon = np.isfinite(steepest)
         steepest /= rows
         lifted = np.maximum(steepest, 0)
-        svf += 1 - lifted / np.sqrt(1 + lifted * lifted)
-        angle_sum += np.arctan(steepest)
-    no_data = ~np.isfinite(z)
-    svf /= directions
-    openness = 90 - np.degrees(angle_sum / directions)
-    svf[no_data] = np.nan
-    openness[no_data] = np.nan
+        svf += np.where(has_horizon, 1 - lifted / np.sqrt(1 + lifted * lifted), 0)
+        angle_sum += np.where(has_horizon, np.arctan(steepest), 0)
+        seen += has_horizon
+    usable = np.isfinite(z) & (seen > 0)
+    count = np.maximum(seen, 1)
+    svf = np.where(usable, svf / count, np.nan).astype(np.float32)
+    openness = np.where(usable, 90 - np.degrees(angle_sum / count), np.nan)
     return svf, openness.astype(np.float32)
 
 

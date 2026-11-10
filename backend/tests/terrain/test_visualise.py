@@ -118,6 +118,27 @@ def test_sky_view_on_a_tilted_plane_matches_the_value_its_rays_see() -> None:
     assert 0.9 < svf[30, 30] < 1
 
 
+@pytest.mark.parametrize(("r_max", "r_min"), [(10, 1), (20, 8)])
+def test_flat_ground_beside_no_data_is_as_open_as_flat_ground_anywhere(r_max: int, r_min: int) -> None:
+    # Flat ground with no data east of column 25, as at a coast or the edge of coverage.
+    flat = np.full((60, 60), 50.0, dtype=np.float32)
+    flat[:, 26:] = np.nan
+    svf, openness = vis.sky_view_and_openness(flat, 1.0, r_max, r_min)
+    # Rays into the gap used to count as unobstructed, which read as 118 degrees next to the edge.
+    assert np.nanmax(np.abs(openness[:, :26] - 90.0)) < 1e-3
+    assert np.nanmax(np.abs(svf[:, :26] - 1.0)) < 1e-6
+    assert np.isfinite(openness[:, :26]).all()
+    assert np.isnan(openness[:, 26:]).all()
+
+
+def test_a_lone_pixel_with_no_neighbours_in_reach_has_no_value() -> None:
+    lone = np.full((30, 30), np.nan, dtype=np.float32)
+    lone[15, 15] = 10.0
+    svf, openness = vis.sky_view_and_openness(lone, 1.0, 5, r_min=1)
+    assert np.isnan(svf[15, 15])
+    assert np.isnan(openness[15, 15])
+
+
 def test_horizon_search_ignores_points_nearer_than_r_min(land: np.ndarray) -> None:
     near, _ = vis.sky_view_and_openness(land, 1.0, 20, r_min=1)
     far, _ = vis.sky_view_and_openness(land, 1.0, 20, r_min=8)
