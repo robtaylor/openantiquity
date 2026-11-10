@@ -140,7 +140,17 @@ def test_layers(meta: dict) -> None:
     assert composite["tiles"][0].startswith("/tiles/lidar/composite/{z}/{x}/{y}.png?v=")
     assert (composite["bounds"], composite["default"]) == (None, True)
     raking = layers["views"][5]
-    assert set(raking) == {"id", "title", "group", "type", "description", "attribution"}
+    assert set(raking) == {
+        "id",
+        "title",
+        "group",
+        "type",
+        "description",
+        "attribution",
+        "licence",
+        "licence_url",
+        "reuse",
+    }
     assert layers["dem"]["encoding"] == "terrarium"
     assert [overlay["type"] for overlay in layers["overlays"]] == [
         "openmaptiles",
@@ -195,29 +205,44 @@ def sources(db: Session) -> None:
 
 
 def test_sources_lists_enabled_sources_with_attribution(sources: None, client: TestClient) -> None:
+    """Each source carries what showing or copying its records needs, reuse class included (Decision 0004)."""
     listed = client.get("/api/v1/meta").json()["sources"]
     assert listed == [
-        {
-            "key": "nhle-scheduled",
-            "name": "Scheduled monuments",
-            "publisher": "Historic England",
-            "licence": "OGL v3.0",
-            "attribution": "© Historic England",
-            "homepage": "https://historicengland.org.uk/listing/the-list/",
-            "category": "designation",
-            "record_count": 19_900,
-        },
         {
             "key": "fresh",
             "name": "Not ingested yet",
             "publisher": "Someone",
             "licence": "OGL v3.0",
+            "licence_url": None,
             "attribution": "© Someone",
+            "reuse": "open",
             "homepage": None,
+            "coverage": None,
             "category": "monument",
+            "access": "bulk",
             "record_count": 0,
+            "last_ingest_at": None,
+        },
+        {
+            "key": "nhle-scheduled",
+            "name": "Scheduled monuments",
+            "publisher": "Historic England",
+            "licence": "OGL v3.0",
+            "licence_url": None,
+            "attribution": "© Historic England",
+            "reuse": "open",
+            "homepage": "https://historicengland.org.uk/listing/the-list/",
+            "coverage": None,
+            "category": "designation",
+            "access": "bulk",
+            "record_count": 19_900,
+            "last_ingest_at": None,
         },
     ]
+
+
+def test_meta_and_the_sources_list_describe_a_source_the_same_way(sources: None, client: TestClient) -> None:
+    assert client.get("/api/v1/meta").json()["sources"] == client.get("/api/v1/sources").json()
 
 
 def test_notices(meta: dict) -> None:

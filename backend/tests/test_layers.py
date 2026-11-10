@@ -10,6 +10,7 @@ from fieldclub import layers
 from fieldclub.schemas.meta import CoverageOverlay, RakingView, RasterView
 from fieldclub.terrain.render import tile_version
 from fieldclub.terrain.service import TILE_EDITIONS
+from fieldclub.vocab import SourceReuse
 
 
 @pytest.fixture
@@ -49,6 +50,9 @@ def test_composite_matches_the_documented_shape_exactly() -> None:
         "minzoom",
         "maxzoom",
         "attribution",
+        "licence",
+        "licence_url",
+        "reuse",
         "bounds",
         "default",
     ]
@@ -65,6 +69,9 @@ def test_composite_matches_the_documented_shape_exactly() -> None:
         "minzoom": 7,
         "maxzoom": 16,
         "attribution": composite["attribution"],
+        "licence": "Open Government Licence v3.0",
+        "licence_url": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+        "reuse": "open",
         "bounds": None,
         "default": True,
     }
@@ -90,7 +97,17 @@ def test_exactly_one_view_is_the_default() -> None:
 
 def test_raking_view_has_only_the_documented_keys() -> None:
     raking = next(view for view in dump()["views"] if view["id"] == "raking")
-    assert set(raking) == {"id", "title", "group", "type", "description", "attribution"}
+    assert set(raking) == {
+        "id",
+        "title",
+        "group",
+        "type",
+        "description",
+        "attribution",
+        "licence",
+        "licence_url",
+        "reuse",
+    }
     assert (raking["title"], raking["group"], raking["type"]) == ("Raking light", "lidar", "raking")
 
 
@@ -111,6 +128,9 @@ def test_dem_source() -> None:
         "minzoom": 7,
         "maxzoom": 16,
         "attribution": dem["attribution"],
+        "licence": "Open Government Licence v3.0",
+        "licence_url": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+        "reuse": "open",
     }
     assert dem["attribution"]
 
@@ -127,6 +147,9 @@ def test_overlays() -> None:
         "glyphs": "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
         "default_opacity": 0.8,
         "attribution": osm["attribution"],
+        "licence": "Open Database License 1.0",
+        "licence_url": "https://www.openstreetmap.org/copyright",
+        "reuse": "share_alike",
     }
     assert "OpenStreetMap" in osm["attribution"]
     assert "OpenMapTiles" in osm["attribution"]
@@ -160,6 +183,9 @@ def test_layers_can_be_appended(restore_catalogue: None) -> None:
             minzoom=1,
             maxzoom=17,
             attribution="National Library of Scotland",
+            licence="CC BY 4.0",
+            licence_url="https://creativecommons.org/licenses/by/4.0/",
+            reuse=SourceReuse.OPEN,
             bounds=(-8.7, 49.8, 1.8, 60.9),
         )
     )
@@ -173,7 +199,14 @@ def test_layers_can_be_appended(restore_catalogue: None) -> None:
 def test_duplicate_ids_are_refused(restore_catalogue: None) -> None:
     with pytest.raises(AssertionError, match="already in the catalogue"):
         layers.add_view(
-            RakingView(id="raking", title="Again", group="lidar", description="x", attribution="y"),
+            RakingView(
+                id="raking",
+                title="Again",
+                group="lidar",
+                description="x",
+                attribution="y",
+                **layers.LIDAR_TERMS,
+            ),
         )
     with pytest.raises(AssertionError, match="already in the catalogue"):
         layers.add_overlay(CoverageOverlay(id="coverage", title="Again"))
@@ -202,3 +235,15 @@ def test_lidar_attribution_is_the_environment_agency_wording_under_ogl() -> None
     assert catalogue["dem"]["attribution"] == layers.LIDAR_ATTRIBUTION
     for other in ("Natural Resources Wales", "Scottish Government", "DfI"):
         assert other not in layers.LIDAR_ATTRIBUTION
+
+
+def test_every_layer_from_someone_else_names_its_licence_and_reuse_class() -> None:
+    """As every source does (Decision 0004). Records and findings carry theirs per feature and in /meta."""
+    layers = dump()
+    third_party = [*layers["views"], layers["dem"], *(o for o in layers["overlays"] if "attribution" in o)]
+    assert len(third_party) == len(layers["views"]) + 2
+    for layer in third_party:
+        assert layer["attribution"], layer
+        assert layer["licence"], layer
+        assert layer["licence_url"].startswith("https://"), layer
+        assert layer["reuse"] in {reuse.value for reuse in SourceReuse}, layer

@@ -4,13 +4,18 @@ They sit outside `/api/v1` so a CDN can cache them by path.
 
 The answer is the same for every viewer, because records carry no
 sensitivity. Findings never go into tiles (Decision 0005).
+
+As with terrain tiles, every response carries an ETag, and a tile asked for
+with the current `?v=` token (`record_tiles.tile_token`, in the address
+`/meta` gives) is sent as immutable.
 """
 
 from __future__ import annotations
 
+import hashlib
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Query
+from fastapi import APIRouter, Header, Query
 from fastapi.responses import Response
 
 from fieldclub.api.deps import Db, split_list
@@ -20,10 +25,6 @@ MOUNT_AT_ROOT = True
 
 router = APIRouter(tags=["tiles"])
 
-# Records change when a source is ingested, at most daily. An hour fresh and a
-# day stale keeps the map quick and an ingest visible the same day.
-CACHE_CONTROL = "public, max-age=3600, stale-while-revalidate=86400"
-
 
 @router.get(
     "/tiles/records/{z}/{x}/{y}.mvt",
@@ -32,14 +33,24 @@ CACHE_CONTROL = "public, max-age=3600, stale-while-revalidate=86400"
 )
 def records_tile(
     db: Db,
-    z: Annotated[int, Path(ge=0, le=record_tiles.MAX_ZOOM)],
-    x: Annotated[int, Path(ge=0)],
-    y: Annotated[int, Path(ge=0)],
+    z: int,
+    x: int,
+    y: int,
     category: Annotated[
         str | None,
         Query(max_length=200, description="Comma-separated categories, such as `designation,find`"),
     ] = None,
+    v: Annotated[str | None, Query(max_length=64, description="The token from /meta")] = None,
+    if_none_match: Annotated[str | None, Header()] = None,
 ) -> Response:
     """Counts by category on a grid below zoom 12, individual records from zoom 12 up."""
     tile = record_tiles.record_tile(db, z, x, y, split_list(category))
-    return Response(tile, media_type=record_tiles.MEDIA_TYPE, headers={"Cache-Control": CACHE_CONTROL})
+    current = v is not None and v == record_tiles.tile_token(db)
+    etag = f'"{hashlib.sha256(tile).hexdigest()[:32]}"'
+    headers = {
+        "Cache-Control": record_tiles.IMMUTABLE_CACHE if current else record_tiles.UNVERSIONED_CACHE,
+        "ETag": etag,
+    }
+    if if_none_match is not None and etag in {tag.strip() for tag in if_none_match.split(",")}:
+        return Response(status_code=304, headers=headers)
+    return Response(tile, media_type=record_tiles.MEDIA_TYPE, headers=headers)

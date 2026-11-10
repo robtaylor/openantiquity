@@ -6,7 +6,11 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
-from fieldclub.schemas.common import ApiModel, RecordCount
+from fieldclub.schemas.common import ApiModel
+
+# One shape for a source, in `/meta` as in `GET /sources`.
+from fieldclub.schemas.records import SourceOut
+from fieldclub.vocab import SourceReuse
 
 # --------------------------------------------------------------------------
 # Vocabularies
@@ -105,6 +109,10 @@ class RasterView(BaseModel):
     minzoom: int
     maxzoom: int
     attribution: str
+    # Every layer someone else publishes says under what terms, as a source does (Decision 0004).
+    licence: str
+    licence_url: str
+    reuse: SourceReuse
     bounds: Bounds | None = None
     default: bool = False
 
@@ -118,6 +126,9 @@ class RakingView(BaseModel):
     type: Literal["raking"] = "raking"
     description: str
     attribution: str
+    licence: str
+    licence_url: str
+    reuse: SourceReuse
 
 
 View = Annotated[RasterView | RakingView, Field(discriminator="type")]
@@ -130,6 +141,9 @@ class DemSource(BaseModel):
     minzoom: int
     maxzoom: int
     attribution: str
+    licence: str
+    licence_url: str
+    reuse: SourceReuse
 
 
 class OpenMapTilesOverlay(BaseModel):
@@ -142,6 +156,9 @@ class OpenMapTilesOverlay(BaseModel):
     glyphs: str
     default_opacity: float = Field(ge=0, le=1)
     attribution: str
+    licence: str
+    licence_url: str
+    reuse: SourceReuse
 
 
 class RecordsOverlay(BaseModel):
@@ -206,17 +223,6 @@ class ProviderOut(BaseModel):
 class AuthInfo(BaseModel):
     # Every sign-in provider, in the order the sign-in sheet shows them.
     providers: list[ProviderOut]
-
-
-class SourceOut(ApiModel):
-    key: str
-    name: str
-    publisher: str
-    licence: str
-    attribution: str
-    homepage: str | None
-    category: str
-    record_count: RecordCount
 
 
 class FieldVisitNotices(BaseModel):

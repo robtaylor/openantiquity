@@ -12,14 +12,15 @@ The LIDAR views and the elevation tiles cover England only for now, from the
 Environment Agency's 2022 composite DTM, so they carry its attribution.
 Change it here, in one place, when another nation's elevation is added.
 
-Not done yet: the OpenStreetMap raster view, the OpenFreeMap overlay and the
-LIDAR providers have no `sources` row, so `/meta` lists them under `layers`
-with their attribution but not under `sources`. When docs/DATA_SOURCES.md
-lands, seed those rows from one idempotent function, with their licence and
-reuse class, and have each layer here name its source by key.
+Every layer someone else publishes carries its attribution, licence and
+reuse class, as a source does (Decision 0004). The records overlay names each
+record's source in the tile, and `/meta` lists the sources. These layers have
+no `sources` row: they are drawn, not indexed.
 """
 
 from __future__ import annotations
+
+from typing import TypedDict
 
 from fieldclub.schemas.meta import (
     CoverageOverlay,
@@ -38,6 +39,7 @@ from fieldclub.terrain.grid import TILE_SIZE
 from fieldclub.terrain.render import DEM_KIND, tile_version
 from fieldclub.terrain.service import TILE_EDITIONS
 from fieldclub.terrain.styles import MAXZOOM, MINZOOM
+from fieldclub.vocab import SourceReuse
 
 
 def terrain_tiles(path: str, kind: str) -> str:
@@ -53,6 +55,23 @@ LIDAR_ATTRIBUTION = (
 )
 
 OSM_ATTRIBUTION = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+
+
+class Terms(TypedDict):
+    """The terms a publisher's layer is shown under."""
+
+    licence: str
+    licence_url: str
+    reuse: SourceReuse
+
+
+LIDAR_TERMS = Terms(licence="Open Government Licence v3.0", licence_url=OGL_V3_URL, reuse=SourceReuse.OPEN)
+# OpenStreetMap's data is under the ODbL, which asks that what is made from it is shared alike.
+OSM_TERMS = Terms(
+    licence="Open Database License 1.0",
+    licence_url="https://www.openstreetmap.org/copyright",
+    reuse=SourceReuse.SHARE_ALIKE,
+)
 
 # OpenFreeMap serves OpenMapTiles-schema vector tiles with no key. The TileJSON
 # and glyph URLs are the ones its "liberty" style uses
@@ -112,6 +131,7 @@ def lidar_view(style: str, title: str, description: str) -> RasterView:
         minzoom=MINZOOM,
         maxzoom=MAXZOOM,
         attribution=LIDAR_ATTRIBUTION,
+        **LIDAR_TERMS,
         bounds=None,
         default=style == DEFAULT_VIEW,
     )
@@ -125,6 +145,7 @@ VIEWS: list[View] = [
         group="lidar",
         description="Low light from a side you choose. Drag the sun round and watch faint ridges appear.",
         attribution=LIDAR_ATTRIBUTION,
+        **LIDAR_TERMS,
     ),
     RasterView(
         id="osm_standard",
@@ -136,6 +157,7 @@ VIEWS: list[View] = [
         minzoom=0,
         maxzoom=19,
         attribution=OSM_ATTRIBUTION,
+        **OSM_TERMS,
         bounds=None,
         default=False,
     ),
@@ -148,6 +170,7 @@ DEM = DemSource(
     minzoom=MINZOOM,
     maxzoom=MAXZOOM,
     attribution=LIDAR_ATTRIBUTION,
+    **LIDAR_TERMS,
 )
 
 OVERLAYS: list[Overlay] = [
@@ -158,6 +181,7 @@ OVERLAYS: list[Overlay] = [
         glyphs=OPENFREEMAP_GLYPHS,
         default_opacity=0.8,
         attribution=OPENFREEMAP_ATTRIBUTION,
+        **OSM_TERMS,
     ),
     RecordsOverlay(id="records", title="Heritage records", tiles=["/tiles/records/{z}/{x}/{y}.mvt"]),
     # No tiles: findings come from GET /findings?format=geojson, because what

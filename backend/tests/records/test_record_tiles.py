@@ -112,10 +112,48 @@ def test_an_empty_index_gives_empty_tiles(client: TestClient, db: Session) -> No
     assert get_tile(client, 16, *tile_of(*SILBURY, 16)) == {}
 
 
-@pytest.mark.parametrize("path", ["1/2/0", "1/0/2", "23/0/0", "5/-1/0"])
+@pytest.mark.parametrize("path", ["1/2/0", "1/0/2", "23/0/0", "5/-1/0", "-1/0/0"])
 def test_a_tile_off_the_map(client: TestClient, index: dict[str, int], path: str) -> None:
+    """The same answer as a terrain tile off the map."""
     response = client.get(f"/tiles/records/{path}.mvt")
-    assert response.status_code in (404, 422)
+    assert response.status_code == 404
+    assert error_code(response) == "tile_not_found"
+
+
+def current_token(client: TestClient) -> str:
+    [overlay] = [o for o in client.get("/api/v1/meta").json()["layers"]["overlays"] if o["type"] == "records"]
+    [template] = overlay["tiles"]
+    assert template.startswith("/tiles/records/{z}/{x}/{y}.mvt?v=")
+    return template.rsplit("?v=", 1)[1]
+
+
+def test_a_tile_with_the_current_token_is_immutable_and_answers_304(
+    client: TestClient, index: dict[str, int]
+) -> None:
+    token = current_token(client)
+    first = client.get("/tiles/records/0/0/0.mvt", params={"v": token})
+    assert first.status_code == 200
+    assert first.headers["cache-control"] == "public, max-age=31536000, immutable"
+    etag = first.headers["etag"]
+    again = client.get("/tiles/records/0/0/0.mvt", params={"v": token}, headers={"If-None-Match": etag})
+    assert again.status_code == 304
+    assert again.content == b""
+    assert again.headers["etag"] == etag
+    stale = client.get("/tiles/records/0/0/0.mvt", params={"v": "old"})
+    assert stale.headers["cache-control"] == record_tiles.UNVERSIONED_CACHE
+    assert stale.headers["etag"] == etag
+    filtered = client.get("/tiles/records/0/0/0.mvt", params={"v": token, "category": "find"})
+    assert filtered.headers["etag"] != etag
+
+
+def test_a_completed_ingest_or_a_disabled_source_changes_the_token(client: TestClient, db: Session) -> None:
+    before = current_token(client)
+    run_connector(FakeConnector([record("A")]))
+    after_ingest = current_token(client)
+    assert after_ingest != before
+    db.execute(update(Source).values(enabled=False))
+    db.commit()
+    assert current_token(client) not in (before, after_ingest)
 
 
 def test_an_unknown_category(client: TestClient, index: dict[str, int]) -> None:

@@ -27,16 +27,24 @@ and `geom` for features, against the tile's envelope in EPSG:4326. A Web
 Mercator tile is a longitude and latitude rectangle, so that test is exact.
 A tile with nothing in it is an empty byte string, which is a valid tile
 with no layers.
+
+Tiles change only when an ingest run completes or a source is switched on or
+off. `tile_token` is a token of both, and `/meta` gives the tile address with
+it as `?v=`, so a tile asked for with the current token can be cached as
+immutable and an ingest reaches every browser at once.
 """
 
 from __future__ import annotations
 
-from sqlalchemy import TextClause, text
+import hashlib
+
+from sqlalchemy import TextClause, func, select, text
 from sqlalchemy.orm import Session
 
-from fieldclub.errors import BadRequestError, NotFoundError
+from fieldclub.errors import BadRequestError, TileNotFoundError
+from fieldclub.models import IngestRun, Source
 from fieldclub.terrain.grid import HALF_WORLD
-from fieldclub.vocab import RecordCategory
+from fieldclub.vocab import IngestStatus, RecordCategory
 
 MAX_ZOOM = 22
 FEATURES_FROM_ZOOM = 12
@@ -52,11 +60,12 @@ EXTENT = 4096
 # outlines join up across tiles.
 BUFFER = 64
 MEDIA_TYPE = "application/vnd.mapbox-vector-tile"
-
-
-class TileOutOfRangeError(NotFoundError):
-    code = "tile_out_of_range"
-    message = "There is no tile with that address."
+# The address `/meta` gives, with `?v=` and the current `tile_token` after it.
+TILE_TEMPLATE = "/tiles/records/{z}/{x}/{y}.mvt"
+# Asked for with the current token, a tile can't change: the next ingest changes the token.
+IMMUTABLE_CACHE = "public, max-age=31536000, immutable"
+# Without it, or with an old one, an hour fresh and a day stale, so an ingest shows the same day.
+UNVERSIONED_CACHE = "public, max-age=3600, stale-while-revalidate=86400"
 
 
 class InvalidTileFilterError(BadRequestError):
@@ -227,7 +236,21 @@ def refresh_counts(db: Session, source_key: str | None = None) -> None:
 
 def check_tile(z: int, x: int, y: int) -> None:
     if not 0 <= z <= MAX_ZOOM or not (0 <= x < 2**z and 0 <= y < 2**z):
-        raise TileOutOfRangeError(f"{z}/{x}/{y} is not a tile. Zoom runs from 0 to {MAX_ZOOM}.")
+        raise TileNotFoundError(f"{z}/{x}/{y} is not a tile. Zoom runs from 0 to {MAX_ZOOM}.")
+
+
+def tile_token(db: Session) -> str:
+    """A token of what the tiles are drawn from: the last completed ingest run and the enabled sources."""
+    finished = db.scalar(
+        select(func.max(IngestRun.finished_at)).where(IngestRun.status == IngestStatus.COMPLETED.value)
+    )
+    enabled = db.scalars(select(Source.key).where(Source.enabled).order_by(Source.key)).all()
+    stamp = finished.isoformat() if finished is not None else "never"
+    return hashlib.sha256("\n".join([stamp, *enabled]).encode()).hexdigest()[:12]
+
+
+def tile_url(token: str) -> str:
+    return f"{TILE_TEMPLATE}?v={token}"
 
 
 def check_categories(

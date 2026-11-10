@@ -124,6 +124,18 @@ def test_the_table_covers_every_level() -> None:
     assert all(set(row) == set(Sensitivity) for row in VIEWER_TABLE.values())
 
 
+@pytest.mark.parametrize(("viewer_kind", "level"), CASES, ids=[f"{v}-{lvl}" for v, lvl in CASES])
+def test_downloads_are_exact_only_where_the_page_is_and_never_for_a_plain_member(
+    viewer_kind: str, level: Sensitivity, make_user: MakeUser, make_finding: MakeFinding, db: Session
+) -> None:
+    """Decision 0005, rule 8: a member's download carries a protected finding at its square."""
+    finder = make_user()
+    finding = make_finding(finder, lon=LON, lat=LAT, sensitivity=level)
+    viewer = viewer_for(viewer_kind, finder, make_user, db)
+    expected = VIEWER_TABLE[viewer_kind][level] and (viewer_kind != "member" or level is Sensitivity.OPEN)
+    assert sensitivity.downloads_exact(finding, viewer) is expected
+
+
 def test_unsaved_objects_with_no_ids_are_not_mistaken_for_finder_and_finding() -> None:
     # Neither has been flushed, so both ids are None. None == None must not
     # read as "this viewer is the finder".

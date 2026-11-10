@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Response, status
 from fieldclub.api.deps import Contributor, Db, OptionalUser, PageQuery, private, rate_limit
 from fieldclub.api.findings import detail
 from fieldclub.schemas.common import Page
-from fieldclub.schemas.findings import AnswerCounts, Comparison, ObservationIn, ObservationOut, Reveal
+from fieldclub.schemas.findings import AnswerCounts, ComparisonOut, ObservationIn, ObservationOut, Reveal
 from fieldclub.services import findings, review
 from fieldclub.vocab import Visible
 
@@ -32,7 +32,7 @@ def put_observation(
     return Reveal(
         observation=ObservationOut.build(result.observation, user),
         finding=detail(db, finding, user),
-        comparison=Comparison(
+        comparison=ComparisonOut(
             finder_class=comparison.finder_class,
             community_class=comparison.community_class,
             matches_finder=comparison.matches_finder,

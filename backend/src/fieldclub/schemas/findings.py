@@ -588,7 +588,7 @@ class AnswerCounts(ApiModel):
     no: int
 
 
-class Comparison(ApiModel):
+class ComparisonOut(ApiModel):
     """How your answer compares, shown once you have given it."""
 
     finder_class: FeatureClass
@@ -604,7 +604,7 @@ class Reveal(ApiModel):
 
     observation: ObservationOut
     finding: FindingDetail
-    comparison: Comparison
+    comparison: ComparisonOut
     tier_before: Tier
     tier_after: Tier
     state_before: FindingState
@@ -648,7 +648,7 @@ class TaskItem(ApiModel):
     finding: TaskFinding | None
 
 
-class TaskGroup(ApiModel):
+class TaskGroupOut(ApiModel):
     code: NextStepCode
     total: int
     items: list[TaskItem]
@@ -656,7 +656,7 @@ class TaskGroup(ApiModel):
 
 
 class TaskGroups(ApiModel):
-    groups: list[TaskGroup]
+    groups: list[TaskGroupOut]
 
 
 # --------------------------------------------------------------------------

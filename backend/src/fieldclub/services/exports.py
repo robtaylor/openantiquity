@@ -3,7 +3,8 @@
 Positions: a download carries the generalised position of a protected or
 restricted finding unless the person downloading is its finder or trusted
 (Decision 0005, rule 8). That is stricter than the page, where any member
-sees a protected finding exactly. `export_location` decides, and it does so
+sees a protected finding exactly. `sensitivity.downloads_exact` is the rule,
+beside the other viewer rules, and `export_location` applies it
 by asking `sensitivity.visible_location` either as the viewer or as the
 public, so the position itself still comes from the one function that
 generalises.
@@ -38,15 +39,13 @@ from fieldclub.schemas.common import (
     to_geojson,
 )
 from fieldclub.services import findings, sensitivity
+from fieldclub.services.sensitivity import downloads_exact as downloads_exact
 from fieldclub.vocab import (
     CONTRIBUTION_LICENCE,
     EVIDENCE_KINDS,
     FEATURE_CLASSES,
     PERIODS,
     TIERS,
-    TRUSTED_ROLES,
-    Role,
-    Sensitivity,
 )
 
 _FISH = {info.id.value: info.fish_term for info in FEATURE_CLASSES}
@@ -59,16 +58,6 @@ _FORMULA_STARTS = ("=", "+", "-", "@", "\t", "\r")
 
 # The most findings one download holds.
 MAX_EXPORT = 5000
-
-
-def downloads_exact(finding: Finding, viewer: User | None) -> bool:
-    """Whether a download for `viewer` may carry the exact position of `finding`."""
-    if Sensitivity(finding.sensitivity) is Sensitivity.OPEN:
-        return True
-    active = sensitivity.active_viewer(viewer)
-    if active is None:
-        return False
-    return active.has_id(finding.author_id) or Role(active.role) in TRUSTED_ROLES
 
 
 def export_location(finding: Finding, viewer: User | None) -> sensitivity.VisibleLocation:

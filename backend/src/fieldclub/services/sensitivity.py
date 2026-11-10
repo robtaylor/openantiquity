@@ -10,7 +10,8 @@ finding goes through it, exports included:
 | Member                             | exact | exact       | 1 km square |
 | Finder, trusted, expert, moderator | exact | exact       | exact       |
 
-Admins count as moderators. A banned or deleted account is treated as signed
+Downloads are stricter (`downloads_exact`): a member's download carries a
+protected finding at its square. Admins count as moderators. A banned or deleted account is treated as signed
 out, whatever its role. A generalised finding is shown at the centre of its
 1 km grid square, with `obscured=True` and no outline.
 
@@ -131,6 +132,22 @@ def sees_exact(finding: Finding, viewer: User | None) -> bool:
     if active.has_id(finding.author_id) or Role(active.role) in EXACT_LOCATION_ROLES:
         return True
     return level is Sensitivity.PROTECTED
+
+
+def downloads_exact(finding: Finding, viewer: User | None) -> bool:
+    """Whether a download for `viewer` may carry the exact position of `finding`.
+
+    Stricter than `sees_exact` (Decision 0005, rule 8): only the finder and
+    trusted people (experts, moderators and admins among them) download a
+    protected or restricted finding's exact position. Any member sees a
+    protected one exactly on its page.
+    """
+    if Sensitivity(finding.sensitivity) is Sensitivity.OPEN:
+        return True
+    active = active_viewer(viewer)
+    if active is None:
+        return False
+    return active.has_id(finding.author_id) or Role(active.role) in TRUSTED_ROLES
 
 
 def sees_exact_clause(viewer: User | None) -> ColumnElement[bool] | bool:
