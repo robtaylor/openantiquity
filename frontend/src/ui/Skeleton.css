@@ -1,0 +1,23 @@
+.fc-skeleton {
+  display: block;
+  height: 1em;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--raised) 0%, #30353d 50%, var(--raised) 100%);
+  background-size: 200% 100%;
+  animation: fc-skeleton 1.4s linear infinite;
+}
+
+.fc-skeleton-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@keyframes fc-skeleton {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}

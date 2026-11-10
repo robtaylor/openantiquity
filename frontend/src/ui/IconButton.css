@@ -1,0 +1,52 @@
+.fc-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height);
+  height: var(--control-height);
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  transition:
+    background-color var(--duration) var(--ease),
+    border-color var(--duration) var(--ease),
+    color var(--duration) var(--ease);
+}
+
+.fc-icon-button:hover:not(:disabled) {
+  background: var(--raised);
+}
+
+.fc-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.fc-icon-button--sm {
+  width: 32px;
+  height: 32px;
+}
+
+/* For buttons that sit directly on the map. */
+.fc-icon-button--floating {
+  background: var(--surface-floating);
+  border-color: var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.fc-icon-button--floating:hover:not(:disabled) {
+  background: var(--raised);
+}
+
+.fc-icon-button--floating:focus-visible {
+  box-shadow: var(--focus-gap), var(--shadow);
+}
+
+.fc-icon-button[aria-pressed="true"],
+.fc-icon-button[aria-expanded="true"] {
+  color: var(--accent-strong);
+  border-color: var(--accent);
+}

@@ -1,0 +1,51 @@
+.fc-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 10px 0 8px;
+  border: 1px solid color-mix(in srgb, var(--badge-colour) 55%, transparent);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--badge-colour) 14%, var(--surface));
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background-color 200ms var(--ease),
+    border-color 200ms var(--ease);
+}
+
+.fc-tier-badge--sm {
+  height: 22px;
+  padding: 0 8px 0 6px;
+  font-size: 12px;
+  gap: 6px;
+}
+
+/* The mark repeats the map marker for the same finding: filled, ring or small grey ring. */
+.fc-tier-badge__mark {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--badge-colour);
+  box-shadow: 0 0 0 1.5px var(--bg);
+}
+
+.fc-tier-badge__mark--ring {
+  background: transparent;
+  border: 2.5px solid var(--badge-colour);
+}
+
+.fc-tier-badge__mark--ruled-out {
+  width: 8px;
+  height: 8px;
+  background: transparent;
+  border: 2px solid var(--badge-colour);
+}
+
+.fc-tier-badge__state {
+  font-weight: 400;
+  color: var(--text-muted);
+}

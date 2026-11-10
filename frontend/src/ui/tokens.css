@@ -1,0 +1,53 @@
+/* Design tokens from docs/UI.md. `tokens.ts` mirrors the colours for the map
+   style, and a test keeps the two in step. */
+:root {
+  --bg: #14161a; /* window and map backdrop */
+  --surface: #1d2026; /* panels */
+  --raised: #262a31; /* cards, inputs */
+  --border: #343942;
+  --text: #eceae4;
+  --text-muted: #a3a39b;
+  --accent: #e0a43a; /* ochre: primary actions, selection */
+  --accent-strong: #f2b94f;
+  --on-accent: #1a1405;
+  --good: #7fb069;
+  --warn: #e07a3a;
+  --bad: #d9544d;
+  --info: #6ba6c9;
+
+  --tier-spotted: #9aa3ad;
+  --tier-seen: #6ba6c9;
+  --tier-corroborated: #9a8fe0;
+  --tier-probable: #e0a43a;
+  --tier-ground-checked: #7fb069;
+  --tier-confirmed: #f5d76e;
+  --state-known: #b9b2a3;
+  --state-disputed: #e07a3a;
+  --state-ruled-out: #6b6f76;
+
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow: 0 8px 28px rgb(0 0 0 / 0.45);
+  --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Derived values used across the shell. */
+  --surface-floating: rgb(29 32 38 / 0.92); /* --surface at 92% for controls on the map */
+  /* The focus ring is an outline in --focus-colour, 2 px out from the control.
+     --focus-gap fills that 2 px with the backdrop colour, as a box-shadow, so
+     the ring has a dark edge to stand against on pale terrain. A rule that
+     sets its own box-shadow must put var(--focus-gap) first in it. If one
+     forgets, the gap goes but the ring stays. */
+  --focus-colour: var(--accent-strong);
+  --focus-gap: 0 0 0 2px var(--bg);
+  --rail-width: 56px;
+  --panel-width: 400px;
+  --search-width: 360px;
+  --status-height: 28px;
+  --tabbar-height: 56px;
+  --gap: 12px;
+  --control-height: 40px;
+  --duration: 180ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}

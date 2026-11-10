@@ -1,0 +1,24 @@
+.fc-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--avatar-size, 32px);
+  height: var(--avatar-size, 32px);
+  border-radius: 50%;
+  background: hsl(var(--avatar-hue, 40) 32% 30%);
+  border: 1px solid hsl(var(--avatar-hue, 40) 36% 46%);
+  color: hsl(var(--avatar-hue, 40) 60% 88%);
+  font-size: calc(var(--avatar-size, 32px) * 0.4);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  user-select: none;
+  overflow: hidden;
+}
+
+.fc-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

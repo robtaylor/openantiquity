@@ -1,0 +1,87 @@
+.fc-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: var(--control-height);
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  user-select: none;
+  transition:
+    background-color var(--duration) var(--ease),
+    border-color var(--duration) var(--ease),
+    color var(--duration) var(--ease),
+    transform 80ms var(--ease);
+}
+
+.fc-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.fc-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.fc-button svg {
+  flex: none;
+}
+
+.fc-button--sm {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.fc-button--lg {
+  height: 48px;
+  padding: 0 22px;
+  font-size: 16px;
+  border-radius: 24px;
+}
+
+.fc-button--block {
+  width: 100%;
+}
+
+.fc-button--primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.fc-button--primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.fc-button--secondary {
+  background: var(--raised);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.fc-button--secondary:hover:not(:disabled) {
+  border-color: #4a505b;
+  background: #2d323a;
+}
+
+.fc-button--ghost {
+  background: transparent;
+  color: var(--text);
+}
+
+.fc-button--ghost:hover:not(:disabled) {
+  background: var(--raised);
+}
+
+.fc-button--danger {
+  background: transparent;
+  border-color: var(--bad);
+  color: #f0827c;
+}
+
+.fc-button--danger:hover:not(:disabled) {
+  background: rgb(217 84 77 / 0.16);
+}

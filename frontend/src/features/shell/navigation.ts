@@ -1,0 +1,65 @@
+import {
+  Activity,
+  BookOpen,
+  CircleUser,
+  Compass,
+  Eye,
+  HandHelping,
+  Info,
+  type LucideIcon,
+  NotebookText,
+  ScanSearch,
+} from "lucide-react";
+
+export interface Mode {
+  id: string;
+  /** Full name, for tooltips and screen readers. */
+  label: string;
+  /** Fits under an icon in the phone tab bar. */
+  shortLabel: string;
+  to: string;
+  icon: LucideIcon;
+  /** Path prefixes that belong to this mode, besides `to`. */
+  also?: string[];
+}
+
+/** The modes, in rail order. The first four also fill the phone tab bar. */
+export const MODES: Mode[] = [
+  // A finding or a record opened from the map is still exploring.
+  { id: "explore", label: "Explore", shortLabel: "Explore", to: "/", icon: Compass, also: ["/f/", "/r/"] },
+  { id: "review", label: "Second look", shortLabel: "Second look", to: "/review", icon: Eye },
+  { id: "scan", label: "Scan a square", shortLabel: "Scan", to: "/scan", icon: ScanSearch },
+  { id: "help", label: "Help wanted", shortLabel: "Help wanted", to: "/help", icon: HandHelping },
+  {
+    id: "investigations",
+    label: "Investigations",
+    shortLabel: "Investigations",
+    to: "/investigations",
+    icon: NotebookText,
+    also: ["/i/"],
+  },
+  { id: "activity", label: "Activity", shortLabel: "Activity", to: "/activity", icon: Activity },
+  { id: "account", label: "Account", shortLabel: "Account", to: "/account", icon: CircleUser, also: ["/u/"] },
+];
+
+/** Reference pages, shown at the foot of the rail and under "More". */
+export const REFERENCE: Mode[] = [
+  { id: "guide", label: "Guide", shortLabel: "Guide", to: "/guide", icon: BookOpen },
+  { id: "about", label: "About", shortLabel: "About", to: "/about", icon: Info },
+];
+
+/** How many modes the phone tab bar shows before "More". */
+export const TAB_BAR_MODES = 4;
+
+export function isModeActive(mode: Mode, pathname: string): boolean {
+  if (mode.to === "/") return pathname === "/" || (mode.also ?? []).some((prefix) => pathname.startsWith(prefix));
+  return (
+    pathname === mode.to ||
+    pathname.startsWith(`${mode.to}/`) ||
+    (mode.also ?? []).some((prefix) => pathname.startsWith(prefix))
+  );
+}
+
+export function activeMode(pathname: string): Mode | undefined {
+  return [...MODES, ...REFERENCE].find((mode) => isModeActive(mode, pathname));
+}

@@ -1,0 +1,78 @@
+.fc-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fc-meter__track {
+  position: relative;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.fc-meter__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  min-width: 10px;
+  border-radius: 5px;
+  background: var(--meter-colour, var(--tier-spotted));
+  transition:
+    width 200ms var(--ease),
+    background-color 200ms var(--ease);
+}
+
+.fc-meter--ruled-out .fc-meter__fill {
+  display: none;
+}
+
+/* One tick per step of the ladder, at that step's base score. */
+.fc-meter__tick {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: #5b616c;
+}
+
+.fc-meter__tick--reached {
+  background: var(--text);
+}
+
+.fc-meter__tick--current {
+  top: -5px;
+  bottom: -5px;
+  width: 3px;
+  margin-left: -1.5px;
+  background: var(--meter-colour, var(--text));
+  box-shadow: 0 0 0 1.5px var(--surface);
+}
+
+.fc-meter__scale {
+  position: relative;
+  height: 15px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.fc-meter__scale span {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.fc-meter__scale span:first-child {
+  transform: translateX(-20%);
+}
+
+.fc-meter__scale span:last-child {
+  transform: translateX(-100%);
+}
+
+.fc-meter__scale .fc-meter__step--current {
+  color: var(--text);
+  font-weight: 600;
+}

@@ -1,0 +1,91 @@
+.fc-switch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.fc-switch--disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.fc-switch__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.fc-switch__label {
+  display: block;
+  font-weight: 600;
+}
+
+.fc-switch__hint {
+  display: block;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-switch__input {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 24px;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--raised);
+  border: 1px solid #4a505b;
+  border-radius: 12px;
+  cursor: inherit;
+  transition:
+    background-color var(--duration) var(--ease),
+    border-color var(--duration) var(--ease);
+}
+
+.fc-switch__input::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition:
+    transform var(--duration) var(--ease),
+    background-color var(--duration) var(--ease);
+}
+
+.fc-switch__input:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.fc-switch__input:checked::before {
+  background: var(--on-accent);
+  transform: translateX(16px);
+}
+
+/* Forced colours drop author backgrounds, which is all that told on from off.
+   System colours survive, and the knob still slides across. */
+@media (forced-colors: active) {
+  .fc-switch__input {
+    background: Canvas;
+    border-color: ButtonText;
+  }
+
+  .fc-switch__input::before {
+    background: ButtonText;
+  }
+
+  .fc-switch__input:checked {
+    background: Highlight;
+    border-color: Highlight;
+  }
+
+  .fc-switch__input:checked::before {
+    background: HighlightText;
+  }
+}

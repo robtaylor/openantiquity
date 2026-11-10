@@ -1,0 +1,120 @@
+.fc-slider {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  align-items: baseline;
+}
+
+.fc-slider__label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.fc-slider__value {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.fc-slider__input {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+
+.fc-slider__input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.fc-slider__input::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0 var(--slider-fill, 50%),
+    var(--border) var(--slider-fill, 50%) 100%
+  );
+}
+
+.fc-slider__input::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.fc-slider__input::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.fc-slider__input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -7px;
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  background: var(--accent-strong);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+}
+
+.fc-slider__input::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  background: var(--accent-strong);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+}
+
+/* The ring goes round the thumb, which is the part that moves. */
+.fc-slider__input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.fc-slider__input:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--focus-colour);
+  outline-offset: 2px;
+}
+
+.fc-slider__input:focus-visible::-moz-range-thumb {
+  outline: 2px solid var(--focus-colour);
+  outline-offset: 2px;
+}
+
+/* Forced colours drop the gradient that draws the track, so it is drawn in a
+   system colour, and the ring goes round the whole control. */
+@media (forced-colors: active) {
+  .fc-slider__input::-webkit-slider-runnable-track {
+    background: CanvasText;
+  }
+
+  .fc-slider__input::-moz-range-track {
+    background: CanvasText;
+  }
+
+  .fc-slider__input::-webkit-slider-thumb {
+    background: Canvas;
+    border-color: CanvasText;
+  }
+
+  .fc-slider__input::-moz-range-thumb {
+    background: Canvas;
+    border-color: CanvasText;
+  }
+
+  .fc-slider__input:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}

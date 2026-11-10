@@ -1,0 +1,514 @@
+/* The map and the controls that belong to it. */
+.fc-map {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.fc-map__pane {
+  position: absolute;
+  inset: 0;
+}
+
+.fc-map__canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.fc-map__failure {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.fc-map__failure .fc-empty {
+  max-width: 420px;
+}
+
+.fc-map__failure-detail {
+  margin-top: 8px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* The canvas fills the window, with its edges under the rail and the status
+   bar. The shell draws the map's focus ring round the part that shows. */
+.fc-map__pane .maplibregl-canvas:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Swipe handle */
+.fc-swipe {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.fc-swipe__bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -18px;
+  width: 36px;
+  cursor: ew-resize;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.fc-swipe__line {
+  position: absolute;
+  top: 0;
+  /* Stops above the primary button, which sits on the divide when it is in the middle. */
+  bottom: var(--map-primary-clear, 0px);
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--text);
+  box-shadow: 0 0 0 1px rgb(20 22 26 / 0.7);
+}
+
+.fc-swipe__grip {
+  position: absolute;
+  /* Half-way down the part of the map that the status bar or a sheet leaves showing. */
+  top: calc((100% - var(--map-covered-bottom, 0px)) / 2);
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin: -18px 0 0 -18px;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.55);
+  transition: transform var(--duration) var(--ease);
+}
+
+.fc-swipe__bar:hover .fc-swipe__grip,
+.fc-swipe__bar:active .fc-swipe__grip {
+  transform: scale(1.08);
+}
+
+/* The ring goes round the grip, not the invisible bar it sits on. */
+.fc-swipe__bar:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.fc-swipe__bar:focus-visible .fc-swipe__grip {
+  outline: 2px solid var(--focus-colour);
+  outline-offset: 2px;
+  box-shadow:
+    var(--focus-gap),
+    0 2px 10px rgb(0 0 0 / 0.55);
+}
+
+.fc-swipe__labels {
+  position: absolute;
+  top: calc(var(--map-label-top, 68px));
+  left: 0;
+}
+
+/* Each label's place and width are set inline, from the room on its side of the divide. */
+.fc-swipe__label {
+  position: absolute;
+  top: 0;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-floating);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Raking light control */
+.fc-raking {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 344px;
+  max-width: 100%;
+  padding: 12px 16px 12px 12px;
+  background: var(--surface-floating);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.fc-raking__controls {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fc-raking__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.fc-raking__title svg {
+  color: var(--accent-strong);
+  flex: none;
+}
+
+.fc-sundial {
+  flex: none;
+  display: block;
+  line-height: 0;
+  border-radius: 50%;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.fc-sundial:active {
+  cursor: grabbing;
+}
+
+.fc-sundial__face {
+  fill: var(--bg);
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+
+.fc-sundial__rim {
+  fill: none;
+  stroke: #4a505b;
+  stroke-width: 1;
+  stroke-dasharray: 1.5 4;
+}
+
+.fc-sundial__tick {
+  stroke: var(--text-muted);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.fc-sundial__north {
+  fill: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.fc-sundial__beam {
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0.55;
+}
+
+.fc-sundial__hub {
+  fill: var(--text-muted);
+}
+
+.fc-sundial__sun circle:first-child {
+  fill: var(--accent);
+  stroke: var(--bg);
+  stroke-width: 2;
+}
+
+.fc-sundial__sun-core {
+  fill: var(--accent-strong);
+}
+
+/* Status bar */
+.fc-status {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: var(--status-height);
+  padding: 0 12px;
+  background: var(--surface-floating);
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.fc-status__gridref {
+  color: var(--text);
+  font-weight: 600;
+  min-width: 11ch;
+}
+
+.fc-status__item {
+  color: var(--text-muted);
+}
+
+.fc-status__flag {
+  padding: 1px 7px;
+  border: 1px solid var(--warn);
+  border-radius: 9px;
+  color: #f0a070;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.fc-status__credits {
+  position: relative;
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Fills the height of the bar, which makes it a 27 px target on a phone as on a desktop. */
+.fc-status__credits-button {
+  align-self: stretch;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 2px 4px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fc-status__credits-button:hover,
+.fc-status__credits-button[aria-expanded="true"] {
+  color: var(--text);
+}
+
+.fc-status__credits-list {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: min(420px, calc(100vw - 24px));
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  white-space: normal;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.fc-status__credits-title {
+  margin-bottom: 6px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.fc-status__credits-list ul,
+.fc-layers__credits ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fc-status--compact {
+  gap: 10px;
+  font-size: 12px;
+}
+
+.fc-status--compact .fc-status__gridref {
+  min-width: 0;
+}
+
+/* Layer panel */
+.fc-layers {
+  display: flex;
+  flex-direction: column;
+}
+
+.fc-layers__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.fc-layers__section:first-child {
+  padding-top: 0;
+}
+
+.fc-layers__section:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+/* Headings use the display serif, as docs/UI.md asks. A legend is not a
+   heading element, so it is given the same face by hand. */
+.fc-layers__heading {
+  padding: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.005em;
+  color: var(--text);
+}
+
+.fc-layers__sides {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.fc-layers__sides .fc-tabs {
+  align-self: stretch;
+}
+
+.fc-layers__views {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.fc-layers__group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.fc-layers__group .fc-layers__heading {
+  margin-bottom: 4px;
+}
+
+.fc-view-option {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background-color var(--duration) var(--ease),
+    border-color var(--duration) var(--ease);
+}
+
+/* The real radio covers the whole card, invisibly, so the card is the hit target. */
+.fc-view-option__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.fc-view-option:hover {
+  border-color: #4a505b;
+}
+
+.fc-view-option:has(input:checked) {
+  background: rgb(224 164 58 / 0.1);
+  border-color: var(--accent);
+}
+
+.fc-view-option:has(input:focus-visible) {
+  outline: 2px solid var(--focus-colour);
+  outline-offset: 2px;
+  box-shadow: var(--focus-gap);
+}
+
+.fc-view-option__mark {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  border: 1.5px solid #7f8898;
+  border-radius: 50%;
+  transition: border-color var(--duration) var(--ease);
+}
+
+.fc-view-option:has(input:checked) .fc-view-option__mark {
+  border: 5px solid var(--accent);
+}
+
+.fc-view-option__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fc-view-option__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.fc-view-option__tag {
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.fc-view-option__description {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-overlay-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.fc-overlay-row__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 0 10px 12px;
+  margin-left: 2px;
+  border-left: 2px solid var(--border);
+}
+
+.fc-overlay-row__notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 0 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-layers__credits {
+  color: var(--text-muted);
+  font-size: 12.5px;
+}

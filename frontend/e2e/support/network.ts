@@ -1,0 +1,169 @@
+import type { Page, Route } from "@playwright/test";
+import { NO_FINDINGS } from "../../src/features/findings/types.js";
+import { solidPng } from "./png.js";
+
+/**
+ * Answer every request that would leave the dev server, so the tests need
+ * neither a backend nor the internet. Tiles are recorded stand-ins: flat
+ * colours for imagery, sea level for elevation, and nothing for vector data.
+ * The two API calls the map makes in fixture mode get stand-in answers too:
+ * no findings, and a fixed height for any spot. A test can answer either
+ * differently with a route of its own, which Playwright tries first.
+ */
+
+/** The height every spot has, by these stubs. */
+export const STUB_HEIGHT_M = 162.4;
+/** The exact grid reference every spot has, by these stubs. */
+export const STUB_GRID_REF = "SU 10235 69874";
+
+const GREY_TILE = solidPng(256, 256, [128, 128, 128]);
+const MAP_TILE = solidPng(256, 256, [222, 214, 196]);
+// Terrarium encodes height as (red * 256 + green + blue / 256) - 32768, so this is 0 m.
+const SEA_LEVEL_TILE = solidPng(256, 256, [128, 0, 0]);
+
+/**
+ * The vector layers in OpenFreeMap's TileJSON (https://tiles.openfreemap.org/planet,
+ * OpenMapTiles schema 3.16), recorded in November 2026. MapLibre checks every
+ * `source-layer` in the style against this list and reports any it cannot find,
+ * so the tests catch a misnamed layer in the overlay styling.
+ */
+const OPENMAPTILES_LAYERS = [
+  "aerodrome_label",
+  "aeroway",
+  "boundary",
+  "building",
+  "housenumber",
+  "landcover",
+  "landuse",
+  "mountain_peak",
+  "park",
+  "place",
+  "poi",
+  "transportation",
+  "transportation_name",
+  "water",
+  "water_name",
+  "waterway",
+];
+
+const TILEJSON = {
+  tilejson: "3.0.0",
+  name: "stub",
+  tiles: ["https://tiles.openfreemap.org/planet/stub/{z}/{x}/{y}.pbf"],
+  minzoom: 0,
+  maxzoom: 14,
+  bounds: [-180, -85.05113, 180, 85.05113],
+  vector_layers: OPENMAPTILES_LAYERS.map((id) => ({ id, fields: {} })),
+};
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Requests to the dev server's backend paths, anchored to the start of the
+ * path so that module URLs such as /src/api/client.ts are left alone.
+ */
+function backendRoute(prefix: string): RegExp {
+  return new RegExp(`^https?://localhost(:\\d+)?${escapeRegExp(prefix)}`);
+}
+
+/** Requests to an API endpoint, such as `apiRoute("/findings")`, with or without a query. */
+export function apiRoute(path: string): RegExp {
+  return new RegExp(`${backendRoute(`/api/v1${path}`).source}(?:\\?|$)`);
+}
+
+/** Requests under a backend tile path, such as `tilesRoute("/records/")`. */
+export function tilesRoute(prefix = "/"): RegExp {
+  return backendRoute(`/tiles${prefix}`);
+}
+
+export interface NetworkLog {
+  /** Requests to hosts the stubs did not recognise. A passing test leaves this empty. */
+  unexpected: string[];
+  /** Count of stubbed requests by kind. */
+  served: Record<string, number>;
+}
+
+function png(route: Route, body: Buffer): Promise<void> {
+  return route.fulfill({ status: 200, contentType: "image/png", body });
+}
+
+function newLog(): NetworkLog {
+  return { unexpected: [], served: {} };
+}
+
+function counter(log: NetworkLog): (kind: string) => void {
+  return (kind) => {
+    log.served[kind] = (log.served[kind] ?? 0) + 1;
+  };
+}
+
+/**
+ * Stand in for the backend. Fixture mode answers /meta itself, the tile
+ * endpoints answer "no data here", and the two API calls the map makes get
+ * the stand-in answers described above.
+ */
+export async function stubBackend(page: Page, log: NetworkLog = newLog()): Promise<NetworkLog> {
+  const count = counter(log);
+  await page.route(tilesRoute(), (route) => {
+    count("backend-tiles");
+    return route.fulfill({ status: 204 });
+  });
+  await page.route(backendRoute("/api/"), (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/v1/findings") {
+      count("findings");
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(NO_FINDINGS) });
+    }
+    if (path === "/api/v1/geo/point") {
+      count("geo-point");
+      const body = { grid_ref: STUB_GRID_REF, nation: "england", elevation: STUB_HEIGHT_M };
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    }
+    log.unexpected.push(route.request().url());
+    return route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "no_backend", message: "No backend in end-to-end tests." } }),
+    });
+  });
+  return log;
+}
+
+/** Stand in for every outside tile service, with the recorded tiles described above. */
+export async function stubUpstream(page: Page, log: NetworkLog = newLog()): Promise<NetworkLog> {
+  const count = counter(log);
+  await page.route(/^https?:\/\/(?!localhost[:/])/, (route) => {
+    const url = new URL(route.request().url());
+    if (url.hostname === "environment.data.gov.uk") {
+      count("lidar");
+      return png(route, GREY_TILE);
+    }
+    if (url.hostname === "tile.openstreetmap.org") {
+      count("osm-raster");
+      return png(route, MAP_TILE);
+    }
+    if (url.hostname === "s3.amazonaws.com") {
+      count("dem");
+      return png(route, SEA_LEVEL_TILE);
+    }
+    if (url.hostname === "tiles.openfreemap.org") {
+      if (url.pathname === "/planet") {
+        count("tilejson");
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(TILEJSON) });
+      }
+      count(url.pathname.startsWith("/fonts/") ? "glyphs" : "osm-vector");
+      return route.fulfill({ status: 204 });
+    }
+    log.unexpected.push(url.href);
+    return route.abort();
+  });
+  return log;
+}
+
+/** Stand in for the backend and every outside service. */
+export async function stubNetwork(page: Page): Promise<NetworkLog> {
+  const log = await stubBackend(page);
+  return stubUpstream(page, log);
+}

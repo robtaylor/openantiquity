@@ -1,0 +1,504 @@
+/* The fixed regions of docs/UI.md. The map fills the window. Everything else floats over it. */
+.fc-shell {
+  position: fixed;
+  inset: 0;
+  /* Clip, not hidden. A hidden box is still a scroll container, and moving
+     focus to anything outside it scrolls the whole shell out of place. */
+  overflow: clip;
+  --inset-left: var(--rail-width);
+  --inset-right: 0px;
+  --stage-bottom: var(--status-height);
+  --status-bottom: 0px;
+  --map-label-top: 68px;
+  --primary-bottom: 16px;
+  --primary-height: 48px;
+  --toast-bottom: calc(var(--status-height) + 80px);
+  /* How far up from the foot of the map the primary button reaches, so things behind it can stop short. */
+  --map-primary-clear: calc(var(--stage-bottom) + var(--primary-bottom) + var(--primary-height) + 8px);
+}
+
+.fc-shell[data-layout="desktop"][data-panel="open"] {
+  --inset-right: var(--panel-width);
+}
+
+/* On a phone the sheet sits above the tab bar, and the status bar and the
+   floating controls ride above the sheet. The shell sets --sheet-clear to the
+   height of sheet on screen. */
+.fc-shell[data-layout="phone"] {
+  --inset-left: 0px;
+  --tabbar-total: calc(var(--tabbar-height) + env(safe-area-inset-bottom, 0px));
+  --sheet-clear: 0px;
+  --primary-bottom: var(--gap);
+  --status-bottom: calc(var(--tabbar-total) + var(--sheet-clear));
+  --stage-bottom: calc(var(--status-bottom) + var(--status-height));
+  --toast-bottom: calc(var(--stage-bottom) + 72px);
+  /* How far the raking light card stops from the right-hand edge. */
+  --raking-right: var(--gap);
+}
+
+/* A half-open sheet lifts the raking light card up beside the column of
+   buttons, so there it stops short of them. */
+.fc-shell[data-layout="phone"][data-sheet="half"] {
+  --raking-right: calc(var(--gap) + var(--control-height) + 8px);
+}
+
+/* On a short screen the card is beside the buttons with no sheet at all. */
+@media (max-height: 640px) {
+  .fc-shell[data-layout="phone"] {
+    --raking-right: calc(var(--gap) + var(--control-height) + 8px);
+  }
+}
+
+/* The map and the controls on it. It has no box of its own to speak of: its
+   children are placed against the shell, as they were before it was a landmark. */
+.fc-shell__main {
+  position: absolute;
+  inset: 0;
+}
+
+/* The part of the map that nothing covers. Floating controls are placed inside it. */
+.fc-stage {
+  position: absolute;
+  top: env(safe-area-inset-top, 0px);
+  left: var(--inset-left);
+  right: var(--inset-right);
+  bottom: var(--stage-bottom);
+  z-index: 10;
+  pointer-events: none;
+  container-type: inline-size;
+  transition:
+    right var(--duration) var(--ease),
+    bottom var(--duration) var(--ease);
+}
+
+/* The map's own focus ring, drawn round the part of it that is on show. The
+   canvas fills the window, so a ring on the canvas itself is half hidden
+   under the rail and the status bar. Dark, bright, dark: it shows on pale
+   terrain and on dark. */
+.fc-shell:has(.maplibregl-canvas:focus-visible) .fc-stage {
+  outline: 2px solid var(--focus-colour);
+  outline-offset: -4px;
+  box-shadow: inset 0 0 0 6px var(--bg);
+}
+
+.fc-stage > * {
+  position: absolute;
+  pointer-events: auto;
+}
+
+.fc-stage__search {
+  top: var(--gap);
+  left: var(--gap);
+  width: min(var(--search-width), calc(100% - var(--gap) * 3 - var(--control-height)));
+}
+
+.fc-stage__controls {
+  top: var(--gap);
+  right: var(--gap);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fc-stage__3d {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.fc-stage__raking {
+  left: var(--gap);
+  bottom: var(--gap);
+  max-width: calc(100% - var(--gap) * 2);
+}
+
+.fc-stage__raking:empty {
+  display: none;
+}
+
+.fc-stage__primary {
+  left: 50%;
+  bottom: var(--primary-bottom);
+  transform: translateX(-50%);
+}
+
+.fc-stage__primary .fc-button {
+  box-shadow: var(--shadow);
+}
+
+.fc-stage__primary .fc-button:focus-visible {
+  box-shadow: var(--focus-gap), var(--shadow);
+}
+
+/* When the raking control and the primary button would collide, the control moves up. */
+@container (max-width: 880px) {
+  .fc-stage__raking {
+    bottom: calc(var(--primary-bottom) + var(--primary-height) + var(--gap));
+  }
+}
+
+.fc-shell[data-layout="phone"] .fc-stage__search {
+  right: var(--gap);
+  width: auto;
+}
+
+.fc-shell[data-layout="phone"] .fc-stage__controls {
+  top: calc(var(--gap) + 44px + 8px);
+}
+
+.fc-shell[data-layout="phone"] .fc-stage__raking {
+  right: var(--raking-right);
+  max-width: none;
+  bottom: calc(var(--primary-bottom) + var(--primary-height) + var(--gap));
+}
+
+.fc-shell[data-layout="phone"] .fc-raking {
+  width: 100%;
+}
+
+/* Search */
+.fc-search form {
+  position: relative;
+}
+
+.fc-search__icon {
+  position: absolute;
+  top: 50%;
+  left: 13px;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.fc-search__input {
+  width: 100%;
+  height: 44px;
+  padding: 0 14px 0 40px;
+  background: var(--surface-floating);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  color: var(--text);
+}
+
+.fc-search__input::placeholder {
+  color: var(--text-muted);
+}
+
+.fc-search__input:focus-visible {
+  border-color: var(--accent);
+  box-shadow: var(--focus-gap), var(--shadow);
+}
+
+.fc-search__input::-webkit-search-cancel-button {
+  filter: invert(0.8);
+}
+
+/* Status bar */
+.fc-shell__status {
+  position: absolute;
+  left: var(--inset-left);
+  right: var(--inset-right);
+  bottom: var(--status-bottom);
+  z-index: 10;
+  transition:
+    right var(--duration) var(--ease),
+    bottom var(--duration) var(--ease);
+}
+
+/* With no room left above an open sheet, the controls at the foot of the map
+   are put away. The shell makes them inert as well. */
+.fc-shell[data-stage="covered"] .fc-stage__primary,
+.fc-shell[data-stage="covered"] .fc-stage__raking,
+.fc-shell[data-stage="covered"] .fc-shell__status,
+.fc-shell[data-sheet="full"] .fc-stage__controls {
+  visibility: hidden;
+}
+
+/* Mode rail */
+.fc-rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: var(--rail-width);
+  padding: 10px 0 8px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+.fc-rail__brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 6px;
+  border-radius: var(--radius-sm);
+}
+
+.fc-rail__group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.fc-rail__group--end {
+  margin-top: auto;
+}
+
+.fc-rail__link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  transition:
+    background-color var(--duration) var(--ease),
+    color var(--duration) var(--ease);
+}
+
+.fc-rail__link:hover {
+  background: var(--raised);
+  color: var(--text);
+}
+
+.fc-rail__link--active {
+  background: rgb(224 164 58 / 0.14);
+  color: var(--accent-strong);
+}
+
+.fc-rail__link--active::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
+}
+
+.fc-rail__tip {
+  position: absolute;
+  left: calc(100% + 14px);
+  top: 50%;
+  padding: 5px 10px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translate(-4px, -50%);
+  pointer-events: none;
+  transition:
+    opacity var(--duration) var(--ease),
+    transform var(--duration) var(--ease);
+}
+
+.fc-rail__link:hover .fc-rail__tip,
+.fc-rail__link:focus-visible .fc-rail__tip {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+/* A short window, such as a phone held sideways, has no room for the whole
+   rail. It tightens up, and scrolls if that is still not enough. A box that
+   scrolls clips what hangs outside it, so the pop-out labels go, and the
+   links carry the browser's own tooltips in their place (see ModeRail). */
+.fc-rail--compact {
+  gap: 4px;
+  padding: 6px 0 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.fc-rail--compact .fc-rail__brand {
+  flex: none;
+  margin-bottom: 0;
+}
+
+.fc-rail--compact .fc-rail__group {
+  flex: none;
+  gap: 2px;
+}
+
+.fc-rail--compact .fc-rail__brand,
+.fc-rail--compact .fc-rail__link {
+  width: 34px;
+  height: 34px;
+}
+
+.fc-rail--compact .fc-rail__link--active::before {
+  left: -10px;
+}
+
+.fc-rail--compact .fc-rail__link .fc-rail__tip {
+  display: none;
+}
+
+/* Phone tab bar */
+.fc-tabbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  height: var(--tabbar-total);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.fc-tabbar__more {
+  position: relative;
+  display: flex;
+}
+
+.fc-tabbar__tab {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 0 2px;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.fc-tabbar__tab--active {
+  color: var(--accent-strong);
+}
+
+/* The tabs fill the bar edge to edge, so the ring is drawn inside each one. */
+.fc-tabbar__tab:focus-visible {
+  outline-offset: -2px;
+  box-shadow: none;
+}
+
+.fc-tabbar__menu {
+  position: absolute;
+  right: 8px;
+  bottom: calc(100% + 8px);
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.fc-tabbar__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.fc-tabbar__item svg {
+  color: var(--text-muted);
+}
+
+.fc-tabbar__item--active,
+.fc-tabbar__item--active svg {
+  color: var(--accent-strong);
+}
+
+.fc-tabbar__item:active {
+  background: var(--raised);
+}
+
+/* Panels */
+.fc-panel-host--side {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  animation: fc-panel-in var(--duration) var(--ease);
+}
+
+.fc-panel-host--sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--tabbar-total);
+  top: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.fc-panel-host--sheet .fc-sheet {
+  pointer-events: auto;
+}
+
+@keyframes fc-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+/* Start-up and failure */
+.fc-boot {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.fc-boot__card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: min(420px, 100%);
+}
+
+.fc-boot__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.fc-boot__brand h1 {
+  font-size: 26px;
+}
+
+/* Links that look like buttons (the Button styles are loaded by the shell). */
+a.fc-button {
+  text-decoration: none;
+}
