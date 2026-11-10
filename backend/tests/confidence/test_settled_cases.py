@@ -6,6 +6,7 @@ from fieldclub.services.confidence import Credit, CreditKind
 from fieldclub.vocab import (
     EvidenceKind,
     Explanation,
+    FeatureClass,
     FindingState,
     NextStepCode,
     Outcome,
@@ -29,6 +30,7 @@ from tests.confidence.builders import (
     run,
     seen_answers,
     two_desk_strands,
+    unsure,
     vote,
     yes,
 )
@@ -192,3 +194,65 @@ def test_credits_name_who_did_what() -> None:
         Credit(verifier, CreditKind.VERIFIED, record.id),
         Credit(unverified.user_id, CreditKind.ADDED_EVIDENCE, unverified.id),
     } == credits, "no credit for the finder's own answer or votes, or for a verification that doesn't count"
+
+
+# --------------------------------------------------------------------------
+# Settled after review
+# --------------------------------------------------------------------------
+
+
+def test_a_two_to_one_majority_who_can_see_it_is_seen_not_disputed() -> None:
+    two_to_one = run([yes(), yes(), no()])
+    assert (two_to_one.tier, two_to_one.state) == (Tier.SEEN, FindingState.OPEN)
+    four_to_two = run([*many(4), no(), no()])
+    assert (four_to_two.tier, four_to_two.state) == (Tier.SEEN, FindingState.OPEN)
+    # Just under two thirds is still disputed.
+    assert run([*many(3), no(), no()]).state is FindingState.DISPUTED
+
+
+def test_an_exact_one_to_two_split_is_disputed_not_ruled_out() -> None:
+    assessment = run([yes(), yes(), *many(4, no)])
+    assert assessment.state is FindingState.DISPUTED
+
+
+def test_people_who_cannot_see_it_do_not_name_its_class_or_clear_checks() -> None:
+    doubters = [unsure(cls=ENCLOSURE, checks=True), unsure(cls=ENCLOSURE, checks=True)]
+    assessment = run([*doubters, yes(TRUSTED), yes()], two_desk_strands())
+    assert assessment.class_support == {ENCLOSURE: 1.0}
+    assert not any(status.cleared for status in assessment.checks)
+    assert assessment.tier is Tier.SEEN
+    said_no = run([*seen_answers(), no(cls=FeatureClass.MOAT, checks=True)])
+    assert FeatureClass.MOAT not in said_no.class_support
+    assert all(status.asserted == 2.0 for status in run(probable_answers()).checks)
+
+
+def test_a_yes_that_explains_it_away_names_no_class() -> None:
+    assessment = run([yes(cls=ENCLOSURE), yes(cls=FeatureClass.MOAT, explanation=Explanation.MODERN)])
+    assert FeatureClass.MOAT not in assessment.class_support
+
+
+def test_the_finders_own_site_visit_cannot_block_a_ruling_out_on_the_ground() -> None:
+    against = item(EvidenceKind.FIELD_VISIT, outcome=Outcome.CONTRADICTS)
+    own = item(EvidenceKind.FIELD_VISIT, by=FINDER, outcome=Outcome.SUPPORTS)
+    assessment = run(evidence=[against, own])
+    assert (assessment.state, assessment.state_reason) == (FindingState.RULED_OUT, StateReason.GROUND_CHECK)
+    assert (assessment.ground_supports, assessment.ground_contradicts) == (False, True)
+    # Once someone else endorses it, the finder's visit counts and the two disagree.
+    endorsed = item(EvidenceKind.FIELD_VISIT, by=FINDER, outcome=Outcome.SUPPORTS, votes=[vote()])
+    assert run(evidence=[against, endorsed]).state is FindingState.DISPUTED
+
+
+def test_the_finders_own_site_visit_does_not_rule_out_their_finding() -> None:
+    own = item(EvidenceKind.FIELD_VISIT, by=FINDER, outcome=Outcome.CONTRADICTS)
+    assert run(evidence=[own]).state is FindingState.OPEN
+
+
+def test_an_expert_cannot_verify_official_evidence_they_added() -> None:
+    expert = person()
+    own = item(EvidenceKind.HER_RECORD, by=expert, role=EXPERT, verified_by=expert, verifier_role=EXPERT)
+    assessment = run(evidence=[own])
+    assert assessment.tier is Tier.SPOTTED
+    assert assessment.evidence[0].verifier is None
+    assert assessment.evidence[0].awaiting
+    other = item(EvidenceKind.HER_RECORD, by=expert, role=EXPERT, verified_by=person(), verifier_role=EXPERT)
+    assert run(evidence=[other]).tier is Tier.CONFIRMED

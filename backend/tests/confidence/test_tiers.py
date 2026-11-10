@@ -76,10 +76,11 @@ def test_the_seen_ratio_is_at_least_067(seen: int, unseen: int, tier: Tier) -> N
     assert assessment.tier is tier
 
 
-def test_two_in_three_is_below_the_seen_ratio() -> None:
+def test_two_in_three_meets_the_seen_ratio() -> None:
     assessment = run([yes(), yes(), no()])
     assert assessment.seen_ratio == pytest.approx(2 / 3)
-    assert assessment.tier is Tier.SPOTTED
+    assert assessment.tier is Tier.SEEN
+    assert run([*many(65), *many(35, no)]).tier is Tier.SPOTTED
 
 
 def test_unsure_answers_count_for_neither_side() -> None:
@@ -215,7 +216,7 @@ def test_a_reviewer_who_explains_it_away_is_not_a_yes() -> None:
     ("roles", "cleared"), [((MEMBER, MEMBER), True), ((TRUSTED,), False), ((MEMBER,), False)]
 )
 def test_a_check_needs_weight_of_two(roles: tuple[Role, ...], cleared: bool) -> None:
-    answers = [*seen_answers(), yes(TRUSTED), *(unsure(role, checks=True) for role in roles)]
+    answers = [*seen_answers(), yes(TRUSTED), *(yes(role, checks=True) for role in roles)]
     assessment = run(answers, two_desk_strands())
     assert all(status.cleared is cleared for status in assessment.checks)
     assert assessment.tier is (Tier.PROBABLE if cleared else Tier.CORROBORATED)
@@ -226,7 +227,7 @@ def test_a_check_must_beat_twice_the_matching_explanation(asserting: int, cleare
     answers = [
         *seen_answers(),
         yes(TRUSTED),
-        *many(asserting, unsure, checks=True),
+        *many(asserting, yes, checks=True),
         no(explanation=Explanation.MODERN),
     ]
     status = run(answers, two_desk_strands()).check(Check.NOT_MODERN)

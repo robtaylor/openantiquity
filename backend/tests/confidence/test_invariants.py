@@ -186,7 +186,8 @@ def test_doing_what_a_step_asks_meets_it_and_one_person_fewer_does_not() -> None
             ):
                 continue
             checked[step.code] += 1
-            fields: dict[str, Any] = {"visible": Visible.UNSURE}
+            # Only someone who can see it names the class or clears a check.
+            fields: dict[str, Any] = {"visible": Visible.YES}
             if step.code is NextStepCode.NEED_OBSERVERS:
                 fields = {"visible": Visible.YES}
             elif step.code is NextStepCode.NEED_CLASS_AGREEMENT:

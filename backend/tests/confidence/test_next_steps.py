@@ -40,9 +40,9 @@ def test_one_more_person() -> None:
 
 def test_the_observer_count_allows_for_people_who_cannot_see_it() -> None:
     (step,) = run([yes(), yes(), no(), no()]).next_steps
-    assert step.people == 3  # 4 of 6 is below 0.67; 5 of 7 is not
-    assert run([*many(4), no(), no()]).tier is Tier.SPOTTED
-    assert run([*many(5), no(), no()]).tier is Tier.SEEN
+    assert step.people == 2  # 3 of 5 is below two thirds; 4 of 6 is not
+    assert run([*many(3), no(), no()]).tier is Tier.SPOTTED
+    assert run([*many(4), no(), no()]).tier is Tier.SEEN
 
 
 def test_seen_needs_strands_and_class_agreement() -> None:
@@ -91,7 +91,7 @@ def test_corroborated_needs_checks_and_a_review() -> None:
 
 
 def test_a_check_against_an_explanation_needs_more_people() -> None:
-    answers = [*seen_answers(), yes(TRUSTED), unsure(checks=True), unsure(explanation=Explanation.ARTEFACT)]
+    answers = [*seen_answers(), yes(TRUSTED), yes(checks=True), unsure(explanation=Explanation.ARTEFACT)]
     steps = {step.check: step for step in run(answers, two_desk_strands()).next_steps}
     assert steps[Check.NOT_MODERN].people == 1  # 1.0 asserting needs to reach 2.0
     assert steps[Check.NOT_ARTEFACT].people == 2  # and must also exceed twice the 1.0 against

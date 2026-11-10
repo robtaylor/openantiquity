@@ -101,8 +101,10 @@ def test_only_same_as_makes_it_known(relation: Relation) -> None:
     ("seen", "unseen", "state"),
     [
         (2, 2, DISPUTED),  # 0.5
-        (4, 2, DISPUTED),  # 0.667, just below the top of the band
-        (67, 33, OPEN),  # 0.67, the top of the band, is Seen instead
+        (65, 35, DISPUTED),  # 0.65
+        (66, 34, DISPUTED),  # 0.66, just below the top of the band
+        (4, 2, OPEN),  # two thirds, the top of the band, is Seen instead
+        (67, 33, OPEN),  # 0.67
         (34, 66, DISPUTED),  # 0.34
         (2, 4, DISPUTED),  # 0.333, just above the bottom of the band
         (33, 67, RULED_OUT),  # 0.33, the bottom of the band, is ruled out instead

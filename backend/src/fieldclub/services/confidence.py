@@ -59,6 +59,8 @@ Each of these is listed for the contract to take up.
 2. A "yes" that also gives an explanation (modern, natural, artefact) counts
    towards neither `seen` nor `unseen`, and doesn't make its author an
    observer or a reviewer. It still counts as that explanation's weight.
+   Like every answer that doesn't count as seeing it, it names no class and
+   clears no check (rule 15).
    Otherwise three people saying "I see it, it's a drain" would lift a
    finding to Seen and could never rule it out, because the explanation
    rule needs its weight to exceed `seen`.
@@ -71,20 +73,27 @@ Each of these is listed for the contract to take up.
 5. A field item (photo, field visit, geophysics, excavation) points the way
    its `outcome` says, when it has one: `inconclusive` is neutral. Otherwise,
    and for every other kind, its `stance` decides. "Ground item" means any
-   field item, ground or survey, in every rule.
+   field item, ground or survey, in every rule, and only an independent one
+   counts towards "ground items disagree" and the ruling-out on the ground.
+   So a finder's own unendorsed site report neither blocks a ruling-out nor
+   rules out their own finding.
 6. A field item added by the finder needs an endorsement from someone else
    to reach Checked on the ground, even when the finder is trusted. Nobody
    checks their own finding on the ground.
 7. "Verified by an expert or moderator" means a verifier whose role is
-   expert, moderator or admin, who isn't the finder, on an official item that
-   stands and supports the finding.
-8. One threshold, 2/3, serves both `community_class` and the class agreement
-   of Corroborated. The contract gives "2/3" for one and "0.67" for the
-   other, which would leave a finding with a community class that still
-   lacks class agreement. The seen ratio keeps 0.67, which lines up with the
-   disputed band.
-9. The disputed ratio band is open at both ends, 0.33 < ratio < 0.67, so a
-   ratio of 0.67 is never both Seen and disputed, and 0.33 is ruled out.
+   expert, moderator or admin, who is neither the finder nor the item's
+   contributor, on an official item that stands and supports the finding.
+   Verifying is a second person's check, and On record pays the finder 30.
+8. Every two-thirds figure is exactly 2/3: `community_class`, the class
+   agreement of Corroborated, the seen ratio and the top of the disputed
+   band. With 0.67, two people who see it against one who doesn't would fall
+   short of Seen, and four against two would be disputed, while a 2:1 split
+   on the class counts as agreement.
+9. The disputed ratio band is open at both ends, 0.33 < ratio < 2/3, so a
+   ratio of 2/3 is Seen and never disputed. The bottom stays at 0.33, with
+   the ruled-out ratio, so an exact one-to-two split is disputed rather than
+   ruled out: where the rules are close, the engine doesn't rule a finding
+   out.
    Contradicting strands make a finding disputed only when there is at least
    one, and they are at least as many as the supporting strands, counted over
    every strand.
@@ -108,6 +117,10 @@ Each of these is listed for the contract to take up.
     and the review; the top two tiers, their one item each.
 14. `satisfied` holds every tier whose own rule is met, so a finding confirmed
     on record can also be Seen. Reputation awards tier points from it.
+15. Class support and the three checks count only answers that count as
+    seeing it (a "yes" with no explanation). Someone who can't see a feature
+    has no basis to say what it is or that it isn't modern. Explanations
+    count from every answer.
 """
 
 from __future__ import annotations
@@ -209,7 +222,7 @@ class Thresholds:
     # Seen by others.
     seen_weight: float = 2.0
     seen_observers: int = 2
-    seen_ratio: float = 0.67
+    seen_ratio: float = 2 / 3
     # Corroborated.
     corroborating_strands: int = 2
     class_agreement: float = 2 / 3
@@ -225,7 +238,7 @@ class Thresholds:
     # Disputed.
     disputed_weight: float = 2.0
     disputed_ratio_low: float = 0.33
-    disputed_ratio_high: float = 0.67
+    disputed_ratio_high: float = 2 / 3
     # Ruled out.
     ruled_out_unseen: float = 3.0
     ruled_out_ratio: float = 0.33
@@ -537,8 +550,9 @@ def assess(inputs: FindingInputs, thresholds: Thresholds = THRESHOLDS) -> Assess
         if obs.explanation is not None:
             explanations[obs.explanation] += role_weight(obs.role)
 
-    classes = _class_support(inputs, observations, t)
-    checks = tuple(_check_status(check, observations, explanations, t) for check in Check)
+    # Only people who can see it say what it is, or that it isn't modern, natural or an artefact.
+    classes = _class_support(inputs, seen_by, t)
+    checks = tuple(_check_status(check, seen_by, explanations, t) for check in Check)
     evidence = tuple(_evidence_status(item, finder, t) for item in items)
 
     def strands(direction: Stance) -> frozenset[Strand]:
@@ -551,7 +565,7 @@ def assess(inputs: FindingInputs, thresholds: Thresholds = THRESHOLDS) -> Assess
     supporting = strands(Stance.SUPPORTS)
     contradicting = strands(Stance.CONTRADICTS)
     desk = supporting & DESK_STRANDS
-    field = [e for e in evidence if e.standing and e.strand in FIELD_STRANDS]
+    field = [e for e in evidence if e.standing and e.independent and e.strand in FIELD_STRANDS]
     ground_supports = any(e.outcome is Outcome.SUPPORTS for e in field)
     ground_contradicts = any(e.outcome is Outcome.CONTRADICTS for e in field)
     known = any(e.matches_record for e in evidence)
@@ -753,7 +767,9 @@ def _evidence_status(item: EvidenceInput, finder: int, t: Thresholds) -> Evidenc
     checks_ground = ground_candidate and (endorsed or (not by_finder and item.role in TRUSTED_ROLES))
     official_candidate = standing and strand is Strand.OFFICIAL and direction is Stance.SUPPORTS
     verified = (
-        item.verified_by is not None and item.verified_by != finder and item.verifier_role in VERIFIER_ROLES
+        item.verified_by is not None
+        and item.verified_by not in (finder, item.user_id)
+        and item.verifier_role in VERIFIER_ROLES
     )
     puts_on_record = official_candidate and verified
     matches_record = (
@@ -817,7 +833,7 @@ def _ruled_out_reason(
 
 _NUMBER_WORDS = ("no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten")
 
-_CHECK_PHRASES: dict[Check, str] = {
+CHECK_PHRASES: dict[Check, str] = {
     Check.NOT_MODERN: "isn't modern",
     Check.NOT_NATURAL: "isn't natural",
     Check.NOT_ARTEFACT: "isn't a fault in the data",
@@ -915,7 +931,7 @@ def _next_steps(
             steps.append(
                 NextStep(
                     NextStepCode.NEED_CHECK,
-                    f"{_more_people(n)} to say it {_CHECK_PHRASES[status.check]}.",
+                    f"{_more_people(n)} to say it {CHECK_PHRASES[status.check]}.",
                     people=n,
                     check=status.check,
                 )
