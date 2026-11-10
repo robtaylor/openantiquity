@@ -15,12 +15,25 @@ Uploads
 `clean_image` is the only way bytes from a person reach storage. It refuses
 anything Pillow can't identify as a JPEG, PNG or WebP, anything over
 `MAX_UPLOAD_BYTES`, anything with more than `MAX_PIXELS` (a decompression
-bomb is a small file that claims a huge picture), and anything truncated. It
-then copies the pixels into a new image and encodes that, so no metadata
-survives: no EXIF, so no GPS position (which would defeat Decision 0005), no
-XMP, no ICC profile, no comments. The EXIF orientation is applied to the
-pixels first, so a phone photo stays the right way up. The result is a JPEG,
-or a PNG when the picture has transparency, at most `MAX_SIDE` pixels across.
+bomb is a small file that claims a huge picture), a picture over `MAX_SIDE`
+squared in a file too small to hold a photo of that size
+(`MIN_BYTES_PER_PIXEL`), and anything truncated. A multi-picture JPEG, which
+many phones write, is read as its first picture. It then copies the pixels
+into a new image and encodes that, so no metadata survives: no EXIF, so no
+GPS position (which would defeat Decision 0005), no XMP, no ICC profile, no
+comments. The EXIF orientation is applied to the pixels first, so a phone
+photo stays the right way up. The result is a JPEG, or a PNG when the
+picture has transparency, at most `MAX_SIDE` pixels across.
+
+Decoding is the costly part. Pillow holds a colour picture at four bytes a
+pixel, and scaling one needs room for a part-scaled copy, so a 49 million
+pixel PNG peaks at about 400 MB. A JPEG is decoded at a half, a quarter or an
+eighth of its size where that still leaves at least `JPEG_DRAFT_SIDE` pixels
+across, which takes a 48 megapixel phone photo to 4000 by 3000 before it is
+held in memory. The picture is scaled down before anything else copies it,
+and only `DECODE_SLOTS` uploads are decoded at once in the whole process. An
+upload that waits longer than `DECODE_WAIT_SECONDS` for its turn is refused
+with `uploads_busy`.
 
 Stored files sit under a random 128-bit key in the `media` storage, and the
 key is never sent to a client. Photos are served only through the API.
@@ -37,6 +50,7 @@ import hashlib
 import io
 import logging
 import secrets
+import threading
 import warnings
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -59,10 +73,22 @@ MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 # A 48 megapixel phone photo fits. Pillow's own bomb warning starts at about 89.
 MAX_PIXELS = 50_000_000
 MAX_SIDE = 4096
+# A JPEG may be decoded small, but never below this across. Three quarters of MAX_SIDE.
+JPEG_DRAFT_SIDE = 3072
 JPEG_QUALITY = 85
+# A picture bigger than MAX_SIDE squared needs at least this many bytes of file per pixel. A
+# phone photo has 0.1 or more; a flat bomb of 7000 by 7000 pixels squeezes into 0.003.
+MIN_BYTES_PER_PIXEL = 0.005
+# Uploads decoded at the same time in the whole process, and how long one waits for its turn.
+DECODE_SLOTS = 1
+DECODE_WAIT_SECONDS = 30.0
 
 # What Pillow may read. Everything else, SVG and HEIC included, is refused.
 ACCEPTED_FORMATS = frozenset({"JPEG", "PNG", "WEBP"})
+# A phone's multi-picture JPEG opens as MPO. Only its first picture is read.
+MULTI_PICTURE_JPEG = "MPO"
+# Modes Pillow scales well as they are. Anything else becomes colour first.
+_SCALES_AS_IS = frozenset({"RGB", "RGBA", "L", "LA"})
 # What is stored, and so the only content types ever served.
 SERVED_TYPES = {"image/jpeg": "jpg", "image/png": "png"}
 
@@ -119,6 +145,12 @@ class ImageTooManyPixelsError(AppError):
     status_code = 413
     code = "image_too_many_pixels"
     message = f"A photo can have at most {MAX_PIXELS // 1_000_000} million pixels."
+
+
+class UploadsBusyError(AppError):
+    status_code = 503
+    code = "uploads_busy"
+    message = "Too many photos are being uploaded at once. Try again in a minute."
 
 
 class MediaBlockedError(ValidationFailedError):
@@ -252,8 +284,22 @@ def _orientation(image: Image.Image) -> int:
     return value if isinstance(value, int) else 1
 
 
+_decode_slots = threading.BoundedSemaphore(DECODE_SLOTS)
+
+
+def _fitted(size: tuple[int, int], side: int) -> tuple[int, int]:
+    """`size` scaled to fit in a `side` square, keeping its shape."""
+    width, height = size
+    scale = min(1.0, side / max(width, height))
+    return max(1, round(width * scale)), max(1, round(height * scale))
+
+
 def _open(raw: bytes) -> Image.Image:
-    """Open and fully decode an upload, refusing what isn't a whole, modest image of an accepted kind."""
+    """Open and fully decode an upload, refusing what isn't a whole, modest image of an accepted kind.
+
+    A JPEG is decoded at the smallest of a half, a quarter or an eighth of
+    its size that is still `JPEG_DRAFT_SIDE` across.
+    """
     if len(raw) > MAX_UPLOAD_BYTES:
         raise ImageTooLargeError()
     if not raw:
@@ -271,36 +317,73 @@ def _open(raw: bytes) -> Image.Image:
         width, height = image.size
         if width < 1 or height < 1:
             raise NotAnImageError()
-        if width * height > MAX_PIXELS:
+        pixels = width * height
+        if pixels > MAX_PIXELS:
             raise ImageTooManyPixelsError()
-        if getattr(image, "n_frames", 1) != 1:
+        if pixels > MAX_SIDE * MAX_SIDE and len(raw) < pixels * MIN_BYTES_PER_PIXEL:
+            raise ImageTooManyPixelsError(
+                "A picture this big can't fit in so small a file. Send a smaller one."
+            )
+        if image.format == MULTI_PICTURE_JPEG:
+            # The first picture is the photo. The others are previews or depth maps.
+            image.seek(0)
+        elif getattr(image, "n_frames", 1) != 1:
             raise UnsupportedImageError("Send a still image, not an animation.")
+        if image.format in ("JPEG", MULTI_PICTURE_JPEG):
+            image.draft("RGB", _fitted(image.size, JPEG_DRAFT_SIDE))
         try:
             image.load()
         except (OSError, ValueError, SyntaxError, Image.DecompressionBombError):
             # Truncated or corrupt data fails here, once the pixels are decoded.
             raise NotAnImageError() from None
-    assert image.format in ACCEPTED_FORMATS, f"Pillow opened a {image.format} it was told not to"
+    assert image.format in ACCEPTED_FORMATS | {MULTI_PICTURE_JPEG}, (
+        f"Pillow opened a {image.format} it was told not to"
+    )
     return image
 
 
-def clean_image(raw: bytes) -> CleanImage:
-    """The upload as a fresh JPEG or PNG with no metadata at all, or an `AppError` saying why not."""
-    image = _open(raw)
-    transpose = _TRANSPOSE.get(_orientation(image))
-    has_alpha = image.mode in ("RGBA", "LA", "PA") or (image.mode == "P" and "transparency" in image.info)
+def _in_mode(image: Image.Image, mode: str) -> Image.Image:
+    if image.mode == mode:
+        return image
     try:
-        image = image.convert("RGBA" if has_alpha else "RGB")
+        return image.convert(mode)
     except ValueError:
         # A mode Pillow can't turn into colour, such as some 16-bit greyscale.
         raise UnsupportedImageError() from None
+
+
+def clean_image(raw: bytes) -> CleanImage:
+    """The upload as a fresh JPEG or PNG with no metadata at all, or an `AppError` saying why not.
+
+    Waits for one of the `DECODE_SLOTS`, or refuses with `uploads_busy`.
+    """
+    if not _decode_slots.acquire(timeout=DECODE_WAIT_SECONDS):
+        raise UploadsBusyError()
+    try:
+        return _clean(raw)
+    finally:
+        _decode_slots.release()
+
+
+def _clean(raw: bytes) -> CleanImage:
+    image = _open(raw)
+    transpose = _TRANSPOSE.get(_orientation(image))
+    has_alpha = image.mode in ("RGBA", "LA", "PA") or (image.mode == "P" and "transparency" in image.info)
+    mode = "RGBA" if has_alpha else "RGB"
+    if image.mode not in _SCALES_AS_IS:
+        # Pillow scales a palette or one-bit picture by picking pixels, which looks ragged.
+        image = _in_mode(image, mode)
+    if max(image.size) > MAX_SIDE:
+        # Scaled before anything copies it, so no copy of the full-sized picture is made.
+        image.thumbnail((MAX_SIDE, MAX_SIDE), Image.Resampling.LANCZOS)
+    image = _in_mode(image, mode)
     if transpose is not None:
         image = image.transpose(transpose)
-    if max(image.size) > MAX_SIDE:
-        image.thumbnail((MAX_SIDE, MAX_SIDE), Image.Resampling.LANCZOS)
-    # A new image from the pixels alone, so nothing in `info` can be carried into the file.
-    clean = Image.frombytes(image.mode, image.size, image.tobytes())
+    # A new image with the pixels alone, so nothing in `info` can be carried into the file.
+    clean = Image.new(image.mode, image.size)
+    clean.paste(image)
     assert not clean.info, "a fresh image carries no metadata"
+    assert max(clean.size) <= MAX_SIDE, f"scaled to {clean.size}"
     out = io.BytesIO()
     if has_alpha:
         clean.save(out, "PNG", optimize=True)

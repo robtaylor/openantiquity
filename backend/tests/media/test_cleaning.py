@@ -4,14 +4,19 @@ from __future__ import annotations
 
 import io
 import struct
+import threading
+import time
 import zlib
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import pytest
 from PIL import ExifTags, Image, PngImagePlugin
 
 from fieldclub.errors import AppError
 from fieldclub.services import media
-from tests.media.support import phone_photo
+from tests.helpers import run_fresh
+from tests.media.support import GPS, phone_photo
 from tests.moderation.support import jpeg, png
 
 
@@ -119,3 +124,110 @@ def test_an_animation_is_refused() -> None:
     with pytest.raises(AppError) as caught:
         media.clean_image(out.getvalue())
     assert caught.value.code == "unsupported_image"
+
+
+def _multi_picture(*, orientation: int = 1) -> bytes:
+    """A multi-picture JPEG with a position in it, as many phone cameras write."""
+    exif = Image.Exif()
+    exif[ExifTags.Base.Orientation] = orientation
+    exif[ExifTags.IFD.GPSInfo] = GPS
+    out = io.BytesIO()
+    first, preview = Image.new("RGB", (40, 20), (200, 10, 10)), Image.new("RGB", (40, 20), (10, 200, 10))
+    first.save(out, "MPO", save_all=True, append_images=[preview], exif=exif.tobytes())
+    return out.getvalue()
+
+
+def test_a_multi_picture_jpeg_is_read_as_its_first_picture_without_its_position() -> None:
+    raw = _multi_picture(orientation=6)
+    original = Image.open(io.BytesIO(raw))
+    assert (original.format, getattr(original, "n_frames", 1)) == ("MPO", 2)
+    assert original.getexif().get_ifd(ExifTags.IFD.GPSInfo)
+    cleaned = media.clean_image(raw)
+    assert cleaned.content_type == "image/jpeg"
+    image = reopen(cleaned.data)
+    assert image.format == "JPEG"
+    assert image.size == (20, 40)
+    assert image.getexif().get_ifd(ExifTags.IFD.GPSInfo) == {}
+    assert b"Exif" not in cleaned.data
+    pixel = image.getpixel((10, 20))
+    assert isinstance(pixel, tuple)
+    assert pixel[0] > 150 > pixel[1], "the first picture, not the preview"
+
+
+def test_a_huge_picture_in_a_tiny_file_is_refused() -> None:
+    # Flat colour compresses to almost nothing, which is what makes a cheap bomb.
+    side = media.MAX_SIDE + 1000
+    raw = png(side, side)
+    assert len(raw) < side * side * media.MIN_BYTES_PER_PIXEL
+    with pytest.raises(AppError) as caught:
+        media.clean_image(raw)
+    assert caught.value.code == "image_too_many_pixels"
+    # The same picture at MAX_SIDE squared is fine, however small its file.
+    assert media.clean_image(png(media.MAX_SIDE, media.MAX_SIDE)).width == media.MAX_SIDE
+
+
+def _noisy_jpeg(width: int, height: int) -> bytes:
+    """A JPEG with enough detail to be the size of a real photo."""
+    noise = Image.effect_noise((width // 10, height // 10), 60).convert("RGB")
+    out = io.BytesIO()
+    noise.resize((width, height)).save(out, "JPEG", quality=80)
+    return out.getvalue()
+
+
+def test_a_big_jpeg_is_decoded_at_a_fraction_of_its_size() -> None:
+    raw = _noisy_jpeg(6400, 4800)
+    assert media._open(raw).size == (3200, 2400)
+    cleaned = media.clean_image(raw)
+    assert (cleaned.width, cleaned.height) == (3200, 2400)
+
+
+def test_a_48_megapixel_photo_is_cleaned_in_modest_memory(tmp_path: Path) -> None:
+    # Before decoding was bounded this took over 400 MB on top of what the process held.
+    photo = tmp_path / "photo.jpg"
+    photo.write_bytes(_noisy_jpeg(8000, 6000))
+    run_fresh(
+        "import pathlib, resource, sys\n"
+        "from fieldclub.services import media\n"
+        f"raw = pathlib.Path({str(photo)!r}).read_bytes()\n"
+        "unit = 1 if sys.platform == 'darwin' else 1024\n"
+        "before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * unit\n"
+        "cleaned = media.clean_image(raw)\n"
+        "grew = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * unit - before\n"
+        "assert (cleaned.width, cleaned.height) == (4000, 3000), (cleaned.width, cleaned.height)\n"
+        "assert grew < 250 * 1024 * 1024, f'grew by {grew / 2**20:.0f} MB'\n"
+    )
+
+
+def test_only_so_many_uploads_are_decoded_at_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    lock = threading.Lock()
+    running, most = 0, 0
+
+    def slow_clean(raw: bytes) -> str:
+        nonlocal running, most
+        with lock:
+            running += 1
+            most = max(most, running)
+        time.sleep(0.05)
+        with lock:
+            running -= 1
+        return "cleaned"
+
+    monkeypatch.setattr(media, "_clean", slow_clean)
+    with ThreadPoolExecutor(max_workers=media.DECODE_SLOTS + 3) as pool:
+        results = list(pool.map(media.clean_image, [b"x"] * (media.DECODE_SLOTS + 3)))
+    assert results == ["cleaned"] * (media.DECODE_SLOTS + 3)
+    assert most == media.DECODE_SLOTS
+
+
+def test_an_upload_that_waits_too_long_for_its_turn_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(media, "DECODE_WAIT_SECONDS", 0.01)
+    held = [media._decode_slots.acquire(timeout=1) for _ in range(media.DECODE_SLOTS)]
+    assert all(held)
+    try:
+        with pytest.raises(media.UploadsBusyError) as caught:
+            media.clean_image(jpeg())
+        assert (caught.value.status_code, caught.value.code) == (503, "uploads_busy")
+    finally:
+        for _ in held:
+            media._decode_slots.release()
+    assert media.clean_image(jpeg()).content_type == "image/jpeg"
