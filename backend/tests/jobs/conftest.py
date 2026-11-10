@@ -17,8 +17,10 @@ def offline(monkeypatch: pytest.MonkeyPatch) -> Iterator[respx.MockRouter]:
     monkeypatch.setattr(safe_fetch, "system_resolver", fake_resolver)
     unfurl.clear_cache()
     http.close_client()
+    safe_fetch.close_client()
     # The global router, so `respx.get(...)` in a test adds to it.
     with respx.mock as router:
         yield router
     unfurl.clear_cache()
     http.close_client()
+    safe_fetch.close_client()

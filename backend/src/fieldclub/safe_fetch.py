@@ -1,9 +1,10 @@
 """Fetching an address someone else chose, without letting it reach inside our network.
 
 `fetch()` is for a URL that came from a person or a feed: a link a member
-typed, or the address a page redirects to. It goes through the shared client
-from `fieldclub.http`, so it carries the project `User-Agent`, and adds these
-guards against server-side request forgery:
+typed, or the address a page redirects to. It has a client of its own, with a
+small connection pool, so a stalled stranger's server never takes a connection
+from the shared client in `fieldclub.http`. It carries the project
+`User-Agent`, and adds these guards against server-side request forgery:
 
 - Only `http` and `https`, only on ports 80 and 443, and no user name or
   password in the address.
@@ -17,9 +18,12 @@ guards against server-side request forgery:
   another address (DNS rebinding).
 - Redirects are followed by hand, at most `max_redirects` of them, and every
   hop passes the same checks.
-- The content type must be one the caller expects, the body is read with a
-  hard cap, and the whole fetch has a deadline as well as the client's
-  per-read timeout, so a server that drips bytes can't hold a thread.
+- The content type must be one the caller expects and the body is read with
+  a hard cap.
+- The whole fetch has a deadline as well as a timeout on each read. The
+  deadline bounds every socket operation, the status line and headers
+  included, so a server that drips bytes can't hold a thread, and the name
+  lookup runs in a worker that is given up on after a few seconds.
 
 A refusal raises `FetchRefusedError`. Anything else that goes wrong (a
 timeout, a 404, a reset connection) raises `FetchFailedError`. Neither is
@@ -33,14 +37,21 @@ import ipaddress
 import logging
 import re
 import socket
+import threading
 import time
+import typing
 import zlib
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Callable, Collection, Iterator, Mapping
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 
+import httpcore
 import httpx
 
-from fieldclub import http
+from fieldclub.config import get_settings
 from fieldclub.errors import AppError
 
 logger = logging.getLogger(__name__)
@@ -65,6 +76,9 @@ _METADATA_ADDRESSES = frozenset(
     }
 )
 _NAT64 = (ipaddress.ip_network("64:ff9b::/96"), ipaddress.ip_network("64:ff9b:1::/48"))
+# IPv4-compatible (deprecated) and SIIT IPv4-translated addresses. Python calls
+# them global, but where they route at all they reach the IPv4 address inside.
+_REFUSED_V6 = (ipaddress.ip_network("::/96"), ipaddress.ip_network("::ffff:0:0:0/96"))
 
 # Something `inet_aton` reads as an IPv4 address: decimal, octal or hex parts.
 _NUMERIC_HOST = re.compile(r"[0-9a-fA-FxX.]+")
@@ -133,13 +147,154 @@ class Fetched:
             return self.content.decode("utf-8", errors="replace")
 
 
+# `getaddrinfo` has no timeout of its own, so it runs in one of these and is
+# given up on after `_RESOLVE_TIMEOUT_S`. A lookup given up on still finishes
+# in its worker, so there are few workers: a slow resolver can't take many threads.
+_RESOLVE_TIMEOUT_S = 5.0
+_resolver_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="safe-fetch-dns")
+
+
 def system_resolver(host: str, port: int) -> list[str]:
-    """Every address the system resolver gives for `host`."""
+    """Every address the system resolver gives for `host`, or `FetchFailedError` after a few seconds."""
+    lookup = _resolver_pool.submit(socket.getaddrinfo, host, port, type=socket.SOCK_STREAM)
     try:
-        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        infos = lookup.result(timeout=_RESOLVE_TIMEOUT_S)
+    except FutureTimeoutError as exc:
+        lookup.cancel()
+        raise FetchFailedError(f"Looking up {host} took too long.") from exc
     except (socket.gaierror, UnicodeError) as exc:
         raise FetchFailedError(f"{host} doesn't resolve.") from exc
     return [str(info[4][0]) for info in infos]
+
+
+# --------------------------------------------------------------------------
+# A deadline on every socket operation
+# --------------------------------------------------------------------------
+
+# When the fetch running in this context must end, by `time.monotonic()`.
+_deadline: ContextVar[float | None] = ContextVar("safe_fetch_deadline", default=None)
+
+
+@contextmanager
+def _deadline_of(deadline: float) -> Iterator[None]:
+    token = _deadline.set(deadline)
+    try:
+        yield
+    finally:
+        _deadline.reset(token)
+
+
+def _within_deadline(timeout: float | None, error: type[Exception]) -> float | None:
+    """`timeout` cut to what is left of the deadline, or `error` once it has passed."""
+    deadline = _deadline.get()
+    if deadline is None:
+        return timeout
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise error("The fetch ran out of time.")
+    return left if timeout is None else min(timeout, left)
+
+
+class _DeadlineStream(httpcore.NetworkStream):
+    """A socket whose every read and write ends by the fetch's deadline."""
+
+    def __init__(self, stream: httpcore.NetworkStream) -> None:
+        self._stream = stream
+
+    def read(self, max_bytes: int, timeout: float | None = None) -> bytes:
+        return self._stream.read(max_bytes, _within_deadline(timeout, httpcore.ReadTimeout))
+
+    def write(self, buffer: bytes, timeout: float | None = None) -> None:
+        self._stream.write(buffer, _within_deadline(timeout, httpcore.WriteTimeout))
+
+    def close(self) -> None:
+        self._stream.close()
+
+    def start_tls(
+        self, ssl_context: typing.Any, server_hostname: str | None = None, timeout: float | None = None
+    ) -> httpcore.NetworkStream:
+        timeout = _within_deadline(timeout, httpcore.ConnectTimeout)
+        return _DeadlineStream(self._stream.start_tls(ssl_context, server_hostname, timeout))
+
+    def get_extra_info(self, info: str) -> typing.Any:
+        return self._stream.get_extra_info(info)
+
+
+class _DeadlineBackend(httpcore.NetworkBackend):
+    """The usual sockets, each bounded by the deadline of the fetch that opened it.
+
+    A per-read timeout alone lets a server send one byte just inside each
+    timeout for as long as it likes, while the status line and headers arrive.
+    """
+
+    def __init__(self) -> None:
+        self._backend = httpcore.SyncBackend()
+
+    def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options: typing.Iterable[typing.Any] | None = None,
+    ) -> httpcore.NetworkStream:
+        timeout = _within_deadline(timeout, httpcore.ConnectTimeout)
+        return _DeadlineStream(self._backend.connect_tcp(host, port, timeout, local_address, socket_options))
+
+    def connect_unix_socket(
+        self,
+        path: str,
+        timeout: float | None = None,
+        socket_options: typing.Iterable[typing.Any] | None = None,
+    ) -> httpcore.NetworkStream:
+        raise httpcore.ConnectError("Fetches never use a Unix socket.")
+
+    def sleep(self, seconds: float) -> None:
+        self._backend.sleep(seconds)
+
+
+# Few connections, so fetches from strangers' servers wait for each other
+# rather than for everything else this process asks of the outside world.
+_POOL_SIZE = 8
+_client: httpx.Client | None = None
+_client_lock = threading.Lock()
+
+
+def _build_client() -> httpx.Client:
+    transport = httpx.HTTPTransport(retries=0)
+    # httpx doesn't take a network backend, so its pool is replaced by one that does.
+    assert isinstance(transport._pool, httpcore.ConnectionPool), "httpx's transport has changed shape"
+    transport._pool = httpcore.ConnectionPool(
+        ssl_context=httpx.create_ssl_context(),
+        max_connections=_POOL_SIZE,
+        max_keepalive_connections=0,
+        network_backend=_DeadlineBackend(),
+    )
+    # With a transport given, httpx ignores proxy settings in the environment.
+    return httpx.Client(
+        transport=transport,
+        headers={"User-Agent": get_settings().outbound_user_agent},
+        follow_redirects=False,
+    )
+
+
+def get_client() -> httpx.Client:
+    """The client for fetches of untrusted addresses. Thread-safe, and lives for the process."""
+    global _client
+    if _client is None:
+        with _client_lock:
+            if _client is None:
+                _client = _build_client()
+    return _client
+
+
+def close_client() -> None:
+    """Close the fetch client. The next `get_client()` builds a fresh one."""
+    global _client
+    with _client_lock:
+        if _client is not None:
+            _client.close()
+            _client = None
 
 
 def _embedded_ipv4(address: ipaddress.IPv6Address) -> ipaddress.IPv4Address | None:
@@ -160,7 +315,7 @@ def is_public_address(address: IPAddress) -> bool:
     if address in _METADATA_ADDRESSES:
         return False
     if isinstance(address, ipaddress.IPv6Address):
-        if address.scope_id:
+        if address.scope_id or any(address in network for network in _REFUSED_V6):
             return False
         embedded = _embedded_ipv4(address)
         if embedded is not None and not is_public_address(embedded):
@@ -285,10 +440,23 @@ def fetch(
     assert content_types, "say which content types are acceptable"
     limits = limits or FetchLimits()
     resolver = resolver or system_resolver
-    client = client or http.get_client()
+    client = client or get_client()
     wanted = {item.lower() for item in content_types}
     deadline = time.monotonic() + limits.deadline_s
-    current = check_url(url)
+    with _deadline_of(deadline):
+        return _fetch(check_url(url), wanted, accept, headers, limits, resolver, client, deadline)
+
+
+def _fetch(
+    current: httpx.URL,
+    wanted: set[str],
+    accept: str | None,
+    headers: Mapping[str, str] | None,
+    limits: FetchLimits,
+    resolver: Resolver,
+    client: httpx.Client,
+    deadline: float,
+) -> Fetched:
     redirects: list[str] = []
     request_headers = {
         "Accept": accept or ", ".join(sorted(wanted)),
@@ -312,7 +480,10 @@ def fetch(
             target,
             headers={**request_headers, "Host": host},
             extensions=extensions,
-            timeout=httpx.Timeout(limits.timeout_s),
+            # Waiting for one of the few connections counts against the deadline too.
+            timeout=httpx.Timeout(
+                limits.timeout_s, pool=max(0.0, min(limits.timeout_s, deadline - time.monotonic()))
+            ),
         )
         try:
             response = client.send(request, stream=True, follow_redirects=False)

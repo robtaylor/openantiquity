@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import gzip
 import ipaddress
+import socket
+import threading
 import time
 from collections.abc import Iterator
 
@@ -14,9 +16,12 @@ import httpx
 import pytest
 import respx
 
-from fieldclub import __version__, safe_fetch
+from fieldclub import __version__, http, safe_fetch
 from fieldclub.safe_fetch import FetchFailedError, FetchLimits, FetchRefusedError, fetch
 from tests.mentions.support import ARTICLE_URL, DNS, ip_of, serve
+
+# Taken before the fixtures swap in the fake resolver.
+real_system_resolver = safe_fetch.system_resolver
 
 HTML = ("text/html",)
 ARTICLE_HOST = "www.wiltshire-gazette.example"
@@ -71,6 +76,13 @@ PRIVATE_LITERALS = [
     "[64:ff9b::7f00:1]",
     "[2002:7f00:1::]",
     "[2001:0:4136:e378:8000:63bf:80ff:fffe]",
+    # IPv4-compatible and SIIT IPv4-translated addresses, which Python calls global.
+    "[::127.0.0.1]",
+    "[::a9fe:a9fe]",
+    "[0:0:0:0:0:0:127.0.0.1]",
+    "[::8.8.8.8]",
+    "[::ffff:0:127.0.0.1]",
+    "[::ffff:0:808:808]",
     "[ff02::1]",
     # IPv4 in the notations inet_aton accepts.
     "2130706433",
@@ -333,3 +345,88 @@ def test_a_name_that_doesnt_resolve_fails(offline: respx.MockRouter) -> None:
 @pytest.mark.parametrize("address", ["93.184.215.14", "2606:4700:4700::1111", "8.8.8.8"])
 def test_public_addresses_are_allowed(address: str) -> None:
     assert safe_fetch.is_public_address(ipaddress.ip_address(address))
+
+
+# --------------------------------------------------------------------------
+# A server that answers slowly, on a real socket
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture
+def header_drip(monkeypatch: pytest.MonkeyPatch, offline: respx.MockRouter) -> Iterator[str]:
+    """A local server that starts its headers and then sends one byte every 50 ms, for 30 s at most.
+
+    The fetch's checks are loosened for it alone: its name resolves to
+    loopback, loopback counts as public, and its port counts as standard.
+    """
+    listener = socket.create_server(("127.0.0.1", 0))
+    port = listener.getsockname()[1]
+    stop = threading.Event()
+
+    def serve() -> None:
+        listener.settimeout(5)
+        try:
+            conn, _ = listener.accept()
+        except OSError:
+            return
+        with conn:
+            conn.recv(65536)
+            conn.sendall(b"HTTP/1.1 200 OK\r\nX-Drip: ")
+            deadline = time.monotonic() + 30
+            while not stop.is_set() and time.monotonic() < deadline:
+                try:
+                    conn.sendall(b"a")
+                except OSError:
+                    return
+                stop.wait(0.05)
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    monkeypatch.setitem(safe_fetch.DEFAULT_PORTS, "http", port)
+    monkeypatch.setitem(DNS, "drip.example", ["127.0.0.1"])
+    real_check = safe_fetch.is_public_address
+    monkeypatch.setattr(
+        safe_fetch,
+        "is_public_address",
+        lambda address: address == ipaddress.ip_address("127.0.0.1") or real_check(address),
+    )
+    offline.route(host="127.0.0.1").pass_through()
+    yield f"http://drip.example:{port}/"
+    stop.set()
+    listener.close()
+    thread.join(5)
+
+
+def test_headers_sent_a_byte_at_a_time_run_out_of_time(header_drip: str) -> None:
+    started = time.monotonic()
+    with pytest.raises(FetchFailedError):
+        fetch(header_drip, content_types=HTML, limits=FetchLimits(timeout_s=1, deadline_s=1.5))
+    # Each byte arrives well inside the read timeout, so only the deadline stops it.
+    assert time.monotonic() - started < 3
+
+
+def test_a_name_lookup_that_hangs_is_given_up_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    release = threading.Event()
+
+    def hang(*args: object, **kwargs: object) -> list[object]:
+        release.wait(10)
+        return []
+
+    monkeypatch.setattr(socket, "getaddrinfo", hang)
+    monkeypatch.setattr(safe_fetch, "_RESOLVE_TIMEOUT_S", 0.2)
+    started = time.monotonic()
+    try:
+        with pytest.raises(FetchFailedError, match="took too long"):
+            real_system_resolver("slow.example", 443)
+    finally:
+        release.set()
+    assert time.monotonic() - started < 2
+
+
+def test_untrusted_fetches_have_a_client_of_their_own() -> None:
+    client = safe_fetch.get_client()
+    assert client is not http.get_client()
+    assert client is safe_fetch.get_client()
+    assert client.headers["user-agent"] == f"FieldClub/{__version__}"
+    safe_fetch.close_client()
+    assert safe_fetch.get_client() is not client

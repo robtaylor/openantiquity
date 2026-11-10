@@ -23,7 +23,7 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 import fieldclub.api
-from fieldclub import APP_NAME, __version__, http
+from fieldclub import APP_NAME, __version__, http, safe_fetch
 from fieldclub.api.deps import PRIVATE_CACHE
 from fieldclub.auth.csrf import ClientHeaderMiddleware
 from fieldclub.auth.oauth import FORM_POST_CALLBACK_PATHS
@@ -127,6 +127,7 @@ async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
     finally:
         await events.stop_hub()
         http.close_client()
+        safe_fetch.close_client()
 
 
 class _HashedAssets(StaticFiles):
