@@ -6,7 +6,7 @@ import dataclasses
 
 import httpx
 import pytest
-from shapely.geometry import Point
+from shapely.geometry import LineString, Point
 
 from fieldclub import http
 from fieldclub.config import get_settings
@@ -16,6 +16,8 @@ from fieldclub.ingest.base import (
     RecordIn,
     SourceInfo,
     bbox_in_bbox,
+    geometry_in_britain_and_ireland,
+    in_britain_and_ireland,
     point_in_bbox,
 )
 from fieldclub.models import Record
@@ -139,3 +141,36 @@ def test_the_box_helpers_include_the_edges() -> None:
     assert not point_in_bbox(box, 1.01, 51.0)
     assert bbox_in_bbox(box, (-1.0, 50.0, 1.0, 52.0))
     assert not bbox_in_bbox(box, (-1.0, 50.0, 1.0, 52.1))
+
+
+@pytest.mark.parametrize(
+    ("name", "lon", "lat", "inside"),
+    [
+        ("Cissbury", -0.37, 50.88, True),
+        ("Dover", 1.31, 51.13, True),
+        ("Dungeness", 0.98, 50.91, True),
+        ("Jersey", -2.2, 49.19, True),
+        ("Alderney", -2.2, 49.72, True),
+        ("Scilly", -6.3, 49.92, True),
+        ("Shetland", -1.2, 60.4, True),
+        ("Dublin", -6.26, 53.35, True),
+        ("Caen", -0.36, 49.18, False),
+        ("Rouen", 1.1, 49.44, False),
+        ("Amiens", 2.3, 49.89, False),
+        ("Boulogne", 1.6, 50.73, False),
+        ("Calais", 1.85, 50.96, False),
+        ("Beaumont-sur-Oise", 2.29, 49.14, False),
+        ("The Atlantic corner", -11.5, 49.0, False),
+    ],
+)
+def test_the_islands_test_keeps_the_isles_and_leaves_out_the_continent(
+    name: str, lon: float, lat: float, inside: bool
+) -> None:
+    assert in_britain_and_ireland(lon, lat) is inside, name
+
+
+def test_a_shape_with_any_part_on_the_continent_is_outside() -> None:
+    assert geometry_in_britain_and_ireland(LineString([(-1.0, 51.0), (0.5, 51.5)]))
+    # Boulogne to Dover: no vertex in mid-Channel to catch, but one in Boulogne.
+    assert not geometry_in_britain_and_ireland(LineString([(1.6, 50.73), (1.31, 51.13)]))
+    assert not geometry_in_britain_and_ireland(LineString([(-1.0, 51.0), (3.0, 51.0)]))

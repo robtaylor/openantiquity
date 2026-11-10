@@ -4,9 +4,11 @@ Work-list key `aarhus-itinere-roman-roads`. The export is one newline-delimited
 GeoJSON file of about 17,000 route segments across the whole Roman Empire,
 58 MB, rebuilt nightly. It is fetched at most once a day and kept under
 `var/ingest/`. Only segments that lie wholly inside Britain and Ireland are
-kept, about 1,500, none of them certain: `segmentCertainty` is Conjectured or
+kept, about 1,460, none of them certain: `segmentCertainty` is Conjectured or
 Hypothetical, so the summary says which, and the lines often sit off the agger
-that LIDAR shows.
+that LIDAR shows. A segment with a point on the Continent is left out, which
+drops the sea lanes from Boulogne to Dover and Richborough, and so is a segment
+with no length, which the export holds as a pair of identical points.
 
 The work-list has no id field. The segment's feature `id` is the number in the
 address of its page on itiner-e.org, which the site links to, so it is the
@@ -26,7 +28,7 @@ from fieldclub.ingest.adapters import UpstreamFormatError, cache_dir
 from fieldclub.ingest.adapters.common import Feature, Polite, json_ready
 from fieldclub.ingest.adapters.download import download
 from fieldclub.ingest.adapters.files import read_ndjson
-from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo, bbox_in_bbox
+from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo, geometry_in_britain_and_ireland
 from fieldclub.ingest.registry import register
 from fieldclub.vocab import Period, RecordCategory, SourceAccess, SourceReuse
 
@@ -37,8 +39,6 @@ SEGMENT_URL = "https://itiner-e.org/route-segment/{id}"
 # The work-list's gotchas ask for the static version to be cited too.
 STATIC_VERSION = "Static version: https://doi.org/10.5281/zenodo.17122148."
 DELAY_S = 1.0
-# Britain and Ireland without Normandy: south of Cherbourg's latitude and east of Calais's longitude are out.
-ISLES: BBox = (-11.5, 49.9, 1.8, 61.5)
 # Fields a segment must carry. The others are optional and kept in `raw`.
 REQUIRED = ("name", "type", "segmentCertainty", "lowerDate", "upperDate")
 
@@ -62,7 +62,7 @@ class ItinerERoads(Connector):
         licence_url="https://creativecommons.org/licenses/by/4.0/",
         attribution=(
             "Itiner-e: the digital atlas of ancient roads © 2024 by Brughmans, Pažout, de Soto and "
-            "Bjerregaard Vahlstrup is licensed under CC BY 4.0 " + STATIC_VERSION
+            "Bjerregaard Vahlstrup is licensed under CC BY 4.0. " + STATIC_VERSION
         ),
         category=RecordCategory.MONUMENT,
         access=SourceAccess.BULK,
@@ -90,30 +90,29 @@ class ItinerERoads(Connector):
 
 
 def in_britain_or_ireland(geometry: BaseGeometry) -> bool:
-    """Whether a segment lies wholly in Britain or Ireland rather than in the Empire's other provinces.
+    """Whether a segment is a line wholly in Britain or Ireland rather than in the Empire's other provinces.
 
-    The runner's own box for the islands also holds Normandy and the coast
-    of Picardy, so this one stops short of them. A segment from Britain to
-    Gaul, such as a sea lane across the Channel, is left out.
+    The runner's own box for the islands also holds Normandy and the coast of
+    Picardy, so the shared test used here leaves them out, and a sea lane from
+    Britain to Gaul, which has a vertex in Boulogne. A segment with no length
+    is a point, not a road.
     """
-    west, south, east, north = geometry.bounds
-    inside = bbox_in_bbox(ISLES, (west, south, east, north))
-    # Nothing in Kent lies wholly south of Dover's latitude, so this is Boulogne's coast.
-    return inside and not (east > 1.35 and north < 51.0)
+    return geometry.length > 0 and geometry_in_britain_and_ireland(geometry)
 
 
 def periods_between(lower: Any, upper: Any) -> list[str]:
     """The periods a date range in years (BC negative) overlaps.
 
-    Nothing when either end is missing, and nothing for 0 to 0, which the
-    export writes for 11,776 of its segments that have no date at all.
+    Nothing when either end is missing. The export writes 0 to 0 for 11,776 of
+    its segments that have no date at all, but the atlas holds only Roman roads
+    in Britain and Ireland, so those are Roman.
     """
     if isinstance(lower, bool) or isinstance(upper, bool):
         return []
     if not isinstance(lower, (int, float)) or not isinstance(upper, (int, float)):
         return []
     if lower == upper == 0:
-        return []
+        return [Period.ROMAN.value]
     if lower > upper:
         lower, upper = upper, lower
     return [period.value for period, start, end in _PERIOD_YEARS if lower < end and upper > start]

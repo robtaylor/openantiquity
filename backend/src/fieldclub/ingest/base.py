@@ -19,7 +19,9 @@ from datetime import date, datetime
 from typing import Any, ClassVar
 
 import httpx
+from shapely.geometry import Point, Polygon
 from shapely.geometry.base import BaseGeometry
+from shapely.prepared import prep
 
 from fieldclub import http
 from fieldclub.config import Settings, get_settings
@@ -36,6 +38,48 @@ BRITISH_ISLES: BBox = (-11.5, 49.0, 2.5, 61.5)
 def point_in_bbox(bbox: BBox, lon: float, lat: float) -> bool:
     """Whether a point falls in a west, south, east, north box."""
     return bbox[0] <= lon <= bbox[2] and bbox[1] <= lat <= bbox[3]
+
+
+# The islands' box without the open Atlantic south-west of Cornwall, so the
+# ocean's names that Pleiades pins to a corner fall outside it.
+ISLES_BOX: BBox = (-11.5, 49.1, 2.5, 61.5)
+
+# A coarse outline of the Continent's coast from Cherbourg to Dunkirk, drawn
+# through mid-Channel and east of Dover, so Kent, Sussex and the Channel
+# Islands (whose eastern edge is at 2.0 W) lie outside it and Normandy,
+# Picardy, the Pas-de-Calais and the Oise valley lie inside.
+_CONTINENT = prep(
+    Polygon(
+        [
+            (-1.9, 48.0),
+            (-1.9, 49.6),
+            (0.0, 50.2),
+            (1.0, 50.6),
+            (1.45, 50.95),
+            (1.5, 51.1),
+            (2.6, 51.3),
+            (2.6, 48.0),
+        ]
+    )
+)
+
+
+def in_britain_and_ireland(lon: float, lat: float) -> bool:
+    """Whether a point is in the islands' box and not on the Continent's side of the Channel.
+
+    The one coarse test every research connector uses to leave out France
+    and the Low Countries, which `BRITISH_ISLES` (the runner's box) also holds.
+    """
+    return point_in_bbox(ISLES_BOX, lon, lat) and not _CONTINENT.intersects(Point(lon, lat))
+
+
+def geometry_in_britain_and_ireland(geometry: BaseGeometry) -> bool:
+    """Whether a shape lies wholly in the islands' box and touches nothing on the Continent.
+
+    A sea lane from Dover to Boulogne has no vertex in the Channel's middle
+    that the box could catch, so any vertex or crossing on the Continent counts.
+    """
+    return bbox_in_bbox(ISLES_BOX, geometry.bounds) and not _CONTINENT.intersects(geometry)
 
 
 def bbox_in_bbox(outer: BBox, inner: tuple[float, float, float, float]) -> bool:

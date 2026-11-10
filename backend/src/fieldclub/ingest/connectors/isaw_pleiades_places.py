@@ -8,12 +8,19 @@ rebuilt several times a week. It is fetched at most once a day and kept under
 in words (`fort`, `province`) for `monument_types`.
 
 Only places with a representative point inside Britain and Ireland are stored,
-about 1,600. A place with `location_precision` of `rough` has a point that may
-be no more than the middle of a large bounding box, so its `precision_m` is
-half the box's longer side, and it is left out altogether when that box
-reaches beyond Britain and Ireland, since its point then says little about
-the isles. The id is Pleiades's own number, which is permanent. The file gives
-no time periods, so none are set.
+by the shared test in `fieldclub.ingest.base` that leaves out Normandy,
+Picardy and the Pas-de-Calais, and leaves out the open sea off Cornwall. A
+place with `location_precision` of `rough` has a point that may be no more
+than the middle of a large bounding box, so its `precision_m` is half the
+box's longer side, and it is left out altogether when that box reaches
+beyond Britain and Ireland or when `precision_m` is above 10 km, since its
+point then says little about where the place is.
+
+Places that are not sites are left out too: a place whose every type is a
+province, region, diocese, kingdom, people, bay, stretch of water or map label
+has no spot to look at. A type the vocabulary marks `(deprecated)` is replaced
+by its live twin (`fort-2` for `fort`) or dropped. The id is Pleiades's own
+number, which is permanent. The file gives no time periods, so none are set.
 """
 
 from __future__ import annotations
@@ -28,6 +35,7 @@ from pathlib import Path
 from typing import ClassVar
 
 import shapely
+from shapely import box
 from shapely.errors import ShapelyError
 
 from fieldclub.ingest.adapters import UpstreamFormatError, cache_dir
@@ -35,13 +43,12 @@ from fieldclub.ingest.adapters.common import Feature, Polite
 from fieldclub.ingest.adapters.download import download
 from fieldclub.ingest.adapters.files import read_csv
 from fieldclub.ingest.base import (
-    BRITISH_ISLES,
     BBox,
     Connector,
     RecordIn,
     SourceInfo,
-    bbox_in_bbox,
-    point_in_bbox,
+    geometry_in_britain_and_ireland,
+    in_britain_and_ireland,
 )
 from fieldclub.ingest.registry import register
 from fieldclub.vocab import RecordCategory, SourceAccess, SourceReuse
@@ -67,6 +74,31 @@ PLACE_COLUMNS = (
 )
 MAX_SUMMARY = 1500
 METRES_PER_DEGREE = 111_000.0
+# A rough place whose point could be this far from the place is not stored.
+MAX_ROUGH_PRECISION_M = 10_000.0
+# Place types that name an area, a people or a sea, not somewhere to look, as the vocabulary words them.
+NOT_SITES = frozenset(
+    {
+        "province",
+        "region",
+        "diocese (church)",
+        "diocese (later Roman Empire)",
+        "kingdom",
+        "territory",
+        "state (polity)",
+        "people, tribe (historical cultural group)",
+        "bay",
+        "gulf",
+        "strait",
+        "water (inland)",
+        "water, open",
+        "archipelago, island group",
+        "map label location",
+        "false place",
+        "fictional place",
+    }
+)
+DEPRECATED = "(deprecated)"
 
 
 @register
@@ -144,6 +176,11 @@ def place_types(links: Path, vocabulary: Path) -> dict[str, list[str]]:
     if rows and not {"key", "term"} <= rows[0].keys():
         raise UpstreamFormatError(f"place_types.csv changed shape: {list(rows[0])}.")
     terms = {row["key"]: row["term"].strip() for row in rows if row["term"].strip()}
+    # A deprecated term has a live twin under the same key and `-2`, or none.
+    terms = {
+        key: term if not term.endswith(DEPRECATED) else terms.get(f"{key}-2", "")
+        for key, term in terms.items()
+    }
     found: dict[str, list[str]] = {}
     with links.open(encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
@@ -164,7 +201,7 @@ def _rough_precision_m(wkt: str | None) -> float | None:
         west, south, east, north = shapely.from_wkt(wkt).bounds
     except (ShapelyError, TypeError, ValueError):
         return None
-    if not bbox_in_bbox(BRITISH_ISLES, (west, south, east, north)):
+    if not geometry_in_britain_and_ireland(box(west, south, east, north)):
         return None
     width = (east - west) * METRES_PER_DEGREE * math.cos(math.radians((south + north) / 2))
     height = (north - south) * METRES_PER_DEGREE
@@ -181,7 +218,7 @@ def to_record(feature: Feature, types: dict[str, list[str]]) -> RecordIn | None:
     if geometry is None:
         return None
     x, y = geometry.bounds[0], geometry.bounds[1]
-    if not point_in_bbox(BRITISH_ISLES, x, y):
+    if not in_britain_and_ireland(x, y):
         return None
     place_id = (p["id"] or "").strip()
     if not place_id:
@@ -191,11 +228,15 @@ def to_record(feature: Feature, types: dict[str, list[str]]) -> RecordIn | None:
         precision = _rough_precision_m(p["bounding_box_wkt"])
         if precision is None:
             return None
+        if precision > MAX_ROUGH_PRECISION_M:
+            return None
         precision = max(precision, 1.0)
     description = (p["description"] or "").strip()
     if len(description) > MAX_SUMMARY:
         description = description[: MAX_SUMMARY - 1].rstrip() + "…"
     terms = types.get(place_id, [])
+    if terms and all(term in NOT_SITES for term in terms):
+        return None
     return RecordIn(
         external_id=place_id,
         name=(p["title"] or "").strip() or f"Pleiades place {place_id}",

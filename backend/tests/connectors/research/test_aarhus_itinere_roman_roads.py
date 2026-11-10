@@ -4,8 +4,10 @@
 https://itiner-e.org/route-segments/download, taken on 2026-11-10 from the
 file the connector downloaded (a plain GET, 57.8 MB). Ten are in Britain,
 chosen to cover each road type and certainty and the missing dates of a river.
-The other four are outside it: a road in Normandy, one on the Channel coast
-at Boulogne, one in Algeria and one in Egypt.
+Four are outside it: a road in Normandy, one on the Channel coast at
+Boulogne, one in Algeria and one in Egypt. Three more were added from the same
+file: the sea lanes from Boulogne to Dover (38992) and to Richborough (38994),
+and Lindum-Durobrivae (13722), a segment in Britain with no length.
 """
 
 from __future__ import annotations
@@ -52,7 +54,7 @@ def test_the_source_carries_the_work_list_licence_and_cites_the_static_version()
         "Itiner-e: the digital atlas of ancient roads © 2024 by Brughmans, Pažout, de Soto and "
         "Bjerregaard Vahlstrup is licensed under CC BY 4.0"
     )
-    assert_source_matches_worklist(ItinerERoads.source, attribution=f"{entry_attribution} {STATIC_VERSION}")
+    assert_source_matches_worklist(ItinerERoads.source, attribution=f"{entry_attribution}. {STATIC_VERSION}")
     assert "10.5281/zenodo.17122148" in STATIC_VERSION
 
 
@@ -68,6 +70,15 @@ def test_a_run_stores_only_the_segments_in_britain(db: Session) -> None:
 
 
 @respx.mock
+def test_the_channel_crossings_and_segments_with_no_length_are_left_out(db: Session) -> None:
+    serve(EXPORT.read_bytes())
+    run_connector(ItinerERoads())
+    ids = set(db.scalars(select(Record.external_id)).all())
+    assert not ids & {"38992", "38994"}  # Boulogne to Dover, and to Richborough
+    assert "13722" not in ids  # two identical points
+
+
+@respx.mock
 def test_segment_fields_are_mapped(db: Session) -> None:
     serve(EXPORT.read_bytes())
     run_connector(ItinerERoads())
@@ -79,7 +90,7 @@ def test_segment_fields_are_mapped(db: Session) -> None:
     assert road.summary is not None
     assert road.summary.startswith("Conjectured line.")
     assert road.url == "https://itiner-e.org/route-segment/13516"
-    assert road.periods is None  # dated 0 to 0, which the export uses for "no date"
+    assert road.periods == ["roman"]  # dated 0 to 0, which the export uses for "no date", on a Roman road
     assert road.raw is not None
     assert road.raw["segmentCertainty"] == "Conjectured"
     assert road.raw["bibliography"]
@@ -93,7 +104,7 @@ def test_segment_fields_are_mapped(db: Session) -> None:
 
 
 def test_periods_come_from_the_date_range() -> None:
-    assert periods_between(0, 0) == []  # the export's placeholder for no date
+    assert periods_between(0, 0) == ["roman"]  # the export's placeholder for no date, on a Roman road
     assert periods_between(50, 200) == ["roman"]
     assert periods_between(-100, 100) == ["iron_age", "roman"]
     assert periods_between(300, 600) == ["roman", "early_medieval"]
@@ -109,7 +120,7 @@ def test_the_stored_attribution_is_dated_from_the_download(db: Session) -> None:
         run_connector(ItinerERoads())
     source = db.get(Source, KEY)
     assert source is not None
-    assert source.attribution.endswith(STATIC_VERSION)
+    assert source.attribution.endswith(f"CC BY 4.0. {STATIC_VERSION}")
 
 
 @respx.mock

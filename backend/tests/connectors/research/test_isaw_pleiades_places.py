@@ -6,7 +6,11 @@ cut down to nine places, with their rows as the live bundle
 GET on 2026-11-10, 36 MB) has them: Londinium, Vindolanda, Stonehenge and the
 Britannia island at precise points, Hadrian's Wall and the province Britannia
 I at rough ones, Germania II whose rough box reaches into the Continent,
-Baqa with no position at all, and a house in Pompeii.
+Baqa with no position at all, and a house in Pompeii. Four more rows were
+copied from the same bundle: Caen in Normandy and Samarobriva Ambianorum
+(Amiens) in Picardy, which the runner's box for the isles holds, the bay
+"Ouolas? Kolpos", and Oram's Arbour, whose type `fort` is the vocabulary's
+deprecated term for `fort-2`.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ from typing import Any
 import httpx
 import pytest
 import respx
+from shapely.geometry import Point
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -31,7 +36,7 @@ from tests.connectors.research.support import FIXTURES, assert_source_matches_wo
 
 KEY = "isaw-pleiades-places"
 BUNDLE = FIXTURES / "pleiades_gis_data.zip"
-STORED = {"79574", "89313", "509089189", "91358", "991321", "20419"}
+STORED = {"79574", "89313", "509089189", "20419", "113170101"}
 
 
 def serve(body: bytes) -> respx.Route:
@@ -90,19 +95,83 @@ def test_place_fields_are_mapped(db: Session) -> None:
     assert londinium.summary
 
 
+def place(**fields: str | None) -> Feature:
+    """A precise place in Hampshire with `fields` over the top."""
+    columns: dict[str, str | None] = {
+        "id": "5",
+        "title": "Somewhere",
+        "description": "",
+        "details": "",
+        "provenance": "",
+        "uri": "u",
+        "created": "c",
+        "representative_latitude": "51",
+        "representative_longitude": "-1",
+        "bounding_box_wkt": None,
+        "location_precision": "precise",
+    } | fields
+    return Feature(
+        columns,
+        Point(
+            float(columns["representative_longitude"] or 0), float(columns["representative_latitude"] or 0)
+        ),
+    )
+
+
+def test_a_rough_place_says_how_rough() -> None:
+    # A box 0.2 degrees wide and 0.1 high at 51 N: half the wider side.
+    record = to_record(
+        place(
+            location_precision="rough",
+            bounding_box_wkt="POLYGON ((-1.1 50.95, -1.1 51.05, -0.9 51.05, -0.9 50.95, -1.1 50.95))",
+        ),
+        {},
+    )
+    assert record is not None
+    assert record.precision_m is not None
+    assert round(record.precision_m / 1000) == 7
+
+
 @respx.mock
-def test_a_rough_place_says_how_rough(db: Session) -> None:
+def test_a_rough_place_above_ten_kilometres_is_not_stored(db: Session) -> None:
     serve(BUNDLE.read_bytes())
     run_connector(PleiadesPlaces())
-    province = db.scalars(select(Record).where(Record.external_id == "991321")).one()
-    # Its box is 5 degrees wide at 52.5 N and 5 high: half the taller side.
-    assert province.precision_m is not None
-    assert round(province.precision_m / 1000) == 278
-    assert province.raw is not None
-    assert province.raw["location_precision"] == "rough"
-    wall = db.scalars(select(Record).where(Record.external_id == "91358")).one()
-    assert wall.precision_m is not None
-    assert 10_000 < wall.precision_m < 80_000
+    # Hadrian's Wall is a rough point in the middle of its box, 40 km or so from the ends.
+    assert db.scalars(select(Record).where(Record.external_id == "91358")).first() is None
+
+
+@respx.mock
+def test_places_that_are_not_sites_are_not_stored(db: Session) -> None:
+    serve(BUNDLE.read_bytes())
+    run_connector(PleiadesPlaces())
+    ids = set(db.scalars(select(Record.external_id)).all())
+    assert "991321" not in ids  # Britannia I, a province
+    assert "89270" not in ids  # Ouolas? Kolpos, a bay
+    assert to_record(place(), {"5": ["province", "people, tribe (historical cultural group)"]}) is None
+    assert to_record(place(), {"5": ["province", "settlement"]}) is not None
+    assert to_record(place(), {}) is not None
+
+
+@respx.mock
+def test_places_on_the_continent_are_not_stored(db: Session) -> None:
+    serve(BUNDLE.read_bytes())
+    run_connector(PleiadesPlaces())
+    ids = set(db.scalars(select(Record.external_id)).all())
+    assert "69483" not in ids  # Caen, in Normandy
+    assert "109321" not in ids  # Samarobriva, in Picardy
+    assert to_record(place(representative_latitude="49.0", representative_longitude="-11.5"), {}) is None
+    assert (
+        to_record(place(representative_latitude="49.19", representative_longitude="-2.2"), {}) is not None
+    )  # Jersey
+
+
+@respx.mock
+def test_a_deprecated_type_is_replaced_by_its_live_twin(db: Session) -> None:
+    serve(BUNDLE.read_bytes())
+    run_connector(PleiadesPlaces())
+    arbour = db.scalars(select(Record).where(Record.external_id == "113170101")).one()
+    assert arbour.monument_types == ["fort"]
+    assert arbour.record_type == "fort"
 
 
 @respx.mock
@@ -127,8 +196,6 @@ def test_a_place_with_no_title_is_named_by_its_number() -> None:
         "bounding_box_wkt": None,
         "location_precision": "precise",
     }
-    from shapely.geometry import Point
-
     record = to_record(Feature(columns, Point(-1, 51)), {})
     assert record is not None
     assert record.name == "Pleiades place 5"
@@ -155,7 +222,7 @@ def test_a_partial_run_by_bbox(db: Session) -> None:
     run = run_connector(PleiadesPlaces(), bbox=(-2.5, 54.9, -2.2, 55.1))
     assert run.stats is not None
     assert not run.stats["full"]
-    assert set(db.scalars(select(Record.external_id)).all()) == {"89313", "91358"}
+    assert set(db.scalars(select(Record.external_id)).all()) == {"89313"}
 
 
 @respx.mock
