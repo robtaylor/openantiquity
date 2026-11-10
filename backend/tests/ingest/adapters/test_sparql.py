@@ -74,3 +74,10 @@ def test_wkt_literals_in_each_crs() -> None:
     assert wkt_literal("POINT EMPTY") is None
     with pytest.raises(UpstreamFormatError):
         wkt_literal("not wkt at all")
+
+
+@respx.mock
+def test_a_longer_timeout_can_be_asked_for() -> None:
+    route = respx.get(ENDPOINT).mock(return_value=httpx.Response(200, json=fixture_json("sparql_page.json")))
+    list(make_query(timeout=90.0).rows())
+    assert route.calls[0].request.extensions["timeout"]["read"] == 90.0

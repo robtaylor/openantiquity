@@ -82,6 +82,7 @@ class SparqlQuery:
         polite: Polite | None = None,
         geometry: str | None = None,
         page_size: int | None = None,
+        timeout: float | None = None,
     ) -> None:
         upper = query.upper()
         if page_size is not None:
@@ -94,10 +95,18 @@ class SparqlQuery:
         self.polite = polite or Polite()
         self.geometry = geometry
         self.page_size = page_size
+        # Seconds to wait for an answer. Wikidata lets a query run for a minute, past the client's own limit.
+        self.timeout = timeout
 
     def _ask(self, query: str) -> list[dict[str, Any]]:
+        extra = {} if self.timeout is None else {"timeout": self.timeout}
         response = self.polite.request(
-            self.client, "GET", self.endpoint, params={"query": query}, headers={"Accept": RESULTS_JSON}
+            self.client,
+            "GET",
+            self.endpoint,
+            params={"query": query},
+            headers={"Accept": RESULTS_JSON},
+            **extra,
         )
         try:
             body = response.json()
