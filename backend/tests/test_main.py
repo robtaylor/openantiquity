@@ -40,7 +40,8 @@ def test_every_module_in_fieldclub_api_with_a_router_is_discovered() -> None:
 def test_routers_are_mounted_under_api_v1(client: TestClient) -> None:
     paths = set(client.get("/api/openapi.json").json()["paths"])
     assert {"/api/v1/meta", "/api/v1/auth/me", "/api/v1/auth/logout"} <= paths
-    assert all(path.startswith("/api/v1/") for path in paths)
+    # Tile endpoints sit at the root so a CDN can cache them by path.
+    assert all(path.startswith(("/api/v1/", "/tiles/")) for path in paths)
     assert client.get("/meta").status_code == 404
 
 
