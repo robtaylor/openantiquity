@@ -52,6 +52,17 @@ UNSAFE = [
     "?next=/",
     "#/f/1",
     "/" + "a" * MAX_NEXT_LENGTH,
+    # Dot segments: a browser resolves these to `//evil.example`, another host.
+    "/.//evil.example",
+    "/a/..//evil.example",
+    "/%2e//evil.example",
+    "/%2E%2E//evil.example",
+    "/.%2e//evil.example",
+    "/a/%252e%252e//evil.example",
+    "/a/b/../c",
+    "/./f/1",
+    "/f/..",
+    "/f/.?x=1",
 ]
 
 SAFE = [
@@ -62,7 +73,9 @@ SAFE = [
     "/f/a%20b",
     "/search?q=caf%C3%A9",
     "/f/%2541",
-    "/a/b/../c",
+    "/f/.hidden",
+    "/f/a..b",
+    "/search?q=../x",
     "/" + "a" * (MAX_NEXT_LENGTH - 1),
 ]
 

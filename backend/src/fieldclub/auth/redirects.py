@@ -5,9 +5,11 @@ a browser could read as another host (`//evil.example`, `/\\evil.example`,
 `/%5Cevil.example`, a tab or newline that browsers strip) or as a scheme
 (`javascript:`) would turn the sign-in flow into an open redirect. Rather than
 try to list every trick, a path is accepted only when it is printable ASCII
-starting with exactly one slash, and still starts that way, with no backslash
-and no control or invisible character, however many times it is
-percent-decoded. Anything else becomes `/`.
+starting with exactly one slash, and still starts that way, with no backslash,
+no `.` or `..` segment and no control or invisible character, however many
+times it is percent-decoded. Anything else becomes `/`. Dot segments are
+refused because a browser resolves `/a/..//evil.example` to `//evil.example`,
+another host, and no link in the app needs them.
 
 The redirect itself is always built as `public_url + path`, so even a path
 that slipped through would stay on this site's host.
@@ -28,6 +30,7 @@ _DECODE_ROUNDS = 3
 # Controls (tab, newline, NUL), format characters (bidirectional overrides,
 # zero-width), and line and paragraph separators.
 _FORBIDDEN_DECODED = frozenset({"Cc", "Cf", "Zl", "Zp"})
+_DOT_SEGMENTS = frozenset({".", ".."})
 
 
 def _looks_local(path: str, *, raw: bool) -> bool:
@@ -45,7 +48,9 @@ def _looks_local(path: str, *, raw: bool) -> bool:
     elif any(unicodedata.category(char) in _FORBIDDEN_DECODED for char in path):
         return False
     parts = urlsplit(path)
-    return not parts.scheme and not parts.netloc
+    if parts.scheme or parts.netloc:
+        return False
+    return not _DOT_SEGMENTS.intersection(parts.path.split("/"))
 
 
 def safe_next(raw: str | None) -> str:

@@ -314,7 +314,7 @@ class Microsoft(OidcProvider):
     def identity(self, claims: dict[str, Any], callback: Callback) -> ProviderIdentity:
         # `email` is a directory attribute anyone with admin rights in a tenant
         # can set to any address. Trust it only with the domain-owner flag.
-        verified = claim_is_true(claims.get("xms_edov")) or claims.get("email_verified") is True
+        verified = claim_is_true(claims.get("xms_edov"))
         return ProviderIdentity(
             provider=self.id,
             subject=_subject(claims.get("sub")),

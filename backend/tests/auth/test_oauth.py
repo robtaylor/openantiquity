@@ -141,7 +141,9 @@ def test_the_microsoft_tenant_setting_is_checked(tenant: str) -> None:
         ({"sub": "m", "email": "a@b.c", "xms_edov": True}, True),
         ({"sub": "m", "email": "a@b.c", "xms_edov": "true"}, True),
         ({"sub": "m", "email": "a@b.c", "xms_edov": False}, False),
-        ({"sub": "m", "email": "a@b.c", "email_verified": True}, True),
+        # A plain `email_verified`, which claims mapping could add, is not the domain owner's word.
+        ({"sub": "m", "email": "a@b.c", "email_verified": True}, False),
+        ({"sub": "m", "email": "a@b.c", "email_verified": True, "xms_edov": False}, False),
     ],
 )
 def test_microsoft_email_is_verified_only_with_the_domain_owner_flag(claims: dict, verified: bool) -> None:
