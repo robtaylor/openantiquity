@@ -1,0 +1,147 @@
+{
+ "head": {
+  "vars": [
+   "item",
+   "itemLabel",
+   "coord",
+   "id",
+   "nhle"
+  ]
+ },
+ "results": {
+  "bindings": [
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q1015054"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Burghead Fort"
+    },
+    "id": {
+     "type": "literal",
+     "value": "2925"
+    },
+    "coord": {
+     "datatype": "http://www.opengis.net/ont/geosparql#wktLiteral",
+     "type": "literal",
+     "value": "Point(-3.49672 57.7032)"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q1025082"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Cadbury Castle"
+    },
+    "id": {
+     "type": "literal",
+     "value": "3948"
+    },
+    "coord": {
+     "datatype": "http://www.opengis.net/ont/geosparql#wktLiteral",
+     "type": "literal",
+     "value": "Point(-2.531667 51.024167)"
+    },
+    "nhle": {
+     "type": "literal",
+     "value": "1011980"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q1027253"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Calleva Atrebatum"
+    },
+    "id": {
+     "type": "literal",
+     "value": "4032"
+    },
+    "coord": {
+     "datatype": "http://www.opengis.net/ont/geosparql#wktLiteral",
+     "type": "literal",
+     "value": "Point(-1.0829 51.3573)"
+    },
+    "nhle": {
+     "type": "literal",
+     "value": "1011957"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q1049577"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Castle Law, Glencorse"
+    },
+    "id": {
+     "type": "literal",
+     "value": "3710"
+    },
+    "coord": {
+     "datatype": "http://www.opengis.net/ont/geosparql#wktLiteral",
+     "type": "literal",
+     "value": "Point(-3.233408679 55.861776959)"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q1088007"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Tre'r Ceiri"
+    },
+    "id": {
+     "type": "literal",
+     "value": "1685"
+    },
+    "coord": {
+     "datatype": "http://www.opengis.net/ont/geosparql#wktLiteral",
+     "type": "literal",
+     "value": "Point(-4.4238 52.9747)"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q1091047"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Chûn Castle"
+    },
+    "id": {
+     "type": "literal",
+     "value": "0617"
+    },
+    "coord": {
+     "datatype": "http://www.opengis.net/ont/geosparql#wktLiteral",
+     "type": "literal",
+     "value": "Point(-5.63374929 50.14862451)"
+    },
+    "nhle": {
+     "type": "literal",
+     "value": "1007264"
+    }
+   }
+  ]
+ }
+}

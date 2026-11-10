@@ -6,14 +6,23 @@ from pathlib import Path
 import pytest
 
 from fieldclub.ingest.connectors import (
+    aarhus_itinere_roman_roads,
     bern_xronos_radiocarbon,
     datacite_ads_dois,
     isaw_pleiades_places,
     ribonline_rib_sites,
+    wikimedia_wikidata_heritage_items,
 )
 
 # Each connector's gap between requests. The tests don't wait.
-DELAYS = (datacite_ads_dois, bern_xronos_radiocarbon, ribonline_rib_sites, isaw_pleiades_places)
+DELAYS = (
+    aarhus_itinere_roman_roads,
+    bern_xronos_radiocarbon,
+    datacite_ads_dois,
+    isaw_pleiades_places,
+    ribonline_rib_sites,
+    wikimedia_wikidata_heritage_items,
+)
 
 
 @pytest.fixture(autouse=True)

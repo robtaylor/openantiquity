@@ -1,0 +1,55 @@
+{
+ "head": {
+  "vars": [
+   "item",
+   "itemLabel",
+   "coord",
+   "id",
+   "nhle"
+  ]
+ },
+ "results": {
+  "bindings": [
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q1015054"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Burghead Fort"
+    },
+    "id": {
+     "type": "literal",
+     "value": "16146"
+    },
+    "coord": {
+     "datatype": "http://www.opengis.net/ont/geosparql#wktLiteral",
+     "type": "literal",
+     "value": "Point(-3.49672 57.7032)"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q1049577"
+    },
+    "itemLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Castle Law, Glencorse"
+    },
+    "id": {
+     "type": "literal",
+     "value": "51871"
+    },
+    "coord": {
+     "datatype": "http://www.opengis.net/ont/geosparql#wktLiteral",
+     "type": "literal",
+     "value": "Point(-3.233408679 55.861776959)"
+    }
+   }
+  ]
+ }
+}
