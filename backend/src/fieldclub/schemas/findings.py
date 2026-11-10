@@ -6,16 +6,17 @@ Every position in a response is built by `location_out`, which goes through
 
 What a viewer who hasn't answered may see follows Decision 0008: the finding's
 title and claim, its tier, state and score, and its next steps without their
-numbers (`review.blind_step`), but no person's answer and no tally of
-answers. The score moves as answers come in, as a tier does; it shows how far
-along a finding is, not how anyone answered. `FindingDetail.from_view`
-applies all this from `FindingView.answers_visible`.
+numbers (`review.blind_step`), but no person's answer, no tally of answers
+and no name of anyone who answered. The score moves as answers come in, as a
+tier does, so the people who answered aren't credited to this viewer at all
+(Decision 0010). `FindingDetail.from_view` applies all this from
+`FindingView.answers_visible`.
 """
 
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Annotated, Any, Literal, cast, get_args
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, UrlConstraints, model_validator
 
@@ -33,7 +34,6 @@ from fieldclub.services import review, sensitivity
 from fieldclub.services.confidence import (
     ANSWER_CREDIT_KINDS,
     Assessment,
-    Credit,
     CreditKind,
     EvidenceStatus,
     NextStep,
@@ -301,24 +301,9 @@ class AssessmentOut(ApiModel):
     tallies: Tallies | None
 
 
-# "answered" stands in for how a person answered when answers are hidden.
-CreditOutKind = Literal[
-    "spotted",
-    "saw_it",
-    "could_not_see",
-    "unsure",
-    "explained",
-    "answered",
-    "added_evidence",
-    "endorsed",
-    "verified",
-]
-assert {kind.value for kind in CreditKind} <= set(get_args(CreditOutKind)), "a credit kind has no output"
-
-
 class CreditOut(ApiModel):
     user: PublicUser
-    kind: CreditOutKind
+    kind: CreditKind
     evidence_id: int | None = None
 
 
@@ -441,24 +426,19 @@ class FindingDetail(FindingSummary):
 
 
 def _credits(view: FindingView) -> list[CreditOut]:
-    """Who did what. How each person answered is shown only when answers are visible."""
+    """Who did what. People who answered are named only to those who may see answers.
 
-    def kind(credit: Credit) -> CreditOutKind:
-        hidden = credit.kind in ANSWER_CREDIT_KINDS and not view.answers_visible
-        # Every `CreditKind` value is a `CreditOutKind`.
-        return "answered" if hidden else cast(CreditOutKind, credit.kind.value)
-
-    credits = view.assessment.credits
-    # Each person gives at most one answer, so hiding how they answered can't merge two credits.
-    keys = [(credit.user_id, kind(credit), credit.evidence_id) for credit in credits]
-    assert len(set(keys)) == len(keys), "two credits are the same once answers are hidden"
+    The score and tier move with each answer, so naming them to anyone else
+    would let a reload tie a yes or a no to a person (Decision 0010).
+    """
     return [
         CreditOut(
             user=PublicUser.from_user(view.people[credit.user_id]),
-            kind=kind(credit),
+            kind=credit.kind,
             evidence_id=credit.evidence_id,
         )
-        for credit in credits
+        for credit in view.assessment.credits
+        if view.answers_visible or credit.kind not in ANSWER_CREDIT_KINDS
     ]
 
 

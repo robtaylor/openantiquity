@@ -150,7 +150,8 @@ def test_a_page_hides_answers_until_you_have_given_yours(
         assert body["title"] == CLAIM["title"]
         assert body["answers_visible"] is False
         assert body["assessment"]["tallies"] is None
-        assert {c["kind"] for c in body["credits"]} == {"spotted", "answered"}
+        # The finder is credited. The person who answered isn't named at all (Decision 0010).
+        assert {c["kind"] for c in body["credits"]} == {"spotted"}
         for secret in (
             ANSWER_NOTE,
             "moat",
@@ -255,3 +256,41 @@ def test_lists_and_the_map_carry_no_tallies(db: Session, client, make_user: Make
         text = client.get(f"{API}/findings", params=params).text
         for secret in (ANSWER_NOTE, "moat", "observation_count", "unseen", "community_class", "tallies"):
             assert secret not in text
+
+
+def test_nobody_who_has_not_answered_can_tie_a_change_in_score_to_a_named_person(
+    db: Session, client, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    """The score moves with each answer, so naming each person who answered would say who said what.
+
+    The finder and people who have answered see every name (Decision 0010).
+    """
+    finder, yes, no, onlooker = make_user(), make_user(), make_user(), make_user()
+    finding = _claimed(db, finder)
+    path = f"{API}/findings/{finding.public_id}"
+    viewers = {"signed out": client, "member": client_as(onlooker)}
+
+    def named(viewer) -> set[str]:
+        page = viewer.get(path)
+        assert page.status_code == 200
+        body = page.json()
+        assert body["answers_visible"] is False
+        for person in (yes, no):
+            assert person.handle not in page.text, f"{person.handle} is named"
+        return {credit["user"]["handle"] for credit in body["credits"]}
+
+    for viewer in viewers.values():
+        assert named(viewer) == {finder.handle}
+    answer(db, finding, yes, Visible.YES)
+    for viewer in viewers.values():
+        assert named(viewer) == {finder.handle}
+    answer(db, finding, no, Visible.NO)
+    for viewer in viewers.values():
+        assert named(viewer) == {finder.handle}
+
+    for insider in (finder, yes):
+        credits = client_as(insider).get(path).json()["credits"]
+        assert {(c["user"]["handle"], c["kind"]) for c in credits} >= {
+            (yes.handle, "saw_it"),
+            (no.handle, "could_not_see"),
+        }
