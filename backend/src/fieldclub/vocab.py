@@ -1,0 +1,1016 @@
+"""Vocabularies: every enumeration the product uses, with the words shown to people.
+
+Enumerations are `StrEnum` classes and are stored as `TEXT`. The descriptive
+tables below (`FEATURE_CLASSES`, `PERIODS` and so on) are what `/meta` serves,
+so the frontend hard-codes none of this. Copy is British English, and hints are
+written for someone who has never heard the term before.
+
+Monument-type terms are preferred labels in the FISH Thesaurus of Monument
+Types (http://purl.org/heritagedata/schemes/eh_tmt2), checked in November 2026.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import StrEnum
+
+# --------------------------------------------------------------------------
+# People
+# --------------------------------------------------------------------------
+
+
+class Role(StrEnum):
+    MEMBER = "member"
+    TRUSTED = "trusted"
+    EXPERT = "expert"
+    MODERATOR = "moderator"
+    ADMIN = "admin"
+
+
+@dataclass(frozen=True)
+class RoleInfo:
+    id: Role
+    label: str
+    weight: float
+    description: str
+
+
+# A person's weight in the confidence engine. Every contributor is a signed-in
+# account, so there is no lower weight for anonymous input. Moderators and
+# admins count as trusted.
+ROLES: tuple[RoleInfo, ...] = (
+    RoleInfo(Role.MEMBER, "Member", 1.0, "Someone who has signed in."),
+    RoleInfo(Role.TRUSTED, "Trusted member", 1.5, "A member whose contributions have earned fifty points."),
+    RoleInfo(Role.EXPERT, "Archaeologist", 3.0, "A recognised archaeologist or records officer."),
+    RoleInfo(Role.MODERATOR, "Moderator", 1.5, "Looks after reports and restricted locations."),
+    RoleInfo(Role.ADMIN, "Admin", 1.5, "Runs the service."),
+)
+
+ROLE_WEIGHTS: dict[Role, float] = {info.id: info.weight for info in ROLES}
+
+# Trusted members and everyone above them. Moderators and admins count as
+# trusted, and so do experts.
+TRUSTED_ROLES: frozenset[Role] = frozenset({Role.TRUSTED, Role.EXPERT, Role.MODERATOR, Role.ADMIN})
+
+# Roles that see the exact position of every finding, whatever its
+# sensitivity. The finder always does. See `services.sensitivity`.
+EXACT_LOCATION_ROLES: frozenset[Role] = TRUSTED_ROLES
+
+# Roles that may approve an uploaded photo so other people can see it
+# (Decision 0009). See `services.media`.
+MEDIA_APPROVER_ROLES: frozenset[Role] = TRUSTED_ROLES
+
+# Roles whose "yes" counts as an experienced review for the Probable tier. The
+# contract asks for "a trusted or expert reviewer" and also says "Moderators
+# and admins count as trusted", so they are reviewers too, at the trusted
+# weight of 1.5.
+REVIEWER_ROLES: frozenset[Role] = TRUSTED_ROLES
+
+# Roles that can moderate content.
+MODERATOR_ROLES: frozenset[Role] = frozenset({Role.MODERATOR, Role.ADMIN})
+
+
+def role_weight(role: Role | str) -> float:
+    """The confidence weight for a role. An unknown role is a bug, so it raises."""
+    return ROLE_WEIGHTS[Role(role)]
+
+
+class AgeBand(StrEnum):
+    """The age band a contributor declares on the welcome sheet (Decision 0009)."""
+
+    AGE_16_17 = "16_17"
+    AGE_18_PLUS = "18_plus"
+
+
+# The youngest age in each band. A band is offered only when this is at least
+# `FIELDCLUB_MIN_AGE`.
+AGE_BAND_YOUNGEST: dict[AgeBand, int] = {AgeBand.AGE_16_17: 16, AgeBand.AGE_18_PLUS: 18}
+
+
+class SignInProvider(StrEnum):
+    GOOGLE = "google"
+    APPLE = "apple"
+    MICROSOFT = "microsoft"
+    FACEBOOK = "facebook"
+    OSM = "osm"
+    EMAIL = "email"
+
+
+@dataclass(frozen=True)
+class SignInProviderInfo:
+    id: SignInProvider
+    label: str
+
+
+# In the order the sign-in sheet shows them. The emailed link comes last,
+# because it is the fallback for people who use none of the others.
+SIGN_IN_PROVIDERS: tuple[SignInProviderInfo, ...] = (
+    SignInProviderInfo(SignInProvider.GOOGLE, "Google"),
+    SignInProviderInfo(SignInProvider.APPLE, "Apple"),
+    SignInProviderInfo(SignInProvider.MICROSOFT, "Microsoft"),
+    SignInProviderInfo(SignInProvider.FACEBOOK, "Facebook"),
+    SignInProviderInfo(SignInProvider.OSM, "OpenStreetMap"),
+    SignInProviderInfo(SignInProvider.EMAIL, "Email link"),
+)
+
+
+# --------------------------------------------------------------------------
+# Feature classes
+# --------------------------------------------------------------------------
+
+
+class FeatureClass(StrEnum):
+    ENCLOSURE = "enclosure"
+    HILLFORT = "hillfort"
+    ROUND_BARROW = "round_barrow"
+    LONG_BARROW = "long_barrow"
+    HUT_CIRCLE = "hut_circle"
+    SETTLEMENT = "settlement"
+    FIELD_SYSTEM = "field_system"
+    RIDGE_AND_FURROW = "ridge_and_furrow"
+    LINEAR = "linear"
+    TRACKWAY = "trackway"
+    ROAD = "road"
+    MOAT = "moat"
+    MOTTE = "motte"
+    PLATFORM = "platform"
+    POND = "pond"
+    PIT = "pit"
+    INDUSTRIAL = "industrial"
+    MILITARY = "military"
+    RITUAL = "ritual"
+    GARDEN = "garden"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class FeatureClassInfo:
+    id: FeatureClass
+    label: str
+    hint: str
+    fish_term: str
+
+
+FEATURE_CLASSES: tuple[FeatureClassInfo, ...] = (
+    FeatureClassInfo(
+        FeatureClass.ENCLOSURE,
+        "Enclosure",
+        "A patch of ground with a bank, a ditch or both running round it.",
+        "ENCLOSURE",
+    ),
+    FeatureClassInfo(
+        FeatureClass.HILLFORT,
+        "Hillfort",
+        "A hilltop ringed by one or more big banks and ditches, usually Iron Age.",
+        "HILLFORT",
+    ),
+    FeatureClassInfo(
+        FeatureClass.ROUND_BARROW,
+        "Round barrow or mound",
+        "A round burial mound, often with a ditch circling it, usually Bronze Age.",
+        "ROUND BARROW",
+    ),
+    FeatureClassInfo(
+        FeatureClass.LONG_BARROW,
+        "Long barrow",
+        "A long, low burial mound from the Neolithic, often with a ditch down each side.",
+        "LONG BARROW",
+    ),
+    FeatureClassInfo(
+        FeatureClass.HUT_CIRCLE,
+        "Hut circle",
+        "A low ring a few metres across, left by the wall of a prehistoric round house.",
+        "HUT CIRCLE",
+    ),
+    FeatureClassInfo(
+        FeatureClass.SETTLEMENT,
+        "Settlement earthworks",
+        "The bumps and hollows left by the houses, yards and lanes of an abandoned village or farm.",
+        "SETTLEMENT",
+    ),
+    FeatureClassInfo(
+        FeatureClass.FIELD_SYSTEM,
+        "Field system",
+        "A pattern of old field edges, seen as low banks, ditches or steps in a slope.",
+        "FIELD SYSTEM",
+    ),
+    FeatureClassInfo(
+        FeatureClass.RIDGE_AND_FURROW,
+        "Ridge and furrow",
+        "Long parallel ridges, like corduroy, left by medieval and later ploughing.",
+        "RIDGE AND FURROW",
+    ),
+    FeatureClassInfo(
+        FeatureClass.LINEAR,
+        "Linear bank or ditch",
+        "A single bank or ditch running across country, such as an old boundary.",
+        "LINEAR EARTHWORK",
+    ),
+    FeatureClassInfo(
+        FeatureClass.TRACKWAY,
+        "Trackway or hollow way",
+        "An old route worn into the ground by feet, hooves and wheels, often a sunken lane.",
+        "TRACKWAY",
+    ),
+    FeatureClassInfo(
+        FeatureClass.ROAD,
+        "Road",
+        "A built road, often straight and raised on a bank, such as a Roman road.",
+        "ROAD",
+    ),
+    FeatureClassInfo(
+        FeatureClass.MOAT,
+        "Moat",
+        "A wide ditch, once full of water, round the island where a house stood.",
+        "MOAT",
+    ),
+    FeatureClassInfo(
+        FeatureClass.MOTTE,
+        "Motte or castle earthwork",
+        "A steep man-made mound or ring of bank built for an early castle.",
+        "MOTTE",
+    ),
+    FeatureClassInfo(
+        FeatureClass.PLATFORM,
+        "Platform",
+        "A levelled patch cut into a slope or built out from it, where a building once stood.",
+        "BUILDING PLATFORM",
+    ),
+    FeatureClassInfo(
+        FeatureClass.POND,
+        "Pond or water management",
+        "Ponds, dams and channels made to hold or move water, such as fishponds and water meadows.",
+        "POND",
+    ),
+    FeatureClassInfo(
+        FeatureClass.PIT,
+        "Pit or quarry",
+        "A hollow or cluster of hollows left by digging for stone, chalk, clay or ore.",
+        "EXTRACTIVE PIT",
+    ),
+    FeatureClassInfo(
+        FeatureClass.INDUSTRIAL,
+        "Industrial",
+        "Remains of industry, such as spoil heaps, kilns, tramways and mine workings.",
+        "INDUSTRIAL SITE",
+    ),
+    FeatureClassInfo(
+        FeatureClass.MILITARY,
+        "Military",
+        "Remains of defence or training, such as trenches, gun positions and airfields.",
+        "MILITARY INSTALLATION",
+    ),
+    FeatureClassInfo(
+        FeatureClass.RITUAL,
+        "Ritual monument",
+        "A prehistoric ceremonial site, such as a henge, a stone circle or a cursus.",
+        "RELIGIOUS RITUAL AND FUNERARY",
+    ),
+    FeatureClassInfo(
+        FeatureClass.GARDEN,
+        "Garden earthworks",
+        "Terraces, mounds, ponds and paths left by a formal garden that has gone.",
+        "GARDEN",
+    ),
+    FeatureClassInfo(
+        FeatureClass.UNKNOWN,
+        "Not sure",
+        "You can see something but can't say what it is. Other people can help work it out.",
+        "SITE",
+    ),
+)
+
+
+# --------------------------------------------------------------------------
+# Periods
+# --------------------------------------------------------------------------
+
+
+class Period(StrEnum):
+    PREHISTORIC = "prehistoric"
+    NEOLITHIC = "neolithic"
+    BRONZE_AGE = "bronze_age"
+    IRON_AGE = "iron_age"
+    ROMAN = "roman"
+    EARLY_MEDIEVAL = "early_medieval"
+    MEDIEVAL = "medieval"
+    POST_MEDIEVAL = "post_medieval"
+    MODERN = "modern"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class PeriodInfo:
+    id: Period
+    label: str
+    hint: str
+
+
+PERIODS: tuple[PeriodInfo, ...] = (
+    PeriodInfo(Period.PREHISTORIC, "Prehistoric", "Before AD 43, when you can't say which part"),
+    PeriodInfo(Period.NEOLITHIC, "Neolithic", "4000 to 2500 BC"),
+    PeriodInfo(Period.BRONZE_AGE, "Bronze Age", "2500 to 800 BC"),
+    PeriodInfo(Period.IRON_AGE, "Iron Age", "800 BC to AD 43"),
+    PeriodInfo(Period.ROMAN, "Roman", "AD 43 to 410"),
+    PeriodInfo(Period.EARLY_MEDIEVAL, "Early medieval", "AD 410 to 1066"),
+    PeriodInfo(Period.MEDIEVAL, "Medieval", "1066 to 1540"),
+    PeriodInfo(Period.POST_MEDIEVAL, "Post-medieval", "1540 to 1901"),
+    PeriodInfo(Period.MODERN, "Modern", "1901 to today"),
+    PeriodInfo(Period.UNKNOWN, "Not sure", "No guess at a date"),
+)
+
+
+# --------------------------------------------------------------------------
+# Evidence
+# --------------------------------------------------------------------------
+
+
+class Strand(StrEnum):
+    LIDAR = "lidar"
+    AERIAL = "aerial"
+    HISTORIC_MAP = "historic_map"
+    RECORDS = "records"
+    LITERATURE = "literature"
+    GROUND = "ground"
+    SURVEY = "survey"
+    OFFICIAL = "official"
+
+
+class EvidenceGroup(StrEnum):
+    DESK = "desk"
+    FIELD = "field"
+    OFFICIAL = "official"
+
+
+# The strands that count towards the Corroborated tier.
+DESK_STRANDS: frozenset[Strand] = frozenset(
+    {Strand.LIDAR, Strand.AERIAL, Strand.HISTORIC_MAP, Strand.RECORDS, Strand.LITERATURE}
+)
+
+
+class EvidenceKind(StrEnum):
+    LIDAR_VIEW = "lidar_view"
+    AERIAL = "aerial"
+    HISTORIC_MAP = "historic_map"
+    RECORD_LINK = "record_link"
+    DOCUMENT = "document"
+    PHOTO = "photo"
+    FIELD_VISIT = "field_visit"
+    GEOPHYSICS = "geophysics"
+    EXCAVATION = "excavation"
+    HER_RECORD = "her_record"
+    DESIGNATION = "designation"
+    PUBLICATION = "publication"
+
+
+@dataclass(frozen=True)
+class EvidenceKindInfo:
+    id: EvidenceKind
+    label: str
+    strand: Strand
+    group: EvidenceGroup
+    hint: str
+
+
+EVIDENCE_KINDS: tuple[EvidenceKindInfo, ...] = (
+    EvidenceKindInfo(
+        EvidenceKind.LIDAR_VIEW,
+        "LIDAR view",
+        Strand.LIDAR,
+        EvidenceGroup.DESK,
+        "Another LIDAR view that shows it, in a different style or with the light from another side.",
+    ),
+    EvidenceKindInfo(
+        EvidenceKind.AERIAL,
+        "Aerial photo",
+        Strand.AERIAL,
+        EvidenceGroup.DESK,
+        "An aerial or satellite photo that shows it, as a mark in a crop, in bare soil or in shadow.",
+    ),
+    EvidenceKindInfo(
+        EvidenceKind.HISTORIC_MAP,
+        "Old map",
+        Strand.HISTORIC_MAP,
+        EvidenceGroup.DESK,
+        "An old map that draws or names it, such as a first edition Ordnance Survey sheet.",
+    ),
+    EvidenceKindInfo(
+        EvidenceKind.RECORD_LINK,
+        "Heritage record",
+        Strand.RECORDS,
+        EvidenceGroup.DESK,
+        "A link to an existing record of the same site or one connected to it.",
+    ),
+    EvidenceKindInfo(
+        EvidenceKind.DOCUMENT,
+        "Book or report",
+        Strand.LITERATURE,
+        EvidenceGroup.DESK,
+        "A book, article or report that mentions it.",
+    ),
+    EvidenceKindInfo(
+        EvidenceKind.PHOTO,
+        "Ground photo",
+        Strand.GROUND,
+        EvidenceGroup.FIELD,
+        "A photograph taken standing at the site.",
+    ),
+    EvidenceKindInfo(
+        EvidenceKind.FIELD_VISIT,
+        "Site visit",
+        Strand.GROUND,
+        EvidenceGroup.FIELD,
+        "Notes from someone who has been to look, with the landowner's permission.",
+    ),
+    EvidenceKindInfo(
+        EvidenceKind.GEOPHYSICS,
+        "Geophysical survey",
+        Strand.SURVEY,
+        EvidenceGroup.FIELD,
+        "A survey that maps what lies under the surface without digging, such as magnetometry.",
+    ),
+    EvidenceKindInfo(
+        EvidenceKind.EXCAVATION,
+        "Excavation",
+        Strand.SURVEY,
+        EvidenceGroup.FIELD,
+        "A dig by archaeologists that tested what's there.",
+    ),
+    EvidenceKindInfo(
+        EvidenceKind.HER_RECORD,
+        "HER entry",
+        Strand.OFFICIAL,
+        EvidenceGroup.OFFICIAL,
+        "An entry in a Historic Environment Record, the local list of known sites.",
+    ),
+    EvidenceKindInfo(
+        EvidenceKind.DESIGNATION,
+        "Designation",
+        Strand.OFFICIAL,
+        EvidenceGroup.OFFICIAL,
+        "Legal protection, such as being scheduled as an ancient monument.",
+    ),
+    EvidenceKindInfo(
+        EvidenceKind.PUBLICATION,
+        "Publication",
+        Strand.OFFICIAL,
+        EvidenceGroup.OFFICIAL,
+        "A published account in a journal, a monograph or a report series.",
+    ),
+)
+
+# The strand each kind is filed under, as `/meta` shows it. To decide what an
+# evidence item counts towards, use `strand_for`, which also looks at the relation.
+EVIDENCE_STRANDS: dict[EvidenceKind, Strand] = {info.id: info.strand for info in EVIDENCE_KINDS}
+
+
+class Stance(StrEnum):
+    SUPPORTS = "supports"
+    NEUTRAL = "neutral"
+    CONTRADICTS = "contradicts"
+
+
+class Relation(StrEnum):
+    SAME_AS = "same_as"
+    PART_OF = "part_of"
+    RELATED = "related"
+
+
+# A record link counts towards the records strand only with one of these
+# relations. `same_as` says the finding is the record, which drives the
+# `known` state and is no corroboration of anything new.
+RECORD_STRAND_RELATIONS: frozenset[Relation] = frozenset({Relation.RELATED, Relation.PART_OF})
+
+
+def strand_for(kind: EvidenceKind | str, relation: Relation | str | None = None) -> Strand | None:
+    """The strand an evidence item counts towards, or None when it counts towards none.
+
+    Every kind has one strand, except that a `record_link` only counts for
+    `records` when its relation is `related` or `part_of`.
+    """
+    kind = EvidenceKind(kind)
+    if kind is EvidenceKind.RECORD_LINK and (
+        relation is None or Relation(relation) not in RECORD_STRAND_RELATIONS
+    ):
+        return None
+    return EVIDENCE_STRANDS[kind]
+
+
+class Outcome(StrEnum):
+    SUPPORTS = "supports"
+    INCONCLUSIVE = "inconclusive"
+    CONTRADICTS = "contradicts"
+
+
+# --------------------------------------------------------------------------
+# Observations
+# --------------------------------------------------------------------------
+
+
+class Visible(StrEnum):
+    YES = "yes"
+    UNSURE = "unsure"
+    NO = "no"
+
+
+class Check(StrEnum):
+    NOT_MODERN = "not_modern"
+    NOT_NATURAL = "not_natural"
+    NOT_ARTEFACT = "not_artefact"
+
+
+class Explanation(StrEnum):
+    MODERN = "modern"
+    NATURAL = "natural"
+    ARTEFACT = "artefact"
+
+
+@dataclass(frozen=True)
+class CheckInfo:
+    id: Check
+    question: str
+    hint: str
+    explanation: Explanation
+
+
+CHECKS: tuple[CheckInfo, ...] = (
+    CheckInfo(
+        Check.NOT_MODERN,
+        "Could it be modern?",
+        "Drains, pipelines, golf bunkers, vehicle tracks and recent field edges can all look old in LIDAR.",
+        Explanation.MODERN,
+    ),
+    CheckInfo(
+        Check.NOT_NATURAL,
+        "Could it be natural?",
+        "Old river channels, landslips, sinkholes and frost patterns make shapes that look built.",
+        Explanation.NATURAL,
+    ),
+    CheckInfo(
+        Check.NOT_ARTEFACT,
+        "Could it be a fault in the data?",
+        (
+            "Stripes where survey flights overlap, steps at tile edges and blotches under trees come from "
+            "processing, not from the ground."
+        ),
+        Explanation.ARTEFACT,
+    ),
+)
+
+CHECK_EXPLANATIONS: dict[Check, Explanation] = {info.id: info.explanation for info in CHECKS}
+
+
+@dataclass(frozen=True)
+class ExplanationInfo:
+    id: Explanation
+    label: str
+    hint: str
+
+
+EXPLANATIONS: tuple[ExplanationInfo, ...] = (
+    ExplanationInfo(
+        Explanation.MODERN,
+        "Modern feature",
+        "Something recent, such as a drain, a pipeline, a bunker or a vehicle track.",
+    ),
+    ExplanationInfo(
+        Explanation.NATURAL,
+        "Natural feature",
+        "Shaped by water, ice or geology, not by people.",
+    ),
+    ExplanationInfo(
+        Explanation.ARTEFACT,
+        "Data artefact",
+        "A stripe, step or blotch that comes from how the LIDAR was flown or processed.",
+    ),
+)
+
+
+# --------------------------------------------------------------------------
+# The confidence ladder
+# --------------------------------------------------------------------------
+
+
+class Tier(StrEnum):
+    SPOTTED = "spotted"
+    SEEN = "seen"
+    CORROBORATED = "corroborated"
+    PROBABLE = "probable"
+    GROUND_CHECKED = "ground_checked"
+    CONFIRMED = "confirmed"
+
+
+@dataclass(frozen=True)
+class TierInfo:
+    id: Tier
+    label: str
+    description: str
+    base_score: int
+
+
+TIERS: tuple[TierInfo, ...] = (
+    TierInfo(Tier.SPOTTED, "Spotted", "One person has marked it.", 10),
+    TierInfo(
+        Tier.SEEN,
+        "Seen by others",
+        "At least two other people can see it too, and few can't.",
+        30,
+    ),
+    TierInfo(
+        Tier.CORROBORATED,
+        "Corroborated",
+        (
+            "It shows up in two more kinds of evidence, such as an aerial photo and an old map, "
+            "and people agree what it is."
+        ),
+        50,
+    ),
+    TierInfo(
+        Tier.PROBABLE,
+        "Probable",
+        (
+            "Reviewers have ruled out modern, natural and data-processing explanations, "
+            "and an experienced reviewer or many other people can see it."
+        ),
+        70,
+    ),
+    TierInfo(
+        Tier.GROUND_CHECKED,
+        "Checked on the ground",
+        "Someone has visited or surveyed it and what they found supports it.",
+        85,
+    ),
+    TierInfo(
+        Tier.CONFIRMED,
+        "On record",
+        "A Historic Environment Record, a designation or a publication now includes it.",
+        100,
+    ),
+)
+
+TIER_ORDER: tuple[Tier, ...] = tuple(info.id for info in TIERS)
+TIER_BASE_SCORES: dict[Tier, int] = {info.id: info.base_score for info in TIERS}
+
+
+def tier_rank(tier: Tier | str) -> int:
+    """Position on the ladder, starting at 0 for Spotted."""
+    return TIER_ORDER.index(Tier(tier))
+
+
+class FindingState(StrEnum):
+    OPEN = "open"
+    KNOWN = "known"
+    DISPUTED = "disputed"
+    RULED_OUT = "ruled_out"
+    WITHDRAWN = "withdrawn"
+
+
+@dataclass(frozen=True)
+class StateInfo:
+    id: FindingState
+    label: str
+    description: str
+
+
+STATES: tuple[StateInfo, ...] = (
+    StateInfo(FindingState.OPEN, "Open", "Still being looked at."),
+    StateInfo(
+        FindingState.KNOWN,
+        "Matches a known record",
+        "It's the same thing as an existing heritage record, which is linked from the finding.",
+    ),
+    StateInfo(FindingState.DISPUTED, "Disputed", "People or evidence disagree about it."),
+    StateInfo(
+        FindingState.RULED_OUT,
+        "Explained",
+        "Most people can't see it, or it turned out to be modern, natural or a fault in the data.",
+    ),
+    StateInfo(FindingState.WITHDRAWN, "Withdrawn", "The finder took it back."),
+)
+
+
+class StateReason(StrEnum):
+    """Why a finding was ruled out. The middle three match `Explanation`."""
+
+    NOT_VISIBLE = "not_visible"
+    MODERN = "modern"
+    NATURAL = "natural"
+    ARTEFACT = "artefact"
+    GROUND_CHECK = "ground_check"
+
+
+class NextStepCode(StrEnum):
+    NEED_OBSERVERS = "need_observers"
+    NEED_STRAND = "need_strand"
+    NEED_CLASS_AGREEMENT = "need_class_agreement"
+    NEED_CHECK = "need_check"
+    NEED_TRUSTED_REVIEW = "need_trusted_review"
+    NEED_GROUND = "need_ground"
+    NEED_OFFICIAL = "need_official"
+
+
+class Sensitivity(StrEnum):
+    """How much of a finding's position each viewer sees (Decision 0005).
+
+    In order from least to most protected. `services.sensitivity` decides who
+    sees what.
+    """
+
+    OPEN = "open"
+    PROTECTED = "protected"
+    RESTRICTED = "restricted"
+
+
+SENSITIVITY_ORDER: tuple[Sensitivity, ...] = tuple(Sensitivity)
+
+
+def sensitivity_rank(level: Sensitivity | str) -> int:
+    """Position in `SENSITIVITY_ORDER`, starting at 0 for open."""
+    return SENSITIVITY_ORDER.index(Sensitivity(level))
+
+
+# Classes that suggest burials, rich occupation or ritual use. A new finding
+# of one of these is `protected` unless someone raises it further.
+PROTECTED_CLASSES: frozenset[FeatureClass] = frozenset(
+    {FeatureClass.ROUND_BARROW, FeatureClass.LONG_BARROW, FeatureClass.RITUAL, FeatureClass.SETTLEMENT}
+)
+
+
+# --------------------------------------------------------------------------
+# Mentions
+# --------------------------------------------------------------------------
+
+
+class MentionKind(StrEnum):
+    VIDEO = "video"
+    ARTICLE = "article"
+    PODCAST = "podcast"
+    PAPER = "paper"
+    BROADCAST = "broadcast"
+    SOCIAL = "social"
+
+
+@dataclass(frozen=True)
+class MentionKindInfo:
+    id: MentionKind
+    label: str
+
+
+MENTION_KINDS: tuple[MentionKindInfo, ...] = (
+    MentionKindInfo(MentionKind.VIDEO, "Video"),
+    MentionKindInfo(MentionKind.ARTICLE, "Article"),
+    MentionKindInfo(MentionKind.PODCAST, "Podcast"),
+    MentionKindInfo(MentionKind.PAPER, "Paper"),
+    MentionKindInfo(MentionKind.BROADCAST, "Broadcast"),
+    MentionKindInfo(MentionKind.SOCIAL, "Social post"),
+)
+
+
+# --------------------------------------------------------------------------
+# Records and sources
+# --------------------------------------------------------------------------
+
+
+class RecordCategory(StrEnum):
+    DESIGNATION = "designation"
+    MONUMENT = "monument"
+    FIND = "find"
+    EVENT = "event"
+    DOCUMENT = "document"
+    COMMUNITY = "community"
+    MAP_LABEL = "map_label"
+
+
+@dataclass(frozen=True)
+class RecordCategoryInfo:
+    id: RecordCategory
+    label: str
+    colour: str
+
+
+# Colours are chosen to stay apart from each other on greyscale terrain. Records
+# are drawn as squares, so they never rely on colour to differ from findings.
+RECORD_CATEGORIES: tuple[RecordCategoryInfo, ...] = (
+    RecordCategoryInfo(RecordCategory.DESIGNATION, "Designations", "#d9544d"),
+    RecordCategoryInfo(RecordCategory.MONUMENT, "Monument records", "#4fb3a5"),
+    RecordCategoryInfo(RecordCategory.FIND, "Finds", "#e6c84f"),
+    RecordCategoryInfo(RecordCategory.EVENT, "Fieldwork", "#6ba6c9"),
+    RecordCategoryInfo(RecordCategory.DOCUMENT, "Reports and publications", "#b08fd8"),
+    RecordCategoryInfo(RecordCategory.COMMUNITY, "Community data", "#7fb069"),
+    RecordCategoryInfo(RecordCategory.MAP_LABEL, "Antiquities on old maps", "#c9a27e"),
+)
+
+
+class SourceAccess(StrEnum):
+    """How Field Club may hold a source's data, per Decision 0007.
+
+    A `bulk` source is downloaded and stored in `records`. A `live` source is
+    queried by the browser and never stored on our servers. A `deeplink`
+    source is only linked. A finding linked to a live or deep-link record
+    keeps the record's identifier and address and nothing else.
+    """
+
+    BULK = "bulk"
+    LIVE = "live"
+    DEEPLINK = "deeplink"
+
+
+class SourceReuse(StrEnum):
+    """What a source's licence allows, per Decision 0004.
+
+    `non_commercial` sources may be ingested because the service is
+    non-commercial. A `link_only` source is deep-linked and never copied.
+    """
+
+    OPEN = "open"
+    SHARE_ALIKE = "share_alike"
+    NON_COMMERCIAL = "non_commercial"
+    LINK_ONLY = "link_only"
+
+
+class IngestStatus(StrEnum):
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class AdminAreaKind(StrEnum):
+    NATION = "nation"
+    COUNTY = "county"
+
+
+class Nation(StrEnum):
+    ENGLAND = "england"
+    SCOTLAND = "scotland"
+    WALES = "wales"
+    NORTHERN_IRELAND = "northern_ireland"
+
+
+# --------------------------------------------------------------------------
+# Collaboration
+# --------------------------------------------------------------------------
+
+
+class Visibility(StrEnum):
+    PUBLIC = "public"
+    UNLISTED = "unlisted"
+    PRIVATE = "private"
+
+
+class InvestigationRole(StrEnum):
+    OWNER = "owner"
+    EDITOR = "editor"
+    VIEWER = "viewer"
+
+
+class InvestigationItemKind(StrEnum):
+    FINDING = "finding"
+    RECORD = "record"
+    VIEW = "view"
+    NOTE = "note"
+    REFERENCE = "reference"
+    PROFILE = "profile"
+
+
+class SurveyResult(StrEnum):
+    NOTHING = "nothing"
+    MARKED = "marked"
+    SKIPPED = "skipped"
+
+
+class ReportStatus(StrEnum):
+    OPEN = "open"
+    UPHELD = "upheld"
+    DISMISSED = "dismissed"
+
+
+class ActivityKind(StrEnum):
+    FINDING_CREATED = "finding_created"
+    TIER_CHANGED = "tier_changed"
+    STATE_CHANGED = "state_changed"
+    OBSERVATION_ADDED = "observation_added"
+    EVIDENCE_ADDED = "evidence_added"
+    COMMENT_ADDED = "comment_added"
+    MENTION_ADDED = "mention_added"
+    FOLLOWUP_LOGGED = "followup_logged"
+    INVESTIGATION_PUBLISHED = "investigation_published"
+
+
+# --------------------------------------------------------------------------
+# Notices
+# --------------------------------------------------------------------------
+
+_NOT_PERMISSION = "A marker on this map is not permission to visit."
+_NEVER_DIG = "Look, photograph and take notes. Never dig, and don't take anything away."
+_ASK_LANDOWNER = "Get the landowner's permission before you leave a public right of way or open access land."
+_NO_DETECTING_ON_ACCESS_LAND = "The right to roam on open access land doesn't cover metal detecting."
+_DAMAGE = "Damaging a scheduled monument, or working on one without consent, is also a crime."
+_TREASURE = "Possible treasure must be reported to the coroner within 14 days."
+
+# Shown before someone logs a site visit. The law differs between the nations.
+# Checked on 2026-11-10 against the legislation recorded in
+# docs/architecture/decisions/spikes/platform-duties-and-age.md: the Ancient
+# Monuments and Archaeological Areas Act 1979 (England and Scotland), the
+# Historic Environment (Wales) Act 2023, the Historic Monuments and
+# Archaeological Objects (NI) Order 1995, the Countryside and Rights of Way
+# Act 2000, the Land Reform (Scotland) Act 2003 and the Treasure Act 1996.
+FIELD_VISIT_NOTICES: dict[Nation, tuple[str, ...]] = {
+    Nation.ENGLAND: (
+        _NOT_PERMISSION,
+        _ASK_LANDOWNER,
+        _NEVER_DIG,
+        (
+            "Using a metal detector on a scheduled monument or other protected place without written "
+            "consent from Historic England is a crime."
+        ),
+        _NO_DETECTING_ON_ACCESS_LAND,
+        _DAMAGE,
+        f"Report anything you find to the Portable Antiquities Scheme. {_TREASURE}",
+    ),
+    Nation.SCOTLAND: (
+        _NOT_PERMISSION,
+        "You have a right of responsible access to most land. Follow the Scottish Outdoor Access Code.",
+        _NEVER_DIG,
+        (
+            "Using a metal detector on a scheduled monument or other protected place without consent "
+            "from Historic Environment Scotland is a crime."
+        ),
+        "Access rights don't cover metal detecting. Always ask the landowner first.",
+        "Every archaeological object you find, whatever it's made of, must be reported to Treasure Trove.",
+    ),
+    Nation.WALES: (
+        _NOT_PERMISSION,
+        _ASK_LANDOWNER,
+        _NEVER_DIG,
+        (
+            "Under the Historic Environment (Wales) Act 2023, using a metal detector in a protected place "
+            "without consent is a crime."
+        ),
+        (
+            "Scheduled monuments are protected places. Consent comes from the Welsh Ministers through Cadw, "
+            "and is rarely given."
+        ),
+        _NO_DETECTING_ON_ACCESS_LAND,
+        _DAMAGE,
+        f"Report anything you find to the Portable Antiquities Scheme in Wales. {_TREASURE}",
+        "To report heritage crime, call 101 and quote Op Heritage Cymru, or 999 if it's happening now.",
+    ),
+    Nation.NORTHERN_IRELAND: (
+        _NOT_PERMISSION,
+        "Get the landowner's permission before you go onto private land.",
+        _NEVER_DIG,
+        (
+            "Digging to search for archaeological objects needs a licence from the Department for "
+            "Communities, even if you don't remove the surface."
+        ),
+        (
+            "Having a metal detector with you in a protected place, such as a scheduled monument, without "
+            "the Department's consent is a crime."
+        ),
+        (
+            "Report any archaeological object you find within 14 days, to the Ulster Museum, the police "
+            "or the Department for Communities."
+        ),
+    ),
+}
+
+# Added to the notices above for an account in the 16 to 17 age band
+# (Decision 0009).
+FIELD_VISIT_NOTICE_16_17 = (
+    "You're 16 or 17, so go with an adult you know, and tell someone at home where you're going."
+)
+
+SENSITIVITY_NOTICE = (
+    "Some findings have their position hidden to protect the site, and are shown as a one-kilometre "
+    "square. Signed-in members see protected findings exactly. Only the finder, trusted members, "
+    "archaeologists and moderators see restricted findings exactly."
+)
+
+CONTRIBUTION_LICENCE = "CC BY 4.0"
+
+
+def _check_complete() -> None:
+    """Every enum member needs exactly one row in its descriptive table, in enum order."""
+    tables: tuple[tuple[type[StrEnum], tuple[object, ...]], ...] = (
+        (Role, ROLES),
+        (SignInProvider, SIGN_IN_PROVIDERS),
+        (FeatureClass, FEATURE_CLASSES),
+        (Period, PERIODS),
+        (EvidenceKind, EVIDENCE_KINDS),
+        (Check, CHECKS),
+        (Explanation, EXPLANATIONS),
+        (Tier, TIERS),
+        (FindingState, STATES),
+        (MentionKind, MENTION_KINDS),
+        (RecordCategory, RECORD_CATEGORIES),
+    )
+    for enum_cls, rows in tables:
+        ids = [getattr(row, "id") for row in rows]  # noqa: B009 - rows are heterogeneous dataclasses
+        assert ids == list(enum_cls), f"{enum_cls.__name__} and its descriptive table disagree: {ids}"
+    assert set(FIELD_VISIT_NOTICES) == set(Nation), "every nation needs field visit notices"
+    assert set(AGE_BAND_YOUNGEST) == set(AgeBand), "every age band needs its youngest age"
+    assert SENSITIVITY_ORDER[0] is Sensitivity.OPEN
+    assert [info.base_score for info in TIERS] == sorted(info.base_score for info in TIERS)
+
+
+_check_complete()

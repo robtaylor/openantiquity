@@ -1,0 +1,124 @@
+[project]
+name = "fieldclub"
+version = "0.1.0"
+description = "Field Club: a collaborative map for finding and checking archaeological earthworks in UK LIDAR data"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "email-validator>=2.3.0",
+    "fastapi>=0.162.2",
+    "feedparser>=6.0.14",
+    "geoalchemy2>=0.21.0",
+    "google-cloud-storage>=3.17.1",
+    "httpx>=0.28.1",
+    "joserfc>=1.8.0",
+    "numpy>=2.5.4",
+    "paramiko>=5.1.0",
+    "pillow>=13.0.0",
+    "psycopg[binary,pool]>=3.3.8",
+    "pydantic>=2",
+    "pydantic-settings>=2.16.2",
+    "pyogrio>=0.13.0",
+    "pyproj>=3.8.0",
+    "python-multipart>=0.0.33",
+    "rasterio>=1.5.2",
+    "rio-tiler>=9.4.13",
+    "scipy>=1.18.1",
+    "shapely>=2.2.0",
+    "sqlalchemy>=2",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+fieldclub-api = "fieldclub.main:run"
+fieldclub-ingest = "fieldclub.ingest.cli:main"
+fieldclub-openapi = "fieldclub.main:print_openapi"
+
+[build-system]
+requires = ["uv_build>=0.13.7,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.16.0",
+    "pyright>=1.1.414",
+    "pytest>=9.2.0",
+    "pytest-cov>=7.1.0",
+    "respx>=0.23.1",
+    "ruff>=0.17.4",
+    "time-machine>=3.6.0",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Lets a test import a helper beside it, as in `from tests.ingest.fakes import ...`.
+pythonpath = ["."]
+addopts = "-ra --strict-markers --strict-config --import-mode=importlib -m 'not live'"
+markers = [
+    "live: talks to a real third-party service. Deselected by default; run with -m live.",
+]
+xfail_strict = true
+# A warning is a failing test. Add a narrow "ignore" line here, with the
+# reason, when a dependency warns about something outside our control.
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+source = ["fieldclub"]
+branch = true
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # import order
+    "B",    # bugbear
+    "UP",   # modern syntax
+    "SIM",  # simplifications
+    "C4",   # comprehensions
+    "PT",   # pytest style
+    "PIE",  # misc. lints
+    "ISC",  # implicit string concatenation
+    "DTZ",  # timezone-aware datetimes only
+    "PTH",  # pathlib over os.path
+    "T20",  # no print outside the CLIs
+    "TID",  # tidy imports
+    "PERF", # performance anti-patterns
+    "LOG",  # logging misuse
+    "N",    # naming
+    "RUF",  # ruff's own rules
+]
+ignore = [
+    "ISC001", # conflicts with the formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/fieldclub/ingest/cli.py" = ["T20"]
+"src/fieldclub/main.py" = ["T20"]
+"src/fieldclub/db.py" = ["T20"]
+"src/fieldclub/auth/handles.py" = ["SIM905"] # word lists read better as split strings
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.Body"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["fieldclub", "tests"]
+
+[tool.pyright]
+include = ["src", "tests"]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+reportMissingTypeStubs = false
+reportUnnecessaryTypeIgnoreComment = true

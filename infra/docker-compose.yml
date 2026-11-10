@@ -1,0 +1,30 @@
+# Local development services for Field Club.
+#
+#   docker compose -f infra/docker-compose.yml up -d db
+#
+# The official postgis/postgis images are amd64-only, so this uses the
+# multi-arch imresamu build (PostgreSQL 17, PostGIS 3.5), which runs natively
+# on Apple silicon. Port 54329 avoids any PostgreSQL already on 5432.
+name: fieldclub
+
+services:
+  db:
+    image: imresamu/postgis:17-3.5
+    environment:
+      POSTGRES_USER: fieldclub
+      POSTGRES_PASSWORD: fieldclub
+      POSTGRES_DB: fieldclub
+    ports:
+      - "127.0.0.1:54329:5432"
+    volumes:
+      - fieldclub-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fieldclub -d fieldclub -h 127.0.0.1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  fieldclub-db:
