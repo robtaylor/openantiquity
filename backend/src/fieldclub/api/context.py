@@ -17,6 +17,9 @@ router = APIRouter(prefix="/context", tags=["context"])
 
 # The catalogue changes only with a deploy.
 CATALOGUE_CACHE = "public, max-age=86400"
+# The links for a point also depend on which nation it is in, from
+# `admin_areas`, so a change there must reach browsers within the hour.
+LINKS_CACHE = "public, max-age=3600"
 
 
 @router.get("/live-sources", response_model=LiveSources)
@@ -36,7 +39,7 @@ def links(
 ) -> ContextLinks:
     """Links that open external viewers at this point, for the ones that cover it."""
     found = context.links_for(db, lon, lat, zoom)
-    response.headers["Cache-Control"] = CATALOGUE_CACHE
+    response.headers["Cache-Control"] = LINKS_CACHE
     return ContextLinks(
         grid_ref=found.grid_ref,
         items=[

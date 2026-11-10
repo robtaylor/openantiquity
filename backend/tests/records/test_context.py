@@ -50,6 +50,16 @@ def test_deep_links_leave_out_the_excluded() -> None:
     assert not record_link["for_point"]
 
 
+def test_no_link_the_research_held_back_is_served() -> None:
+    worklist = json.loads((context_data.WORKLISTS / "deep-links.json").read_text(encoding="utf-8"))
+    notes = {entry["key"]: entry["notes"] or "" for entry in worklist}
+    held_back = {
+        key for key, note in notes.items() if any(phrase in note for phrase in context_data.NOT_FOR_PEOPLE)
+    }
+    assert {"old-maps-online", "canmore-legacy-site", "he-nhle-legacy-list"} <= held_back
+    assert held_back <= set(context_data.EXCLUDED_LINKS)
+
+
 def test_the_live_sources_endpoint(client: TestClient) -> None:
     response = client.get("/api/v1/context/live-sources")
     assert response.status_code == 200
@@ -124,12 +134,14 @@ def test_links_off_the_grids(db: Session) -> None:
     found = context.links_for(db, *PARIS)
     assert found.grid_ref is None
     # Only the viewers that cover the wider world, not the British ones.
-    assert set(by_key(found)) == {"google-earth-web", "old-maps-online"}
+    assert set(by_key(found)) == {"google-earth-web"}
 
 
 def test_the_links_endpoint(client: TestClient) -> None:
     response = client.get("/api/v1/context/links", params={"lon": AVEBURY[0], "lat": AVEBURY[1]})
     assert response.status_code == 200
+    # Shorter than the catalogue's day, because the answer follows the admin areas.
+    assert response.headers["cache-control"] == "public, max-age=3600"
     body = response.json()
     assert body["grid_ref"].startswith("SU ")
     item = next(item for item in body["items"] if item["key"] == "he-apex-viewer")

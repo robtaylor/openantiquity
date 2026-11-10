@@ -30,8 +30,13 @@ DATA = REPO / "backend" / "src" / "fieldclub" / "data"
 
 EXCLUDED_LINKS = {
     "he-nhle-legacy-list": "A redirect host marked for server-side link checks, not for people.",
+    "canmore-legacy-site": "A redirect host marked for server-side link checks, not for people.",
     "he-heritage-gateway-near-point": "The research said a browser must check it before it goes into code.",
+    "old-maps-online": "The pattern came from memory, and the research said to check it in a browser first.",
 }
+# Phrases in a work-list note that mean a link isn't for people yet. A link
+# whose note has one must be in EXCLUDED_LINKS, which `test_context.py` checks.
+NOT_FOR_PEOPLE = ("from memory", "server-side link checks", "before it goes into code")
 
 # The zoom a template's `{zoom}` takes when it isn't a web-map zoom level.
 FIXED_ZOOM = {

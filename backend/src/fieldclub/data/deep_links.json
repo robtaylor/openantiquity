@@ -204,18 +204,6 @@
   "bounds": null
  },
  {
-  "key": "canmore-legacy-site",
-  "name": "canmore.org.uk legacy site link (redirect)",
-  "template": "https://canmore.org.uk/site/{id}",
-  "coverage": "scotland",
-  "placeholders_crs": null,
-  "verified": "redirect_only",
-  "no_frame": true,
-  "for_point": false,
-  "zoom": null,
-  "bounds": null
- },
- {
   "key": "trove-map-at-point",
   "name": "trove.scot map search at a point",
   "template": "https://www.trove.scot/search/map?q=*&page_type=Places&coords={easting},{northing},{zoom}",
@@ -675,18 +663,6 @@
    -1.4732,
    51.7077
   ]
- },
- {
-  "key": "old-maps-online",
-  "name": "Old Maps Online at a point",
-  "template": "https://www.oldmapsonline.org/en/#position={zoom}/{lat}/{lon}",
-  "coverage": "wider",
-  "placeholders_crs": "EPSG:4326",
-  "verified": "not_tested",
-  "no_frame": false,
-  "for_point": true,
-  "zoom": null,
-  "bounds": null
  },
  {
   "key": "open-domesday-place",
