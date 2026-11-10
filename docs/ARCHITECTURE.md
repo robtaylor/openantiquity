@@ -32,6 +32,7 @@ backend/
     storage.py              Storage protocol, LocalStorage, GcsStorage
     ratelimit.py            in-memory token buckets as FastAPI dependencies
     gridref.py              OSGB and Irish grid conversion and parsing
+    data/                   live-source and deep-link catalogues, generated from docs/sources/worklists
     models/                 one file per domain, all imported by models/__init__.py
     schemas/                Pydantic request and response models, one file per domain
     api/                    one router module per domain, each exposes `router`
@@ -200,7 +201,7 @@ All paths are under `/api/v1`. Bodies are JSON. The session is a `fieldclub_sess
 | Review | `GET /review/next` (blind cards: place and view only, with no title, class, tier or other answers until the reviewer has answered), `GET /review/tasks` (open next steps grouped by code) |
 | Squares | `GET /squares/next`, `PUT /squares/{ref}`, `GET /squares/coverage?bbox=` |
 | Records | `GET /records/search`, `GET /records/nearby`, `GET /records/{id}`, `GET /sources`, `GET /findings/{public_id}/suggested-records` |
-| Context | `GET /context/nearby?lon=&lat=` (live lookups, cached), `GET /context/links?lon=&lat=` (deep links to external viewers) |
+| Context | `GET /context/live-sources` (the sources the browser queries itself, with endpoint, query pattern, licence and attribution), `GET /context/links?lon=&lat=` (deep links to external viewers, filled in for that point) |
 | Geo | `GET /geo/search?q=` (grid reference, coordinates, place, record or finding id), `GET /geo/point?lon=&lat=` (grid reference, nation, elevation) |
 | Terrain | `POST /terrain/profile` (elevation along a line), `GET /terrain/coverage?bbox=` (the 5 km tiles that have 1 m elevation, as GeoJSON) |
 | Investigations | `GET` and `POST /investigations`, `GET`, `PATCH` and `DELETE /investigations/{public_id}`, items and members sub-resources, `GET /investigations/{public_id}/export?format=` |
