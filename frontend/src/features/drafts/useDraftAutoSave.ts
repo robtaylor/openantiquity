@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { toast } from "../../ui/toastStore.js";
-import { onDraftsSaved, saverFor, saveWaitingDrafts, useSaversVersion } from "./savers.js";
-import { useDrafts } from "./store.js";
+import { isDue, onDraftsSaved, saveWaitingDrafts, useSaversVersion } from "./savers.js";
+import { adoptSignedOutDrafts, setDraftsViewer, useDrafts } from "./store.js";
 import { useDraftsUi } from "./uiStore.js";
 
 function plural(count: number, one: string, many: string): string {
@@ -9,15 +9,27 @@ function plural(count: number, one: string, many: string): string {
 }
 
 /**
- * While `ready` (signed in and through the welcome step), save every waiting
- * draft that has a saver, and say what happened. Mounted once, by the
- * account layer. It runs again when a draft or a saver arrives, and each run
- * reports once however many times React runs the effect.
+ * Keep the drafts in step with who is signed in, and save their drafts.
+ * `account` is the signed-in person's identity, or null; `ready` is true when
+ * they are through the welcome step. Mounted once, by the account layer.
+ *
+ * New drafts are stamped with `account`. When someone signs in, the drafts
+ * made signed out just before become theirs. While `ready`, every waiting
+ * draft of theirs that has a saver is saved, and they are told what happened.
+ * Anyone else's drafts wait to be asked about in the drafts bar. It runs
+ * again when a draft or a saver arrives, and each run reports once however
+ * many times React runs the effect.
  */
-export function useDraftAutoSave(ready: boolean): void {
+export function useDraftAutoSave(account: string | null, ready: boolean): void {
   const drafts = useDrafts();
   const saversVersion = useSaversVersion();
-  const due = ready && drafts.some((draft) => draft.state === "waiting" && saverFor(draft.kind) !== undefined);
+  // Worked out each render: a saver arriving re-renders through `useSaversVersion`.
+  const due = ready && account !== null && drafts.some((draft) => isDue(draft, account));
+
+  useEffect(() => {
+    setDraftsViewer(account);
+    if (account !== null) adoptSignedOutDrafts(account);
+  }, [account]);
 
   useEffect(
     () =>
@@ -45,6 +57,6 @@ export function useDraftAutoSave(ready: boolean): void {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new draft or saver is the trigger
   useEffect(() => {
-    if (due) void saveWaitingDrafts();
-  }, [due, drafts, saversVersion]);
+    if (due && account !== null) void saveWaitingDrafts(account);
+  }, [due, account, drafts, saversVersion]);
 }

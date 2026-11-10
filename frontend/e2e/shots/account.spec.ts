@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { type Page, test } from "@playwright/test";
-import { DRAFTS_STORAGE_KEY } from "../../src/features/drafts/store.js";
+import { DRAFTS_STORAGE_KEY, DRAFTS_VERSION } from "../../src/features/drafts/store.js";
 import { answerJson, fakeSession, meWith, newcomerFixture } from "../support/account.js";
 import { openMap } from "../support/app.js";
 import { apiRoute, stubNetwork } from "../support/network.js";
@@ -26,12 +26,14 @@ function never(): Promise<never> {
   return new Promise(() => {});
 }
 
-async function seed(page: Page, failed = false): Promise<void> {
+/** Two drafts, made signed out unless `owner` says whose they are. */
+async function seed(page: Page, failed = false, owner: object = { signedOut: "shot" }): Promise<void> {
   const now = new Date().toISOString();
   const drafts = ["Ring ditch by the barn", "Hollow way to the ford"].map((note, index) => ({
     id: `shot-${index}`,
     kind: "fixture_probe",
     data: { note },
+    owner,
     createdAt: now,
     updatedAt: now,
     state: failed ? "failed" : "waiting",
@@ -39,7 +41,7 @@ async function seed(page: Page, failed = false): Promise<void> {
   }));
   await page.evaluate(([key, value]) => localStorage.setItem(key, value), [
     DRAFTS_STORAGE_KEY,
-    JSON.stringify({ version: 1, drafts }),
+    JSON.stringify({ version: DRAFTS_VERSION, epoch: "shot", drafts }),
   ] as const);
 }
 
@@ -178,11 +180,34 @@ test("drafts bar", async ({ page }) => {
   await shoot(page, "drafts-with-panel");
 
   session.set(meWith());
-  await seed(page, true);
+  await seed(page, true, { account: meWith().created_at });
   await page.goto("/");
   await page.getByRole("region", { name: "Drafts" }).waitFor();
   await page.getByRole("button", { name: "Show drafts" }).click();
   await shoot(page, "drafts-failed");
+
+  // Someone else's, left behind: asked about, not saved.
+  await seed(page, false, { account: "someone-else" });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Check" }).waitFor();
+  await shoot(page, "drafts-others-bar");
+  await page.getByRole("button", { name: "Check" }).click();
+  await shoot(page, "drafts-others-list");
+});
+
+test("signing out and deleting with drafts in the browser", async ({ page }) => {
+  await fakeSession(page, meWith());
+  await openMap(page, "/account");
+  await seed(page, false, { account: "someone-else" });
+  await page.reload();
+  await page.getByText("@QuietBarrow42").waitFor();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("dialog", { name: "Keep your drafts?" }).waitFor();
+  await shoot(page, "signout-dialog");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Delete my account" }).click();
+  await page.getByRole("dialog", { name: "Delete your account?" }).waitFor();
+  await shoot(page, "delete-dialog-with-drafts");
 });
 
 test("Account item when signed in", async ({ page }) => {

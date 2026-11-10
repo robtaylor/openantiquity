@@ -9,14 +9,16 @@
  * `signedIn(client, me)` and `signedOut(client)` are how a sign-in, sign-out
  * or deletion tells the whole app at once. `useSessionSync()`, mounted once
  * by the account layer, keeps the answer true: a 401 from any request means
- * signed out; a change in another tab is picked up; and whenever the person
+ * signed out; a 403 `onboarding_required` from any request means the welcome
+ * step is owed, so the session is asked for again and the welcome sheet
+ * opens; a change in another tab is picked up; and whenever the person
  * changes, every query whose answer depends on the viewer is dropped and
  * asked again, so a protected finding's exact position goes with the session.
  */
 
 import { type QueryClient, type QueryKey, queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
-import { onUnauthorised } from "../../api/client.js";
+import { onForbidden, onUnauthorised } from "../../api/client.js";
 import { META_QUERY_KEY } from "../../api/useMeta.js";
 import { toast } from "../../ui/toastStore.js";
 import { accountKeys, fetchMe, type Me } from "./api.js";
@@ -108,6 +110,14 @@ export function signedOut(client: QueryClient): void {
   tellOtherTabs();
 }
 
+/**
+ * What tells one account from another, for as long as it exists. The handle
+ * can change, so it is when the account was made. (`Me` has no id.)
+ */
+export function accountIdentity(me: Me): string {
+  return me.created_at;
+}
+
 function isMeKey(key: QueryKey): boolean {
   return key.length === accountKeys.me.length && key[0] === accountKeys.me[0] && key[1] === accountKeys.me[1];
 }
@@ -121,11 +131,18 @@ function viewerIndependent(key: QueryKey): boolean {
   );
 }
 
+export interface SessionSyncHandlers {
+  /** Someone who was signed in has been signed out by the server, such as when the session ran out. */
+  onSignedOutUnexpectedly?: () => void;
+  /** A save was refused because the welcome step is still owed. */
+  onWelcomeNeeded?: () => void;
+}
+
 /** Mount once, near the root, inside the query client. */
-export function useSessionSync(onSignedOutUnexpectedly?: () => void): void {
+export function useSessionSync(handlers: SessionSyncHandlers = {}): void {
   const client = useQueryClient();
-  const latest = useRef(onSignedOutUnexpectedly);
-  latest.current = onSignedOutUnexpectedly;
+  const latest = useRef(handlers);
+  latest.current = handlers;
 
   // A 401 from any request: the server says nobody is signed in.
   useEffect(
@@ -135,9 +152,22 @@ export function useSessionSync(onSignedOutUnexpectedly?: () => void): void {
         setSession(client, null);
         if (before) {
           toast("You've been signed out. Sign in again to save.", {
-            action: latest.current ? { label: "Sign in", onClick: () => latest.current?.() } : undefined,
+            action: latest.current.onSignedOutUnexpectedly
+              ? { label: "Sign in", onClick: () => latest.current.onSignedOutUnexpectedly?.() }
+              : undefined,
           });
         }
+      }),
+    [client],
+  );
+
+  // A 403 onboarding_required from any request: the welcome step is owed, whatever the cache says.
+  useEffect(
+    () =>
+      onForbidden((error) => {
+        if (error.code !== "onboarding_required") return;
+        void client.invalidateQueries({ queryKey: accountKeys.me, exact: true });
+        latest.current.onWelcomeNeeded?.();
       }),
     [client],
   );
@@ -155,7 +185,7 @@ export function useSessionSync(onSignedOutUnexpectedly?: () => void): void {
   // A new handle is the same person, so it is told apart by when the account was made.
   useEffect(() => {
     const identity = (me: Me | null | undefined): string | null | undefined =>
-      me === undefined ? undefined : (me?.created_at ?? null);
+      me === undefined ? undefined : me === null ? null : accountIdentity(me);
     let person = identity(client.getQueryData<Me | null>(accountKeys.me));
     return client.getQueryCache().subscribe((event) => {
       if (event.type !== "updated" || !isMeKey(event.query.queryKey)) return;

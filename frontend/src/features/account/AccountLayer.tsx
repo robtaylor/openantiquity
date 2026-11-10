@@ -6,7 +6,7 @@ import { SIGNIN_ERROR_PARAM, withoutSigninError } from "./next.js";
 import { useAccountUi } from "./requireAccount.js";
 import { currentMapHash } from "./returnPath.js";
 import { SignInSheet } from "./SignInSheet.js";
-import { useSession, useSessionSync } from "./session.js";
+import { accountIdentity, useSession, useSessionSync } from "./session.js";
 import { WelcomeSheet } from "./WelcomeSheet.js";
 
 /**
@@ -15,7 +15,10 @@ import { WelcomeSheet } from "./WelcomeSheet.js";
  * failed provider sign-in, and saving drafts once someone is ready.
  */
 export function AccountLayer({ meta }: { meta: Meta }) {
-  useSessionSync(() => useAccountUi.getState().openSignIn());
+  useSessionSync({
+    onSignedOutUnexpectedly: () => useAccountUi.getState().openSignIn(),
+    onWelcomeNeeded: () => useAccountUi.getState().openWelcome(),
+  });
   const session = useSession();
   const sheet = useAccountUi((state) => state.sheet);
   const waiting = useAccountUi((state) => state.waiting.length);
@@ -48,7 +51,7 @@ export function AccountLayer({ meta }: { meta: Meta }) {
     if (needsWelcome && sheet === null && !welcomeDismissed) useAccountUi.getState().openWelcome();
   }, [needsWelcome, sheet, welcomeDismissed]);
 
-  useDraftAutoSave(ready);
+  useDraftAutoSave(me === null ? null : accountIdentity(me), ready);
 
   return (
     <>

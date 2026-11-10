@@ -4,7 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type ApiRoutes, apiError, routeApi } from "../../test/apiRoutes.js";
 import { meFixture, newcomerFixture } from "../../test/fixtures/me.js";
 import { json, renderShell, setUpShellTests } from "../../test/shellHarness.js";
-import { resetDraftsForTests } from "../drafts/store.js";
+import {
+  DRAFTS_STORAGE_KEY,
+  DRAFTS_UNREADABLE_KEY,
+  listDrafts,
+  putDraft,
+  resetDraftsForTests,
+} from "../drafts/store.js";
 import type { Me } from "./api.js";
 import { useAccountUi } from "./requireAccount.js";
 
@@ -115,6 +121,50 @@ describe("the account page", () => {
     expect(await p.findByRole("heading", { name: "You're not signed in" })).toBeInTheDocument();
     expect(screen.queryByTestId("account-avatar")).toBeNull();
     expect(api.callsTo("POST /auth/logout")).toHaveLength(1);
+  });
+
+  it("asks whether to keep the drafts in this browser before signing out, and discards them when told", async () => {
+    putDraft("probe", { note: "a" });
+    window.localStorage.setItem(`${DRAFTS_UNREADABLE_KEY}.old`, "{bad");
+    const { api, p } = await openAccount(meFixture(), {
+      "POST /auth/logout": () => new Response(null, { status: 204 }),
+    });
+    await userEvent.click(await p.findByRole("button", { name: "Sign out" }));
+    const dialog = await screen.findByRole("dialog", { name: "Keep your drafts?" });
+    expect(within(dialog).getByText(/whoever uses this browser next will see it/)).toBeInTheDocument();
+    expect(api.callsTo("POST /auth/logout")).toEqual([]);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Discard and sign out" }));
+    expect(await p.findByRole("heading", { name: "You're not signed in" })).toBeInTheDocument();
+    expect(listDrafts()).toEqual([]);
+    expect(window.localStorage.getItem(`${DRAFTS_UNREADABLE_KEY}.old`)).toBeNull();
+  });
+
+  it("keeps the drafts when asked to, and signs out", async () => {
+    putDraft("probe", { note: "a" });
+    const { p } = await openAccount(meFixture(), {
+      "POST /auth/logout": () => new Response(null, { status: 204 }),
+    });
+    await userEvent.click(await p.findByRole("button", { name: "Sign out" }));
+    const dialog = await screen.findByRole("dialog", { name: "Keep your drafts?" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Keep and sign out" }));
+    expect(await p.findByRole("heading", { name: "You're not signed in" })).toBeInTheDocument();
+    expect(listDrafts()).toHaveLength(1);
+  });
+
+  it("discards this browser's drafts with the account, unless told to keep them", async () => {
+    putDraft("probe", { note: "a" });
+    putDraft("probe", { note: "b" });
+    const { p } = await openAccount(meFixture(), {
+      "DELETE /auth/me": () => new Response(null, { status: 204 }),
+    });
+    await userEvent.click(await p.findByRole("button", { name: "Delete my account" }));
+    const dialog = await screen.findByRole("dialog", { name: "Delete your account?" });
+    const discard = within(dialog).getByRole("checkbox", { name: "Also discard the 2 drafts kept in this browser" });
+    expect(discard).toBeChecked();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Delete my account" }));
+    expect(await p.findByRole("heading", { name: "You're not signed in" })).toBeInTheDocument();
+    expect(listDrafts()).toEqual([]);
+    expect(JSON.parse(window.localStorage.getItem(DRAFTS_STORAGE_KEY) ?? "{}").drafts).toEqual([]);
   });
 
   it("deletes the account only after a dialog that says what happens to contributions", async () => {

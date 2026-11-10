@@ -4,9 +4,18 @@ import { Button } from "../../ui/Button.js";
 import { toast } from "../../ui/toastStore.js";
 import { useDismiss } from "../../ui/useDismiss.js";
 import { AccountRequiredError, useRequireAccount } from "../account/requireAccount.js";
-import { useSession } from "../account/session.js";
+import { accountIdentity, useSession } from "../account/session.js";
 import { draftLabel } from "./savers.js";
-import { type Draft, discardDraft, draftsArePersisted, restoreDraft, retryDraft, useDrafts } from "./store.js";
+import {
+  claimDraftsAsOwn,
+  type Draft,
+  discardDraft,
+  draftsArePersisted,
+  isOwnDraft,
+  restoreDraft,
+  retryDraft,
+  useDrafts,
+} from "./store.js";
 import { useDraftsUi } from "./uiStore.js";
 import "./drafts.css";
 
@@ -14,7 +23,8 @@ function count(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
-function summary(drafts: readonly Draft[]): string {
+function summary(drafts: readonly Draft[], others: number): string {
+  if (others === drafts.length) return `${count(others, "draft")} left here`;
   const saving = drafts.filter((draft) => draft.state === "saving").length;
   const failed = drafts.filter((draft) => draft.state === "failed").length;
   if (saving > 0) return `Saving ${count(saving, "draft")}…`;
@@ -60,9 +70,54 @@ function DraftRow({ draft, canRetry }: { draft: Draft; canRetry: boolean }) {
 }
 
 /**
+ * Drafts someone else may have left in this browser, for a person who is
+ * signed in: they say whether to save them as their own, or discard them.
+ */
+function OthersDrafts({ drafts, account }: { drafts: readonly Draft[]; account: string }) {
+  const one = drafts.length === 1;
+  function discardAll(): void {
+    const removed = drafts.flatMap((draft) => discardDraft(draft.id) ?? []);
+    toast(one ? "Draft discarded." : `${count(removed.length, "draft")} discarded.`, {
+      action: { label: "Undo", onClick: () => removed.forEach(restoreDraft) },
+    });
+  }
+  return (
+    <div className="fc-drafts__others">
+      <p className="fc-drafts__hint">
+        {one ? "This draft was" : "These drafts were"} left in this browser before you signed in, perhaps by someone
+        else. Save {one ? "it" : "them"} as yours only if you made {one ? "it" : "them"}.
+      </p>
+      <div className="fc-drafts__buttons">
+        <Button
+          size="sm"
+          variant="primary"
+          onClick={() =>
+            claimDraftsAsOwn(
+              drafts.map((draft) => draft.id),
+              account,
+            )
+          }
+        >
+          Save as mine
+        </Button>
+        <Button size="sm" variant="ghost" icon={<Trash2 size={14} aria-hidden />} onClick={discardAll}>
+          {one ? "Discard it" : "Discard them"}
+        </Button>
+      </div>
+      <ul>
+        {drafts.map((draft) => (
+          <DraftRow key={draft.id} draft={draft} canRetry={false} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
  * The quiet bar that says how many drafts are waiting and offers to save
- * them. Saving while signed out opens the sign-in sheet. It shows nothing
- * when there are no drafts.
+ * them. Saving while signed out opens the sign-in sheet. Drafts that aren't
+ * the signed-in person's are asked about before anything is saved. It shows
+ * nothing when there are no drafts.
  */
 export function DraftsBar() {
   const drafts = useDrafts();
@@ -81,8 +136,11 @@ export function DraftsBar() {
 
   if (drafts.length === 0) return null;
 
-  const failed = drafts.filter((draft) => draft.state === "failed");
-  const allFailed = failed.length === drafts.length;
+  const account = session.ready && session.me ? accountIdentity(session.me) : null;
+  const mine = account === null ? drafts : drafts.filter((draft) => isOwnDraft(draft, account));
+  const others = account === null ? [] : drafts.filter((draft) => !isOwnDraft(draft, account));
+  const failed = mine.filter((draft) => draft.state === "failed");
+  const allFailed = failed.length > 0 && failed.length === drafts.length;
 
   async function save(): Promise<void> {
     try {
@@ -97,6 +155,12 @@ export function DraftsBar() {
     action = (
       <Button size="sm" variant="primary" onClick={() => void save()}>
         Save
+      </Button>
+    );
+  } else if (others.length > 0 && !open) {
+    action = (
+      <Button size="sm" variant="primary" onClick={() => setOpen(true)}>
+        Check
       </Button>
     );
   } else if (allFailed) {
@@ -118,7 +182,7 @@ export function DraftsBar() {
       <div className={allFailed ? "fc-drafts__bar fc-drafts__bar--failed" : "fc-drafts__bar"}>
         <CloudOff size={16} aria-hidden className="fc-drafts__icon" />
         <span className="fc-drafts__summary" role="status">
-          {summary(drafts)}
+          {summary(drafts, others.length)}
         </span>
         {action}
         <button
@@ -140,11 +204,14 @@ export function DraftsBar() {
             A draft is kept only in this browser, and nobody else sees it until it's saved.
             {draftsArePersisted() ? "" : " This browser isn't keeping them, so they'll go when you close the page."}
           </p>
-          <ul>
-            {drafts.map((draft) => (
-              <DraftRow key={draft.id} draft={draft} canRetry={session.ready} />
-            ))}
-          </ul>
+          {account !== null && others.length > 0 ? <OthersDrafts drafts={others} account={account} /> : null}
+          {mine.length > 0 ? (
+            <ul>
+              {mine.map((draft) => (
+                <DraftRow key={draft.id} draft={draft} canRetry={session.ready} />
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
     </section>

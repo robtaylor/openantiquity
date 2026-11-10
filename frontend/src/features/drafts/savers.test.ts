@@ -1,15 +1,31 @@
+import { renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../api/client.js";
 import {
   CLAIM_LEASE_MS,
   type DraftSaver,
+  defineDraftKind,
   draftLabel,
   onDraftsSaved,
   registerDraftSaver,
   resetSaversForTests,
   saveWaitingDrafts,
+  useKindDrafts,
 } from "./savers.js";
-import { DRAFTS_STORAGE_KEY, listDrafts, putDraft, resetDraftsForTests, updateDrafts } from "./store.js";
+import {
+  adoptSignedOutDrafts,
+  DRAFTS_STORAGE_KEY,
+  DraftBusyError,
+  listDrafts,
+  putDraft,
+  resetDraftsForTests,
+  setDraftsViewer,
+  updateDrafts,
+} from "./store.js";
+
+/** The signed-in person, by `accountIdentity`. */
+const ME = "2026-11-01T09:00:00Z";
+const SOMEONE_ELSE = "2026-10-01T09:00:00Z";
 
 /** A kind of draft no feature has: proof that the machinery works for any kind. */
 const PROBE = "probe";
@@ -37,6 +53,7 @@ beforeEach(() => {
   window.localStorage.clear();
   resetDraftsForTests();
   resetSaversForTests();
+  setDraftsViewer(ME);
 });
 
 afterEach(() => {
@@ -56,7 +73,7 @@ describe("saveWaitingDrafts", () => {
     const second = putDraft(PROBE, { note: "two" });
 
     // As React's strict mode would: two effects, back to back.
-    const [a, b] = await Promise.all([saveWaitingDrafts(), saveWaitingDrafts()]);
+    const [a, b] = await Promise.all([saveWaitingDrafts(ME), saveWaitingDrafts(ME)]);
     expect(a).toBe(b);
     expect(a).toEqual({ saved: 2, failed: 0, stopped: null });
     expect(save).toHaveBeenCalledTimes(2);
@@ -65,7 +82,7 @@ describe("saveWaitingDrafts", () => {
     expect(listDrafts()).toEqual([]);
 
     // Nothing is left to save.
-    await saveWaitingDrafts();
+    await saveWaitingDrafts(ME);
     expect(save).toHaveBeenCalledTimes(2);
   });
 
@@ -74,7 +91,7 @@ describe("saveWaitingDrafts", () => {
     resetDraftsForTests();
     const save = vi.fn(async () => {});
     register(probeSaver(save));
-    await saveWaitingDrafts();
+    await saveWaitingDrafts(ME);
     expect(save).toHaveBeenCalledOnce();
     expect(listDrafts()).toEqual([]);
   });
@@ -87,7 +104,7 @@ describe("saveWaitingDrafts", () => {
     );
     const bad = putDraft(PROBE, { note: "bad" });
     putDraft(PROBE, { note: "good" });
-    const report = await saveWaitingDrafts();
+    const report = await saveWaitingDrafts(ME);
     expect(report).toEqual({ saved: 1, failed: 1, stopped: null });
     expect(listDrafts()).toEqual([
       expect.objectContaining({
@@ -99,7 +116,7 @@ describe("saveWaitingDrafts", () => {
     expect(listDrafts()[0]?.claim).toBeUndefined();
 
     // A failed draft waits for the person to try again.
-    await saveWaitingDrafts();
+    await saveWaitingDrafts(ME);
     expect(listDrafts()[0]?.state).toBe("failed");
   });
 
@@ -110,7 +127,7 @@ describe("saveWaitingDrafts", () => {
       }),
     );
     putDraft(PROBE, { note: "a" });
-    await saveWaitingDrafts();
+    await saveWaitingDrafts(ME);
     expect(listDrafts()[0]?.failure).toEqual({ code: "save_failed", message: "Something went wrong while saving it." });
   });
 
@@ -124,7 +141,7 @@ describe("saveWaitingDrafts", () => {
     register(probeSaver(save));
     putDraft(PROBE, { note: "a" });
     putDraft(PROBE, { note: "b" });
-    const report = await saveWaitingDrafts();
+    const report = await saveWaitingDrafts(ME);
     expect(report).toEqual({ saved: 0, failed: 0, stopped });
     expect(save).toHaveBeenCalledOnce();
     expect(listDrafts().map((draft) => draft.state)).toEqual(["waiting", "waiting"]);
@@ -134,7 +151,7 @@ describe("saveWaitingDrafts", () => {
     const save = vi.fn(async () => {});
     register(probeSaver(save));
     putDraft(PROBE, { wrong: true });
-    const report = await saveWaitingDrafts();
+    const report = await saveWaitingDrafts(ME);
     expect(report.failed).toBe(1);
     expect(save).not.toHaveBeenCalled();
     expect(listDrafts()[0]?.failure?.code).toBe("draft_unreadable");
@@ -142,11 +159,11 @@ describe("saveWaitingDrafts", () => {
 
   it("leaves drafts with no saver waiting, and saves them once a saver arrives", async () => {
     putDraft(PROBE, { note: "a" });
-    expect(await saveWaitingDrafts()).toEqual({ saved: 0, failed: 0, stopped: null });
+    expect(await saveWaitingDrafts(ME)).toEqual({ saved: 0, failed: 0, stopped: null });
     expect(listDrafts()[0]?.state).toBe("waiting");
     const save = vi.fn(async () => {});
     register(probeSaver(save));
-    await saveWaitingDrafts();
+    await saveWaitingDrafts(ME);
     expect(save).toHaveBeenCalledOnce();
   });
 
@@ -157,13 +174,13 @@ describe("saveWaitingDrafts", () => {
     updateDrafts((drafts) =>
       drafts.map((item) => ({ ...item, state: "saving", claim: { tab: "another-tab", at: Date.now() } })),
     );
-    await saveWaitingDrafts();
+    await saveWaitingDrafts(ME);
     expect(save).not.toHaveBeenCalled();
 
     updateDrafts((drafts) =>
       drafts.map((item) => ({ ...item, claim: { tab: "another-tab", at: Date.now() - CLAIM_LEASE_MS - 1 } })),
     );
-    await saveWaitingDrafts();
+    await saveWaitingDrafts(ME);
     expect(save).toHaveBeenCalledWith({ note: "a" }, { draftId: draft.id });
     expect(listDrafts()).toEqual([]);
   });
@@ -182,7 +199,7 @@ describe("saveWaitingDrafts", () => {
         setItem.call(this, key, value.replace(/"tab":"[^"]+"/, '"tab":"another-tab"'));
       }
     });
-    await saveWaitingDrafts();
+    await saveWaitingDrafts(ME);
     expect(save).not.toHaveBeenCalled();
   });
 
@@ -191,11 +208,104 @@ describe("saveWaitingDrafts", () => {
     const heard = vi.fn();
     const stop = onDraftsSaved(heard);
     putDraft(PROBE, { note: "a" });
-    await Promise.all([saveWaitingDrafts(), saveWaitingDrafts()]);
-    await saveWaitingDrafts();
+    await Promise.all([saveWaitingDrafts(ME), saveWaitingDrafts(ME)]);
+    await saveWaitingDrafts(ME);
     stop();
     expect(heard).toHaveBeenCalledOnce();
     expect(heard).toHaveBeenCalledWith({ saved: 1, failed: 0, stopped: null });
+  });
+});
+
+describe("an edit while a draft is being saved", () => {
+  it("is refused while the save is going, so nothing is lost", async () => {
+    let release: () => void = () => {};
+    const sent: string[] = [];
+    register(
+      probeSaver(async (data) => {
+        sent.push(data.note);
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      }),
+    );
+    const draft = putDraft(PROBE, { note: "first" });
+    const run = saveWaitingDrafts(ME);
+    await vi.waitFor(() => expect(sent).toEqual(["first"]));
+    expect(listDrafts()[0]?.state).toBe("saving");
+    expect(() => putDraft(PROBE, { note: "edited" }, draft.id)).toThrow(DraftBusyError);
+    release();
+    await run;
+    expect(listDrafts()).toEqual([]);
+  });
+
+  it("that lands anyway is kept and sent too, rather than removed with the old save", async () => {
+    let release: () => void = () => {};
+    const sent: string[] = [];
+    register(
+      probeSaver(async (data) => {
+        sent.push(data.note);
+        if (sent.length === 1)
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+      }),
+    );
+    putDraft(PROBE, { note: "first" });
+    const run = saveWaitingDrafts(ME);
+    await vi.waitFor(() => expect(sent).toEqual(["first"]));
+    // As another tab of an older build might: a new version, written over the claim.
+    updateDrafts((drafts) =>
+      drafts.map((item) => ({ ...item, data: { note: "edited" }, updatedAt: "2099-01-01T00:00:00.000Z" })),
+    );
+    release();
+    const report = await run;
+    expect(sent).toEqual(["first", "edited"]);
+    expect(report.saved).toBe(2);
+    expect(listDrafts()).toEqual([]);
+  });
+});
+
+describe("whose drafts are saved", () => {
+  it("saves only the signed-in person's own drafts", async () => {
+    const save = vi.fn(async (_data: Probe) => {});
+    register(probeSaver(save));
+    setDraftsViewer(SOMEONE_ELSE);
+    putDraft(PROBE, { note: "theirs" });
+    setDraftsViewer(ME);
+    putDraft(PROBE, { note: "mine" });
+    expect(await saveWaitingDrafts(ME)).toEqual({ saved: 1, failed: 0, stopped: null });
+    expect(save.mock.calls.map(([data]) => data.note)).toEqual(["mine"]);
+    expect(listDrafts().map((draft) => (draft.data as Probe).note)).toEqual(["theirs"]);
+  });
+
+  it("makes the drafts done signed out just before sign-in the person's, and no earlier ones", async () => {
+    const save = vi.fn(async (_data: Probe) => {});
+    register(probeSaver(save));
+    setDraftsViewer(null);
+    putDraft(PROBE, { note: "left by someone" });
+    // Someone signed in and out again: the signed-out drafts of that time were theirs.
+    adoptSignedOutDrafts(SOMEONE_ELSE);
+    updateDrafts((drafts) => drafts.map((draft) => ({ ...draft, owner: { signedOut: "an-old-epoch" } })));
+    putDraft(PROBE, { note: "just now" });
+    expect(adoptSignedOutDrafts(ME)).toBe(1);
+    await saveWaitingDrafts(ME);
+    expect(save.mock.calls.map(([data]) => data.note)).toEqual(["just now"]);
+    expect(listDrafts()).toHaveLength(1);
+  });
+});
+
+describe("defineDraftKind", () => {
+  it("gives a kind's put and its drafts typed data", () => {
+    const probes = defineDraftKind<Probe>(probeSaver(async () => {}));
+    unregister.push(probes.unregister);
+    const draft = probes.put({ note: "typed" });
+    putDraft(PROBE, { wrong: true });
+    putDraft("other", { note: "not a probe" });
+    const { result } = renderHook(() => useKindDrafts(probes));
+    expect(result.current.map((item) => item.data.note)).toEqual(["typed"]);
+    expect(probes.read(draft)).toEqual({ note: "typed" });
+    // @ts-expect-error: a probe's data needs a note
+    expect(() => probes.put({ text: "untyped" })).not.toThrow();
   });
 });
 
@@ -203,6 +313,12 @@ describe("registerDraftSaver", () => {
   it("refuses a second saver for the same kind", () => {
     register(probeSaver(async () => {}));
     expect(() => registerDraftSaver(probeSaver(async () => {}))).toThrow(/already registered/);
+  });
+
+  it("does nothing when the same saver is registered again, as a hot reload does", () => {
+    const saver = probeSaver(async () => {});
+    register(saver);
+    expect(() => register(saver)).not.toThrow();
   });
 
   it("names a draft by its saver", () => {

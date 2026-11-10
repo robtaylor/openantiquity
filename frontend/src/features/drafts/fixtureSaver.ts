@@ -8,7 +8,7 @@
 
 import { apiFetch } from "../../api/client.js";
 import { isRecord } from "../../api/guards.js";
-import { registerDraftSaver } from "./savers.js";
+import { defineDraftKind } from "./savers.js";
 
 export const FIXTURE_DRAFT_KIND = "fixture_probe";
 
@@ -16,7 +16,7 @@ interface FixtureDraft {
   note: string;
 }
 
-registerDraftSaver<FixtureDraft>({
+export const fixtureDrafts = defineDraftKind<FixtureDraft>({
   kind: FIXTURE_DRAFT_KIND,
   label: "Test draft",
   parse: (data) => (isRecord(data) && typeof data.note === "string" ? { note: data.note } : null),

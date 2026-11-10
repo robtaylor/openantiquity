@@ -1,9 +1,9 @@
 /**
  * How each kind of draft is saved, and the run that saves them.
  *
- * A feature registers one saver for its kind, at start-up:
+ * A feature defines its kind once, at start-up, and uses what comes back:
  *
- *     registerDraftSaver({
+ *     export const findingDrafts = defineDraftKind<FindingDraft>({
  *       kind: DRAFT_KINDS.finding,
  *       label: "Finding",
  *       parse: (data) => (isFindingDraft(data) ? data : null),
@@ -11,24 +11,41 @@
  *       describe: (data) => `${data.featureLabel} near ${data.gridRef}`,
  *     });
  *
+ *     findingDrafts.put(data)            // typed: data must be a FindingDraft
+ *     useKindDrafts(findingDrafts)       // in a component: this kind's drafts, typed
+ *
  * `parse` checks what was read back from storage, which may be old or
  * damaged, and returns null for data it can't use. `save` sends it, and
  * throws to fail (an `ApiError` gives the reason shown to the person).
  * `draftId` is stable for the draft's life, for a saver that can send an
- * idempotency key.
+ * idempotency key. Defining the same saver object twice, as a hot reload
+ * does, is harmless; a second, different saver for a kind is refused.
  *
- * `saveWaitingDrafts()` saves every waiting draft whose kind has a saver,
- * each exactly once. One run happens at a time in a page, and across tabs a
- * Web Lock makes one tab wait for another; each draft is also claimed in
- * storage before it is sent, so a second runner skips it. A saved draft is
- * removed. A failed one is kept with its reason. A 401 or
- * `onboarding_required` stops the run and leaves the rest waiting, because
- * every save after it would fail the same way.
+ * `saveWaitingDrafts(account)` saves every waiting draft of `account`'s
+ * whose kind has a saver, each exactly once. One run happens at a time in a
+ * page, and across tabs a Web Lock makes one tab wait for another; each
+ * draft is also claimed in storage before it is sent, so a second runner
+ * skips it. A saved draft is removed, unless it was changed while it was
+ * being sent, when it waits to be sent again. A failed one is kept with its
+ * reason. A 401 or `onboarding_required` stops the run and leaves the rest
+ * waiting, because every save after it would fail the same way.
  */
 
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { ApiError } from "../../api/client.js";
-import { type Draft, type DraftFailure, readFreshDrafts, updateDrafts } from "./store.js";
+import {
+  type Draft,
+  type DraftFailure,
+  hasStaleStoredCopy,
+  isBeingSaved,
+  isOwnDraft,
+  putDraft,
+  readFreshDrafts,
+  updateDrafts,
+  useDrafts,
+} from "./store.js";
+
+export { CLAIM_LEASE_MS } from "./store.js";
 
 export interface DraftSaver<T = unknown> {
   kind: string;
@@ -41,26 +58,78 @@ export interface DraftSaver<T = unknown> {
 }
 
 const savers = new Map<string, DraftSaver>();
+/** The object each kind was registered with, to tell a repeat from a rival. */
+const registered = new Map<string, unknown>();
 let saversVersion = 0;
 const saverListeners = new Set<() => void>();
 
-function savingsChanged(): void {
+function saversChanged(): void {
   saversVersion += 1;
   for (const listener of [...saverListeners]) listener();
 }
 
-/** Register the saver for a kind. Returns a function that removes it. */
+/**
+ * Register the saver for a kind. Returns a function that removes it.
+ * Registering the same object again does nothing. A different saver for a
+ * kind that has one throws, except under a development server's hot reload,
+ * where the new module's saver replaces the old one.
+ */
 export function registerDraftSaver<T>(saver: DraftSaver<T>): () => void {
-  if (savers.has(saver.kind)) throw new Error(`A saver for "${saver.kind}" drafts is already registered`);
   const stored = saver as unknown as DraftSaver;
-  savers.set(saver.kind, stored);
-  savingsChanged();
-  return () => {
-    if (savers.get(saver.kind) === stored) {
+  const unregister = (): void => {
+    if (registered.get(saver.kind) === saver) {
       savers.delete(saver.kind);
-      savingsChanged();
+      registered.delete(saver.kind);
+      saversChanged();
     }
   };
+  const existing = registered.get(saver.kind);
+  if (existing === saver) return unregister;
+  // Vitest has `import.meta.hot` too, and its tests want the refusal.
+  const hotReload = import.meta.hot !== undefined && import.meta.env.MODE !== "test";
+  if (existing !== undefined && !hotReload) {
+    throw new Error(`A saver for "${saver.kind}" drafts is already registered`);
+  }
+  savers.set(saver.kind, stored);
+  registered.set(saver.kind, saver);
+  saversChanged();
+  return unregister;
+}
+
+/** A draft of one kind, with its data read by that kind's saver. */
+export type KindDraft<T> = Omit<Draft, "data"> & { data: T };
+
+export interface DraftKind<T> {
+  readonly kind: string;
+  /** Add a draft, or replace the one with `id`. Throws as `putDraft` does. */
+  put: (data: T, id?: string) => Draft;
+  /** This kind's data in `draft`, or null when it isn't this kind's or can't be read. */
+  read: (draft: Draft) => T | null;
+  unregister: () => void;
+}
+
+/** Register a kind's saver and get back functions bound to that kind and its data's type. */
+export function defineDraftKind<T>(saver: DraftSaver<T>): DraftKind<T> {
+  const unregister = registerDraftSaver(saver);
+  return {
+    kind: saver.kind,
+    put: (data, id) => putDraft(saver.kind, data, id),
+    read: (draft) => (draft.kind === saver.kind ? saver.parse(draft.data) : null),
+    unregister,
+  };
+}
+
+/** A kind's drafts whose data can be read, with that data typed, kept up to date. */
+export function useKindDrafts<T>(draftKind: DraftKind<T>): readonly KindDraft<T>[] {
+  const drafts = useDrafts(draftKind.kind);
+  return useMemo(
+    () =>
+      drafts.flatMap((draft): KindDraft<T>[] => {
+        const data = draftKind.read(draft);
+        return data === null ? [] : [{ ...draft, data }];
+      }),
+    [drafts, draftKind],
+  );
 }
 
 export function saverFor(kind: string): DraftSaver | undefined {
@@ -97,8 +166,6 @@ export interface SaveReport {
   stopped: "signed_out" | "welcome_needed" | null;
 }
 
-/** A draft claimed by a tab that hasn't finished after this long is taken to be lost. */
-export const CLAIM_LEASE_MS = 120_000;
 const LOCK_NAME = "fieldclub.drafts.save";
 const TAB = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Math.random());
 
@@ -107,43 +174,61 @@ const UNREADABLE: DraftFailure = {
   message: "This draft couldn't be read back, so it can't be saved.",
 };
 
+const STORAGE_FULL: DraftFailure = {
+  code: "storage_full",
+  message: "This browser's storage is full, so it couldn't be saved safely. Discard something and try again.",
+};
+
 function failureFrom(error: unknown): DraftFailure {
   if (error instanceof ApiError) return { code: error.code, message: error.message };
   return { code: "save_failed", message: "Something went wrong while saving it." };
 }
 
-function isDue(draft: Draft, now: number): boolean {
-  if (!saverFor(draft.kind)) return false;
-  if (draft.state === "waiting") return true;
-  return draft.state === "saving" && (draft.claim === undefined || now - draft.claim.at > CLAIM_LEASE_MS);
+/** True when `draft` is `account`'s, has a saver, and nobody is saving it. */
+export function isDue(draft: Draft, account: string, now = Date.now()): boolean {
+  if (!saverFor(draft.kind) || !isOwnDraft(draft, account)) return false;
+  return draft.state === "waiting" || (draft.state === "saving" && !isBeingSaved(draft, now));
 }
 
-/** Mark `id` as being saved by this tab, if it is still due. True when the claim was won. */
-function claim(id: string): Draft | null {
+/** Mark `id` as being saved by this tab, if it is still due. Returns the claimed draft, or null. */
+function claim(id: string, account: string): Draft | null {
   const now = Date.now();
   let claimed: Draft | null = null;
   updateDrafts((drafts) =>
     drafts.map((draft) => {
-      if (draft.id !== id || !isDue(draft, now)) return draft;
+      if (draft.id !== id || !isDue(draft, account, now)) return draft;
       const { failure: _failure, ...rest } = draft;
       claimed = { ...rest, state: "saving", claim: { tab: TAB, at: now } };
       return claimed;
     }),
   );
+  if (claimed !== null && hasStaleStoredCopy(id)) {
+    // Other tabs would still see it waiting, and could send it too.
+    finish(id, STORAGE_FULL);
+    return null;
+  }
   // Without a lock, another tab could have written in between. Read back to be sure.
   const check = readFreshDrafts().find((draft) => draft.id === id);
   return claimed !== null && check?.claim?.tab === TAB ? claimed : null;
 }
 
-function finish(id: string, outcome: "saved" | "release" | DraftFailure): void {
-  updateDrafts((drafts) => {
-    if (outcome === "saved") return drafts.filter((draft) => draft.id !== id);
-    return drafts.map((draft) => {
-      if (draft.id !== id || draft.claim?.tab !== TAB) return draft;
+/**
+ * Settle this tab's claim on `id`. A save is recorded by removing the draft,
+ * but only if it is still the version that was sent: one changed meanwhile
+ * goes back to waiting, so the change is saved too.
+ */
+function finish(id: string, outcome: { saved: string } | "release" | DraftFailure): void {
+  updateDrafts((drafts) =>
+    drafts.flatMap((draft): Draft[] => {
+      if (draft.id !== id) return [draft];
+      const ours = draft.claim?.tab === TAB;
+      if (typeof outcome === "object" && "saved" in outcome && ours && draft.updatedAt === outcome.saved) return [];
+      if (!ours) return [draft];
       const { claim: _claim, failure: _failure, ...rest } = draft;
-      return outcome === "release" ? { ...rest, state: "waiting" } : { ...rest, state: "failed", failure: outcome };
-    });
-  });
+      if (outcome === "release" || "saved" in outcome) return [{ ...rest, state: "waiting" }];
+      return [{ ...rest, state: "failed", failure: outcome }];
+    }),
+  );
 }
 
 async function withLock<T>(task: () => Promise<T>): Promise<T> {
@@ -152,18 +237,20 @@ async function withLock<T>(task: () => Promise<T>): Promise<T> {
   return task();
 }
 
-async function run(): Promise<SaveReport> {
+async function run(account: string): Promise<SaveReport> {
   return withLock(async () => {
     const report: SaveReport = { saved: 0, failed: 0, stopped: null };
+    // Each version of a draft is tried once a run. A draft changed after it was sent is a new version.
     const tried = new Set<string>();
+    const version = (draft: Draft): string => `${draft.id}@${draft.updatedAt}`;
     for (;;) {
       // Read afresh each time: another tab, or the person, may have changed things.
       const now = Date.now();
-      const next = readFreshDrafts().find((draft) => !tried.has(draft.id) && isDue(draft, now));
+      const next = readFreshDrafts().find((draft) => !tried.has(version(draft)) && isDue(draft, account, now));
       if (!next) return report;
-      tried.add(next.id);
+      tried.add(version(next));
       const saver = saverFor(next.kind);
-      const draft = claim(next.id);
+      const draft = claim(next.id, account);
       if (!saver || !draft) continue;
       const data = saver.parse(draft.data);
       if (data === null) {
@@ -183,13 +270,13 @@ async function run(): Promise<SaveReport> {
         report.failed += 1;
         continue;
       }
-      finish(draft.id, "saved");
+      finish(draft.id, { saved: draft.updatedAt });
       report.saved += 1;
     }
   });
 }
 
-let running: Promise<SaveReport> | null = null;
+let running: { account: string; report: Promise<SaveReport> } | null = null;
 const reportListeners = new Set<(report: SaveReport) => void>();
 
 /** Hear the outcome of every run that saved or failed something, once per run. */
@@ -201,25 +288,31 @@ export function onDraftsSaved(listener: (report: SaveReport) => void): () => voi
 }
 
 /**
- * Save every waiting draft that has a saver. Calls made while a run is going
- * share it, so a component that asks twice causes one run.
+ * Save every waiting draft of `account`'s that has a saver. Calls made for
+ * the same account while a run is going share it, so a component that asks
+ * twice causes one run. A call for someone else waits for that run to end.
  */
-export function saveWaitingDrafts(): Promise<SaveReport> {
-  if (running) return running;
-  const current = run().then((report) => {
-    if (report.saved > 0 || report.failed > 0) for (const listener of [...reportListeners]) listener(report);
-    return report;
-  });
+export function saveWaitingDrafts(account: string): Promise<SaveReport> {
+  if (running?.account === account) return running.report;
+  const before = running?.report.catch(() => undefined) ?? Promise.resolve();
+  const report = before
+    .then(() => run(account))
+    .then((result) => {
+      if (result.saved > 0 || result.failed > 0) for (const listener of [...reportListeners]) listener(result);
+      return result;
+    });
+  const current = { account, report };
   running = current;
   const clear = (): void => {
     if (running === current) running = null;
   };
-  current.then(clear, clear);
-  return current;
+  report.then(clear, clear);
+  return report;
 }
 
 /** For tests: forget every saver. */
 export function resetSaversForTests(): void {
   savers.clear();
-  savingsChanged();
+  registered.clear();
+  saversChanged();
 }

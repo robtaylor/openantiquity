@@ -12,7 +12,8 @@ import { useAccountUi } from "../account/requireAccount.js";
 import { Shell } from "../shell/Shell.js";
 import { DraftBadge } from "./DraftBadge.js";
 import { registerDraftSaver, resetSaversForTests } from "./savers.js";
-import { listDrafts, putDraft, resetDraftsForTests } from "./store.js";
+import { listDrafts, putDraft, resetDraftsForTests, setDraftsViewer } from "./store.js";
+import { useDraftsUi } from "./uiStore.js";
 
 vi.mock("maplibre-gl", async () => {
   const fake = await import("../../test/fakeMapLibre.js");
@@ -27,6 +28,7 @@ let stopSaver: () => void = () => {};
 
 beforeEach(() => {
   useAccountUi.setState(useAccountUi.getInitialState(), true);
+  useDraftsUi.setState({ open: false });
   window.localStorage.clear();
   resetDraftsForTests();
   resetSaversForTests();
@@ -112,6 +114,40 @@ describe("the drafts bar", () => {
     expect(saved).toEqual(["a", "b"]);
     expect(listDrafts()).toEqual([]);
     expect(screen.queryByRole("region", { name: "Drafts" })).toBeNull();
+  });
+
+  it("asks before saving drafts someone else left in this browser", async () => {
+    routeApi(harness.fetchMock(), { "GET /auth/me": () => json(meFixture()) });
+    // Someone else signed in here, made a draft, and their session ran out.
+    setDraftsViewer("someone-else");
+    putDraft(PROBE, { note: "theirs" });
+    setDraftsViewer(null);
+    renderApp();
+    const b = await bar();
+    await waitFor(() => expect(b.getByRole("status")).toHaveTextContent("1 draft left here"));
+    expect(saved).toEqual([]);
+
+    await userEvent.click(b.getByRole("button", { name: "Check" }));
+    expect(b.getByText(/left in this browser before you signed in, perhaps by someone else/)).toBeInTheDocument();
+    expect(b.getByText("Saying theirs")).toBeInTheDocument();
+    await userEvent.click(b.getByRole("button", { name: "Save as mine" }));
+    expect(await screen.findByText("Your draft is saved.")).toBeInTheDocument();
+    expect(saved).toEqual(["theirs"]);
+  });
+
+  it("discards drafts someone else left, with undo", async () => {
+    routeApi(harness.fetchMock(), { "GET /auth/me": () => json(meFixture()) });
+    setDraftsViewer("someone-else");
+    putDraft(PROBE, { note: "theirs" });
+    setDraftsViewer(null);
+    renderApp();
+    const b = await bar();
+    await userEvent.click(await b.findByRole("button", { name: "Check" }));
+    await userEvent.click(b.getByRole("button", { name: "Discard it" }));
+    expect(listDrafts()).toEqual([]);
+    await userEvent.click(await screen.findByRole("button", { name: "Undo" }));
+    expect(listDrafts()).toHaveLength(1);
+    expect(saved).toEqual([]);
   });
 
   it("waits for the welcome step before saving", async () => {

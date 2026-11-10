@@ -90,6 +90,20 @@ describe("the session", () => {
     expect(await screen.findByText("You've been signed out. Sign in again to save.")).toBeInTheDocument();
   });
 
+  it("asks again and opens the welcome sheet when any save is refused with onboarding_required", async () => {
+    const routes = routeApi(harness.fetchMock(), { "GET /auth/me": () => json(meFixture()) });
+    renderShell("/", <SaveProbe />);
+    await waitFor(() => expect(probe().getByTestId("status")).toHaveTextContent("signed-in"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    routes.on("GET /auth/me", () => json(newcomerFixture()));
+    routes.on("PATCH /auth/me", () => apiError(403, "onboarding_required", "Finish joining first."));
+    await act(async () => {
+      await apiFetch("/auth/me", { method: "PATCH", body: {} }).catch(() => undefined);
+    });
+    expect(await screen.findByRole("dialog", { name: "Welcome to Field Club" })).toBeInTheDocument();
+    await waitFor(() => expect(routes.callsTo("GET /auth/me").length).toBeGreaterThan(1));
+  });
+
   it("asks again when another tab signs in", async () => {
     const routes = routeApi(harness.fetchMock());
     renderShell("/", <SaveProbe />);
@@ -160,6 +174,16 @@ describe("requireAccount", () => {
     const second = await screen.findByRole("dialog", { name: "Welcome to Field Club" });
     await userEvent.click(within(second).getByRole("button", { name: "Close" }));
     await waitFor(() => expect(probe().getByTestId("outcome")).toHaveTextContent("closed"));
+  });
+
+  it("says it couldn't check, rather than treating the person as signed out, when the server can't be asked", async () => {
+    routeApi(harness.fetchMock(), { "GET /auth/me": () => apiError(503, "unavailable", "Down.") });
+    renderShell("/", <SaveProbe />);
+    await waitFor(() => expect(probe().getByTestId("status")).toHaveTextContent("unknown"));
+    await userEvent.click(probe().getByRole("button", { name: "Probe save" }));
+    expect(await screen.findByText(/We couldn't check whether you're signed in/)).toBeInTheDocument();
+    await waitFor(() => expect(probe().getByTestId("outcome")).toHaveTextContent("closed"));
+    expect(screen.queryByRole("dialog", { name: "Sign in" })).toBeNull();
   });
 
   it("asks the server first when the session isn't known yet", async () => {

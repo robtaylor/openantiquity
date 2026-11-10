@@ -14,6 +14,8 @@
   white-space: nowrap;
 }
 
+/* The bar hugs its content whether or not the list below it is open, so it
+   doesn't jump when the list is wider. */
 .fc-drafts {
   width: fit-content;
   max-width: 100%;
@@ -21,6 +23,8 @@
 
 .fc-drafts__bar {
   display: flex;
+  width: fit-content;
+  max-width: 100%;
   align-items: center;
   gap: 8px;
   height: 44px;
@@ -84,7 +88,7 @@
 .fc-drafts__list {
   margin-top: 8px;
   width: min(360px, 100%);
-  max-height: min(50vh, 360px);
+  max-height: min(60dvh, 480px);
   overflow-y: auto;
   padding: 12px;
   background: var(--surface);
@@ -96,6 +100,25 @@
 .fc-drafts__hint {
   color: var(--text-muted);
   font-size: 13px;
+}
+
+.fc-drafts__others {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--raised);
+}
+
+.fc-drafts__others .fc-drafts__hint {
+  color: var(--text);
+}
+
+.fc-drafts__others ul {
+  margin: 0;
 }
 
 .fc-drafts__list ul {

@@ -192,6 +192,73 @@ test.describe("the emailed link", () => {
     await panel.getByRole("button", { name: "Ask for a new link" }).click();
     await expect(page.getByRole("dialog", { name: "Sign in" })).toBeVisible();
   });
+
+  test("keeps the link's next when asking for a new one", async ({ page }) => {
+    await fakeSession(page);
+    await answerJson(page, "/auth/email/verify", { error: { code: "link_invalid", message: "x" } }, { status: 400 });
+    await page.goto(`/signin/email?next=%2Freview#token=${TOKEN}`);
+    const panel = page.getByRole("complementary", { name: "Signing in" });
+    await panel.getByRole("button", { name: "Ask for a new link" }).click();
+    const google = page.getByRole("dialog", { name: "Sign in" }).getByRole("link", { name: /Google/ });
+    const href = new URL((await google.getAttribute("href")) ?? "", "http://x");
+    expect(href.searchParams.get("next")).toBe("/review");
+  });
+
+  test("takes the token out of the address at a path the router also matches", async ({ page }) => {
+    const session = await fakeSession(page);
+    session.set(null);
+    await answerJson(page, "/auth/email/verify", meWith());
+    await page.goto(`/Signin/Email/?next=%2Fabout#token=${TOKEN}`);
+    await expect(page).toHaveURL((url) => !url.href.includes(TOKEN));
+    await expect(page).toHaveURL(/\/about/);
+  });
+});
+
+test("offers to discard this browser's drafts when signing out, in a dialog that holds focus", async ({ page }) => {
+  const session = await fakeSession(page, meWith());
+  await page.route(apiRoute("/auth/logout"), (route) => {
+    session.set(null);
+    return route.fulfill({ status: 204 });
+  });
+  await openMap(page, "/account");
+  // A draft someone else left, which isn't saved for this person unasked.
+  await page.evaluate(() =>
+    localStorage.setItem(
+      "fieldclub.drafts",
+      JSON.stringify({
+        version: 2,
+        epoch: "e",
+        drafts: [
+          {
+            id: "left",
+            kind: "fixture_probe",
+            data: { note: "left behind" },
+            owner: { account: "someone-else" },
+            createdAt: "2026-11-10T10:00:00.000Z",
+            updatedAt: "2026-11-10T10:00:00.000Z",
+            state: "waiting",
+          },
+        ],
+      }),
+    ),
+  );
+  await page.reload();
+  const panel = page.getByRole("complementary", { name: "Account" });
+  await expect(page.getByRole("region", { name: "Drafts" }).getByRole("status")).toHaveText("1 draft left here");
+  await panel.getByRole("button", { name: "Sign out" }).click();
+  const dialog = page.getByRole("dialog", { name: "Keep your drafts?" });
+  await expect(dialog).toContainText("whoever uses this browser next will see it");
+  await expectSheetFits(page, "Keep your drafts?");
+  await expectFocusTrapped(page, 4);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  expect(session.current()).not.toBeNull();
+
+  await panel.getByRole("button", { name: "Sign out" }).click();
+  await dialog.getByRole("button", { name: "Discard and sign out" }).click();
+  await expect(panel.getByRole("heading", { name: "You're not signed in" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Drafts" })).toHaveCount(0);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("fieldclub.drafts") ?? "{}").drafts)).toEqual([]);
 });
 
 test("completes the welcome sheet by keyboard alone", async ({ page }) => {

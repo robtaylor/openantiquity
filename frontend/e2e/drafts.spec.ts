@@ -1,5 +1,5 @@
 import type { Page, Route } from "@playwright/test";
-import { DRAFTS_STORAGE_KEY } from "../src/features/drafts/store.js";
+import { DRAFTS_STORAGE_KEY, DRAFTS_VERSION } from "../src/features/drafts/store.js";
 import { fakeSession, meWith } from "./support/account.js";
 import { openMap } from "./support/app.js";
 import { expect, test } from "./support/fixtures.js";
@@ -14,20 +14,26 @@ import { apiRoute, stubNetwork } from "./support/network.js";
 
 const KIND = "fixture_probe";
 
-/** Put drafts in this browser's storage, as signed-out work would have. */
-async function seedDrafts(page: Page, notes: string[]): Promise<void> {
+const EPOCH = "seeded-epoch";
+
+/**
+ * Put drafts in this browser's storage, as signed-out work would have, or
+ * as someone else's work left behind when `owner` is given.
+ */
+async function seedDrafts(page: Page, notes: string[], owner: object = { signedOut: EPOCH }): Promise<void> {
   const now = new Date().toISOString();
   const drafts = notes.map((note, index) => ({
     id: `seed-${index}-${note}`,
     kind: KIND,
     data: { note },
+    owner,
     createdAt: now,
     updatedAt: now,
     state: "waiting",
   }));
   await page.evaluate(([key, value]) => localStorage.setItem(key, value), [
     DRAFTS_STORAGE_KEY,
-    JSON.stringify({ version: 1, drafts }),
+    JSON.stringify({ version: DRAFTS_VERSION, epoch: EPOCH, drafts }),
   ] as const);
 }
 
@@ -83,7 +89,25 @@ test("keeps drafts through a reload and a provider's round trip, then saves each
   expect(after.hash).toContain("v=slope");
   await page.waitForTimeout(500);
   expect(saves.notes).toEqual(["ring ditch"]);
-  expect(await page.evaluate((key) => localStorage.getItem(key), DRAFTS_STORAGE_KEY)).toBe('{"version":1,"drafts":[]}');
+  const left = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "{}"), DRAFTS_STORAGE_KEY);
+  expect(left).toMatchObject({ version: DRAFTS_VERSION, drafts: [] });
+});
+
+test("asks before saving drafts someone else left in this browser", async ({ page }) => {
+  await fakeSession(page, meWith());
+  const saves = await answerSaves(page);
+  await openMap(page, "/");
+  await seedDrafts(page, ["their barrow"], { account: "someone-else" });
+  await page.reload();
+  await expect(bar(page).getByRole("status")).toHaveText("1 draft left here");
+  await page.waitForTimeout(300);
+  expect(saves.notes).toEqual([]);
+
+  await bar(page).getByRole("button", { name: "Check" }).click();
+  await expect(bar(page).getByText(/left in this browser before you signed in, perhaps by someone else/)).toBeVisible();
+  await bar(page).getByRole("button", { name: "Save as mine" }).click();
+  await expect(page.getByText("Your draft is saved.")).toBeVisible();
+  expect(saves.notes).toEqual(["their barrow"]);
 });
 
 test("saves each draft once with two tabs open", async ({ page, context }) => {
@@ -163,12 +187,18 @@ test("the drafts bar and its list stay on screen, clear of the other controls", 
   await page.reload();
   const region = bar(page);
   await expect(region.getByRole("status")).toHaveText("3 drafts not saved yet");
+  const closed = await region.boundingBox();
   await region.getByRole("button", { name: "Show drafts" }).click();
   const viewport = page.viewportSize() ?? { width: 0, height: 0 };
   const box = await region.boundingBox();
-  if (!box) throw new Error("No drafts bar on screen");
-  expect(box.x).toBeGreaterThanOrEqual(0);
-  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+  const list = await region.locator(".fc-drafts__list").boundingBox();
+  if (!box || !closed || !list) throw new Error("No drafts bar on screen");
+  // Opening the list doesn't change the bar.
+  expect(box).toEqual(closed);
+  for (const shown of [box, list]) {
+    expect(shown.x).toBeGreaterThanOrEqual(0);
+    expect(shown.x + shown.width).toBeLessThanOrEqual(viewport.width);
+  }
   for (const name of ["Layers", "Zoom in"]) {
     const control = await page.getByRole("button", { name, exact: true }).boundingBox();
     if (!control) continue;

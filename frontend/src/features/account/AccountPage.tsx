@@ -11,6 +11,7 @@ import { EmptyState } from "../../ui/EmptyState.js";
 import { Field } from "../../ui/Field.js";
 import { Skeleton } from "../../ui/Skeleton.js";
 import { toast } from "../../ui/toastStore.js";
+import { discardAllDrafts, useDrafts } from "../drafts/store.js";
 import { useDocumentTitle } from "../placeholders.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { accountKeys, deleteMe, logout, type Me, type MeUpdate, updateMe } from "./api.js";
@@ -146,11 +147,17 @@ function ProfileForm({ me }: { me: Me }) {
   );
 }
 
+function draftCount(n: number): string {
+  return n === 1 ? "1 draft" : `${n} drafts`;
+}
+
 function DeleteAccount() {
   const client = useQueryClient();
   const meta = useMeta();
+  const drafts = useDrafts().length;
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [discardDrafts, setDiscardDrafts] = useState(true);
   const licence = meta.data?.app.contribution_licence ?? "an open licence";
 
   async function remove(): Promise<void> {
@@ -158,6 +165,7 @@ function DeleteAccount() {
     try {
       await deleteMe();
       setOpen(false);
+      if (discardDrafts) discardAllDrafts();
       signedOut(client);
       toast("Your account has been deleted.");
     } catch (error) {
@@ -197,7 +205,80 @@ function DeleteAccount() {
             Your findings, second looks, evidence and comments stay on the map, credited to “Former member”. They were
             published under {licence}, and other people's work builds on them.
           </p>
-          <p className="fc-account-small">Drafts kept in this browser aren't affected.</p>
+          {drafts > 0 ? (
+            <label className="fc-account-check">
+              <input
+                type="checkbox"
+                checked={discardDrafts}
+                onChange={(event) => setDiscardDrafts(event.target.checked)}
+              />
+              Also discard the {draftCount(drafts)} kept in this browser
+            </label>
+          ) : null}
+        </div>
+      </Dialog>
+    </>
+  );
+}
+
+/**
+ * Sign out. With drafts in this browser, it first asks whether to keep them,
+ * because whoever uses the browser next will see them.
+ */
+function SignOut() {
+  const client = useQueryClient();
+  const drafts = useDrafts().length;
+  const [asking, setAsking] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
+  async function signOut(discard: boolean): Promise<void> {
+    setSigningOut(true);
+    try {
+      await logout();
+      setAsking(false);
+      if (discard) discardAllDrafts();
+      signedOut(client);
+      toast(discard ? "You've signed out, and your drafts are discarded." : "You've signed out.");
+    } catch (error) {
+      setSigningOut(false);
+      toast(error instanceof ApiError ? error.message : "You weren't signed out. Please try again.", { kind: "error" });
+    }
+  }
+
+  return (
+    <>
+      <Button
+        icon={<LogOut size={16} aria-hidden />}
+        onClick={() => (drafts > 0 ? setAsking(true) : void signOut(false))}
+        disabled={signingOut}
+      >
+        Sign out
+      </Button>
+      <Dialog
+        open={asking}
+        onClose={() => setAsking(false)}
+        title="Keep your drafts?"
+        className="fc-account-sheet"
+        actions={
+          <>
+            <Button onClick={() => void signOut(false)} disabled={signingOut}>
+              Keep and sign out
+            </Button>
+            <Button variant="danger" onClick={() => void signOut(true)} disabled={signingOut}>
+              Discard and sign out
+            </Button>
+          </>
+        }
+      >
+        <div className="fc-account-stack">
+          <p>
+            There {drafts === 1 ? "is 1 draft" : `are ${drafts} drafts`} in this browser that{" "}
+            {drafts === 1 ? "hasn't" : "haven't"} been saved.
+          </p>
+          <p>
+            If you keep {drafts === 1 ? "it" : "them"}, whoever uses this browser next will see{" "}
+            {drafts === 1 ? "it" : "them"}. Discard {drafts === 1 ? "it" : "them"} if this isn't your own device.
+          </p>
         </div>
       </Dialog>
     </>
@@ -205,21 +286,6 @@ function DeleteAccount() {
 }
 
 function SignedIn({ me }: { me: Me }) {
-  const client = useQueryClient();
-  const [signingOut, setSigningOut] = useState(false);
-
-  async function signOut(): Promise<void> {
-    setSigningOut(true);
-    try {
-      await logout();
-      signedOut(client);
-      toast("You've signed out.");
-    } catch (error) {
-      setSigningOut(false);
-      toast(error instanceof ApiError ? error.message : "You weren't signed out. Please try again.", { kind: "error" });
-    }
-  }
-
   return (
     <div className="fc-account-stack">
       <div className="fc-account-who">
@@ -258,9 +324,7 @@ function SignedIn({ me }: { me: Me }) {
         <h3 id="account-signin">Signing in</h3>
         {me.email ? <p className="fc-account-small">Signed in as {me.email}.</p> : null}
         <div className="fc-account-actions">
-          <Button icon={<LogOut size={16} aria-hidden />} onClick={() => void signOut()} disabled={signingOut}>
-            Sign out
-          </Button>
+          <SignOut />
           <DeleteAccount />
         </div>
       </section>
