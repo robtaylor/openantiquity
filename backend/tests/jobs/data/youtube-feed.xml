@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+ <link rel="self" href="http://www.youtube.com/feeds/videos.xml?channel_id=UCabcdefghijklmnopqrstuv"/>
+ <id>yt:channel:abcdefghijklmnopqrstuv</id>
+ <yt:channelId>abcdefghijklmnopqrstuv</yt:channelId>
+ <title>Barrow Walks</title>
+ <link rel="alternate" href="https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv"/>
+ <author>
+  <name>Barrow Walks</name>
+  <uri>https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv</uri>
+ </author>
+ <published>2024-01-01T10:00:00+00:00</published>
+ <entry>
+  <id>yt:video:dQw4w9WgXcQ</id>
+  <yt:videoId>dQw4w9WgXcQ</yt:videoId>
+  <yt:channelId>UCabcdefghijklmnopqrstuv</yt:channelId>
+  <title>A new enclosure &amp; a barrow</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=dQw4w9WgXcQ"/>
+  <author>
+   <name>Barrow Walks</name>
+   <uri>https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv</uri>
+  </author>
+  <published>2026-11-01T18:00:06+00:00</published>
+  <updated>2026-11-02T01:00:00+00:00</updated>
+  <media:group>
+   <media:title>A new enclosure &amp; a barrow</media:title>
+   <media:content url="https://www.youtube.com/v/dQw4w9WgXcQ?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+   <media:thumbnail url="https://i2.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg" width="480" height="360"/>
+   <media:description>The enclosure is on Field Club: https://fieldclub.example/f/7K3QXM
+The barrow too (https://www.fieldclub.example/f/abc12z?ref=yt), and again https://fieldclub.example/f/7K3QXM.
+Not ours: https://elsewhere.example/f/MNPQRS</media:description>
+   <media:community>
+    <media:starRating count="10" average="5.00" min="1" max="5"/>
+    <media:statistics views="100"/>
+   </media:community>
+  </media:group>
+ </entry>
+ <entry>
+  <id>yt:video:9bZkp7q19f0</id>
+  <yt:videoId>9bZkp7q19f0</yt:videoId>
+  <yt:channelId>UCabcdefghijklmnopqrstuv</yt:channelId>
+  <title>Walking the Ridgeway</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=9bZkp7q19f0"/>
+  <author>
+   <name>Barrow Walks</name>
+   <uri>https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv</uri>
+  </author>
+  <published>2026-10-20T12:00:00+00:00</published>
+  <updated>2026-10-21T01:00:00+00:00</updated>
+  <media:group>
+   <media:title>Walking the Ridgeway</media:title>
+   <media:thumbnail url="https://i3.ytimg.com/vi/9bZkp7q19f0/hqdefault.jpg" width="480" height="360"/>
+   <media:description>No finding links in this one. Music by someone.</media:description>
+  </media:group>
+ </entry>
+</feed>

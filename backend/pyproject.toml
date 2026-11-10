@@ -31,6 +31,7 @@ dependencies = [
 [project.scripts]
 fieldclub-api = "fieldclub.main:run"
 fieldclub-ingest = "fieldclub.ingest.cli:main"
+fieldclub-jobs = "fieldclub.jobs.cli:main"
 fieldclub-openapi = "fieldclub.main:print_openapi"
 fieldclub-terrain = "fieldclub.terrain.cli:main"
 

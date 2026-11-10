@@ -31,6 +31,7 @@ backend/
     layers.py               map layer catalogue served by /meta
     storage.py              Storage protocol, LocalStorage, GcsStorage
     ratelimit.py            in-memory token buckets as FastAPI dependencies
+    safe_fetch.py           fetching an address someone else chose, guarded against request forgery
     gridref.py              OSGB and Irish grid conversion and parsing
     data/                   live-source and deep-link catalogues, generated from docs/sources/worklists
     models/                 one file per domain, all imported by models/__init__.py
@@ -100,7 +101,7 @@ Columns marked with `*` are required. Every table has `id BIGINT` and `created_a
 | `evidence` | `finding_id*`, `user_id*`, `kind*`, `stance*` (supports, neutral, contradicts), `title`, `note`, `url`, `record_id`, `relation` (same_as, part_of, related), `media_id`, `occurred_on` date, `organisation`, `reference`, `outcome` (supports, inconclusive, contradicts), `data` jsonb, `verified_by`, `verified_at`, `deleted_at` |
 | `evidence_votes` | `evidence_id*`, `user_id*`, `value*` (+1 or -1). Primary key on both |
 | `comments` | `finding_id*`, `user_id*`, `body*`, `parent_id`, `edited_at`, `deleted_at` |
-| `mentions` | `finding_id*`, `user_id`, `kind*` (video, article, podcast, paper, broadcast, social), `url*`, `canonical_url*`, `provider`, `title`, `author_name`, `thumbnail_url`, `published_at`, `start_seconds`, `note`, `auto_detected*`. Unique on finding and canonical URL |
+| `mentions` | `finding_id*`, `user_id`, `kind*` (video, article, podcast, paper, broadcast, social), `url*`, `canonical_url*`, `provider`, `title`, `author_name`, `thumbnail_url`, `published_at`, `start_seconds`, `note`, `auto_detected*`, `deleted_at`. Unique on finding and canonical URL, so a removed mention can't be added again |
 | `follows` | `user_id*`, `finding_id*`. Primary key on both |
 | `media` | `user_id*`, `storage_key*` unique, `content_type*`, `width`, `height`, `bytes*`, `sha256*`, `approved_at`, `approved_by` |
 
@@ -134,7 +135,7 @@ Columns marked with `*` are required. Every table has `id BIGINT` and `created_a
 | `activity` | `kind*`, `actor_id`, `finding_id`, `investigation_id`, `data` jsonb, `location` Point |
 | `notifications` | `user_id*`, `kind*`, `actor_id`, `finding_id`, `data` jsonb, `read_at` |
 | `reports` | `reporter_id*`, `target_kind*`, `target_id*`, `reason*`, `note`, `status*` (open, upheld, dismissed), `resolved_by`, `resolved_at` |
-| `watch_channels` | `provider*`, `channel_id*`, `title`, `last_checked_at`, `enabled*`. Channels scanned for links back to findings |
+| `watch_channels` | `provider*`, `channel_id*`, `title`, `last_checked_at`, `enabled*`, `etag`, `last_modified`, `last_error`. Channels scanned for links back to findings |
 
 <!-- Investigations and squares (track b2/investigations). -->
 Anyone with an investigation's id can read a public or unlisted one; a private one is found only by its owner, and everyone else gets `investigation_not_found`. The owner and editors change the title, summary, notes, area and items. Only the owner changes visibility, members and deletes it, and any other member can leave. The owner invites a contributor by handle; someone who hasn't finished the welcome step can't be invited. An invited person has no role, and the investigation isn't in their `mine` list, until they accept with `POST .../invitation`. They decline by leaving, which needs only a session. Only public investigations are in the public list. `scope=invited` lists a person's waiting invitations, and `scope=unlisted` lists every unlisted investigation for moderators only, so collaborators never share a notebook moderators can't find (Decision 0009, rule 5). The moderation queue doesn't take reports of investigations yet. Making one public records `investigation_published`, and making it unlisted or private deletes that row. Every change takes the investigation's row lock first, so membership and visibility can't race, and `investigation_items` has a deferred unique constraint on `(investigation_id, position)`. An item pointing at a withdrawn finding or a record no longer in the index is returned with `unavailable` set to `withdrawn` or `gone` and nothing of the target. So is one pointing at a hidden finding, with `hidden`, for anyone but the finder and moderators. Exports follow the download rule of Decision 0005 and leave such items out; the report is one HTML page with no scripts, served with a sandboxing `Content-Security-Policy`. When an account is deleted its private investigations are deleted with it, each shared one it owns passes to its longest-standing editor, and one with no editor stays readable with nobody able to manage it. Its memberships and invitations elsewhere go.
@@ -380,6 +381,16 @@ A person sees their own second looks on their profile as `second_look`, without 
 Activity kinds: `finding_created`, `tier_changed`, `state_changed`, `observation_added`, `evidence_added`, `comment_added`, `mention_added`, `followup_logged`, `investigation_published`.
 
 The payload carries ids only, and `activity.location` is the centre of the finding's 1 km square, never an exact position.
+
+## Mentions
+
+`services/unfurl.py` reduces every address to one canonical form: each way of writing a YouTube link becomes `https://www.youtube.com/watch?v=<id>` with the start time in `start_seconds`, Vimeo links become `https://vimeo.com/<id>`, a DOI in any form becomes its lower-case doi.org address, and anything else loses its fragment and tracking parameters. It fetches the title, author, thumbnail and date without keys: oEmbed for YouTube and Vimeo, doi.org content negotiation for CSL JSON, and Open Graph tags or `<title>` for a page. Results are cached in the process for an hour, failures for five minutes. A fetch that fails or is refused leaves the mention with its address alone. Thumbnails are kept only on https and only from the provider's image hosts or the page's own site.
+
+Every such fetch goes through `safe_fetch.fetch`: http and https only, ports 80 and 443, no credentials, the host resolved once and refused if any address is private, loopback, link-local, shared, reserved, multicast or a cloud metadata address (IPv4 in odd notations or inside IPv6 included), the connection made to the checked address with the name as `Host` and TLS server name, redirects followed by hand with the same checks (three by default), the content type checked, the body capped after decompression, and a deadline on the whole fetch.
+
+Adding a mention bumps `mention_count` and records `mention_added`, which tells the finding's followers (the finder and everyone who helped) except whoever added it. A mention never touches the confidence engine. `GET /mentions/recent` lists mentions on findings the viewer may list, newest first, each with its finding's position from `location_out`. Withdrawn findings and removed mentions are left out.
+
+`fieldclub-jobs scan-channels` reads each enabled channel's public feed, one at a time with a pause between them and conditional requests, and adds an `auto_detected` mention with no member for every link in a video description to `<FIELDCLUB_PUBLIC_URL>/f/<public id>`. `fieldclub-jobs refresh-sources` runs each enabled bulk source's connector, one at a time, when its last completed full run is older than the connector's `max_age` (a week when it declares none). Both exit non-zero when anything failed, after carrying on with the rest.
 
 ## Terrain service
 
