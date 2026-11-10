@@ -1,7 +1,9 @@
-"""The map's search box. The gazetteer is empty until a later wave fills it, so places are made here."""
+"""The map's search box. Places are made here rather than loaded from the gazetteer."""
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 
 import pytest
@@ -224,3 +226,71 @@ def test_a_record_search_that_runs_out_of_time_leaves_the_rest(
     hits = search.geo_search(db, "avebury", None)
     assert hits
     assert {hit.type for hit in hits} == {"place"}
+
+
+def test_a_monument_named_exactly_comes_before_places_named_after_it(db: Session) -> None:
+    """With the gazetteer loaded, a search for a monument once opened with five places named after it."""
+    add_place(db, "Stonehenge Works", -0.62, 52.05, kind="Other Settlement", rank=480)
+    add_place(db, "Stonehenge Down", -1.83, 51.18, kind="Hill Or Mountain", rank=240)
+    add_place(db, "Maiden Castle Wood", -2.0, 50.7, kind="Woodland Or Forest", rank=240)
+    add_place(db, "Castle Eden", -1.35, 54.74, kind="Village", rank=750)
+    source = add_source(db)
+    add_record(db, source, "STONEHENGE", -1.8262, 51.1789)
+    add_record(db, source, "Maiden Castle", -2.4637, 50.6944)
+    add_record(db, source, "Grim's Ditch", -1.43, 51.55)
+    db.commit()
+    assert [hit.label for hit in search.geo_search(db, "Stonehenge", None)][:3] == [
+        "STONEHENGE",
+        "Stonehenge Works",
+        "Stonehenge Down",
+    ]
+    labels = [hit.label for hit in search.geo_search(db, "maiden castle", None)]
+    assert labels[:2] == ["Maiden Castle", "Maiden Castle Wood"]
+    assert labels.index("Castle Eden") > 1
+    assert search.geo_search(db, "Grim's Ditch", None)[0].label == "Grim's Ditch"
+
+
+def test_a_place_still_comes_before_a_record_named_alike(db: Session, gazetteer: None) -> None:
+    hits = search.geo_search(db, "aveb", None)
+    labels = [hit.label for hit in hits]
+    assert labels[:3] == ["Avebury", "Avebury Trusloe", "Avebury henge and stone circles"]
+
+
+def test_loose_matches_come_by_likeness_whatever_their_type(db: Session) -> None:
+    add_place(db, "Silverly Hill", -1.9, 51.4, rank=750)
+    add_record(db, add_source(db), "Silbury Hill", -1.8571, 51.4156)
+    db.commit()
+    assert [hit.label for hit in search.geo_search(db, "silbery hill", None)] == [
+        "Silbury Hill",
+        "Silverly Hill",
+    ]
+
+
+def test_a_place_carries_its_source(db: Session, client: TestClient) -> None:
+    add_source(db, "os-open-names", name="OS Open Names", category="place", attribution="Contains OS data")
+    add_place(db, "Avebury", *AVEBURY).source = "os-open-names"
+    db.commit()
+    [item] = client.get("/api/v1/geo/search", params={"q": "avebury"}).json()["items"]
+    assert item["type"] == "place"
+    assert item["source"]["key"] == "os-open-names"
+    assert item["source"]["attribution"] == "Contains OS data"
+
+
+def test_a_place_search_that_runs_out_of_time_gives_no_places(
+    db: Session, gazetteer: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    @contextmanager
+    def too_slow(db: Session, milliseconds: int = records.SEARCH_TIMEOUT_MS) -> Iterator[None]:
+        raise records.SearchTimeoutError()
+        yield
+
+    monkeypatch.setattr(records, "time_limit", too_slow)
+    assert search.places(db, "avebury") == []
+
+
+def test_places_alike_by_spelling_are_ranked_from_a_capped_few(
+    db: Session, gazetteer: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert len(search.places(db, "avebery")) == 2
+    monkeypatch.setattr(search, "PLACE_CANDIDATES", 1)
+    assert len(search.places(db, "avebery")) == 1

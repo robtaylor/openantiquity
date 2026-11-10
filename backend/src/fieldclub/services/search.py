@@ -10,7 +10,8 @@
 6. record names from the record index.
 
 The first four give at most one result each and come first. Places and
-records follow, best match first. Each of their queries is cut off at
+records follow, ranked together by how well their names match the query
+(`by_name`). Each of their queries is cut off at
 `records.SEARCH_TIMEOUT_MS`, and a query that runs out of time leaves the
 names out, not an error. The limit holds for each statement, not for the
 names as a whole. A finding is placed where this viewer may see
@@ -25,7 +26,7 @@ import re
 from dataclasses import dataclass
 
 from geoalchemy2.shape import to_shape
-from sqlalchemy import Integer, cast, func, literal, select
+from sqlalchemy import func, literal, select
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
@@ -38,6 +39,9 @@ logger = logging.getLogger(__name__)
 
 PLACE_LIMIT = 5
 RECORD_LIMIT = 5
+# How many places like the query, by spelling, are ranked at most. A common
+# word such as "hill" is like tens of thousands of names.
+PLACE_CANDIDATES = 2000
 
 # How far in to zoom for a grid square of each size, in metres.
 GRIDREF_ZOOM = {10_000: 11, 1000: 14, 100: 16, 10: 17, 1: 18}
@@ -66,7 +70,7 @@ class GeoHit:
     bbox: tuple[float, float, float, float] | None = None
     ref: str | None = None
     obscured: bool = False
-    # A record's source, so its licence and attribution go with it.
+    # A place's or record's source, so its licence and attribution go with it.
     source: Source | None = None
 
 
@@ -181,27 +185,43 @@ def as_finding(db: Session, text: str, viewer: User | None) -> GeoHit | None:
 
 
 def places(db: Session, text: str, limit: int = PLACE_LIMIT) -> list[GeoHit]:
-    """Places whose name is like the query.
+    """Places whose name is like the query. A search that runs out of time gives none, not an error.
 
     Names that start with the query come first, bigger places first, which
     suits someone still typing. The rest come by how alike they are, then
     by size, so a misspelt village comes before a town that only shares a word.
+    Only when too few names start with the query are the rest looked for,
+    among at most `PLACE_CANDIDATES` of them, so a common word stays quick.
     """
     words = records.query_words(text)
     if not words:
         return []
     phrase = " ".join(words)
-    records.use_name_similarity(db)
-    starts = cast(func.starts_with(func.lower(Place.name), literal(phrase)), Integer)
-    similarity = func.strict_word_similarity(literal(phrase), Place.name)
-    rows = db.execute(
-        select(Place, func.ST_X(Place.geom), func.ST_Y(Place.geom))
-        .where(Place.name.op("%>")(literal(phrase)))
-        .order_by(starts.desc(), (starts * Place.rank).desc(), similarity.desc(), Place.rank.desc(), Place.id)
-        .limit(limit)
-    ).all()
+    # The phrase is letters, digits and single spaces, so it holds no LIKE wildcard.
+    assert re.fullmatch(r"[^\W_]+( [^\W_]+)*", phrase), "the phrase must be words and spaces"
+    starts = Place.name.ilike(phrase + "%")
+    found = select(Place, Source, func.ST_X(Place.geom), func.ST_Y(Place.geom)).outerjoin(
+        Source, Source.key == Place.source
+    )
+    try:
+        with records.time_limit(db):
+            rows = list(db.execute(found.where(starts).order_by(Place.rank.desc(), Place.id).limit(limit)))
+            if len(rows) < limit:
+                records.use_name_similarity(db)
+                candidates = (
+                    select(Place.id).where(Place.name.op("%>")(literal(phrase))).limit(PLACE_CANDIDATES)
+                ).scalar_subquery()
+                similarity = func.strict_word_similarity(literal(phrase), Place.name)
+                rows += db.execute(
+                    found.where(Place.id.in_(candidates), ~starts)
+                    .order_by(similarity.desc(), Place.rank.desc(), Place.id)
+                    .limit(limit - len(rows))
+                ).all()
+    except records.SearchTimeoutError:
+        logger.warning("Place search for %r ran out of time; the search box shows no places", text)
+        return []
     hits = []
-    for place, lon, lat in rows:
+    for place, source, lon, lat in rows:
         detail = ", ".join(part for part in (place.district, place.county) if part) or None
         hits.append(
             GeoHit(
@@ -212,6 +232,7 @@ def places(db: Session, text: str, limit: int = PLACE_LIMIT) -> list[GeoHit]:
                 lat=lat,
                 zoom=PLACE_ZOOM.get(place.kind.lower(), 14),
                 ref=str(place.id),
+                source=source,
             )
         )
     return hits
@@ -258,8 +279,41 @@ def geo_search(db: Session, q: str, viewer: User | None, *, limit: int = 10) -> 
     ]
     try:
         with records.time_limit(db, records.SEARCH_TIMEOUT_MS):
-            named = places(db, text) + record_hits(db, text)
+            named = by_name(db, text, places(db, text) + record_hits(db, text))
     except records.SearchTimeoutError:
         logger.warning("Place search for %r ran out of time; the search box shows no names", text)
         named = []
     return (exact + named)[:limit]
+
+
+def by_name(db: Session, text: str, hits: list[GeoHit]) -> list[GeoHit]:
+    """Places and records in one order, by how well each name matches the whole query.
+
+    A name that is the query comes first, then names that start with it, then
+    the rest by how alike they are. Within the first two, places keep their
+    lead over records, so a town comes before a record named after it. A
+    search for "Stonehenge" gives the monument before Stonehenge Works, and
+    one for "Maiden Castle" the hillfort before Castle Eden.
+    """
+    phrase = " ".join(records.query_words(text))
+
+    def fit(hit: GeoHit) -> int:
+        name = " ".join(records.query_words(hit.label))
+        return 2 if name == phrase else 1 if name.startswith(phrase) else 0
+
+    scored = [(fit(hit), hit) for hit in hits]
+    # Only the loose matches are ordered by likeness. The sort is stable, so the rest keep their order.
+    loose = list(dict.fromkeys(hit.label for value, hit in scored if value == 0))
+    likeness = dict(zip(loose, _likeness(db, phrase, loose), strict=True))
+    ranked = sorted(scored, key=lambda pair: (-pair[0], -likeness.get(pair[1].label, 0.0)))
+    return [hit for _, hit in ranked]
+
+
+def _likeness(db: Session, phrase: str, labels: list[str]) -> list[float]:
+    """How alike each label is to the phrase, as the gazetteer and the record index rank names."""
+    if not labels:
+        return []
+    row = db.execute(
+        select(*(func.strict_word_similarity(literal(phrase), literal(label)) for label in labels))
+    ).one()
+    return [float(value) for value in row]
