@@ -1,0 +1,20 @@
+# The DNS record sets this project manages at Gandi, applied by infra/dns.py.
+#
+# Only what is listed here is read or written. Everything else in a zone is
+# left as it is, including the mail records Gandi made when the domains were
+# registered. A record set is one name and type with all its values. Give
+# values the way Gandi shows them (`uv run infra/dns.py show`), with host names
+# ending in a dot. `absent = true` removes a record set if it exists.
+#
+# openantiquity.org is the site's address. The .com and .co.uk are held so
+# nobody else has them, and will redirect to it.
+
+# Which certificate authorities may issue for these names. Google's load
+# balancer gets its managed certificate from Google Trust Services or Let's
+# Encrypt, and nobody else has a reason to issue one.
+[[record]]
+domains = ["openantiquity.org", "openantiquity.com", "openantiquity.co.uk"]
+name = "@"
+type = "CAA"
+ttl = 3600
+values = ['0 issue "pki.goog"', '0 issue "letsencrypt.org"']
