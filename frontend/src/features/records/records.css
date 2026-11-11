@@ -29,6 +29,23 @@
   gap: 16px;
 }
 
+/* On a phone the sheet's title is one line, cut short, which suits a short
+   panel name. A record's name can be a whole report title, and the page
+   doesn't repeat it, so here it wraps: up to three lines half open, and all
+   of it fully open. Peeking keeps the one line. */
+.fc-sheet[data-stop="half"]:has(.fc-panel__body > .fc-record) .fc-panel__title,
+.fc-sheet[data-stop="full"]:has(.fc-panel__body > .fc-record) .fc-panel__title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.fc-sheet[data-stop="half"]:has(.fc-panel__body > .fc-record) .fc-panel__title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
 .fc-record__kind {
   display: flex;
   flex-wrap: wrap;
@@ -110,6 +127,10 @@
   flex-direction: column;
   gap: 4px;
   overflow-wrap: anywhere;
+}
+
+.fc-source-credit--compact {
+  display: inline;
 }
 
 .fc-source-credit__attribution {

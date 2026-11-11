@@ -1,6 +1,6 @@
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { Download, SearchX, Unplug } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { useMeta } from "../../api/useMeta.js";
@@ -12,7 +12,7 @@ import { Field } from "../../ui/Field.js";
 import { Skeleton } from "../../ui/Skeleton.js";
 import { useDebounced } from "../../ui/useDebounced.js";
 import { useDocumentTitle } from "../placeholders.js";
-import { isSearchTimeout } from "../search/api.js";
+import { isSearchRefused, isSearchTimeout, MAX_QUERY_CHARS } from "../search/api.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import {
   type Bbox,
@@ -24,7 +24,10 @@ import {
 } from "./api.js";
 import { CategoryMark } from "./CategoryMark.js";
 import { RECORD_SEARCH_PATH, recordPath } from "./paths.js";
+import { SourceCredit } from "./SourceCredit.js";
+import { useSearchAddress } from "./searchAddress.js";
 import { type SearchScope, useRecordSearch } from "./searchStore.js";
+import { decodeEntities } from "./text.js";
 import "./records.css";
 
 /** How long the words and the view must hold still before the server is asked. */
@@ -44,23 +47,35 @@ function ResultItem({ meta, record }: { meta: Meta; record: RecordSummary }) {
   return (
     <li className="fc-record-result">
       <Link className="fc-record-result__name" to={recordPath(record.id)}>
-        {record.name}
+        {decodeEntities(record.name)}
       </Link>
       <p className="fc-record-result__kind">
         <CategoryMark meta={meta} category={record.category} />
         {record.record_type ? <span className="fc-record__type">{record.record_type}</span> : null}
       </p>
-      <p className="fc-record-result__source">From {record.source.name}</p>
+      <p className="fc-record-result__source">
+        From <SourceCredit source={record.source} compact />
+      </p>
     </li>
   );
 }
 
-function SearchForm({ meta }: { meta: Meta }) {
+function SearchForm({ meta, onCommit }: { meta: Meta; onCommit: () => void }) {
   const { q, sources, categories, scope, set } = useRecordSearch();
-  // Open from the start when a search brought back from earlier already narrows them.
-  const [moreOpen, setMoreOpen] = useState(categories.length > 0 || sources.length > 0);
+  // Open whenever a search brought back from earlier, or from the address, narrows them.
+  const narrowed = categories.length > 0 || sources.length > 0;
+  const [moreOpen, setMoreOpen] = useState(narrowed);
+  useEffect(() => {
+    if (narrowed) setMoreOpen(true);
+  }, [narrowed]);
   return (
-    <form className="fc-record-search__form" onSubmit={(event) => event.preventDefault()}>
+    <form
+      className="fc-record-search__form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onCommit();
+      }}
+    >
       <Field label="Words to look for" hint="Part of a name, a type such as “barrow”, or words from a summary.">
         {(control) => (
           <input
@@ -70,6 +85,8 @@ function SearchForm({ meta }: { meta: Meta }) {
             value={q}
             autoComplete="off"
             spellCheck={false}
+            maxLength={MAX_QUERY_CHARS}
+            enterKeyHint="search"
             onChange={(event) => set({ q: event.currentTarget.value })}
           />
         )}
@@ -155,6 +172,14 @@ function Results({ meta }: { meta: Meta }) {
     retry: false,
   });
 
+  if (search.isError && !search.data && isSearchRefused(search.error)) {
+    // Asking again would be refused again, so there is nothing to retry.
+    return (
+      <EmptyState tone="error" icon={<SearchX size={22} />} title="That search can't be made">
+        <p>Try fewer words, or choose fewer kinds of record.</p>
+      </EmptyState>
+    );
+  }
   if (search.isError && !search.data) {
     const timedOut = isSearchTimeout(search.error);
     return (
@@ -232,7 +257,18 @@ function Results({ meta }: { meta: Meta }) {
   );
 }
 
-/** `/records`: the record index, searched by words, kind, source and area. */
+/** The form and the results, once the catalogue is in, which the address is read against. */
+function SearchBody({ meta }: { meta: Meta }) {
+  const { commit } = useSearchAddress(meta);
+  return (
+    <div className="fc-record-search">
+      <SearchForm meta={meta} onCommit={commit} />
+      <Results meta={meta} />
+    </div>
+  );
+}
+
+/** `/records`: the record index, searched by words, kind, source and area. The search is kept in the address. */
 export function RecordSearchPanel() {
   const { pathname } = useLocation();
   const meta = useMeta().data;
@@ -243,12 +279,7 @@ export function RecordSearchPanel() {
       title="Search the records"
       subtitle="Heritage records in the index"
     >
-      {meta ? (
-        <div className="fc-record-search">
-          <SearchForm meta={meta} />
-          <Results meta={meta} />
-        </div>
-      ) : null}
+      {meta ? <SearchBody meta={meta} /> : null}
     </PanelFrame>
   );
 }

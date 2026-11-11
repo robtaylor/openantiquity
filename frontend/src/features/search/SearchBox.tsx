@@ -3,10 +3,25 @@ import { ExternalLink, Search } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useEffect, useId, useState } from "react";
 import { useNavigate } from "react-router";
 import { useMapStore } from "../../map/store.js";
+import { useMapCover, visibleCentre } from "../../map/visibleArea.js";
 import { IconButton } from "../../ui/IconButton.js";
+import { parseRecordId } from "../records/api.js";
 import { elsewherePath, RECORD_SEARCH_PATH, recordPath } from "../records/paths.js";
+import { SourceCredit } from "../records/SourceCredit.js";
 import { useRecordSearch } from "../records/searchStore.js";
-import { cameraFor, fetchGeoSearch, type GeoResult, groupResults, isSearchTimeout, searchKeys } from "./api.js";
+import { decodeEntities } from "../records/text.js";
+import {
+  cameraFor,
+  fetchGeoSearch,
+  type GeoResult,
+  groupResults,
+  isSearchRefused,
+  isSearchTimeout,
+  MAX_QUERY_CHARS,
+  resultSources,
+  searchKeys,
+  takesOnEnter,
+} from "./api.js";
 import "./search.css";
 
 /** How long typing must pause before the server is asked. */
@@ -72,24 +87,38 @@ export function SearchBox() {
 
   function choose(result: GeoResult): void {
     useMapStore.getState().requestCamera(cameraFor(result));
-    setText(result.label);
-    setSettled(result.label.trim());
-    setPicked(result.label.trim());
+    const label = decodeEntities(result.label);
+    setText(label);
+    setSettled(label.trim());
+    setPicked(label.trim());
     setOpen(false);
     setActive(-1);
     setPendingPick(null);
-    if (result.type === "record" && result.ref) navigate(recordPath(result.ref));
+    // The ref is the server's, but it is checked before it becomes an address all the same.
+    const recordId = result.type === "record" ? parseRecordId(result.ref ?? undefined) : null;
+    if (recordId !== null) navigate(recordPath(recordId));
     else if (result.type === "finding" && result.ref) navigate(`/f/${encodeURIComponent(result.ref)}`);
   }
 
-  // Enter pressed early: take the first result for that text as soon as there is one.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: choose reads the latest render
+  /** Enter with nothing picked: the first result, if it is a sure match. Otherwise the list stays open to choose from. */
+  function takeFirstIfSure(): void {
+    const first = ordered[0];
+    if (first && takesOnEnter(first, term)) choose(first);
+  }
+
+  // Enter pressed early: once the results for that text are in, go to the first if it is a sure match.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: takeFirstIfSure reads the latest render
   useEffect(() => {
     if (pendingPick === null || pendingPick !== term || !current || query.isFetching) return;
-    const first = ordered[0];
     setPendingPick(null);
-    if (first) choose(first);
+    takeFirstIfSure();
   }, [pendingPick, current, query.isFetching, ordered[0]]);
+
+  // The option the arrow keys are on is kept in sight in the scrolling list.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the active option is the trigger
+  useEffect(() => {
+    if (active >= 0) document.getElementById(optionId(active))?.scrollIntoView?.({ block: "nearest" });
+  }, [active]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -98,16 +127,20 @@ export function SearchBox() {
       searchRecords();
       return;
     }
-    if (failed && active === retryIndex) {
+    if (retryIndex >= 0 && active === retryIndex) {
       retry();
       return;
     }
-    const picked = ordered[active] ?? (current && !query.isFetching ? ordered[0] : undefined);
-    if (picked) {
-      choose(picked);
+    const highlighted = ordered[active];
+    if (highlighted) {
+      choose(highlighted);
       return;
     }
     setOpen(true);
+    if (current && !query.isFetching) {
+      takeFirstIfSure();
+      return;
+    }
     setSettled(term);
     setPendingPick(term);
   }
@@ -147,16 +180,21 @@ export function SearchBox() {
   }
 
   function openElsewhere(): void {
-    const { camera } = useMapStore.getState();
-    navigate(elsewherePath(camera.lng, camera.lat));
+    // The middle of what's showing, not of the window, which is under the panel.
+    const middle = visibleCentre(useMapStore.getState().camera, useMapCover.getState().cover);
+    navigate(elsewherePath(middle.lng, middle.lat));
   }
 
   const expanded = open && searchable;
   const optionId = (index: number) => `${id}-option-${index}`;
   const failed = current && query.isError;
+  // A search the server refused would be refused again, so it is offered no retry.
+  const refused = failed && isSearchRefused(query.error);
+  const retryable = failed && !refused;
   // The options are the results, "Try again" when the search failed, and last, searching the records for the text.
-  const retryIndex = failed ? ordered.length : -1;
-  const moreIndex = ordered.length + (failed ? 1 : 0);
+  const retryIndex = retryable ? ordered.length : -1;
+  const moreIndex = ordered.length + (retryable ? 1 : 0);
+  const sources = resultSources(results);
 
   function retry(): void {
     setActive(-1);
@@ -165,7 +203,9 @@ export function SearchBox() {
 
   let message: string | null = null;
   if (expanded) {
-    if (failed) {
+    if (refused) {
+      message = "That's more than can be searched for at once. Try a few words.";
+    } else if (failed) {
       message = isSearchTimeout(query.error)
         ? "That search took too long. Add another word, or search for somewhere smaller."
         : "Search isn't working right now. Please try again in a moment.";
@@ -199,6 +239,7 @@ export function SearchBox() {
           autoComplete="off"
           spellCheck={false}
           enterKeyHint="search"
+          maxLength={MAX_QUERY_CHARS}
           onChange={(event) => {
             setText(event.currentTarget.value);
             setOpen(true);
@@ -229,41 +270,44 @@ export function SearchBox() {
           {message}
         </div>
         <div className="fc-search__list" id={listId} role="listbox" aria-label="Search results" aria-busy={waiting}>
-          {expanded
-            ? groups.map((group) => (
-                // biome-ignore lint/a11y/useSemanticElements: a group of options inside a listbox
-                <div
-                  key={group.type}
-                  role="group"
-                  aria-labelledby={`${id}-group-${group.type}`}
-                  className="fc-search__group"
-                >
-                  <div className="fc-search__group-label" id={`${id}-group-${group.type}`} role="presentation">
-                    {group.label}
+          {/* The results scroll. "Try again" and the record search stay at the foot of the list, always in sight. */}
+          <div className="fc-search__results" role="presentation">
+            {expanded
+              ? groups.map((group) => (
+                  // biome-ignore lint/a11y/useSemanticElements: a group of options inside a listbox
+                  <div
+                    key={group.type}
+                    role="group"
+                    aria-labelledby={`${id}-group-${group.type}`}
+                    className="fc-search__group"
+                  >
+                    <div className="fc-search__group-label" id={`${id}-group-${group.type}`} role="presentation">
+                      {group.label}
+                    </div>
+                    {group.items.map(({ result, index }) => {
+                      const detail = resultDetail(result);
+                      return (
+                        // biome-ignore lint/a11y/useFocusableInteractive: focus stays in the field, as a combobox's does
+                        // biome-ignore lint/a11y/useKeyWithClickEvents: the field handles the keys for every option
+                        <div
+                          key={`${result.type}-${result.ref ?? `${result.lon},${result.lat}`}-${index}`}
+                          id={optionId(index)}
+                          role="option"
+                          aria-selected={index === active}
+                          className="fc-search__option"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => choose(result)}
+                        >
+                          <span className="fc-search__label">{decodeEntities(result.label)}</span>
+                          {detail ? <span className="fc-search__detail">{detail}</span> : null}
+                        </div>
+                      );
+                    })}
                   </div>
-                  {group.items.map(({ result, index }) => {
-                    const detail = resultDetail(result);
-                    return (
-                      // biome-ignore lint/a11y/useFocusableInteractive: focus stays in the field, as a combobox's does
-                      // biome-ignore lint/a11y/useKeyWithClickEvents: the field handles the keys for every option
-                      <div
-                        key={`${result.type}-${result.ref ?? `${result.lon},${result.lat}`}-${index}`}
-                        id={optionId(index)}
-                        role="option"
-                        aria-selected={index === active}
-                        className="fc-search__option"
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => choose(result)}
-                      >
-                        <span className="fc-search__label">{result.label}</span>
-                        {detail ? <span className="fc-search__detail">{detail}</span> : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              ))
-            : null}
-          {expanded && failed ? (
+                ))
+              : null}
+          </div>
+          {expanded && retryable ? (
             // biome-ignore lint/a11y/useFocusableInteractive: focus stays in the field, as a combobox's does
             // biome-ignore lint/a11y/useKeyWithClickEvents: the field handles the keys for every option
             <div
@@ -292,6 +336,16 @@ export function SearchBox() {
             </div>
           ) : null}
         </div>
+        {expanded && sources.length > 0 ? (
+          // Each source's name and licence, as Decision 0004 asks. A record's page gives its full credit.
+          <ul className="fc-search__credits" aria-label="Where these names come from">
+            {sources.map((source) => (
+              <li key={source.key}>
+                <SourceCredit source={source} compact />
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
     </search>
   );

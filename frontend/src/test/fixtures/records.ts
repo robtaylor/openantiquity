@@ -36,6 +36,17 @@ const PAS_SOURCE: SourceRef = {
   reuse: "open",
 };
 
+/** The gazetteer the search box's place names come from. */
+export const OS_NAMES_SOURCE: SourceRef = {
+  key: "os-open-names",
+  name: "OS Open Names",
+  publisher: "Ordnance Survey",
+  licence: "OGL v3.0",
+  licence_url: "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+  attribution: "Contains OS data © Crown copyright and database right 2026",
+  reuse: "open",
+};
+
 /** A source whose name, credit and links are hostile, as an outside service might send. */
 const HOSTILE_SOURCE: SourceRef = {
   key: "hostile",
@@ -146,7 +157,7 @@ export const GEO_RESULTS: GeoResult[] = [
     ref: "9",
     obscured: false,
     bbox: null,
-    source: null,
+    source: OS_NAMES_SOURCE,
   },
   {
     type: "record",
@@ -175,7 +186,7 @@ export const GEO_RESULTS: GeoResult[] = [
     ref: "10",
     obscured: false,
     bbox: null,
-    source: null,
+    source: OS_NAMES_SOURCE,
   },
   {
     type: "finding",

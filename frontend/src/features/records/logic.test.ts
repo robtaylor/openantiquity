@@ -13,8 +13,10 @@ import { AVENUE_RECORD, CONTEXT_LINKS, FIND_RECORD } from "../../test/fixtures/r
 import { parseRecordId, recordsDownloadUrl } from "./api.js";
 import { recordLayerFilter } from "./filters.js";
 import { coverageLabel, groupLinks, linkTitle } from "./OpenElsewherePanel.js";
-import { elsewherePath } from "./paths.js";
+import { elsewherePath, recordPath } from "./paths.js";
+import { searchFromParams, searchToParams } from "./searchAddress.js";
 import { impreciseSquares, precisionText, recordShape } from "./shape.js";
+import { decodeEntities } from "./text.js";
 import { recordTarget, sourcesOf } from "./useRecordsOnMap.js";
 
 describe("parseRecordId", () => {
@@ -298,5 +300,49 @@ describe("the records overlay's style", () => {
     expect(counts.layout["icon-allow-overlap"]).toBe(false);
     expect(counts.layout["icon-ignore-placement"]).toBeUndefined();
     expect(byId(RECORD_LAYERS.counts)?.opacity["icon-opacity"]).toBeLessThanOrEqual(0.75);
+  });
+});
+
+describe("decodeEntities", () => {
+  it("turns the common entities back into characters, once", () => {
+    expect(decodeEntities("Monitoring &amp; Recording")).toBe("Monitoring & Recording");
+    expect(decodeEntities("&lt;b&gt; &quot;x&quot; &#39;y&#39; &#x27;z&#x27;")).toBe(`<b> "x" 'y' 'z'`);
+    // One pass only, so an escaped entity stays an entity.
+    expect(decodeEntities("&amp;lt;")).toBe("&lt;");
+    // Unknown names, control characters and surrogates are left as they were.
+    expect(decodeEntities("&bogus; &#0; &#xD800; &#x110000;")).toBe("&bogus; &#0; &#xD800; &#x110000;");
+    expect(decodeEntities("No entities")).toBe("No entities");
+  });
+});
+
+describe("the record search in the address", () => {
+  it("writes only what differs from a new search, with the API's names", () => {
+    expect(searchToParams({ q: "", sources: [], categories: [], scope: "view" }).toString()).toBe("");
+    expect(
+      searchToParams({
+        q: "long barrow",
+        sources: ["nhle-scheduled"],
+        categories: ["monument", "find"],
+        scope: "everywhere",
+      }).toString(),
+    ).toBe("q=long+barrow&scope=everywhere&category=monument&category=find&source=nhle-scheduled");
+  });
+
+  it("reads an address back, dropping what the catalogue doesn't know", () => {
+    const params = new URLSearchParams(
+      `q=${"x".repeat(250)}&scope=nowhere&category=find&category=find&category=bogus&source=bogus&source=${metaFixture.sources[0]?.key}`,
+    );
+    const terms = searchFromParams(params, metaFixture);
+    expect(terms.q).toHaveLength(200);
+    expect(terms.scope).toBe("view");
+    expect(terms.categories).toEqual(["find"]);
+    expect(terms.sources).toEqual([metaFixture.sources[0]?.key]);
+  });
+});
+
+describe("recordPath", () => {
+  it("encodes the id, so it can only ever name a record's page", () => {
+    expect(recordPath(101)).toBe("/r/101");
+    expect(recordPath("../account?x=1")).toBe("/r/..%2Faccount%3Fx%3D1");
   });
 });

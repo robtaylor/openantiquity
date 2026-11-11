@@ -19,6 +19,7 @@ import { LinkedFindings } from "./LinkedFindings.js";
 import { elsewherePath } from "./paths.js";
 import { SourceCredit } from "./SourceCredit.js";
 import { precisionText, recordShape, useRecordSelection } from "./shape.js";
+import { decodeEntities } from "./text.js";
 import "./records.css";
 
 /** The zoom a record is shown at when the map goes to it: close enough to see an earthwork, or a whole square. */
@@ -150,7 +151,8 @@ export function RecordPage() {
     retry: (failures, error) => failures < 1 && isTransient(error),
   });
   const record = query.data;
-  useDocumentTitle(record?.name ?? "Heritage record");
+  const name = record ? decodeEntities(record.name) : "Heritage record";
+  useDocumentTitle(name);
 
   // The open record is drawn on the map, and the map goes to it if it is out of sight.
   const flown = useRef<number | null>(null);
@@ -211,11 +213,7 @@ export function RecordPage() {
   }
 
   return (
-    <PanelFrame
-      panelKey={pathname}
-      title={record?.name ?? "Heritage record"}
-      subtitle={record ? "Heritage record" : undefined}
-    >
+    <PanelFrame panelKey={pathname} title={name} subtitle={record ? "Heritage record" : undefined}>
       {body}
     </PanelFrame>
   );

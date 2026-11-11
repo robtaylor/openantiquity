@@ -3,9 +3,16 @@ import { userEvent } from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useMapStore } from "../../map/store.js";
 import { type ApiRoutes, apiError, routeApi } from "../../test/apiRoutes.js";
-import { AVENUE_RECORD, GEO_RESULTS, GRIDREF_RESULT } from "../../test/fixtures/records.js";
+import {
+  AVENUE_RECORD,
+  GEO_RESULTS,
+  GRIDREF_RESULT,
+  NHLE_SOURCE,
+  OS_NAMES_SOURCE,
+} from "../../test/fixtures/records.js";
 import { json, mapReady, renderShell, setUpShellTests } from "../../test/shellHarness.js";
 import { useRecordSearch } from "../records/searchStore.js";
+import type { GeoResult } from "./api.js";
 import { SEARCH_DEBOUNCE_MS } from "./SearchBox.js";
 
 vi.mock("maplibre-gl", async () => {
@@ -25,6 +32,7 @@ beforeEach(() => {
       if (q.startsWith("su")) return json({ items: [GRIDREF_RESULT] });
       if (q === "slow") return apiError(503, "search_timeout", "That search took too long.");
       if (q === "broken") return apiError(500, "internal_error", "Oops");
+      if (q === "refused") return apiError(422, "validation_error", "q is too long");
       return json({ items: [] });
     },
     [`GET /records/${AVENUE_RECORD.id}`]: () => json(AVENUE_RECORD),
@@ -176,5 +184,77 @@ describe("the search box", () => {
     await user.keyboard("{Enter}");
     expect(await screen.findByRole("complementary", { name: "Search the records" })).toBeInTheDocument();
     expect(useRecordSearch.getState().q).toBe("barrow");
+  });
+
+  it("credits where the names come from, with each licence as a link", async () => {
+    const { user, box } = await openSearch();
+    await user.type(box, "ave");
+    await screen.findByRole("option", { name: /West Kennet Avenue/ });
+    const credits = screen.getByRole("list", { name: "Where these names come from" });
+    const lines = within(credits).getAllByRole("listitem");
+    // Each source once, though two places come from the gazetteer.
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toHaveTextContent(`${OS_NAMES_SOURCE.name} · ${OS_NAMES_SOURCE.licence}`);
+    expect(within(lines[0] as HTMLElement).getByRole("link", { name: OS_NAMES_SOURCE.licence })).toHaveAttribute(
+      "href",
+      OS_NAMES_SOURCE.licence_url,
+    );
+    expect(lines[1]).toHaveTextContent(`${NHLE_SOURCE.name} · ${NHLE_SOURCE.licence}`);
+  });
+
+  it("goes straight there on Enter only for a sure match, and otherwise shows the list", async () => {
+    const { user, box } = await openSearch();
+    const before = useMapStore.getState().camera;
+    // The first result, "Avebury", is only like "ave".
+    await user.type(box, "ave");
+    await screen.findByRole("option", { name: /West Kennet Avenue/ });
+    await user.keyboard("{Enter}");
+    expect(box).toHaveAttribute("aria-expanded", "true");
+    expect(box).toHaveValue("ave");
+    expect(useMapStore.getState().camera).toEqual(before);
+    // A place named exactly what was typed, whatever the case, is taken.
+    await user.clear(box);
+    await user.type(box, "avebury{Enter}");
+    await waitFor(() => expect(box).toHaveValue("Avebury"));
+    await waitFor(() => expect(box).toHaveAttribute("aria-expanded", "false"));
+    expect(useMapStore.getState().camera.zoom).toBe(14);
+  });
+
+  it("doesn't fly to a record that only shares a name, when Enter is pressed before the results arrive", async () => {
+    const lookalike: GeoResult = { ...(GEO_RESULTS[1] as GeoResult), label: "STONEHENGE", zoom: 18 };
+    api.on("GET /geo/search", () => json({ items: [lookalike] }));
+    const { user, box } = await openSearch();
+    await user.type(box, "Stonehenge{Enter}");
+    expect(await screen.findByRole("option", { name: /STONEHENGE/ })).toBeInTheDocument();
+    expect(box).toHaveAttribute("aria-expanded", "true");
+    expect(useMapStore.getState().camera.zoom).not.toBe(18);
+    expect(screen.queryByRole("complementary", { name: AVENUE_RECORD.name })).toBeNull();
+  });
+
+  it("stops at the server's limit, and asks for a shorter search, with no retry, when one is refused", async () => {
+    const { user, box } = await openSearch();
+    expect(box).toHaveAttribute("maxLength", "200");
+    await user.type(box, "refused");
+    expect(await screen.findByText(/more than can be searched for at once/)).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Try again" })).toBeNull();
+  });
+
+  it("shows a name's entities as the characters they stand for", async () => {
+    api.on("GET /geo/search", () =>
+      json({ items: [{ ...(GEO_RESULTS[1] as GeoResult), label: "Monitoring &amp; Recording" }] }),
+    );
+    const { user, box } = await openSearch();
+    await user.type(box, "monitoring");
+    expect(await screen.findByRole("option", { name: /Monitoring & Recording/ })).toBeInTheDocument();
+    expect(screen.queryByText(/&amp;/)).toBeNull();
+  });
+
+  it("goes nowhere for a record whose id is not a record id", async () => {
+    api.on("GET /geo/search", () => json({ items: [{ ...(GEO_RESULTS[1] as GeoResult), ref: "../account" }] }));
+    const { user, box } = await openSearch();
+    await user.type(box, "west");
+    await user.click(await screen.findByRole("option", { name: /West Kennet Avenue/ }));
+    expect(box).toHaveValue(AVENUE_RECORD.name);
+    expect(screen.queryByRole("complementary")).toBeNull();
   });
 });

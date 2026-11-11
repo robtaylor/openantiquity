@@ -1,6 +1,6 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { useLocation } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import type { Mock } from "vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RECORD_BASE_FILTERS, RECORD_LAYERS } from "../../map/overlayLayers.js";
@@ -79,10 +79,18 @@ beforeEach(() => {
   });
 });
 
-/** The router's address, for a test to read. */
+/** The router's address, for a test to read, and a way back through its history. */
 function Address() {
   const { pathname, search } = useLocation();
-  return <output data-testid="address">{`${pathname}${search}`}</output>;
+  const navigate = useNavigate();
+  return (
+    <>
+      <output data-testid="address">{`${pathname}${search}`}</output>
+      <button type="button" onClick={() => void navigate(-1)}>
+        Test: go back
+      </button>
+    </>
+  );
 }
 
 function outsideCalls(host: string): string[] {
@@ -367,7 +375,13 @@ describe("the record search panel", () => {
     const panel = await screen.findByRole("complementary", { name: "Search the records" });
     const first = await within(panel).findByRole("link", { name: AVENUE_RECORD.name });
     expect(first).toHaveAttribute("href", `/r/${AVENUE_RECORD.id}`);
-    expect(within(panel).getByText(`From ${FIND_RECORD.source.name}`)).toBeInTheDocument();
+    // Each result names its source, with the licence as a link to its terms.
+    const findCard = within(panel).getByRole("link", { name: FIND_RECORD.name }).closest("li") as HTMLElement;
+    expect(findCard).toHaveTextContent(`From ${FIND_RECORD.source.name} · ${FIND_RECORD.source.licence}`);
+    expect(within(findCard).getByRole("link", { name: FIND_RECORD.source.licence })).toHaveAttribute(
+      "href",
+      FIND_RECORD.source.licence_url,
+    );
     const call = api.callsTo("GET /records/search")[0];
     expect(call?.url.searchParams.get("bbox")).toMatch(/^-?\d+\.\d{4},/);
 
@@ -403,6 +417,79 @@ describe("the record search panel", () => {
     expect(await screen.findByText("No records match")).toBeInTheDocument();
     await user.type(screen.getByRole("searchbox", { name: "Words to look for" }), "slow");
     expect(await screen.findByText("That search took too long")).toBeInTheDocument();
+  });
+
+  it("asks for a shorter search, with nothing to retry, when the server refuses one", async () => {
+    api.on("GET /records/search", () => apiError(422, "validation_error", "q is too long"));
+    renderShell("/records");
+    await mapReady();
+    expect(await screen.findByText("That search can't be made")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(screen.getByRole("searchbox", { name: "Words to look for" })).toHaveAttribute("maxLength", "200");
+  });
+
+  it("shows a name's entities as the characters they stand for", async () => {
+    const [first] = RECORD_SEARCH_PAGE_1.items;
+    api.on("GET /records/search", () =>
+      json({ items: [{ ...first, name: "Archaeological Monitoring &amp; Recording" }], next_cursor: null }),
+    );
+    renderShell("/records");
+    await mapReady();
+    expect(await screen.findByRole("link", { name: "Archaeological Monitoring & Recording" })).toBeInTheDocument();
+  });
+
+  it("opens the search an address describes", async () => {
+    renderShell("/records?q=avenue&scope=everywhere&category=find&category=nonsense", <Address />);
+    await mapReady();
+    const panel = await screen.findByRole("complementary", { name: "Search the records" });
+    expect(within(panel).getByRole("searchbox", { name: "Words to look for" })).toHaveValue("avenue");
+    expect(within(panel).getByRole("radio", { name: "Everywhere" })).toBeChecked();
+    expect(within(panel).getByRole("button", { name: "Finds" })).toHaveAttribute("aria-pressed", "true");
+    // The kinds and sources the address narrows the search to are on show.
+    expect(
+      within(panel)
+        .getByText(/^Kinds and sources/)
+        .closest("details"),
+    ).toHaveAttribute("open");
+    await waitFor(() => {
+      const asked = api.callsTo("GET /records/search").at(-1)?.url.searchParams;
+      expect(asked?.get("q")).toBe("avenue");
+      expect(asked?.get("bbox")).toBeNull();
+      expect(asked?.getAll("category")).toEqual(["find"]);
+    });
+    // A kind the catalogue doesn't know is dropped from the address too.
+    await waitFor(() =>
+      expect(screen.getByTestId("address")).toHaveTextContent(/^\/records\?q=avenue&scope=everywhere&category=find$/),
+    );
+  });
+
+  it("keeps the search in the address: typing replaces it, other changes add to the history", async () => {
+    const user = userEvent.setup();
+    renderShell("/?panel=layers", <Address />);
+    await mapReady();
+    await user.click(await screen.findByRole("link", { name: "Search the records" }));
+    const panel = await screen.findByRole("complementary", { name: "Search the records" });
+    await user.type(within(panel).getByRole("searchbox", { name: "Words to look for" }), "ston");
+    await waitFor(() => expect(screen.getByTestId("address")).toHaveTextContent(/^\/records\?q=ston$/));
+    await user.click(within(panel).getByRole("button", { name: "Finds" }));
+    await waitFor(() => expect(screen.getByTestId("address")).toHaveTextContent(/^\/records\?q=ston&category=find$/));
+
+    // Back undoes the kind, and the words stay, as typing made no entries of its own.
+    await user.click(screen.getByRole("button", { name: "Test: go back" }));
+    await waitFor(() => expect(screen.getByTestId("address")).toHaveTextContent(/^\/records\?q=ston$/));
+    expect(within(panel).getByRole("button", { name: "Finds" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(panel).getByRole("searchbox", { name: "Words to look for" })).toHaveValue("ston");
+    await user.click(screen.getByRole("button", { name: "Test: go back" }));
+    await waitFor(() => expect(screen.getByTestId("address")).toHaveTextContent(/^\/\?panel=layers$/));
+  });
+
+  it("puts a search kept from earlier back in the address", async () => {
+    useRecordSearch.getState().set({ q: "barrow", scope: "everywhere" });
+    renderShell("/records", <Address />);
+    await mapReady();
+    await waitFor(() =>
+      expect(screen.getByTestId("address")).toHaveTextContent(/^\/records\?q=barrow&scope=everywhere$/),
+    );
   });
 });
 

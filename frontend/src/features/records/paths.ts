@@ -3,8 +3,9 @@
 export const RECORD_SEARCH_PATH = "/records";
 export const ELSEWHERE_PATH = "/elsewhere";
 
+/** A record's page. The id is encoded, so an id from elsewhere can never name another address. */
 export function recordPath(id: number | string): string {
-  return `/r/${id}`;
+  return `/r/${encodeURIComponent(String(id))}`;
 }
 
 /** The "open elsewhere" panel for a spot, to five decimal places (about a metre). */
