@@ -1,6 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
 import {
-  ABERDEENSHIRE_LIVE,
   ADS_LIVE,
   AVENUE_RECORD,
   DARTMOOR_LIVE,
@@ -8,6 +7,7 @@ import {
   HOSTILE_LIVE_ANSWER,
   HOSTILE_RECORD,
   WILTSHIRE_LIVE,
+  WOLVERHAMPTON_LIVE,
 } from "../src/test/fixtures/records.js";
 import { openMap } from "./support/app.js";
 import { expect, test } from "./support/fixtures.js";
@@ -313,7 +313,7 @@ test.describe("live sources", () => {
       await serveLiveHosts(page, log);
       const live = await openLiveSources(page);
       // A click, not check(): the failure can turn the switch off again before check() looks at it.
-      const refusing = live.getByRole("switch", { name: ABERDEENSHIRE_LIVE.name });
+      const refusing = live.getByRole("switch", { name: WOLVERHAMPTON_LIVE.name });
       await refusing.click();
       await expect(live.getByText(/didn't answer this browser/)).toBeVisible();
       await expect(refusing).not.toBeChecked();

@@ -425,6 +425,16 @@ describe("coverage", () => {
     expect(screen.queryByTestId("coverage-notice")).toBeNull();
   });
 
+  it("says the zoomed-out terrain is an overview once /meta says the overview is built", async () => {
+    const terrain = { fine_minzoom: 12, catalogue_tiles: 5877, overview: { built: true, built_at: null, tiles: 412 } };
+    api.on("GET /meta", () => json({ ...metaFixture, terrain }));
+    open("/#m=8/52.5/-1.5/0/0&v=composite");
+    await mapReady();
+    expect(await screen.findByTestId("coverage-notice")).toHaveTextContent(
+      "Zoomed out this far, the terrain is a coarse overview.",
+    );
+  });
+
   it("says plainly when the whole view has no data", async () => {
     api.on("GET /terrain/coverage", () => json({ type: "FeatureCollection", features: [] }));
     open("/#m=12/52.4/-3.9/0/0&v=composite");

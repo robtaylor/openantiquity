@@ -244,6 +244,7 @@ export const CONTEXT_LINKS: ContextLinks = {
       key: "he-apex-viewer",
       shows: "aerial_photographs",
       name: "Historic England Aerial Photo Explorer at a point",
+      title: "Historic England Aerial Photo Explorer",
       url: "https://historicengland.org.uk/images-books/archive/collections/aerial-photos/?lat=51.42860&lon=-1.85420",
       coverage: "england",
       verified: "not_tested",
@@ -253,6 +254,7 @@ export const CONTEXT_LINKS: ContextLinks = {
       key: "nls-explore-at-point",
       shows: "historic_maps",
       name: "NLS georeferenced maps viewer at a point",
+      title: "National Library of Scotland maps",
       url: "https://maps.nls.uk/geo/explore/#zoom=15&lat=51.42860&lon=-1.85420",
       coverage: "gb",
       verified: "yes",
@@ -262,6 +264,7 @@ export const CONTEXT_LINKS: ContextLinks = {
       key: "britain-from-above-map",
       shows: "aerial_photographs",
       name: "Britain from Above map at a point",
+      title: "Britain from Above",
       url: "https://britainfromabove.org.uk/en/map?lat=51.42860&lon=-1.85420",
       coverage: "uk",
       verified: "redirect_only",
@@ -271,6 +274,7 @@ export const CONTEXT_LINKS: ContextLinks = {
       key: "hostile-link",
       shows: "other",
       name: "<script>alert(1)</script>A link that isn't one",
+      title: "<script>alert(1)</script>A link that isn't one",
       url: "javascript:alert(1)",
       coverage: "wider",
       verified: "yes",
@@ -280,11 +284,14 @@ export const CONTEXT_LINKS: ContextLinks = {
 };
 
 /**
- * Entries of the live catalogue as the backend serves them. Wiltshire,
- * Aberdeenshire and Dartmoor credit the whole source in one line and link
- * each record, so they are offered. The others are not: the Archaeology Data
- * Service and Bristol credit each record differently, and one asks for a
- * single record rather than an area.
+ * Entries of the live catalogue, copied from the backend's
+ * `data/live_sources.json`. The server sends only the sources it shows
+ * (`shown`), each with the credit and licence to show. Wiltshire,
+ * Wolverhampton and Dartmoor are credited in one line for the whole source.
+ * Wikimedia Commons is credited file by file, from fields of each answer.
+ * The Archaeology Data Service and Bristol aren't shown, so the server
+ * leaves them out; they are here to prove the browser leaves them out too,
+ * as it does one that asks for a single record rather than an area.
  */
 export const WILTSHIRE_LIVE: LiveSourceOut = {
   key: "wiltshire-her-monuments",
@@ -294,7 +301,8 @@ export const WILTSHIRE_LIVE: LiveSourceOut = {
   endpoint: "https://maps.wiltshire.gov.uk/arcgis/rest/services/Website/Monuments/MapServer/2",
   query_pattern:
     "https://maps.wiltshire.gov.uk/arcgis/rest/services/Website/Monuments/MapServer/2/query?where=1%3D1&geometry={west},{south},{east},{north}&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=*&outSR=4326&f=geojson",
-  response_fields: "GeoJSON FeatureCollection; MonUID, PrefRef, RecordType, Name, MonType, Period, URL",
+  response_fields:
+    "GeoJSON FeatureCollection: features[].properties (fields listed in gotchas), features[].geometry in EPSG:4326 via outSR=4326; MonUID (MWInnn), PrefRef, RecordType, Name, MonType, Period, URL",
   licence: "Unstated. Service sits in the 'Website' folder, not Wiltshire's 'OpenData' folder.",
   attribution: "Wiltshire Council Archaeology Service (Wiltshire and Swindon HER)",
   link_template: "{URL}",
@@ -305,6 +313,13 @@ export const WILTSHIRE_LIVE: LiveSourceOut = {
   limit_param: "resultRecordCount",
   max_limit: 1000,
   min_zoom: 13,
+  shown: true,
+  credit: "Wiltshire Council Archaeology Service (Wiltshire and Swindon HER)",
+  licence_label: "No licence stated",
+  homepage: "https://services.wiltshire.gov.uk/HistoryEnvRecord/Home/Index",
+  credit_field: null,
+  licence_field: null,
+  preferred_credit_field: null,
 };
 
 export const ADS_LIVE: LiveSourceOut = {
@@ -314,19 +329,29 @@ export const ADS_LIVE: LiveSourceOut = {
   coverage: "uk",
   endpoint: "https://archaeologydataservice.ac.uk/data-catalogue-api/api/search",
   query_pattern:
-    "https://archaeologydataservice.ac.uk/data-catalogue-api/api/search?q=&size=50&page=1&bbox={north},{west},{south},{east}",
-  response_fields: "hits[].id; hits[].data.title.text; data.spatial[].geopoint {lat,lon}",
-  licence: "Per record (accessRights). ADS-published records: ADS Terms of Use and Access.",
+    "https://archaeologydataservice.ac.uk/data-catalogue-api/api/search?q=&page=1&bbox={north},{west},{south},{east}",
+  response_fields:
+    "total.value; hits[].id; hits[].data.title.text; data.description.text; data.resourceType; data.ariadneSubject[].prefLabel; data.spatial[].geopoint {lat,lon} or boundingbox/polygon WKT with centroid; data.landingPage (null for many inventory records); data.accessRights; data.publisher[]; data.originalId; data.otherId",
+  licence:
+    "Per record (accessRights). ADS-published records: ADS Terms of Use and Access (research, learning and teaching only; no supply to third parties). PAS: CC-BY. HES and Historic England wrecks: OGL v3. RCAHMW: CC BY NC ND. No API terms published.",
   attribution:
     "Original depositor, funder if different, and 'Archaeology Data Service (distributor)' with DOI or record link",
   link_template: "https://archaeologydataservice.ac.uk/data-catalogue/resource/{id}",
-  limits: null,
+  limits:
+    "No published limits; about 350 requests at 1 per second saw no throttling. 50 per page, 10,000-result window.",
   answer_format: "ads_search",
   name_field: "data.title.text",
   id_field: "id",
   limit_param: "size",
   max_limit: 50,
   min_zoom: 14,
+  shown: false,
+  credit: null,
+  licence_label: null,
+  homepage: "https://archaeologydataservice.ac.uk/",
+  credit_field: null,
+  licence_field: null,
+  preferred_credit_field: null,
 };
 
 export const BRISTOL_LIVE: LiveSourceOut = {
@@ -336,40 +361,56 @@ export const BRISTOL_LIVE: LiveSourceOut = {
   coverage: "england",
   endpoint: "https://maps2.bristol.gov.uk/server2/rest/services/ext/her_2026/MapServer/34",
   query_pattern:
-    "https://maps2.bristol.gov.uk/server2/rest/services/ext/her_2026/MapServer/34/query?where=1%3D1&geometry={west},{south},{east},{north}&geometryType=esriGeometryEnvelope&inSR=4326&outFields=*&outSR=4326&f=geojson",
-  response_fields: "GeoJSON FeatureCollection",
+    "https://maps2.bristol.gov.uk/server2/rest/services/ext/her_2026/MapServer/34/query?where=1%3D1&geometry={west},{south},{east},{north}&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=*&outSR=4326&f=geojson",
+  response_fields:
+    "GeoJSON FeatureCollection: features[].properties (fields listed in gotchas), features[].geometry in EPSG:4326 via outSR=4326",
   licence: "'GIS User Agreement for external use'",
   attribution: "Per source HER; service copyrightText 'Bristol City Council'",
   link_template: null,
-  limits: null,
+  limits: "maxRecordCount 1000 or 2000 per service; pagination supported",
   answer_format: "geojson",
   name_field: null,
   id_field: "PRN",
   limit_param: "resultRecordCount",
   max_limit: 1000,
   min_zoom: 13,
+  shown: false,
+  credit: null,
+  licence_label: null,
+  homepage: "https://maps.bristol.gov.uk/kyp/",
+  credit_field: null,
+  licence_field: null,
+  preferred_credit_field: null,
 };
 
-export const ABERDEENSHIRE_LIVE: LiveSourceOut = {
-  key: "aberdeenshire-her",
-  name: "Aberdeenshire Council HER (Aberdeenshire, Moray, Angus, Aberdeen City)",
-  publisher: "Aberdeenshire Council",
-  coverage: "scotland",
-  endpoint:
-    "https://services2.arcgis.com/VIguPNrHLCWUHr2B/arcgis/rest/services/Historic_Environment_Records/FeatureServer/1",
+export const WOLVERHAMPTON_LIVE: LiveSourceOut = {
+  key: "wolverhampton-walsall-her",
+  name: "Wolverhampton and Walsall HER",
+  publisher: "City of Wolverhampton Council",
+  coverage: "england",
+  endpoint: "https://services2.arcgis.com/5K9ykSNwoxdIgeYH/arcgis/rest/services/HER_points_260121/FeatureServer/0",
   query_pattern:
-    "https://services2.arcgis.com/VIguPNrHLCWUHr2B/arcgis/rest/services/Historic_Environment_Records/FeatureServer/1/query?where=1%3D1&geometry={west},{south},{east},{north}&geometryType=esriGeometryEnvelope&inSR=4326&outFields=*&outSR=4326&f=geojson",
-  response_fields: "GeoJSON FeatureCollection; HER_Refere, Name, Summary, Monument_U",
-  licence: "'Copyright is reserved... intended to be used for personal research only'",
-  attribution: "Aberdeenshire Council",
-  link_template: "{Monument_U}",
-  limits: "maxRecordCount 1000-2000",
+    "https://services2.arcgis.com/5K9ykSNwoxdIgeYH/arcgis/rest/services/HER_points_260121/FeatureServer/0/query?where=1%3D1&geometry={west},{south},{east},{north}&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=*&outSR=4326&f=geojson",
+  response_fields:
+    "GeoJSON FeatureCollection: features[].properties (fields listed in gotchas), features[].geometry in EPSG:4326 via outSR=4326; MonUID (MBLnnn), PrefRef, RecordType, Name, Summary, MonType, Period, Dates, More_info",
+  licence:
+    "Unstated on the ArcGIS items. The 2016 data.gov.uk record cites 'Public Sector End User Licence - INSPIRE' and has no resources.",
+  attribution: "City of Wolverhampton Council / Wolverhampton and Walsall HER",
+  link_template: "{More_info}",
+  limits: "maxRecordCount 2000",
   answer_format: "geojson",
   name_field: "Name",
-  id_field: "HER_Refere",
+  id_field: "MonUID",
   limit_param: "resultRecordCount",
-  max_limit: 1000,
+  max_limit: 2000,
   min_zoom: 13,
+  shown: true,
+  credit: "City of Wolverhampton Council / Wolverhampton and Walsall HER",
+  licence_label: "No licence stated",
+  homepage: null,
+  credit_field: null,
+  licence_field: null,
+  preferred_credit_field: null,
 };
 
 export const DARTMOOR_LIVE: LiveSourceOut = {
@@ -380,8 +421,9 @@ export const DARTMOOR_LIVE: LiveSourceOut = {
   endpoint:
     "https://services-eu1.arcgis.com/ygaMbwTQr2O0LMlb/arcgis/rest/services/Heritage_Environment_Record/FeatureServer/0",
   query_pattern:
-    "https://services-eu1.arcgis.com/ygaMbwTQr2O0LMlb/arcgis/rest/services/Heritage_Environment_Record/FeatureServer/0/query?where=1%3D1&geometry={west},{south},{east},{north}&geometryType=esriGeometryEnvelope&inSR=4326&outFields=*&outSR=4326&f=geojson",
-  response_fields: "GeoJSON FeatureCollection; monuid, name, montype",
+    "https://services-eu1.arcgis.com/ygaMbwTQr2O0LMlb/arcgis/rest/services/Heritage_Environment_Record/FeatureServer/0/query?where=1%3D1&geometry={west},{south},{east},{north}&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=*&outSR=4326&f=geojson",
+  response_fields:
+    "GeoJSON FeatureCollection: features[].properties (fields listed in gotchas), features[].geometry in EPSG:4326 via outSR=4326; monuid (MDVnnn), name, montype",
   licence: "Unstated. Item credits: '© Crown copyright and database rights 2026 OS AC0000823576'.",
   attribution: "Dartmoor National Park Authority; © Crown copyright and database rights 2026 OS AC0000823576",
   link_template:
@@ -393,6 +435,42 @@ export const DARTMOOR_LIVE: LiveSourceOut = {
   limit_param: "resultRecordCount",
   max_limit: 2000,
   min_zoom: 13,
+  shown: true,
+  credit: "Dartmoor National Park Authority; © Crown copyright and database rights 2026 OS AC0000823576",
+  licence_label: "No licence stated",
+  homepage: null,
+  credit_field: null,
+  licence_field: null,
+  preferred_credit_field: null,
+};
+
+export const COMMONS_LIVE: LiveSourceOut = {
+  key: "wikimedia-commons-geosearch",
+  name: "Wikimedia Commons geosearch (photos near here)",
+  publisher: "Wikimedia Foundation",
+  coverage: "wider",
+  endpoint: "https://commons.wikimedia.org/w/api.php",
+  query_pattern:
+    "https://commons.wikimedia.org/w/api.php?action=query&generator=geosearch&ggscoord={lat}|{lon}&ggsradius=1000&ggsnamespace=6&prop=coordinates|imageinfo&iiprop=url|extmetadata&iiurlwidth=320&iiextmetadatafilter=LicenseShortName|Artist|AttributionRequired|LicenseUrl|Attribution&format=json&origin=*",
+  response_fields:
+    "query.pages{}.title, coordinates[0].lat/lon, imageinfo[0].thumburl, imageinfo[0].extmetadata.Artist / LicenseShortName / AttributionRequired",
+  licence: "Per file (sampled files were CC BY-SA 2.0)",
+  attribution: "Per file, from extmetadata Artist, Attribution and LicenseShortName",
+  link_template: "https://commons.wikimedia.org/wiki/{title}",
+  limits: "ggsradius 10-10,000 m; 429 with retry-after: 8 on rapid anonymous bursts",
+  answer_format: "mediawiki_query",
+  name_field: "title",
+  id_field: "title",
+  limit_param: "ggslimit",
+  max_limit: 500,
+  min_zoom: 14,
+  shown: true,
+  credit: "Wikimedia Commons",
+  licence_label: "Licensed file by file",
+  homepage: "https://commons.wikimedia.org/",
+  credit_field: "imageinfo.0.extmetadata.Artist.value",
+  licence_field: "imageinfo.0.extmetadata.LicenseShortName.value",
+  preferred_credit_field: "imageinfo.0.extmetadata.Attribution.value",
 };
 
 /** Asks for one record by id, so it can't be asked about an area and is left out. */
@@ -411,7 +489,7 @@ export const LIVE_SOURCES: LiveSourceOut[] = [
   WILTSHIRE_LIVE,
   ADS_LIVE,
   BRISTOL_LIVE,
-  ABERDEENSHIRE_LIVE,
+  WOLVERHAMPTON_LIVE,
   DARTMOOR_LIVE,
   SINGLE_RECORD_LIVE,
 ];

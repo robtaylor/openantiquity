@@ -694,4 +694,5 @@ export const metaFixture: Meta = {
     sensitivity:
       "Some findings have their position hidden to protect the site, and are shown as a one-kilometre square. Protected findings are exact once you sign in. Restricted findings are exact only to their finder, trusted members, archaeologists and moderators.",
   },
+  terrain: { fine_minzoom: 13, catalogue_tiles: 5877, overview: { built: false, built_at: null, tiles: 0 } },
 };

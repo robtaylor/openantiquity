@@ -1,7 +1,8 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { useLocation } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { RECORD_LAYERS } from "../../map/overlayLayers.js";
 import { overlayTroubleKey, useMapStore, useViewAreaStore } from "../../map/store.js";
 import { FINDINGS_MIN_ZOOM } from "../../map/useFindingsOverlay.js";
 import { apiError, routeApi } from "../../test/apiRoutes.js";
@@ -20,7 +21,15 @@ const harness = setUpShellTests();
 
 function Address() {
   const location = useLocation();
-  return <output data-testid="address">{`${location.pathname}${location.search}`}</output>;
+  const navigate = useNavigate();
+  return (
+    <>
+      <output data-testid="address">{`${location.pathname}${location.search}`}</output>
+      <button type="button" onClick={() => void navigate(-1)}>
+        Test: go back
+      </button>
+    </>
+  );
 }
 
 beforeEach(() => {
@@ -126,7 +135,7 @@ describe("the Explore panel", () => {
     renderShell("/", <Address />);
     const map = await mapReady();
     const feature = findingsData.features.find((f) => f.properties.public_id === "tier-seen");
-    map.renderedFeatures = [
+    map.rendered = [
       {
         layer: { id: "findings-points" },
         properties: { public_id: "tier-seen" },
@@ -136,6 +145,45 @@ describe("the Explore panel", () => {
     act(() => map.click(500, 380));
     await waitFor(() => expect(screen.getByTestId("address")).toHaveTextContent("/f/tier-seen"));
     expect(useSelectedFinding.getState().selected?.point).toEqual(feature?.geometry.coordinates);
+  });
+
+  it("opens the finding, not the record, when a click lands on both", async () => {
+    // Findings sit above heritage records.
+    routeApi(harness.fetchMock());
+    renderShell("/", <Address />);
+    const map = await mapReady();
+    const feature = findingsData.features.find((f) => f.properties.public_id === "tier-seen");
+    map.rendered = [
+      {
+        layer: { id: "findings-points" },
+        properties: { public_id: "tier-seen" },
+        ...(feature ? { geometry: feature.geometry } : {}),
+      },
+      { id: 101, layer: { id: RECORD_LAYERS.squares }, properties: { id: 101, source: "nhle-scheduled" } },
+    ];
+    act(() => map.click(500, 380));
+    await waitFor(() => expect(screen.getByTestId("address")).toHaveTextContent("/f/tier-seen"));
+    // The record's page was never opened on the way: one step back is Explore.
+    await userEvent.setup().click(screen.getByRole("button", { name: "Test: go back" }));
+    await waitFor(() => expect(screen.getByTestId("address")).toHaveTextContent(/^\/$/));
+  });
+
+  it("leaves a click on a record to the record, and a click on a record while marking to the mark", async () => {
+    routeApi(harness.fetchMock());
+    renderShell("/", <Address />);
+    const map = await mapReady();
+    map.rendered = [
+      { id: 101, layer: { id: RECORD_LAYERS.squares }, properties: { id: 101, source: "nhle-scheduled" } },
+    ];
+    act(() => map.click(500, 380));
+    await waitFor(() => expect(screen.getByTestId("address")).toHaveTextContent("/r/101"));
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Mark a finding" }));
+    await waitFor(() => expect(screen.getByTestId("address")).toHaveTextContent(/^\/mark/));
+    act(() => map.click(500, 380));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.getByTestId("address")).toHaveTextContent(/^\/mark/);
   });
 
   it("pages when there are many", async () => {

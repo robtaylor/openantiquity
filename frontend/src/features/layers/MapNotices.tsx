@@ -13,13 +13,16 @@ import "./layers.css";
  * Says so on the map when a terrain view has nothing to draw, so a blank or
  * black area isn't read as flat ground: while the terrain is still being
  * prepared, where the whole view or some squares in it have no one-metre
- * elevation, and when zoomed out past where the server draws everything.
+ * elevation, and when zoomed out below the zoom `/meta` gives for the
+ * one-metre data, where the words depend on whether the national overview
+ * is built.
  */
 export function CoverageNotice({ meta }: { meta: Meta }) {
   const terrain = useMapStore((state) => isTerrainView(meta, state.mainView) || isTerrainView(meta, state.compareView));
   const summary = useCoverageStore((state) => state.summary);
   const preparing = useTerrainLoading((state) => state.preparing);
-  const zoomedOut = useViewAreaStore((state) => state.bounds !== null && state.zoom < TERRAIN_DETAIL_ZOOM);
+  const detailZoom = meta.terrain?.fine_minzoom ?? TERRAIN_DETAIL_ZOOM;
+  const zoomedOut = useViewAreaStore((state) => state.bounds !== null && state.zoom < detailZoom);
   if (!terrain) return null;
   let words: ReactNode;
   if (preparing) {
@@ -38,7 +41,10 @@ export function CoverageNotice({ meta }: { meta: Meta }) {
         "Shaded squares have no one-metre LIDAR, so they show nothing, not flat ground."
       );
   } else if (zoomedOut) {
-    words = "Zoomed out this far, only places someone has looked at closely are drawn. Zoom in to see the rest.";
+    words =
+      meta.terrain?.overview.built === true
+        ? "Zoomed out this far, the terrain is a coarse overview. Zoom in for the one-metre detail."
+        : "Zoomed out this far, only places someone has looked at closely are drawn. Zoom in to see the rest.";
   } else {
     return null;
   }

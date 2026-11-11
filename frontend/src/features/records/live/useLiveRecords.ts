@@ -135,7 +135,7 @@ export function useLiveRecords(shown: boolean): FeatureCollection {
     drawn.current = {
       signature,
       collection: features.length > 0 ? { type: "FeatureCollection", features } : NO_RECORDS,
-      credits: ready.map(([source]) => source.attribution).join("\n"),
+      credits: ready.map(([source]) => source.credit).join("\n"),
     };
   }
   const { collection, credits } = drawn.current;

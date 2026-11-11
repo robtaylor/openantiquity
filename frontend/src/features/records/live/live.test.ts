@@ -1,14 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  ABERDEENSHIRE_LIVE,
   ADS_LIVE,
   BRISTOL_LIVE,
+  COMMONS_LIVE,
   DARTMOOR_LIVE,
   HOSTILE_LIVE_ANSWER,
   LIVE_SOURCES,
   SINGLE_RECORD_LIVE,
   WILTSHIRE_LIVE,
   WILTSHIRE_RECORDED_ANSWER,
+  WOLVERHAMPTON_LIVE,
 } from "../../../test/fixtures/records.js";
 import {
   creditableOnScreen,
@@ -34,7 +35,7 @@ describe("the live catalogue", () => {
   it("keeps the sources that can be asked about an area or a point, and drops one that wants a record id", () => {
     expect(liveSourcesFrom(LIVE_SOURCES).map((item) => item.key)).toEqual([
       WILTSHIRE_LIVE.key,
-      ABERDEENSHIRE_LIVE.key,
+      WOLVERHAMPTON_LIVE.key,
       DARTMOOR_LIVE.key,
     ]);
     expect(liveSourceFrom(SINGLE_RECORD_LIVE)).toBeNull();
@@ -46,22 +47,63 @@ describe("the live catalogue", () => {
     expect(point?.query).toBe("point");
   });
 
-  it("leaves out a source it can't credit as its publisher asks: a credit per record, or no link to its records", () => {
-    // The Archaeology Data Service's terms and credit are per record, and Bristol's per contributing HER.
+  it("offers only a source the server shows with a credit, and a link to each record", () => {
+    // The server leaves these out; the browser does too, should an older server send them.
     expect(liveSourceFrom(ADS_LIVE)).toBeNull();
     expect(liveSourceFrom(BRISTOL_LIVE)).toBeNull();
-    expect(creditableOnScreen({ ...WILTSHIRE_LIVE, attribution: "Use the per-record Copyright field" })).toBe(false);
-    expect(creditableOnScreen({ ...WILTSHIRE_LIVE, attribution: "Per file, from extmetadata Artist" })).toBe(false);
-    expect(
-      creditableOnScreen({
-        ...WILTSHIRE_LIVE,
-        attribution: "© Exmoor National Park Authority; records containing NRHE data: 'This record includes ...'",
-      }),
-    ).toBe(false);
+    expect(creditableOnScreen({ ...WILTSHIRE_LIVE, shown: false })).toBe(false);
+    expect(creditableOnScreen({ ...WILTSHIRE_LIVE, credit: null })).toBe(false);
+    expect(creditableOnScreen({ ...WILTSHIRE_LIVE, credit: " " })).toBe(false);
     expect(creditableOnScreen({ ...WILTSHIRE_LIVE, link_template: null })).toBe(false);
     expect(creditableOnScreen({ ...WILTSHIRE_LIVE, link_template: " " })).toBe(false);
     expect(creditableOnScreen(WILTSHIRE_LIVE)).toBe(true);
-    expect(liveSourceFrom(DARTMOOR_LIVE)?.attribution).toBe(DARTMOOR_LIVE.attribution);
+    // The credit, licence and home page shown are the server's, never the research notes.
+    expect(source(DARTMOOR_LIVE)).toMatchObject({
+      credit: DARTMOOR_LIVE.credit,
+      licence: "No licence stated",
+      homepage: null,
+    });
+    expect(source(COMMONS_LIVE)).toMatchObject({
+      credit: "Wikimedia Commons",
+      creditField: "imageinfo.0.extmetadata.Artist.value",
+      preferredCreditField: "imageinfo.0.extmetadata.Attribution.value",
+      licenceField: "imageinfo.0.extmetadata.LicenseShortName.value",
+    });
+  });
+
+  it("reads each record's own credit and licence where the terms ask for them, as plain text", () => {
+    const page = (extmetadata: Record<string, unknown>) => ({
+      pageid: 1,
+      title: "File:Avebury.jpg",
+      coordinates: [{ lat: 51.43, lon: -1.85 }],
+      imageinfo: [{ extmetadata }],
+    });
+    const body = {
+      batchcomplete: "",
+      query: {
+        pages: {
+          "1": page({
+            Artist: { value: '<a href="https://example.org/u">A. Walker</a> <script>alert(1)</script>' },
+            LicenseShortName: { value: "CC BY-SA 4.0" },
+          }),
+          "2": {
+            ...page({ Artist: { value: "B. Painter" }, Attribution: { value: "Photo: B. Painter, 2019" } }),
+            pageid: 2,
+            title: "File:Silbury.jpg",
+          },
+        },
+      },
+    };
+    const { records } = parseLiveAnswer(body, source(COMMONS_LIVE));
+    expect(records.map(({ credit, licence }) => ({ credit, licence }))).toEqual([
+      { credit: "A. Walker", licence: "CC BY-SA 4.0" },
+      { credit: "Photo: B. Painter, 2019", licence: null },
+    ]);
+    // A source credited as a whole has nothing per record.
+    expect(parseLiveAnswer(WILTSHIRE_RECORDED_ANSWER, source()).records[0]).toMatchObject({
+      credit: null,
+      licence: null,
+    });
   });
 
   it("refuses an address that isn't https, or that points at this site", () => {
@@ -129,6 +171,8 @@ describe("reading a live answer", () => {
       lon: -1.8587010167953852,
       lat: 51.42754558450793,
       url: "http://history.wiltshire.gov.uk/smr/getsmr.php?id=7753",
+      credit: null,
+      licence: null,
     });
   });
 
@@ -163,6 +207,8 @@ describe("reading a live answer", () => {
         lon: -1.8,
         lat: 51.4,
         url: "https://archaeologydataservice.ac.uk/data-catalogue/resource/abc",
+        credit: null,
+        licence: null,
       },
     ]);
     const wiki = parseLiveAnswer(

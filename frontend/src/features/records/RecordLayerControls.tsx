@@ -135,6 +135,32 @@ function statusLine(source: LiveSource, state: LiveStatus, on: boolean, zoom: nu
   return `From ${source.publisher}.`;
 }
 
+/** Text with any full stop at its end taken off, so a sentence can be built round it. */
+function sentence(value: string): string {
+  return value.replace(/\.\s*$/, "");
+}
+
+/** The credit and licence the server gives, and where each record leads, linking the publisher's home page where there is one. */
+function LiveSourceCredit({ source }: { source: LiveSource }) {
+  const home = safeHref(source.homepage);
+  const publisher = home ? (
+    <a href={home} target="_blank" rel="noopener noreferrer external">
+      {source.publisher}
+    </a>
+  ) : (
+    source.publisher
+  );
+  return (
+    <p className="fc-live-source__credit">
+      {sentence(source.credit)}.{source.licence ? ` ${sentence(source.licence)}.` : null}
+      {source.creditField
+        ? " Each record shows its own credit, and links to its page at "
+        : " Each record links to its page at "}
+      {publisher}.
+    </p>
+  );
+}
+
 function LiveSourceRow({ source }: { source: LiveSource }) {
   const on = useLiveStore((state) => Boolean(state.on[source.key]));
   const status = useLiveStore((state) => liveStatus(state.status, source.key));
@@ -159,11 +185,7 @@ function LiveSourceRow({ source }: { source: LiveSource }) {
         checked={on}
         onChange={(next) => setOn(source.key, next)}
       />
-      {on ? (
-        <p className="fc-live-source__credit">
-          {source.attribution.replace(/\.\s*$/, "")}. Each record links to its page at {source.publisher}.
-        </p>
-      ) : null}
+      {on ? <LiveSourceCredit source={source} /> : null}
       {records.length > 0 ? (
         <ul className="fc-live-source__records" ref={list} aria-label={`Records from ${source.name}`}>
           {records.map((record) => {
@@ -172,7 +194,14 @@ function LiveSourceRow({ source }: { source: LiveSource }) {
             return (
               <li key={record.id} data-picked={isPicked} tabIndex={isPicked ? -1 : undefined}>
                 <span className="fc-record-swatch fc-record-swatch--live" aria-hidden="true" />
-                <span className="fc-live-source__name">{record.name}</span>
+                <span className="fc-live-source__name">
+                  {record.name}
+                  {record.credit || record.licence ? (
+                    <span className="fc-live-source__record-credit">
+                      {[record.credit, record.licence].filter(Boolean).join(", ")}
+                    </span>
+                  ) : null}
+                </span>
                 {href ? (
                   <a href={href} target="_blank" rel="noopener noreferrer external" className="fc-live-source__link">
                     <ExternalLink size={14} aria-hidden />

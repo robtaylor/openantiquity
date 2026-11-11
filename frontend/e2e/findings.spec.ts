@@ -117,7 +117,7 @@ test("marks a finding by pointer and keyboard, saves it at once, and opens its p
     feature_class: "linear",
     period: "unknown",
     title: expect.stringMatching(/^Linear bank or ditch in SU \d{2} \d{2}/),
-    view_state: { layer: "composite", zoom: 15, bearing: 0, pitch: 0, sun_azimuth: 315, sun_altitude: 25 },
+    view_state: { layer: "composite", zoom: 15, bearing: 0, pitch: 0, sun_azimuth: 315, sun_altitude: 20 },
   });
   await expect(page.getByRole("img", { name: /saving$/ })).toHaveCount(0);
 

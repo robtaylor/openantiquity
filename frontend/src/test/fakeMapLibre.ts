@@ -146,28 +146,6 @@ export class FakeMap {
     }),
     isEnabled: () => this.doubleClickZoom.enabled,
   };
-  /** Screen pixels for a position: Web Mercator at 512 px a tile, with the centre at (512, 384). Near enough for tests. */
-  project([lng, lat]: [number, number]): { x: number; y: number } {
-    const scale = 512 * 2 ** this.camera.zoom;
-    const mercY = (value: number) => Math.log(Math.tan(Math.PI / 4 + (value * Math.PI) / 360)) / (2 * Math.PI);
-    return {
-      x: 512 + ((lng - this.camera.lng) / 360) * scale,
-      y: 384 - (mercY(lat) - mercY(this.camera.lat)) * scale,
-    };
-  }
-
-  /** The inverse of `project`. */
-  unproject(point: { x: number; y: number } | [number, number]): { lng: number; lat: number } {
-    const [x, y] = Array.isArray(point) ? point : [point.x, point.y];
-    const scale = 512 * 2 ** this.camera.zoom;
-    const mercY = (value: number) => Math.log(Math.tan(Math.PI / 4 + (value * Math.PI) / 360)) / (2 * Math.PI);
-    const merc = mercY(this.camera.lat) + (384 - y) / scale;
-    return {
-      lng: this.camera.lng + ((x - 512) / scale) * 360,
-      lat: ((2 * Math.atan(Math.exp(merc * 2 * Math.PI)) - Math.PI / 2) * 180) / Math.PI,
-    };
-  }
-
   /** Called by MapLibre when the style asks for an image the map does not have. */
   missingImageResolver: ((id: string) => void | Promise<void>) | null = null;
   setMissingStyleImageResolver = vi.fn((resolver: ((id: string) => void | Promise<void>) | null) => {
@@ -348,7 +326,12 @@ export class FakeMap {
    * What the map has drawn, for `queryRenderedFeatures` to answer from. It
    * filters by the layers asked for and ignores the point. A test sets it.
    */
-  rendered: Array<{ id?: string | number; properties: Record<string, unknown>; layer: { id: string } }> = [];
+  rendered: Array<{
+    id?: string | number;
+    properties: Record<string, unknown>;
+    layer: { id: string };
+    geometry?: { type: string; coordinates: unknown };
+  }> = [];
   queryRenderedFeatures = vi.fn((first?: unknown, second?: unknown) => {
     this.requireStyle();
     // Called as (options) for the whole screen, or (point, options) for one spot.
@@ -439,14 +422,6 @@ export class FakeMap {
 
   getContainer(): HTMLElement {
     return this.options.container as HTMLElement;
-  }
-
-  /** What `queryRenderedFeatures` answers. A test sets it to stand for the markers under the pointer. */
-  renderedFeatures: Array<{ layer?: { id: string }; properties: Record<string, unknown> }> = [];
-
-  queryRenderedFeatures(): Array<{ layer?: { id: string }; properties: Record<string, unknown> }> {
-    this.requireStyle();
-    return this.renderedFeatures;
   }
 
   /** Click the map at a point on the canvas, as MapLibre reports a click that was not a drag. */

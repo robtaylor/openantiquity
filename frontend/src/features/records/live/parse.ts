@@ -25,6 +25,15 @@ export interface LiveReading {
   /** A dotted path, such as "data.title.text", within one record. Null when the source names none. */
   nameField: string | null;
   idField: string | null;
+  /**
+   * Where the terms ask for a credit or licence taken from each record, the
+   * dotted paths to it. `preferredCreditField` is shown in place of
+   * `creditField` when a record has it. Absent or null when the source is
+   * credited as a whole.
+   */
+  creditField?: string | null;
+  preferredCreditField?: string | null;
+  licenceField?: string | null;
   linkTemplate: string | null;
 }
 
@@ -36,6 +45,9 @@ export interface LiveRecord {
   lat: number;
   /** The record's page on the publisher's site, when the catalogue says how to build it. */
   url: string | null;
+  /** The record's own credit and licence, as plain text, where the source's terms ask for them. */
+  credit: string | null;
+  licence: string | null;
 }
 
 export interface LiveAnswer {
@@ -65,15 +77,40 @@ function text(value: unknown): string | null {
   return isFiniteNumber(value) ? String(value) : null;
 }
 
-/** The value at a dotted path such as "data.title.text", as text, or null. */
-export function fieldAt(record: Props, path: string | null): string | null {
-  if (!path) return null;
+/** The value at a dotted path such as "data.title.text" or "imageinfo.0.extmetadata", or undefined. */
+function valueAt(record: Props, path: string | null | undefined): unknown {
+  if (!path) return undefined;
   let value: unknown = record;
   for (const part of path.split(".")) {
-    if (!isRecord(value)) return null;
-    value = value[part];
+    // A part that is a number indexes a list.
+    if (Array.isArray(value) && /^\d+$/.test(part)) value = value[Number(part)];
+    else if (isRecord(value)) value = value[part];
+    else return undefined;
   }
-  return text(value);
+  return value;
+}
+
+/** The value at a dotted path, as text, or null. */
+export function fieldAt(record: Props, path: string | null | undefined): string | null {
+  return text(valueAt(record, path));
+}
+
+/**
+ * A credit or licence from a record, which some sources write as HTML (the
+ * Commons' `extmetadata` does), as plain text. Parsing it into an inert
+ * document runs nothing and fetches nothing, and only its text is kept.
+ */
+function creditAt(record: Props, path: string | null | undefined): string | null {
+  const value = fieldAt(record, path);
+  if (value === null) return null;
+  const plain = value.includes("<") ? htmlText(value) : value;
+  return plain === null ? null : cut(plain);
+}
+
+function htmlText(html: string): string | null {
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  for (const element of parsed.querySelectorAll("script, style")) element.remove();
+  return text(parsed.body.textContent);
 }
 
 function cut(value: string): string {
@@ -256,6 +293,8 @@ export function parseLiveAnswer(body: unknown, reading: LiveReading, cap = MAX_L
       lon: candidate.position[0],
       lat: candidate.position[1],
       url: fillLinkTemplate(reading.linkTemplate, candidate.props),
+      credit: creditAt(candidate.props, reading.preferredCreditField) ?? creditAt(candidate.props, reading.creditField),
+      licence: creditAt(candidate.props, reading.licenceField),
     });
   }
   return { records, truncated: heldBack || drawable > records.length };

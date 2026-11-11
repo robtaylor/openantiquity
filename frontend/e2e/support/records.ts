@@ -103,7 +103,7 @@ export async function serveRecordsApi(page: Page): Promise<RecordsLog> {
 
 /**
  * The live sources' own hosts. Wiltshire replays its recorded answer and
- * allows this site to read it. Aberdeenshire's request is refused. A browser tells a page about a cross-origin refusal only as a
+ * allows this site to read it. Wolverhampton's request is refused. A browser tells a page about a cross-origin refusal only as a
  * failed fetch with no response, the same as a dropped connection, and an
  * answer Playwright fulfils is not checked for CORS headers, so the request
  * is failed outright: from the page that is exactly what a refusal looks

@@ -251,6 +251,12 @@
   overflow-wrap: anywhere;
 }
 
+.fc-live-source__record-credit {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .fc-live-source__link {
   display: inline-flex;
   align-items: center;

@@ -1,4 +1,4 @@
-import { apiFetch, apiUrl, type QueryValue } from "../../api/client.js";
+import { apiFetch, apiUrl, type QueryParam } from "../../api/client.js";
 import type { components } from "../../api/schema.js";
 
 /**
@@ -81,7 +81,7 @@ function bboxParam(bbox: Bbox): string {
   return bbox.map((value) => value.toFixed(4)).join(",");
 }
 
-function searchParams(query: RecordQuery): Record<string, QueryValue> {
+function searchParams(query: RecordQuery): Record<string, QueryParam> {
   return {
     q: query.q.trim() || undefined,
     source: query.sources,

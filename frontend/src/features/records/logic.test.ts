@@ -12,7 +12,7 @@ import { metaFixture } from "../../test/fixtures/meta.js";
 import { AVENUE_RECORD, CONTEXT_LINKS, FIND_RECORD } from "../../test/fixtures/records.js";
 import { parseRecordId, recordsDownloadUrl } from "./api.js";
 import { recordLayerFilter } from "./filters.js";
-import { coverageLabel, groupLinks, linkTitle } from "./OpenElsewherePanel.js";
+import { coverageLabel, groupLinks } from "./OpenElsewherePanel.js";
 import { elsewherePath, recordPath } from "./paths.js";
 import { searchFromParams, searchToParams } from "./searchAddress.js";
 import { impreciseSquares, precisionText, recordShape } from "./shape.js";
@@ -232,15 +232,6 @@ describe("coverageLabel", () => {
   it("names the area a viewer covers, or keeps a name it has no words for", () => {
     expect(coverageLabel("uk")).toBe("The whole UK");
     expect(coverageLabel("isle_of_man")).toBe("isle_of_man");
-  });
-});
-
-describe("linkTitle", () => {
-  it('leaves off the catalogue\'s "at a point", and nothing else', () => {
-    expect(linkTitle("NCAP Air Photo Finder at a point")).toBe("NCAP Air Photo Finder");
-    expect(linkTitle("Canmore map at the spot")).toBe("Canmore map");
-    expect(linkTitle("A point of view")).toBe("A point of view");
-    expect(linkTitle("at a point")).toBe("at a point");
   });
 });
 

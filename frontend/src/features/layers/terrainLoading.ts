@@ -22,7 +22,9 @@ export const PREPARING_AFTER_MS = 1500;
  * Terrain tiles from this zoom up are drawn from the one-metre mirror, and
  * fetched when missing. Below it they come from the national 10 m composite
  * or, until that is built, only from tiles already mirrored, so much of a
- * zoomed-out view can be blank (docs/ARCHITECTURE.md, Terrain).
+ * zoomed-out view can be blank (docs/ARCHITECTURE.md, Terrain). `/meta`
+ * says this as `terrain.fine_minzoom`; this is the fallback for a server that
+ * doesn't.
  */
 export const TERRAIN_DETAIL_ZOOM = 13;
 

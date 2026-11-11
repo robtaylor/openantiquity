@@ -60,14 +60,6 @@ function isChecked(link: Pick<ContextLink, "verified">): boolean {
   return link.verified === "yes";
 }
 
-/**
- * A viewer's name as a person would say it. The catalogue names each link by
- * what it does, "… at a point", which every link here does, so that is left off.
- */
-export function linkTitle(name: string): string {
-  return name.replace(/\s+at (a|the) (point|spot)\s*$/i, "").trim() || name;
-}
-
 /** One sentence about the links nobody could check, or nothing when every one was checked. */
 function uncheckedNote(unchecked: number, total: number): string {
   if (unchecked === 0) return "";
@@ -119,7 +111,7 @@ function LinkItem({ link, tagged }: { link: ContextLink; tagged: boolean }) {
     <li className="fc-elsewhere__link">
       <a href={href} target="_blank" rel="noopener noreferrer external">
         <ExternalLink size={16} aria-hidden />
-        <span className="fc-elsewhere__name">{linkTitle(link.name)}</span>
+        <span className="fc-elsewhere__name">{link.title}</span>
         <span className="fc-elsewhere__coverage">{coverageLabel(link.coverage)}</span>
         {tagged && !isChecked(link) ? <span className="fc-elsewhere__tag">unchecked</span> : null}
         <span className="fc-visually-hidden"> (opens in a new tab)</span>

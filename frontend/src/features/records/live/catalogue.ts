@@ -8,8 +8,7 @@ import { type LiveReading, MAX_LIVE_RECORDS, READABLE_FORMATS } from "./parse.js
  * request for one area, and leaves out the entries this browser can't use:
  * ones that ask for a single record rather than an area, ones whose address
  * isn't a secure web address on someone else's server, ones whose answer
- * it has no reader for, and ones it can't credit as their publisher asks
- * (see `creditableOnScreen`).
+ * it has no reader for, and ones it can't credit (see `creditableOnScreen`).
  */
 
 /**
@@ -23,8 +22,12 @@ export interface LiveSource extends LiveReading {
   key: string;
   name: string;
   publisher: string;
-  /** The credit to show beside its records. Never one that varies by record: see `creditableOnScreen`. */
-  attribution: string;
+  /** The credit to show beside its records, as the server gives it. */
+  credit: string;
+  /** The licence to show with the credit, as the server gives it. */
+  licence: string | null;
+  /** The publisher's home page, where the catalogue names one. */
+  homepage: string | null;
   coverage: string;
   /** "area" fills a box, "point" the centre of the view. */
   query: "area" | "point";
@@ -67,30 +70,19 @@ function queryKind(pattern: string): LiveSource["query"] | null {
 }
 
 /**
- * Words in a catalogue entry's attribution or licence that say the credit
- * or the terms change from record to record: "per record", "per-record
- * Copyright field", "per source HER", "per file", or a clause for "records
- * containing" some other body's data.
- */
-const PER_RECORD = /\bper[- ](record|file|source)\b|\brecords? containing\b/i;
-
-/**
  * True when a live source's records can be shown with the credit Decision
- * 0007 asks for, the publisher's name and a link, from what the catalogue
- * gives. The catalogue's attribution and licence are research notes in
- * words, with no machine-readable field naming where a per-record credit
- * is kept, so a source whose credit or terms vary by record can't be
- * credited properly and isn't offered. Nor is one with no link to its
- * records' pages.
+ * 0007 asks for: the server marks it shown and gives the credit to show, and
+ * the catalogue says how to link each record to its page. The server leaves
+ * out every source it doesn't show, so this only guards against an older or
+ * a misconfigured server.
  */
-export function creditableOnScreen(item: Pick<LiveSourceOut, "attribution" | "licence" | "link_template">): boolean {
-  if (!item.link_template?.trim()) return false;
-  return !PER_RECORD.test(item.attribution) && !PER_RECORD.test(item.licence);
+export function creditableOnScreen(item: Pick<LiveSourceOut, "shown" | "credit" | "link_template">): boolean {
+  return item.shown && Boolean(item.credit?.trim()) && Boolean(item.link_template?.trim());
 }
 
 /** The catalogue entry as a source this browser can ask, or null when it can't. */
 export function liveSourceFrom(item: LiveSourceOut): LiveSource | null {
-  if (!creditableOnScreen(item) || item.link_template === null) return null;
+  if (!creditableOnScreen(item) || item.credit === null || item.link_template === null) return null;
   if (!READABLE_FORMATS.has(item.answer_format)) return null;
   const query = queryKind(item.query_pattern);
   if (query === null) return null;
@@ -108,13 +100,18 @@ export function liveSourceFrom(item: LiveSourceOut): LiveSource | null {
     key: item.key,
     name: item.name,
     publisher: item.publisher,
-    attribution: item.attribution,
+    credit: item.credit,
+    licence: item.licence_label,
+    homepage: item.homepage,
     coverage: item.coverage,
     query,
     pattern: item.query_pattern,
     format: item.answer_format,
     nameField: item.name_field,
     idField: item.id_field,
+    creditField: item.credit_field,
+    preferredCreditField: item.preferred_credit_field,
+    licenceField: item.licence_field,
     linkTemplate: item.link_template,
     limitParam: item.limit_param,
     maxLimit: item.max_limit,

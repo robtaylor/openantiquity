@@ -10,7 +10,6 @@ import { type ApiRoutes, apiError, routeApi } from "../../test/apiRoutes.js";
 import type { FakeMap } from "../../test/fakeMapLibre.js";
 import { metaFixture } from "../../test/fixtures/meta.js";
 import {
-  ABERDEENSHIRE_LIVE,
   ADS_LIVE,
   AVENUE_LINKED_FINDINGS,
   AVENUE_RECORD,
@@ -26,6 +25,7 @@ import {
   RECORDS_BY_ID,
   WILTSHIRE_LIVE,
   WILTSHIRE_RECORDED_ANSWER,
+  WOLVERHAMPTON_LIVE,
 } from "../../test/fixtures/records.js";
 import { json, mapReady, metaResponse, renderShell, setUpShellTests } from "../../test/shellHarness.js";
 import { useRecordFilters } from "./filters.js";
@@ -336,7 +336,7 @@ describe("records on the map", () => {
       }),
     );
     const panel = await screen.findByRole("complementary", { name: "Open elsewhere" });
-    const link = await within(panel).findByRole("link", { name: /NLS georeferenced maps viewer/ });
+    const link = await within(panel).findByRole("link", { name: /National Library of Scotland maps/ });
     expect(link).toHaveAttribute("target", "_blank");
     expect(link.getAttribute("rel")?.split(" ")).toEqual(expect.arrayContaining(["noopener", "noreferrer"]));
     expect(api.callsTo("GET /context/links")[0]?.url.searchParams.get("lon")).toBe("-1.85421");
@@ -361,7 +361,7 @@ describe("open elsewhere", () => {
     );
     renderShell("/elsewhere?lon=-1.8542&lat=51.4286");
     const panel = await screen.findByRole("complementary", { name: "Open elsewhere" });
-    await within(panel).findByRole("link", { name: /NLS georeferenced maps viewer/ });
+    await within(panel).findByRole("link", { name: /National Library of Scotland maps/ });
     expect(within(panel).queryByText("unchecked", { exact: true })).toBeNull();
     expect(within(panel).getByText(/haven't been able to check these links/)).toBeInTheDocument();
   });
@@ -526,7 +526,14 @@ describe("live sources", () => {
     expect(screen.getAllByText(new RegExp(WILTSHIRE_LIVE.attribution.replace(/[()]/g, "\\$&"))).length).toBeGreaterThan(
       0,
     );
-    expect(screen.getByText(/Each record links to its page at Wiltshire Council\./)).toBeInTheDocument();
+    const credit = screen.getByText(/Each record links to its page at/);
+    expect(credit).toHaveTextContent(
+      `${WILTSHIRE_LIVE.credit}. No licence stated. Each record links to its page at Wiltshire Council.`,
+    );
+    expect(within(credit).getByRole("link", { name: "Wiltshire Council" })).toHaveAttribute(
+      "href",
+      WILTSHIRE_LIVE.homepage,
+    );
     expect(screen.queryByText(new RegExp(WILTSHIRE_LIVE.licence.slice(0, 20)))).toBeNull();
     // Nothing the source sent went to our server.
     for (const call of api.calls) expect(JSON.stringify([call.url.href, call.body])).not.toContain("MWI");
@@ -536,7 +543,7 @@ describe("live sources", () => {
     outside.set("services2.arcgis.com", () => Promise.reject(new TypeError("Failed to fetch")));
     outside.set("services-eu1.arcgis.com", () => new Response("Server error", { status: 500 }));
     const { user } = await openLive();
-    const refusing = await screen.findByRole("switch", { name: ABERDEENSHIRE_LIVE.name });
+    const refusing = await screen.findByRole("switch", { name: WOLVERHAMPTON_LIVE.name });
     await user.click(refusing);
     await waitFor(() => expect(refusing).not.toBeChecked());
     expect(

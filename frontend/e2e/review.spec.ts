@@ -103,7 +103,7 @@ test("the keys 1, 2 and 3 answer, and do nothing while a text field has focus", 
   await expect(note).toHaveValue("3 banks");
   await expect(look.getByRole("button", { name: "I can see it", exact: true })).toHaveAttribute("aria-pressed", "true");
   // The search box is a text field too.
-  await page.getByRole("searchbox", { name: /Search for a place/ }).click();
+  await page.getByRole("combobox", { name: /Search for a place/ }).click();
   await page.keyboard.press("3");
   await expect(look.getByRole("button", { name: "I can't see it", exact: true })).toHaveAttribute(
     "aria-pressed",

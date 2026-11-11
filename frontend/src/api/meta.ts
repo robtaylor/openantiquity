@@ -235,6 +235,19 @@ export interface Meta {
     /** Where to report an object found in the ground, by nation (Decision 0005). `url` is null where there is no one address. */
     find_reporting: Record<string, FindReporting>;
   };
+  /**
+   * Facts for the map's terrain notices: the zoom from which tiles are drawn
+   * from the one-metre data, and whether the national overview below it is
+   * built (null when its manifest can't be read). Typed as possibly absent
+   * because `parseMeta` doesn't check it, and the map works without it.
+   */
+  terrain?: TerrainFacts;
+}
+
+export interface TerrainFacts {
+  fine_minzoom: number;
+  catalogue_tiles: number;
+  overview: { built: boolean | null; built_at: string | null; tiles: number };
 }
 
 function check(condition: boolean, message: string): asserts condition {
