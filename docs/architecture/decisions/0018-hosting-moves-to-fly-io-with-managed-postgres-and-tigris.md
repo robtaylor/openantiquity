@@ -26,11 +26,12 @@ The spike [hosting-on-fly-io](spikes/hosting-on-fly-io.md) tested the parts of t
 2. The database was Fly Managed Postgres, PostgreSQL 17 with PostGIS. The application connected to its direct address, never the pooled one Fly attaches by default, because the event stream's `LISTEN` and the ingest runner's session lock need a connection of their own. PostGIS was enabled through Fly before the schema job ran.
 3. Elevation, the tile cache and photos were kept in Tigris buckets through the S3 interface. The mirror's three conditional writes (create only if absent, replace only if unchanged, delete only if unchanged) were kept as they were, on the S3 preconditions that the spike proved Tigris honours.
 4. Idle machines were suspended, not stopped: a suspended machine answered in half a second and a stopped one in twenty.
-5. The deployment was described by Fly's own configuration files and small tested scripts in `infra/`, as `infra/dns.py` already was. Terraform was removed.
-6. Defra's supply login was given only to the app that copies elevation, never to the public service.
-7. The elevation already converted into Google Cloud Storage was copied across once the copy there had finished, in preference to asking Defra for the country a second time.
-8. Fly had no billing alert, so the deployment supplied its own check of the month's spend.
-9. Google Cloud stayed as it was, held back, until the service on Fly had passed its checks. The project was then taken down.
+5. The visitor's address, which rate limits and bans rest on, was taken from the `Fly-Client-IP` header that Fly's proxy sets and a visitor can't forge.
+6. The deployment was described by Fly's own configuration files and small tested scripts in `infra/`, as `infra/dns.py` already was. Terraform was removed.
+7. Defra's supply login was given only to the app that copies elevation, never to the public service.
+8. The elevation already converted into Google Cloud Storage was copied across once the copy there had finished, in preference to asking Defra for the country a second time.
+9. Fly had no billing alert, so the deployment supplied its own check of the month's spend.
+10. Google Cloud stayed as it was, held back, until the service on Fly had passed its checks. The project was then taken down.
 
 ## Alternatives considered
 
