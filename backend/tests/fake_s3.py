@@ -252,7 +252,7 @@ def _handler(s3: FakeS3) -> type[http.server.BaseHTTPRequestHandler]:
     return Handler
 
 
-class _QuickServer(http.server.ThreadingHTTPServer):
+class QuickServer(http.server.ThreadingHTTPServer):
     daemon_threads = True
 
     def server_bind(self) -> None:
@@ -276,7 +276,7 @@ def serve_for_gdal(s3: FakeS3, monkeypatch: pytest.MonkeyPatch) -> Iterator[str]
     Only the platform's variables are set here. The S3 folders made inside
     the block turn them into GDAL's options themselves.
     """
-    server = _QuickServer(("127.0.0.1", 0), _handler(s3))
+    server = QuickServer(("127.0.0.1", 0), _handler(s3))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     endpoint = f"http://127.0.0.1:{server.server_address[1]}"

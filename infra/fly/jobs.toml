@@ -1,0 +1,38 @@
+# The jobs app on Fly.io, read by infra/fly_jobs.py. This is not a fly.toml:
+# never pass it to `fly deploy`, which would start the web server in the app
+# that holds Defra's login. The jobs are machines that `fly machine run`
+# starts and that exit when they are done (infra/README.md, "The jobs").
+
+app = "openantiquity-jobs"
+region = "lhr"
+# The web app's deploy pushes the image here, labelled with its commit
+# (`fly deploy --image-label <commit>`). The jobs run the same image.
+image_repository = "registry.fly.io/openantiquity"
+
+# The volume that keeps ingest downloads between runs of the hourly machine,
+# so a run can ask the publisher whether a file changed instead of fetching it
+# again. Made once with `fly volumes create` (infra/README.md).
+[schedule]
+volume = "jobs_var"
+mount = "/data"
+
+# Every non-secret setting, given to each job machine as --env. Secrets are
+# the app's own (infra/fly-secrets.sh): FIELDCLUB_SECRET_KEY, DATABASE_URL from
+# Managed Postgres, the Tigris key for the elevation bucket, and Defra's login.
+[env]
+FIELDCLUB_ENV = "prod"
+FIELDCLUB_LOG_LEVEL = "INFO"
+FIELDCLUB_PUBLIC_URL = "https://openantiquity.org"
+FIELDCLUB_CONTACT = "https://openantiquity.org/about"
+# Required in production for every process, though the jobs show no terms.
+FIELDCLUB_TERMS_URL = "/about#terms"
+# Required on every Fly machine, though the jobs serve no requests.
+FIELDCLUB_CLIENT_IP_HEADER = "Fly-Client-IP"
+FIELDCLUB_TERRAIN_MIRROR = "s3://openantiquity-elevation/england/mirror"
+FIELDCLUB_TERRAIN_NATIONAL = "s3://openantiquity-elevation/england/national"
+FIELDCLUB_DB_POOL_SIZE = "2"
+FIELDCLUB_DB_MAX_OVERFLOW = "2"
+# The endpoint Fly's Tigris page says `fly storage create` sets as a secret.
+# A secret of the same name takes precedence.
+AWS_ENDPOINT_URL_S3 = "https://fly.storage.tigris.dev"
+AWS_REGION = "auto"

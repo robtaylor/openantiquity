@@ -1,0 +1,117 @@
+# Open Antiquity's public service on Fly.io: the API, the tiles and the built
+# frontend, from infra/Dockerfile. Deployed from the repository root with
+#
+#   fly deploy --image-label "$(git rev-parse HEAD)"
+#
+# It is here, not in infra/, because `fly deploy` builds from the directory it
+# is run in and finds fly.toml there, and the image is built from the
+# repository root. infra/README.md is the runbook and argues each number below.
+# The jobs are a second app, described in infra/fly/jobs.toml.
+#
+# Keys are as Fly's configuration reference names them:
+# https://docs.fly.io/reference/configuration
+
+app = "openantiquity"
+primary_region = "lhr"
+# uvicorn ends its event streams at once and the rest after
+# FIELDCLUB_SHUTDOWN_GRACE_S, well inside the time Fly waits before killing it.
+kill_signal = "SIGTERM"
+kill_timeout = 10
+
+[build]
+  dockerfile = "infra/Dockerfile"
+
+[deploy]
+  # Once per release, before any machine runs the new image. It only adds what
+  # is missing, so it is safe to run again (docs/ARCHITECTURE.md, Conventions).
+  release_command = "python -m fieldclub.db"
+  release_command_timeout = "15m"
+  strategy = "rolling"
+
+  [deploy.release_command_vm]
+    size = "shared-cpu-1x"
+    memory = "1gb"
+
+# Every non-secret setting. backend/.env.example documents each one. The
+# secrets are set with infra/fly-secrets.sh and `fly storage create`, never
+# here: FIELDCLUB_SECRET_KEY; DATABASE_URL, from `fly mpg attach`, which the
+# application turns into the cluster's direct address; AWS_ACCESS_KEY_ID,
+# AWS_SECRET_ACCESS_KEY and AWS_ENDPOINT_URL_S3 for Tigris; and, once each
+# exists, FIELDCLUB_GOOGLE_CLIENT_SECRET, FIELDCLUB_MICROSOFT_CLIENT_SECRET,
+# FIELDCLUB_FACEBOOK_APP_SECRET, FIELDCLUB_OSM_CLIENT_SECRET,
+# FIELDCLUB_APPLE_PRIVATE_KEY and FIELDCLUB_SMTP_PASSWORD. This app never
+# holds Defra's login: missing elevation is fetched by the jobs app.
+[env]
+  FIELDCLUB_ENV = "prod"
+  FIELDCLUB_LOG_LEVEL = "INFO"
+  FIELDCLUB_PUBLIC_URL = "https://openantiquity.org"
+  # Answered 308 to the same path on FIELDCLUB_PUBLIC_URL (fieldclub.redirects).
+  FIELDCLUB_REDIRECT_HOSTS = '["www.openantiquity.org", "openantiquity.com", "www.openantiquity.com", "openantiquity.co.uk", "www.openantiquity.co.uk"]'
+  FIELDCLUB_CONTACT = "https://openantiquity.org/about"
+  # The contributor terms the welcome step asks people to accept. Point it at
+  # the real terms before the site is opened.
+  FIELDCLUB_TERMS_URL = "/about#terms"
+  # Fly's proxy sets it to the visitor's address and overwrites a forged one.
+  FIELDCLUB_CLIENT_IP_HEADER = "Fly-Client-IP"
+  FIELDCLUB_STORAGE_BACKEND = "s3"
+  FIELDCLUB_S3_BUCKET = "openantiquity-cache"
+  FIELDCLUB_S3_NAMESPACE_BUCKETS = '{"media": "openantiquity-photos"}'
+  FIELDCLUB_TERRAIN_MIRROR = "s3://openantiquity-elevation/england/mirror"
+  FIELDCLUB_TERRAIN_NATIONAL = "s3://openantiquity-elevation/england/national"
+  # Up to three machines of eight connections each, inside the 112 the Basic plan allows.
+  FIELDCLUB_DB_POOL_SIZE = "4"
+  FIELDCLUB_DB_MAX_OVERFLOW = "4"
+  # Streams end themselves and the browser opens the next. The spike held one
+  # open through Fly's proxy for 600 s.
+  FIELDCLUB_EVENTS_MAX_STREAM_S = "540"
+  # The hard limit below less four, so tiles and JSON always have four slots.
+  FIELDCLUB_EVENTS_MAX_STREAMS = "26"
+  FIELDCLUB_SHUTDOWN_GRACE_S = "5"
+  # The endpoint `fly storage create` sets as a secret, which takes precedence.
+  AWS_ENDPOINT_URL_S3 = "https://fly.storage.tigris.dev"
+  AWS_REGION = "auto"
+  # The emailed sign-in link, once there is a mail relay. Its password is a secret.
+  # FIELDCLUB_MAIL_BACKEND = "smtp"
+  # FIELDCLUB_MAIL_FROM = "Open Antiquity <hello@openantiquity.org>"
+  # FIELDCLUB_SMTP_HOST = "<relay host>"
+  # FIELDCLUB_SMTP_USERNAME = "<relay user>"
+  # A sign-in provider is offered once its id is here and its secret is set.
+  # FIELDCLUB_GOOGLE_CLIENT_ID = "<id>"
+  # FIELDCLUB_MICROSOFT_CLIENT_ID = "<id>"
+  # FIELDCLUB_FACEBOOK_APP_ID = "<id>"
+  # FIELDCLUB_OSM_CLIENT_ID = "<id>"
+  # FIELDCLUB_APPLE_CLIENT_ID = "<id>"
+  # FIELDCLUB_APPLE_TEAM_ID = "<id>"
+  # FIELDCLUB_APPLE_KEY_ID = "<id>"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Suspended, not stopped: the spike measured 0.5 s to answer from suspended
+  # and 21 s from stopped. Suspend needs 2 GB of memory or less and no swap.
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  # Each open tab holds one request with its event stream. Past the soft limit
+  # the proxy prefers, and starts, another machine; it never sends a machine
+  # more than the hard limit.
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 20
+    hard_limit = 30
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    timeout = "5s"
+    method = "GET"
+    path = "/healthz"
+
+# Two shared vCPUs halve a fresh screen's render time against one. 2 GB holds
+# the 320 MB the spike saw at idle, a photo decode of up to 400 MB and renders
+# at once, and is the most a machine may have and still be suspended. The
+# number of machines is set with `fly scale count 3`: the proxy never makes more.
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"

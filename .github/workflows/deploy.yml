@@ -1,113 +1,70 @@
-# Run by hand from main: build the image, push it to the project's registry,
-# and print what `terraform apply` would change to run it. It deploys nothing.
-# The owner reads the plan and applies it (infra/README.md, "A deploy").
+# Run by hand from main: deploy the web app to Fly.io. `flyctl deploy` builds
+# the image on Fly's builder from infra/Dockerfile, pushes it labelled with the
+# commit, runs fly.toml's release_command (the schema, once) and rolls the
+# machines onto it one at a time (infra/README.md, "A deploy").
 #
-# It reaches Google Cloud through workload identity federation, so there is no
-# key anywhere. Set these repository variables (Settings, Secrets and
-# variables, Actions, Variables) from `terraform output`:
+# It holds one secret, FLY_API_TOKEN: a deploy token for the app openantiquity
+# alone, kept in the repository's `production` environment, which only main
+# may use. Make it with
 #
-#   GCP_PROJECT_ID                  the project id
-#   GCP_WORKLOAD_IDENTITY_PROVIDER  output workload_identity_provider
-#   GCP_DEPLOYER_SERVICE_ACCOUNT    output deployer_service_account
-#   TFVARS                          the contents of terraform.tfvars, which hold no secret
-name: Build and plan
+#   fly tokens create deploy --app openantiquity --name github-deploy --expiry 2160h |
+#     gh secret set FLY_API_TOKEN --env production
+#
+# The jobs app, which holds Defra's login, is never reachable from here. After
+# a deploy, the owner moves its hourly machine to the new image with the
+# command the run's summary prints.
+name: Deploy
 
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: deploy
   cancel-in-progress: false
 
-env:
-  PROJECT: ${{ vars.GCP_PROJECT_ID }}
-
 jobs:
-  build-and-plan:
-    name: Build, push and plan
+  deploy:
+    name: Deploy the web app
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    # The identity pool only trusts deploy.yml on main, so refuse anything else up front.
+    # The environment only allows main as well; refuse anything else up front.
     if: github.ref == 'refs/heads/main'
+    environment: production
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Check the repository variables
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
+        with:
+          version: "0.5.8"
+
+      - name: Check the deploy token
         env:
-          PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          ACCOUNT: ${{ vars.GCP_DEPLOYER_SERVICE_ACCOUNT }}
-          TFVARS: ${{ vars.TFVARS }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
-          for name in PROJECT PROVIDER ACCOUNT TFVARS; do
-            if [ -z "${!name}" ]; then
-              echo "::error::Repository variable for $name is not set"
-              exit 1
-            fi
-          done
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "::error::FLY_API_TOKEN is not set in the production environment"
+            exit 1
+          fi
 
-      - id: auth
-        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
-        with:
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_DEPLOYER_SERVICE_ACCOUNT }}
-          token_format: access_token
-
-      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        with:
-          terraform_version: "1.14.8"
-          terraform_wrapper: false
-
-      # The registry's region and path come from Terraform, so they can't
-      # drift from var.region and var.name. The plan only reads the state.
-      - name: Find the image repository
-        id: repo
-        working-directory: infra/terraform
+      # fly.toml at the repository root names the app, the Dockerfile and the release command.
+      - name: Build, push and deploy
         env:
-          TFVARS: ${{ vars.TFVARS }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy --remote-only --image-label "$GITHUB_SHA" --wait-timeout 10m
+
+      - name: Say what to run next
         run: |
-          printf '%s\n' "$TFVARS" > terraform.tfvars
-          terraform init -input=false -backend-config="bucket=${PROJECT}-tfstate"
-          repository=$(terraform output -raw image_repository)
-          echo "repository=${repository}" >> "$GITHUB_OUTPUT"
-          echo "registry=${repository%%/*}" >> "$GITHUB_OUTPUT"
-
-      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
-        with:
-          registry: ${{ steps.repo.outputs.registry }}
-          username: oauth2accesstoken
-          password: ${{ steps.auth.outputs.access_token }}
-
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      # Cloud Run runs linux/amd64 only.
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: infra/Dockerfile
-          platforms: linux/amd64
-          push: true
-          provenance: false
-          tags: ${{ steps.repo.outputs.repository }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # The summary lists only which resources would change and how, never
-      # their values: if the repository is public, anyone can read it. The
-      # owner sees the whole plan again when running `terraform apply`.
-      - name: Terraform plan
-        working-directory: infra/terraform
-        run: |
-          terraform plan -input=false -lock=false -var "image_tag=${GITHUB_SHA}" -out=tfplan >/dev/null
           {
-            echo "## Terraform plan for ${GITHUB_SHA}"
+            echo "## Deployed ${GITHUB_SHA}"
+            echo
+            echo "Image: registry.fly.io/openantiquity:${GITHUB_SHA}"
+            echo
+            echo "Move the jobs app's hourly machine to it, from the main checkout:"
             echo
             echo '```'
-            terraform show -no-color tfplan | grep -E '^ *# .* (will|must) be |^Plan: |^No changes' || true
+            echo "uv run infra/fly_jobs.py --commit ${GITHUB_SHA} schedule"
             echo '```'
-            echo
-            echo "To deploy, from infra/terraform: terraform apply -var image_tag=${GITHUB_SHA}"
           } >> "$GITHUB_STEP_SUMMARY"
