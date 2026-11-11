@@ -10,7 +10,14 @@ same monument, and to Historic England's research record.
 
 As in the detailed layer, `HE_UID` is shared and often ` NONE GIVEN` (see
 `he_aim_detailed_mapping`), so the external id is a hash of `layer`, `project`,
-`HE_UID` and the geometry.
+`HE_UID` and the geometry on the British National Grid. Assigning a number to
+an extent that had none therefore gives it a new id. An extent without a number
+is named for its project, because over half of them have nothing else to say.
+
+Deviation from the work-list: it prefers the Hub's GeoPackage export (`layers=1`),
+which `download()` can cache as the detailed mapping does. That export has not been
+tried, so this reads the FeatureServer, about 99 pages and 19 minutes, with no cache.
+A second run the same day costs the publisher as much as the first.
 """
 
 from __future__ import annotations
@@ -31,9 +38,10 @@ logger = logging.getLogger(__name__)
 LAYER_URL = (
     "https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1"
 )
-# Six decimal places of a degree is about a tenth of a metre, finer than the drawing. A few slivers
-# are smaller still and collapse to nothing.
-GEOMETRY_PRECISION = 6
+# The layer is asked for the British National Grid to a tenth of a metre, finer than the drawing. A few
+# slivers are smaller still and collapse to nothing. Ids are hashed from these grid coordinates, so
+# they don't move when PROJ's reprojection to WGS84 does.
+GEOMETRY_PRECISION = 1
 FIELDS = ("OBJECTID", "layer", "project", "HE_UID", "HER_No")
 
 
@@ -54,13 +62,13 @@ class MonumentExtents(Connector):
     )
 
     def fetch(self, *, bbox: BBox | None = None, limit: int | None = None) -> Iterator[RecordIn]:
-        layer = ArcGISLayer(LAYER_URL, client=self.http, geometry_precision=GEOMETRY_PRECISION)
+        layer = ArcGISLayer(LAYER_URL, client=self.http, out_sr=27700, geometry_precision=GEOMETRY_PRECISION)
         layer.require_shape(FIELDS, "esriGeometryPolygon")
         keys = FeatureKeys()
         collapsed = 0
         for feature in layer.features(bbox=bbox):
             if feature.geometry is None:
-                collapsed += 1  # a sliver too small to keep its shape at six decimal places
+                collapsed += 1  # a sliver too small to keep its shape at a tenth of a metre
                 continue
             yield to_record(feature, keys)
         if collapsed:
@@ -80,10 +88,17 @@ def to_record(feature: Feature, keys: FeatureKeys) -> RecordIn:
     uid = str(properties["HE_UID"] or "").strip()
     named = uid.upper() not in EMPTY
     return RecordIn(
-        external_id=keys.key([layer, project, uid], feature.geometry),
-        name=f"Monument extent (Historic England record {uid})" if named else "Monument extent",
+        external_id=keys.key([layer, project, uid], feature.geometry, native=feature.native),
+        name=extent_name(uid if named else None, project),
         geom=feature.geometry,
         summary=f"Project: {project}." if project else None,
         record_type="Monument extent",
         raw=json_ready(properties, drop_empty=True),
     )
+
+
+def extent_name(uid: str | None, project: str) -> str:
+    """The extent's name: its Historic England record when it has one, else its project."""
+    if uid:
+        return f"Monument extent (Historic England record {uid})"
+    return f"Monument extent, {project}" if project else "Monument extent"

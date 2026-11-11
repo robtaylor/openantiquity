@@ -214,6 +214,65 @@ def test_an_export_that_changed_shape_fails_the_run_and_writes_nothing(db: Sessi
 
 
 @pytest.mark.parametrize(
+    ("change", "problem"),
+    [
+        ("UPDATE gpkg_geometry_columns SET geometry_type_name = 'POINT'", "geometry"),
+        ("UPDATE gpkg_geometry_columns SET srs_id = 4326; UPDATE gpkg_contents SET srs_id = 4326", "crs"),
+    ],
+    ids=["a layer that is not polygons", "a CRS other than the British National Grid"],
+)
+# GDAL says that the declared type and the stored geometries disagree, which is the point of the first case.
+@pytest.mark.filterwarnings("ignore::RuntimeWarning", "ignore::pytest.PytestUnraisableExceptionWarning")
+@respx.mock
+def test_an_export_in_another_crs_or_geometry_fails_the_run_and_writes_nothing(
+    db: Session, tmp_path: Path, change: str, problem: str
+) -> None:
+    """Records read as the wrong CRS would land hundreds of kilometres out, with nothing to say so."""
+    changed = tmp_path / "changed.gpkg"
+    changed.write_bytes(EXPORT.read_bytes())
+    with sqlite3.connect(changed) as conn:
+        conn.executescript(change)
+    serve_hub(changed.read_bytes())
+    with pytest.raises(IngestFailedError, match="changed shape") as failure:
+        run_connector(DetailedMapping())
+    assert problem in str(failure.value).lower()
+    assert db.scalars(select(Record)).all() == []
+
+
+@respx.mock
+def test_a_drawing_entered_twice_is_stored_once_and_two_interpretations_are_told_apart(
+    db: Session, tmp_path: Path
+) -> None:
+    doubled = tmp_path / "doubled.gpkg"
+    doubled.write_bytes(EXPORT.read_bytes())
+    with sqlite3.connect(doubled) as conn:
+        # The spatial index triggers need SpatiaLite functions that sqlite3 lacks. Reading doesn't need them.
+        for (trigger,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'trigger'").fetchall():
+            conn.execute(f'DROP TRIGGER "{trigger}"')
+        columns = [row[1] for row in conn.execute("PRAGMA table_info(Detailed_Mapping)") if row[1] != "fid"]
+        names = ", ".join(f'"{name}"' for name in columns)
+        # Row 1 again, exactly. Row 2 again with another period, as if interpreted twice.
+        conn.execute(
+            f"INSERT INTO Detailed_Mapping ({names}) SELECT {names} FROM Detailed_Mapping WHERE fid = 1"
+        )
+        conn.execute(
+            f"INSERT INTO Detailed_Mapping ({names}) SELECT {names} FROM Detailed_Mapping WHERE fid = 2"
+        )
+        last = "(SELECT MAX(fid) FROM Detailed_Mapping)"
+        conn.execute(f"UPDATE Detailed_Mapping SET PERIOD = 'XX UNTESTED' WHERE fid = {last}")
+        feature_count = conn.execute("SELECT COUNT(*) FROM Detailed_Mapping").fetchone()[0]
+        conn.execute("UPDATE gpkg_ogr_contents SET feature_count = ?", (feature_count,))
+    serve_hub(doubled.read_bytes())
+    run = run_connector(DetailedMapping())
+    assert run.status == "completed"
+    # Fifteen rows read: one was skipped as an exact repeat, and the other is kept beside its twin.
+    assert len(db.scalars(select(Record)).all()) == FEATURES + 1
+    ids = [record.external_id for record in db.scalars(select(Record)).all()]
+    assert len(set(ids)) == len(ids)
+    assert sum("-" in external_id for external_id in ids) == 1
+
+
+@pytest.mark.parametrize(
     ("text", "expected"),
     [
         ("BRONZE AGE", ["bronze_age"]),

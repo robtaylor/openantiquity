@@ -11,7 +11,8 @@ The page size never exceeds the layer's `maxRecordCount`. Servers cap pages
 lower than they say (Historic England's says 22,000 at the root and gives
 2,000), so the offset moves by however many features came back, and a range
 that comes back short is asked for again from the first id still missing.
-Geometry is asked for in EPSG:4326 and checked on the way back. When fewer
+Geometry is asked for in EPSG:4326, or in `out_sr` when the caller wants the
+source's own grid to key features on (`Feature.native`), and checked on the way back. When fewer
 distinct object ids arrive than the count promised, the reader raises
 `IncompleteReadError` instead of letting a short run look complete.
 
@@ -39,6 +40,7 @@ from fieldclub.ingest.adapters.common import (
     Tally,
     UpstreamFormatError,
     json_body,
+    native_in,
     plain,
     to_wgs84,
 )
@@ -65,6 +67,7 @@ class ArcGISLayer:
         geometry_precision: int | None = None,
         tolerance: float = 0.0,
         by_object_id: bool = False,
+        out_sr: int = 4326,
     ) -> None:
         """`tolerance` is the share of the count that may go missing between counting and paging.
 
@@ -73,6 +76,9 @@ class ArcGISLayer:
         offsets count rows the layer then filters out, such as a view that holds several
         kinds of shape and shows one: its pages come back short of what was asked for
         while more remain, and paging by offset ends early.
+        `out_sr` is the EPSG code the server answers in. Anything but 4326 is
+        reprojected here, with the original kept in `Feature.native`, and
+        `geometry_precision` then counts decimal places of that CRS's unit.
         """
         assert url.rstrip("/").rsplit("/", 1)[-1].isdigit(), f"{url} must end with the layer number"
         assert page_size is None or page_size >= 1, "page_size must be at least 1"
@@ -86,6 +92,7 @@ class ArcGISLayer:
         self.geometry_precision = geometry_precision
         self.tolerance = tolerance
         self.by_object_id = by_object_id
+        self.out_sr = out_sr
         self._info: dict[str, Any] | None = None
 
     # ------------------------------------------------------------------ metadata
@@ -184,7 +191,7 @@ class ArcGISLayer:
         query = {
             **params,
             "outFields": self.out_fields,
-            "outSR": "4326",
+            "outSR": str(self.out_sr),
             "returnGeometry": "true",
         }
         if self.geometry_precision is not None:
@@ -201,12 +208,14 @@ class ArcGISLayer:
             if not isinstance(attributes, dict):
                 raise UpstreamFormatError(f"{self.url} gave a feature without attributes.")
             geometry = esri_geometry(item.get("geometry"))
+            native = None
             if geometry is not None and crs is not None:
+                native = native_in(geometry, crs)
                 geometry = to_wgs84(geometry, crs)
             properties = {key: plain(value) for key, value in attributes.items()}
             if not isinstance(properties.get(oid), int):
                 raise UpstreamFormatError(f"{self.url} gave a feature without its object id {oid}.")
-            features.append(Feature(properties, geometry, properties[oid]))
+            features.append(Feature(properties, geometry, properties[oid], native))
         return features
 
     def _by_offset(self, bbox: BBox | None, expected: int, page: int) -> Iterator[Feature]:

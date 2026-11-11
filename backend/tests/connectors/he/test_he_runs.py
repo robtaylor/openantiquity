@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 import respx
+import shapely
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -182,3 +183,36 @@ def test_a_sliver_too_small_to_keep_its_shape_is_left_out_and_the_rest_stored(ke
     run = run_connector(CONNECTORS[key]())
     assert run.status == "completed"
     assert len(db.scalars(select(Record)).all()) == len(layer.features) - 1
+
+
+GRID_KEYED = [
+    "he-aim-monument-extents",
+    "he-aim-project-areas",
+    "he-research-spatial-reports",
+    "he-turning-the-plough-2",
+    "he-greater-london-apas",
+]
+
+
+@pytest.mark.parametrize("key", GRID_KEYED)
+@respx.mock
+def test_ids_do_not_change_when_the_reprojection_to_wgs84_moves(
+    db: Session, key: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A datum grid moves every WGS84 vertex by about 1e-5 degrees. That must not renumber a source."""
+    from fieldclub.ingest.adapters import arcgis
+
+    serve(key)
+    run_connector(CONNECTORS[key]())
+    before = sorted(record.external_id for record in db.scalars(select(Record)).all())
+    assert before
+
+    real = arcgis.to_wgs84
+    monkeypatch.setattr(
+        arcgis,
+        "to_wgs84",
+        lambda geometry, crs: shapely.transform(real(geometry, crs), lambda xy: xy + 1e-5),
+    )
+    run_connector(CONNECTORS[key]())
+    db.expire_all()
+    assert sorted(record.external_id for record in db.scalars(select(Record)).all()) == before

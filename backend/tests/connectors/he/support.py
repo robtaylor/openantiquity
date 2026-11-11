@@ -18,6 +18,7 @@ from typing import Any
 
 import httpx
 import respx
+from pyproj import Transformer
 from shapely.geometry import box
 
 from fieldclub.ingest.adapters.arcgis import esri_geometry
@@ -25,6 +26,27 @@ from fieldclub.ingest.adapters.arcgis import esri_geometry
 FIXTURES = Path(__file__).parent / "fixtures"
 WORKLIST = Path(__file__).parents[4] / "docs" / "sources" / "worklists" / "sources.json"
 HOST = "services-eu1.arcgis.com"
+
+
+GRID = Transformer.from_crs(4326, 27700, always_xy=True)
+
+
+def on_grid(geometry: dict[str, Any] | None, decimals: int) -> dict[str, Any] | None:
+    """An Esri geometry recorded in WGS84 as outSR=27700 gives it, rounded as geometryPrecision does."""
+    if geometry is None:
+        return None
+
+    def move(point: list[float]) -> list[float]:
+        east, north = GRID.transform(point[0], point[1])
+        return [round(east, decimals), round(north, decimals)]
+
+    if "x" in geometry:
+        east, north = move([geometry["x"], geometry["y"]])
+        return {"x": east, "y": north}
+    for key in ("rings", "paths"):
+        if key in geometry:
+            return {key: [[move(point) for point in part] for part in geometry[key]]}
+    raise AssertionError(f"unknown Esri geometry {sorted(geometry)}")
 
 
 def worklist_entry(key: str) -> dict[str, Any]:
@@ -68,16 +90,17 @@ class RecordedLayer:
         matching = self.inside(params.get("geometry"))
         if params.get("returnCountOnly") == "true":
             return httpx.Response(200, json={"count": len(matching) + self.count_adds})
-        assert params["outSR"] == "4326", "connectors must ask for WGS84"
         offset = int(params.get("resultOffset", "0"))
         size = int(params["resultRecordCount"])
-        return httpx.Response(
-            200,
-            json={
-                "spatialReference": self.recorded["spatialReference"],
-                "features": matching[offset : offset + size],
-            },
-        )
+        page = matching[offset : offset + size]
+        if params["outSR"] == "27700":
+            decimals = int(params["geometryPrecision"])
+            page = [{**item, "geometry": on_grid(item["geometry"], decimals)} for item in page]
+            reference = {"wkid": 27700, "latestWkid": 27700}
+        else:
+            assert params["outSR"] == "4326", "connectors ask for WGS84 or the British National Grid"
+            reference = self.recorded["spatialReference"]
+        return httpx.Response(200, json={"spatialReference": reference, "features": page})
 
 
 def serve(key: str, **kwargs: Any) -> RecordedLayer:

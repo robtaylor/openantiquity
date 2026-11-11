@@ -15,9 +15,18 @@ downloaded at about half a megabyte a second.
 The layer has no identifier of its own. `HE_UID` is the number of the monument
 record a polygon belongs to, so it is shared by every polygon of that monument, and
 it reads ` NONE GIVEN` on 202,356 of the 498,295 features. The external id is a
-hash of `LAYER`, `project`, `HE_UID` and the geometry (see `FeatureKeys`). Attributes
-such as the monument type are left out, so a corrected term updates the record
-and doesn't replace it. An edit to a polygon's outline gives it a new id.
+hash of `LAYER`, `project` and the geometry in the file's own British National Grid
+coordinates, to a tenth of a metre (see `FeatureKeys`), so it doesn't move with the
+reprojection to WGS84. Attributes such as the monument type, and `HE_UID`, are left
+out, so a corrected term, or a number assigned later, updates the record and doesn't
+replace it. An edit to a polygon's outline gives it a new id.
+
+Polygons that share layer, project and outline are not always one drawing entered
+twice: about 800 such groups hold two interpretations that differ in type, period or
+evidence (and sometimes in `HE_UID`). A group member whose other attributes are
+identical to one already read is skipped. One that differs gets the id of the first
+with a hash of its attributes after it, so re-exporting in another row order doesn't
+swap the ids of two interpretations. Only the member read first keeps the bare id.
 
 Monument types are Historic England's FISH thesaurus terms, backslash-separated,
 kept as written. Periods are FISH period terms, mapped onto `vocab.Period` by
@@ -26,6 +35,7 @@ kept as written. Periods are FISH period terms, mapped onto `vocab.Period` by
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from collections.abc import Iterator
@@ -121,10 +131,13 @@ class DetailedMapping(Connector):
         for feature in read_vector(path, bbox=bbox, info=info):
             if feature.geometry is None:
                 raise UpstreamFormatError(f"AIM feature {feature.id} has no geometry.")
-            yield to_record(feature, keys)
+            record = to_record(feature, keys)
+            if record is not None:
+                yield record
         if keys.repeats:
             logger.info(
-                "%s: %d features repeat another's layer, project, monument and outline",
+                "%s: %d features repeat another's layer, project and outline, and were skipped or "
+                "told apart by their attributes",
                 self.source.key,
                 keys.repeats,
             )
@@ -168,8 +181,8 @@ def periods_of(text: object) -> list[str]:
     return list(found)
 
 
-def to_record(feature: Feature, keys: FeatureKeys) -> RecordIn:
-    """One detailed-mapping polygon as a record."""
+def to_record(feature: Feature, keys: FeatureKeys) -> RecordIn | None:
+    """One detailed-mapping polygon as a record, or None when it is an exact repeat of one already read."""
     properties = feature.properties
     assert feature.geometry is not None, "the caller skips features with no shape"
     layer = str(properties["LAYER"] or "").strip()
@@ -187,13 +200,22 @@ def to_record(feature: Feature, keys: FeatureKeys) -> RecordIn:
         )
         if sentence
     )
+    raw = json_ready(properties, drop_empty=True)
+    external_id = keys.distinct_key(
+        [layer, project],
+        feature.geometry,
+        [json.dumps(raw, sort_keys=True, default=str)],
+        native=feature.native,
+    )
+    if external_id is None:
+        return None
     return RecordIn(
-        external_id=keys.key([layer, project, properties["HE_UID"]], feature.geometry),
+        external_id=external_id,
         name=", ".join(term.capitalize() for term in types) or record_type,
         geom=feature.geometry,
         summary=summary or None,
         record_type=record_type,
         monument_types=types,
         periods=periods_of(properties["PERIOD"]),
-        raw=json_ready(properties, drop_empty=True),
+        raw=raw,
     )

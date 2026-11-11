@@ -46,6 +46,44 @@ def test_an_exact_repeat_gets_a_numbered_key_in_the_order_given() -> None:
     assert keys.repeats == 2
 
 
+def test_a_key_from_the_native_grid_does_not_move_with_the_reprojection() -> None:
+    """The WGS84 shape moves by about 1e-5 degrees when PROJ gets a datum grid. The id must not."""
+    native = box(417000.0, 142000.0, 417050.0, 142040.0)
+    here = box(-1.8297167, 51.1771118, -1.8296, 51.1772)
+    shifted = box(-1.8297067, 51.1771068, -1.8295900, 51.1771950)
+    assert FeatureKeys().key(["BANK"], here, native=native) == FeatureKeys().key(
+        ["BANK"], shifted, native=native
+    )
+    # Without the grid shape the same shift gives another id, which is why callers pass it.
+    assert FeatureKeys().key(["BANK"], here) != FeatureKeys().key(["BANK"], shifted)
+    # Grid coordinates count to a tenth of a metre, and no finer.
+    nudged = box(417000.04, 142000.0, 417050.0, 142040.0)
+    assert FeatureKeys().key(["BANK"], here, native=native) == FeatureKeys().key(
+        ["BANK"], here, native=nudged
+    )
+    moved = box(417000.3, 142000.0, 417050.0, 142040.0)
+    assert FeatureKeys().key(["BANK"], here, native=native) != FeatureKeys().key(["BANK"], here, native=moved)
+
+
+def test_a_repeat_with_the_same_detail_is_skipped_and_one_with_other_detail_is_named_for_it() -> None:
+    keys = FeatureKeys()
+    shape = Point(1.0, 51.0)
+    bare = keys.distinct_key(["bank"], shape, ["BARROW", "BRONZE AGE"])
+    assert bare is not None
+    assert "-" not in bare
+    assert keys.distinct_key(["bank"], shape, ["BARROW", "BRONZE AGE"]) is None
+    other = keys.distinct_key(["bank"], shape, ["BARROW", "IRON AGE"])
+    assert other is not None
+    assert other.startswith(f"{bare}-")
+    assert keys.repeats == 2
+    # The name follows the detail, not the order: the same other interpretation is named the same
+    # whether it comes second or third.
+    again = FeatureKeys()
+    assert again.distinct_key(["bank"], shape, ["BARROW", "BRONZE AGE"]) == bare
+    assert again.distinct_key(["bank"], shape, ["x"]) is not None
+    assert again.distinct_key(["bank"], shape, ["BARROW", "IRON AGE"]) == other
+
+
 def test_json_ready_can_leave_out_empty_values() -> None:
     properties = {"a": None, "b": " ", "c": "", "d": 0, "e": "x", "f": datetime(2020, 1, 2, tzinfo=UTC)}
     assert json_ready(properties) == {**properties, "f": "2020-01-02T00:00:00+00:00"}

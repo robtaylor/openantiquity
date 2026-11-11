@@ -36,6 +36,7 @@ from fieldclub.ingest.adapters.common import (
     Feature,
     UpstreamFormatError,
     bbox_from_wgs84,
+    native_in,
     plain,
     plain_tree,
     to_wgs84,
@@ -123,11 +124,15 @@ def ogr_features(
     names = [str(name) for name in meta["fields"]]
     for index, fid in enumerate(fids):
         properties = {name: plain(values[index]) for name, values in zip(names, fields, strict=True)}
-        geometry = None
+        geometry = native = None
         if geometries is not None and geometries[index] is not None:
             geometry = shapely.from_wkb(geometries[index])
-            geometry = None if geometry.is_empty else to_wgs84(geometry, crs)
-        yield Feature(properties, geometry, plain(fid))
+            if geometry.is_empty:
+                geometry = None
+            else:
+                native = native_in(geometry, crs)
+                geometry = to_wgs84(geometry, crs)
+        yield Feature(properties, geometry, plain(fid), native)
 
 
 @contextmanager

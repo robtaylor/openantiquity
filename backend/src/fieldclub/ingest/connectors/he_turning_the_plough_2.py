@@ -51,7 +51,7 @@ class TurningThePlough2(Connector):
     )
 
     def fetch(self, *, bbox: BBox | None = None, limit: int | None = None) -> Iterator[RecordIn]:
-        layer = ArcGISLayer(LAYER_URL, client=self.http, geometry_precision=6)
+        layer = ArcGISLayer(LAYER_URL, client=self.http, out_sr=27700, geometry_precision=1)
         layer.require_shape(FIELDS, "esriGeometryPolygon")
         keys = FeatureKeys()
         for feature in layer.features(bbox=bbox):
@@ -86,7 +86,9 @@ def to_record(feature: Feature, keys: FeatureKeys) -> RecordIn:
     ]
     comment = str(properties["Comments"] or "").strip()
     return RecordIn(
-        external_id=keys.key([str(properties["FeatureID"] or ""), parish], feature.geometry),
+        external_id=keys.key(
+            [str(properties["FeatureID"] or ""), parish], feature.geometry, native=feature.native
+        ),
         name=f"Ridge and furrow, {parish}" if parish else "Ridge and furrow",
         geom=feature.geometry,
         summary=" ".join([*judgements, *([comment] if comment else [])]) or None,

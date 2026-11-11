@@ -4,7 +4,12 @@ Work-list key `he-aim-project-areas`. About 160 polygons, `HE_AIM_data` FeatureS
 layer 2, each the area one mapping project covered. They show where the other two
 layers have anything to say: outside them the ground is unmapped, not empty. Several
 polygons can belong to one project, and the layer has no identifier, so the external
-id is a hash of `PROJECT_NA`, `TYPE`, `layer` and the geometry.
+id is a hash of `PROJECT_NA`, `TYPE`, `layer` and the geometry on the British National Grid.
+
+Each is category `monument` because the records table has no category for coverage, but its
+record type is in `vocab.COVERAGE_RECORD_TYPES`, so `services.records.nearby` and the
+"is this already recorded?" suggestions leave it out. A coverage overlay would be its own
+change and decision.
 """
 
 from __future__ import annotations
@@ -16,7 +21,7 @@ from fieldclub.ingest.adapters.arcgis import ArcGISLayer, esri_date
 from fieldclub.ingest.adapters.common import Feature, FeatureKeys, UpstreamFormatError, json_ready
 from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo
 from fieldclub.ingest.registry import register
-from fieldclub.vocab import RecordCategory, SourceAccess, SourceReuse
+from fieldclub.vocab import MAPPING_PROJECT_AREA, RecordCategory, SourceAccess, SourceReuse
 
 LAYER_URL = (
     "https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/2"
@@ -41,7 +46,7 @@ class ProjectAreas(Connector):
     )
 
     def fetch(self, *, bbox: BBox | None = None, limit: int | None = None) -> Iterator[RecordIn]:
-        layer = ArcGISLayer(LAYER_URL, client=self.http, geometry_precision=4)
+        layer = ArcGISLayer(LAYER_URL, client=self.http, out_sr=27700, geometry_precision=1)
         layer.require_shape(FIELDS, "esriGeometryPolygon")
         keys = FeatureKeys()
         for feature in layer.features(bbox=bbox):
@@ -70,11 +75,13 @@ def to_record(feature: Feature, keys: FeatureKeys) -> RecordIn:
     raw = json_ready({**properties, "Completed": completed}, drop_empty=True)
     report_url = str(properties["RRS_URL"] or "").strip()
     return RecordIn(
-        external_id=keys.key([name, kind, str(properties["layer"] or "")], feature.geometry),
+        external_id=keys.key(
+            [name, kind, str(properties["layer"] or "")], feature.geometry, native=feature.native
+        ),
         name=name,
         geom=feature.geometry,
         summary=summary or None,
-        record_type="Mapping project area",
+        record_type=MAPPING_PROJECT_AREA,
         url=report_url if report_url.startswith("https://") else None,
         source_updated_at=completed,
         raw=raw,

@@ -52,14 +52,14 @@ class GreaterLondonApas(Connector):
     )
 
     def fetch(self, *, bbox: BBox | None = None, limit: int | None = None) -> Iterator[RecordIn]:
-        layer = ArcGISLayer(LAYER_URL, client=self.http, geometry_precision=6)
+        layer = ArcGISLayer(LAYER_URL, client=self.http, out_sr=27700, geometry_precision=1)
         layer.require_shape(FIELDS, "esriGeometryPolygon")
         keys = FeatureKeys()
         collapsed = 0
         for feature in layer.features(bbox=bbox):
             if feature.geometry is None:
                 # One part, OBJECTID 10690, is a triangle a few millimetres across, which has no shape
-                # left at six decimal places. It is a drawing slip, and is left out.
+                # left at a tenth of a metre. It is a drawing slip, and is left out.
                 collapsed += 1
                 continue
             yield to_record(feature, keys)
@@ -82,7 +82,9 @@ def to_record(feature: Feature, keys: FeatureKeys) -> RecordIn:
     reference = str(properties["primary_re"] or "").strip()
     name = tier or "Archaeological Priority Area"
     return RecordIn(
-        external_id=keys.key([str(properties["resourcein"] or ""), reference], feature.geometry),
+        external_id=keys.key(
+            [str(properties["resourcein"] or ""), reference], feature.geometry, native=feature.native
+        ),
         name=f"{name} (HER reference {reference})" if reference else name,
         geom=feature.geometry,
         summary=plain_text(properties["descriptio"]) or None,

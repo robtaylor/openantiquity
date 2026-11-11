@@ -101,11 +101,16 @@ class Feature:
     `geometry` is None when the upstream row has no position. Property values
     are plain Python: str, int, float, bool, None, or a timezone-aware
     datetime. NaN is turned into None, because the runner stores `raw` as JSON.
+    `native` is the same shape in the source's own projected CRS, before it was
+    reprojected, when the reader had it. `FeatureKeys` hashes that, because a
+    reprojection moves with the PROJ version and datum grids installed, and an
+    id must not.
     """
 
     properties: dict[str, Any]
     geometry: BaseGeometry | None
     id: str | int | None = None
+    native: BaseGeometry | None = None
 
 
 @lru_cache(maxsize=32)
@@ -136,6 +141,11 @@ def to_wgs84(geometry: BaseGeometry, crs: str) -> BaseGeometry:
     )
     assert isinstance(result, BaseGeometry), "shapely.transform returns a geometry for a geometry"
     return result
+
+
+def native_in(geometry: BaseGeometry, crs: str) -> BaseGeometry | None:
+    """`geometry` when `crs` is a CRS that `to_wgs84` will move, None when it is WGS84 already."""
+    return None if _transformer(crs) is None else geometry
 
 
 def plain(value: Any) -> Any:
@@ -184,29 +194,81 @@ def json_body(response: httpx.Response, where: str) -> Any:
 class FeatureKeys:
     """Stable external ids for a source that publishes none, built from what names each feature.
 
-    `key(parts, geometry)` hashes the text `parts` (upstream fields that name
-    the thing and survive a republish) with the geometry rounded to seven
-    decimal places of a degree, about a centimetre. The same feature gives
-    the same key in every run. Two features that agree in every part and in
-    their geometry are the same drawing entered twice, so the second gets
-    `-2` after its key, the third `-3`, in the order the source gives them.
-    Those repeats are counted in `repeats`, for the connector to report.
+    `key(parts, geometry, native=...)` hashes the text `parts` (upstream fields
+    that name the thing and survive a republish) with the shape. The shape is
+    `native` when the reader has it, rounded to a tenth of a metre, and
+    otherwise `geometry` in WGS84 rounded to seven decimal places of a degree,
+    about a centimetre. Prefer `native`: a reprojection moves every vertex by
+    metres or by 1e-5 degrees when the PROJ version or its datum grids change,
+    and that would give every feature a new id, and so delete every record and
+    its links on the next full run. The same feature gives the same key in
+    every run.
+
+    Features that agree in every part and in their shape are not always the
+    same drawing entered twice: in the detailed mapping they often differ in
+    type or period. `key` numbers such repeats `-2`, `-3` in read order, which
+    is only right when they are identical. `distinct_key` takes `detail`, the
+    rest of the feature's attributes. A repeat with the same detail as one
+    already given is a true duplicate and gets None, for the connector to
+    skip. A repeat with different detail is named for it, `-` and a hash of
+    the detail, so a re-export in another order doesn't swap the ids of two
+    interpretations. Which of them keeps the bare key still follows read order.
+    Duplicates and repeats are counted in `repeats`, for the connector to report.
     """
 
     def __init__(self) -> None:
         self._seen: dict[str, int] = {}
+        self._details: dict[str, set[str]] = {}
         self.repeats = 0
 
-    def key(self, parts: Sequence[str | None], geometry: BaseGeometry | None) -> str:
-        wkt = "" if geometry is None else shapely.to_wkt(geometry, rounding_precision=7, trim=True)
+    @staticmethod
+    def _digest(
+        parts: Sequence[str | None], geometry: BaseGeometry | None, native: BaseGeometry | None
+    ) -> str:
+        if native is not None:
+            wkt = shapely.to_wkt(native, rounding_precision=1, trim=True)
+        elif geometry is not None:
+            wkt = shapely.to_wkt(geometry, rounding_precision=7, trim=True)
+        else:
+            wkt = ""
         text = "|".join((part or "").strip().lower() for part in parts) + "|" + wkt
-        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:20]
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()[:20]
+
+    def key(
+        self,
+        parts: Sequence[str | None],
+        geometry: BaseGeometry | None,
+        *,
+        native: BaseGeometry | None = None,
+    ) -> str:
+        digest = self._digest(parts, geometry, native)
         count = self._seen.get(digest, 0) + 1
         self._seen[digest] = count
         if count == 1:
             return digest
         self.repeats += 1
         return f"{digest}-{count}"
+
+    def distinct_key(
+        self,
+        parts: Sequence[str | None],
+        geometry: BaseGeometry | None,
+        detail: Sequence[str | None],
+        *,
+        native: BaseGeometry | None = None,
+    ) -> str | None:
+        """A key, or None when a feature with the same parts, shape and `detail` was already given."""
+        digest = self._digest(parts, geometry, native)
+        fingerprint = hashlib.sha256("|".join(part or "" for part in detail).encode("utf-8")).hexdigest()[:8]
+        seen = self._details.setdefault(digest, set())
+        if fingerprint in seen:
+            self.repeats += 1
+            return None
+        seen.add(fingerprint)
+        if len(seen) == 1:
+            return digest
+        self.repeats += 1
+        return f"{digest}-{fingerprint}"
 
 
 def json_ready(properties: dict[str, Any], *, drop_empty: bool = False) -> dict[str, Any]:

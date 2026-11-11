@@ -99,7 +99,7 @@ external_id = hashlib.sha256(f"{props['NGR']}|{props['Name'].strip().lower()}".e
 
 Don't use `OBJECTID`, `FID`, a row number or `feature.id` unless the publisher states the value is stable. They're numbered afresh when a layer is republished, and then a full run upserts every record under a new id and deletes the old ones, with their links from evidence and investigations. Check that the key is unique in the data, and raise `UpstreamFormatError` when two features give the same one, because the runner would otherwise keep the first and count the rest as duplicates. Say in the connector's docstring which fields the key is built from.
 
-Where polygons share their upstream fields, as a monument's several drawn features do, add the geometry to the key. `FeatureKeys` in `adapters/common.py` builds it from the fields you name and the geometry rounded to a centimetre, and numbers an exact repeat (`-2`, `-3`) instead of losing it. `he_aim_detailed_mapping.py` is the example.
+Where polygons share their upstream fields, as a monument's several drawn features do, add the geometry to the key. `FeatureKeys` in `adapters/common.py` builds it from the fields you name and the geometry, and numbers an exact repeat (`-2`, `-3`) instead of losing it. Hash the shape in the source's own grid, to a tenth of a metre, by passing `native=feature.native` (ask an `ArcGISLayer` for `out_sr=27700`): the WGS84 shape moves with the PROJ version and datum grids installed, and a moved shape renumbers the whole source. Where repeats can differ in their other attributes, use `distinct_key` with those attributes as `detail`. `he_aim_detailed_mapping.py` is the example.
 
 ## 5. Record a fixture and test against it
 
