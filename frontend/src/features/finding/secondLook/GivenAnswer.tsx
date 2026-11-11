@@ -66,7 +66,7 @@ export function GivenAnswer({ meta, finding, observation, onRevealed, onWithdraw
         {what}.{" "}
         {observation.withdrawn
           ? "You took this answer back, so it doesn't count."
-          : "Your answer is final, but you can change its note."}
+          : "Your answer is final, but you can add or change its note."}
       </p>
       {observation.withdrawn ? (
         <Button size="sm" disabled={busy} onClick={() => void send(sameAnswer(observation))}>
@@ -74,7 +74,7 @@ export function GivenAnswer({ meta, finding, observation, onRevealed, onWithdraw
         </Button>
       ) : (
         <>
-          <Field label="Your note">
+          <Field label="Your note" hint="Optional. What you saw, what you think it is, or which layer showed it best.">
             {(control) => (
               <textarea
                 {...control}

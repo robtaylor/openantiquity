@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useState } from "react";
 import type { Meta } from "../../../api/meta.js";
 import { ChipGroup } from "../../../ui/Chip.js";
 import { Field } from "../../../ui/Field.js";
@@ -21,8 +21,11 @@ export interface AnswerDetailProps {
  */
 export function AnswerDetail({ meta, answer, onChange }: AnswerDetailProps) {
   const headingId = useId();
+  // "Don't know" is a choice of its own, not the starting one, so it never
+  // looks like the answer "Not sure" above it.
+  const [dontKnow, setDontKnow] = useState(false);
   const classOptions = [
-    { id: NOT_SAID, label: "Not sure" },
+    { id: NOT_SAID, label: "Don't know" },
     ...meta.vocab.feature_classes
       .filter((featureClass) => featureClass.id !== "unknown")
       .map((featureClass) => ({
@@ -42,8 +45,11 @@ export function AnswerDetail({ meta, answer, onChange }: AnswerDetailProps) {
           <p className="fc-answer-detail__label">What do you think it is?</p>
           <ChipGroup
             label="What do you think it is?"
-            value={answer.featureClass ?? NOT_SAID}
-            onChange={(id) => onChange({ ...answer, featureClass: id === NOT_SAID ? null : id })}
+            value={answer.featureClass ?? (dontKnow ? NOT_SAID : null)}
+            onChange={(id) => {
+              setDontKnow(id === NOT_SAID);
+              onChange({ ...answer, featureClass: id === NOT_SAID ? null : id });
+            }}
             options={classOptions}
           />
         </div>

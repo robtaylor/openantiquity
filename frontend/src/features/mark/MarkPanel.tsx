@@ -23,8 +23,10 @@ function useOpenSavedDraft(draftId: string | undefined): boolean {
   const client = useQueryClient();
   const navigate = useNavigate();
   useEffect(() => {
-    if (saved) openSavedFinding(client, navigate, saved);
-  }, [saved, client, navigate]);
+    if (!saved || draftId === undefined) return;
+    useSavedDrafts.getState().forget(draftId);
+    openSavedFinding(client, navigate, saved);
+  }, [saved, draftId, client, navigate]);
   return saved !== undefined;
 }
 

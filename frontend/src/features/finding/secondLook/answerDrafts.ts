@@ -12,6 +12,7 @@
 
 import { create } from "zustand";
 import { isRecord } from "../../../api/guards.js";
+import { onPersonChanged } from "../../account/session.js";
 import { defineDraftKind } from "../../drafts/savers.js";
 import { DRAFT_KINDS } from "../../drafts/store.js";
 import { putObservation } from "../api.js";
@@ -29,17 +30,51 @@ export function parseAnswerDraft(value: unknown): AnswerDraftData | null {
   return { public_id: value.public_id, answer: answer as unknown as ObservationIn };
 }
 
-interface SavedAnswers {
-  /** What answering revealed, by finding, for answers saved from drafts in this page. */
-  revealed: Readonly<Record<string, Reveal>>;
-  record: (reveal: Reveal) => void;
+interface SavedAnswer {
+  reveal: Reveal;
+  /** Its place in the order answers were saved, so a page opened later can tell it is older than what it shows. */
+  seq: number;
 }
 
-/** Answers saved from drafts since the page loaded, so an open page can show what they revealed. */
+interface SavedAnswers {
+  /** What answering revealed, by finding, for answers saved from drafts in this page and not yet shown. */
+  revealed: Readonly<Record<string, SavedAnswer>>;
+  record: (reveal: Reveal) => void;
+  /** Forget one, once a page has dealt with it. */
+  forget: (publicId: string) => void;
+  clear: () => void;
+}
+
+let saves = 0;
+
+/** How many answers have been saved from drafts so far: a page remembers this when it opens. */
+export function savedAnswerCount(): number {
+  return saves;
+}
+
+/**
+ * Answers saved from drafts, kept until the finding's page has dealt with
+ * them, so an open page can show what they revealed. What a reveal holds was
+ * for the person who answered, exact place and all, so it is forgotten when
+ * the person changes.
+ */
 export const useSavedAnswers = create<SavedAnswers>()((set) => ({
   revealed: {},
-  record: (reveal) => set((state) => ({ revealed: { ...state.revealed, [reveal.finding.public_id]: reveal } })),
+  record: (reveal) => {
+    saves += 1;
+    const entry = { reveal, seq: saves };
+    set((state) => ({ revealed: { ...state.revealed, [reveal.finding.public_id]: entry } }));
+  },
+  forget: (publicId) =>
+    set((state) => {
+      if (!(publicId in state.revealed)) return state;
+      const { [publicId]: _gone, ...rest } = state.revealed;
+      return { revealed: rest };
+    }),
+  clear: () => set({ revealed: {} }),
 }));
+
+onPersonChanged(() => useSavedAnswers.getState().clear());
 
 export const answerDrafts = defineDraftKind<AnswerDraftData>({
   kind: DRAFT_KINDS.observation,

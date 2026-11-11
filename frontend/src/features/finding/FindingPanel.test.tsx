@@ -1,6 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { apiFetch } from "../../api/client.js";
 import { useMapStore } from "../../map/store.js";
 import { type ApiRoutes, apiError, routeApi } from "../../test/apiRoutes.js";
 import {
@@ -21,8 +22,10 @@ import { meFixture } from "../../test/fixtures/me.js";
 import { json, mapReady, renderShell, setUpShellTests, signedOutResponse } from "../../test/shellHarness.js";
 import type { Me } from "../account/api.js";
 import { useAccountUi } from "../account/requireAccount.js";
-import { DRAFTS_STORAGE_KEY } from "../drafts/store.js";
+import { DRAFTS_STORAGE_KEY, resetDraftsForTests } from "../drafts/store.js";
 import { useSelectedFinding } from "../findings/selection.js";
+import { useSavedDrafts } from "../mark/findingDrafts.js";
+import { useSavedAnswers } from "./secondLook/answerDrafts.js";
 import type { FindingDetail } from "./types.js";
 
 vi.mock("maplibre-gl", async () => {
@@ -37,8 +40,10 @@ const THE_FINDER = meFixture({ handle: FINDER.handle, display_name: FINDER.displ
 
 beforeEach(() => {
   useSelectedFinding.getState().clear();
+  useSavedAnswers.getState().clear();
   useAccountUi.setState({ sheet: null, waiting: [] });
   localStorage.clear();
+  resetDraftsForTests();
 });
 
 /** The finding's page served for `finding`, with an empty discussion and no suggestions, as `me`. */
@@ -63,8 +68,18 @@ async function open(finding: FindingDetail, me: Me | null = MEMBER, routes = ser
 describe("a finding's head", () => {
   it("shows the step, the meter, who found it and when, what it is and where, and marks it on the map", async () => {
     const { panel } = await open(seenFixture());
-    expect(panel.getByText("Seen by others")).toBeInTheDocument();
+    const badges = document.querySelector(".fc-finding__badges") as HTMLElement;
+    expect(within(badges).getByText("Seen by others")).toBeInTheDocument();
     expect(panel.getByRole("meter", { name: "Confidence" })).toHaveAttribute("aria-valuenow", "36");
+    // Each step of the ladder is named, not numbered, with this one's marked.
+    const ladder = panel.getByRole("list", { name: "The ladder" });
+    expect(
+      within(ladder)
+        .getAllByRole("listitem")
+        .map((step) => step.textContent),
+    ).toEqual(["Spotted", "Seen by others", "Corroborated", "Probable", "Checked on the ground", "On record"]);
+    expect(within(ladder).getByText("Seen by others")).toHaveAttribute("aria-current", "step");
+    expect(panel.queryByText("30")).toBeNull();
     expect(panel.getByText(/Spotted by/)).toHaveTextContent("Spotted by Ada Lovelace on 1 November 2026");
     expect(panel.getByText("Round barrow or mound")).toBeInTheDocument();
     expect(panel.getByText("SU 1025 6996")).toBeInTheDocument();
@@ -158,7 +173,7 @@ describe("a second look on the page", () => {
     expect(panel.getByText(/final once sent/)).toBeInTheDocument();
   });
 
-  it("offers the detail after the answer, sends it all at once, and reveals how it compares and that it moved", async () => {
+  it("offers the detail once an answer is chosen, sends it all at once, and reveals how it compares and that it moved", async () => {
     const user = userEvent.setup();
     const finding = pageFixture();
     const { panel, routes } = await open(finding);
@@ -174,10 +189,14 @@ describe("a second look on the page", () => {
 
     await user.click(panel.getByRole("button", { name: "I can see it" }));
     expect(panel.getByRole("button", { name: "I can see it" })).toHaveAttribute("aria-pressed", "true");
+    // The class question starts with nothing chosen, so nothing in it reads like the answer "Not sure".
+    const kind = panel.getByRole("radiogroup", { name: "What do you think it is?" });
+    expect(within(kind).queryByRole("radio", { checked: true })).toBeNull();
+    expect(within(kind).getByRole("radio", { name: "Don't know" })).toBeInTheDocument();
     await user.click(panel.getByRole("radio", { name: "Round barrow or mound" }));
     const modern = panel.getByRole("radiogroup", { name: "Could it be modern?" });
     await user.click(within(modern).getByRole("radio", { name: "No" }));
-    await user.click(panel.getByRole("button", { name: "Send: i can see it" }));
+    await user.click(panel.getByRole("button", { name: "Send “I can see it”" }));
 
     await waitFor(() => expect(routes.callsTo("PUT /findings/f-ring/observation")).toHaveLength(1));
     expect(routes.callsTo("PUT /findings/f-ring/observation")[0]?.body).toEqual({
@@ -185,8 +204,8 @@ describe("a second look on the page", () => {
       feature_class: "round_barrow",
       not_modern: true,
     });
-    expect(await panel.findByText(/2 other people can see it, 1 isn't sure and 0 can't\./)).toBeInTheDocument();
-    expect(panel.getByText(/So do you\./)).toBeInTheDocument();
+    expect(await panel.findByText(/2 other people can see it and 1 isn't sure\./)).toBeInTheDocument();
+    expect(panel.getByText(/The finder marked it as: Round barrow or mound\. So did you\./)).toBeInTheDocument();
     expect(panel.getByText(/Your answer helped\. It has moved up to Seen by others\./)).toBeInTheDocument();
     expect(panel.getAllByText("Seen by others").length).toBeGreaterThan(0);
     // The answer is final: only its note can change now.
@@ -199,7 +218,7 @@ describe("a second look on the page", () => {
     const user = userEvent.setup();
     const { panel, routes } = await open(pageFixture(), null);
     await user.click(panel.getByRole("button", { name: "Not sure" }));
-    await user.click(panel.getByRole("button", { name: "Send: not sure" }));
+    await user.click(panel.getByRole("button", { name: "Send “Not sure”" }));
     await waitFor(() => expect(useAccountUi.getState().sheet).toBe("signin"));
     expect(routes.callsTo("PUT /findings/f-ring/observation")).toHaveLength(0);
     const stored = JSON.parse(localStorage.getItem(DRAFTS_STORAGE_KEY) ?? "{}");
@@ -209,6 +228,49 @@ describe("a second look on the page", () => {
     });
     act(() => useAccountUi.getState().close());
     expect(await panel.findByText("Not saved yet")).toBeInTheDocument();
+  });
+
+  it("never shows an answer saved before the page opened, which may be someone else's, over what the server sends", async () => {
+    const theirs = observationFixture({ user: { ...MEMBER, avatar_url: null } });
+    act(() => useSavedAnswers.getState().record(revealFixture(theirs, pageFixture(), {})));
+    const { panel, routes } = await open(squareFixture(), null);
+    expect(panel.queryByRole("region", { name: "Your second look" })).toBeNull();
+    expect(panel.getByText("SU1069")).toBeInTheDocument();
+    expect(panel.queryByText("SU 1025 6996")).toBeNull();
+    expect(useSavedAnswers.getState().revealed).toEqual({});
+    expect(routes.callsTo("GET /findings/f-ring").length).toBeGreaterThan(0);
+  });
+
+  it("forgets the exact place and anything saved for the person when they are signed out", async () => {
+    const { routes } = await open(pageFixture());
+    // The page as the next viewer sees it hasn't arrived: nothing of the last one's may stay meanwhile.
+    routes.on("GET /findings/f-ring", () => new Promise<Response>(() => undefined));
+    expect(useSelectedFinding.getState().selected).toMatchObject({ publicId: "f-ring", square: null });
+    act(() => {
+      useSavedAnswers.getState().record(revealFixture(observationFixture(), pageFixture(), {}));
+      useSavedDrafts.getState().record("draft-1", pageFixture());
+    });
+    harness.fetchMock().mockImplementationOnce(async () => signedOutResponse());
+    await act(async () => {
+      await apiFetch("/findings", { method: "POST", body: {} }).catch(() => undefined);
+    });
+    expect(useSelectedFinding.getState().selected).toBeNull();
+    expect(useSavedAnswers.getState().revealed).toEqual({});
+    expect(useSavedDrafts.getState().saved).toEqual({});
+    expect(await screen.findByText("Loading the finding")).toBeInTheDocument();
+  });
+
+  it("reveals an answer saved from a draft while the page is open, and asks for the finding again", async () => {
+    const finding = pageFixture();
+    const { panel, routes } = await open(finding);
+    const answered = observationFixture({ user: { ...MEMBER, avatar_url: null } });
+    const before = routes.callsTo("GET /findings/f-ring").length;
+    routes.on("GET /findings/f-ring", () => json(pageFixture({ answers_visible: true, my_observation: answered })));
+    act(() => useSavedAnswers.getState().record(revealFixture(answered, finding, {})));
+    expect(await panel.findByText(/2 other people can see it and 1 isn't sure\./)).toBeInTheDocument();
+    await waitFor(() => expect(routes.callsTo("GET /findings/f-ring").length).toBeGreaterThan(before));
+    expect(await panel.findByLabelText("Your note")).toBeInTheDocument();
+    expect(useSavedAnswers.getState().revealed).toEqual({});
   });
 
   it("lets an answer's note change, and offers taking it back", async () => {
@@ -254,7 +316,10 @@ describe("evidence", () => {
     expect(within(map).getByText("OS 6-inch, Wiltshire sheet XXVIII, 1888")).toBeInTheDocument();
     expect(within(map).getByText("Supports it")).toBeInTheDocument();
     expect(within(map).getByText(/Added by Mary Anning/)).toBeInTheDocument();
-    expect(within(map).getByText("+1")).toBeInTheDocument();
+    expect(within(map).getByText("Support +1")).toBeInTheDocument();
+    expect(
+      panel.getByText(/Its support is endorsements minus disputes, with more weight for experienced members\./),
+    ).toBeInTheDocument();
     const official = panel.getByRole("heading", { name: /Designation/ }).parentElement as HTMLElement;
     expect(within(official).getByText(/Not verified yet/)).toBeInTheDocument();
   });
@@ -272,14 +337,14 @@ describe("evidence", () => {
     );
     const endorse = panel.getByRole("button", { name: "Endorse" });
     await user.click(endorse);
-    // Shown at once.
+    // The vote shows at once. The total is weighted by who voted, so it stays as the server said until it says again.
     await waitFor(() => expect(panel.getByRole("button", { name: "Endorse" })).toHaveAttribute("aria-pressed", "true"));
-    expect(panel.getByText("+2")).toBeInTheDocument();
+    expect(panel.getByText("Support +1")).toBeInTheDocument();
     act(() => answer(apiError(409, "finding_withdrawn", "This finding was withdrawn.")));
     await waitFor(() =>
       expect(panel.getByRole("button", { name: "Endorse" })).toHaveAttribute("aria-pressed", "false"),
     );
-    expect(panel.getByText("+1")).toBeInTheDocument();
+    expect(panel.getByText("Support +1")).toBeInTheDocument();
     expect(await screen.findByText(/Your vote couldn't be saved\. This finding was withdrawn\./)).toBeInTheDocument();
   });
 

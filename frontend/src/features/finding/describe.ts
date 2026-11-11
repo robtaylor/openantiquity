@@ -36,6 +36,12 @@ export function distanceWords(metres: number): string {
 // Who is looking
 // --------------------------------------------------------------------------
 
+// Known duplication of the server's rules, listed in docs/ARCHITECTURE.md
+// ("A finding's page"): who may raise a level or verify, which steps a second
+// look or an evidence group meets, and who sees what at each level. They go
+// once `FindingDetail` says what this viewer may do and `/meta` says what
+// meets each step.
+
 /** Roles that may raise a finding's level as well as its finder (docs/ARCHITECTURE.md, "Location sensitivity"). */
 const RAISING_ROLES = new Set(["trusted", "expert", "moderator", "admin"]);
 /** Roles that may verify an official record. */

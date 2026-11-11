@@ -44,6 +44,14 @@ export interface EvidenceItemProps {
   onDelete: () => void;
 }
 
+/** The weighted vote total as shown, such as "+2.5", "0" or "−1". */
+function supportOf(total: number): string {
+  const rounded = Math.round(total * 10) / 10;
+  if (rounded > 0) return `+${rounded}`;
+  if (rounded < 0) return `−${Math.abs(rounded)}`;
+  return "0";
+}
+
 /**
  * One piece of evidence: what it is, whether it supports the finding, who
  * added it, the endorsements and disputes on it, and for an official record
@@ -155,10 +163,7 @@ export function EvidenceItem({
           >
             Dispute
           </Button>
-          <span className="fc-vote__total" title="Endorsements minus disputes, weighted by experience">
-            {item.vote_total > 0 ? "+" : ""}
-            {Math.round(item.vote_total * 10) / 10}
-          </span>
+          <span className="fc-vote__total">Support {supportOf(item.vote_total)}</span>
         </div>
         {official && !item.verified_by && mayVerify ? (
           <Button size="sm" icon={<BadgeCheck size={15} aria-hidden />} disabled={pending} onClick={onVerify}>

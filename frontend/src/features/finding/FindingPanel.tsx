@@ -5,6 +5,7 @@ import { Link, useParams } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { Button } from "../../ui/Button.js";
 import { EmptyState } from "../../ui/EmptyState.js";
+import { scrollBehaviour } from "../../ui/motion.js";
 import { Skeleton } from "../../ui/Skeleton.js";
 import { useSession } from "../account/session.js";
 import { useDocumentTitle } from "../placeholders.js";
@@ -34,16 +35,21 @@ function BackToExplore() {
   );
 }
 
-/** Bring a part of the page into view and give it focus, opening a phone sheet fully so it can be seen. */
+/**
+ * Bring a part of the page into view and give it focus. On a phone the sheet
+ * opens to `stop` first: fully for a form, but only half-way for a second
+ * look, because the person needs the map above the sheet to answer it.
+ */
 function useReveal() {
   const environment = usePanelEnvironment();
   return useCallback(
-    (find: () => HTMLElement | null) => {
-      if (environment.isPhone && environment.stop !== "full") environment.setStop("full");
+    (find: () => HTMLElement | null, stop: "half" | "full" = "full") => {
+      // A sheet already open fully stays so.
+      if (environment.isPhone && environment.stop !== "full" && environment.stop !== stop) environment.setStop(stop);
       // After the render that opens the form or the sheet.
       requestAnimationFrame(() => {
         const element = find();
-        element?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+        element?.scrollIntoView?.({ block: "start", behavior: scrollBehaviour() });
         element?.focus({ preventScroll: true });
       });
     },
@@ -105,7 +111,7 @@ function FindingPage({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
   function act(action: StepAction): void {
     switch (action.kind) {
       case "answer":
-        reveal(() => secondLook.current);
+        reveal(() => secondLook.current, "half");
         return;
       case "share":
         void copyLink(finding.public_id);

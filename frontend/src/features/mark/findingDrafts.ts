@@ -13,6 +13,7 @@
 
 import { create } from "zustand";
 import { isFiniteNumber, isRecord } from "../../api/guards.js";
+import { onPersonChanged } from "../account/session.js";
 import { defineDraftKind } from "../drafts/savers.js";
 import { DRAFT_KINDS } from "../drafts/store.js";
 import { createFinding } from "../findings/api.js";
@@ -76,20 +77,37 @@ export function createBody(draft: FindingDraft): FindingCreate {
 }
 
 interface SavedDrafts {
-  /** The finding each draft became, by draft id, for drafts saved in this page. */
+  /** The finding each draft became, by draft id, for drafts saved in this page and not yet opened. */
   saved: Readonly<Record<string, FindingDetail>>;
+  /** How many drafts have been saved in this page, so the map knows when to ask again. */
+  count: number;
   record: (draftId: string, finding: FindingDetail) => void;
+  /** Forget one, once its finding has been opened. */
+  forget: (draftId: string) => void;
+  clear: () => void;
 }
 
 /**
  * Drafts saved since the page loaded. A mark panel showing a draft that has
  * just been saved opens the finding it became, and the map asks for its
- * findings again, through this.
+ * findings again, through this. The finding is as its finder sees it, exact
+ * place and all, so it is forgotten once opened and when the person changes.
  */
 export const useSavedDrafts = create<SavedDrafts>()((set) => ({
   saved: {},
-  record: (draftId, finding) => set((state) => ({ saved: { ...state.saved, [draftId]: finding } })),
+  count: 0,
+  record: (draftId, finding) =>
+    set((state) => ({ saved: { ...state.saved, [draftId]: finding }, count: state.count + 1 })),
+  forget: (draftId) =>
+    set((state) => {
+      if (!(draftId in state.saved)) return state;
+      const { [draftId]: _opened, ...rest } = state.saved;
+      return { saved: rest };
+    }),
+  clear: () => set({ saved: {} }),
 }));
+
+onPersonChanged(() => useSavedDrafts.getState().clear());
 
 export const findingDrafts = defineDraftKind<FindingDraft>({
   kind: DRAFT_KINDS.finding,

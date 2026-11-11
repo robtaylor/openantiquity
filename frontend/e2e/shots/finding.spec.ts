@@ -124,10 +124,21 @@ test("second look", async ({ page }) => {
   await scrollTo(look);
   await shoot(page, "11-look-detail");
   await look.getByRole("radio", { name: "Round barrow or mound" }).click();
+  await shoot(page, "11b-look-detail-chosen");
   await look.getByRole("button", { name: /^Send/ }).click();
   await look.getByText(/other people can see it/).waitFor();
   await scrollTo(look);
   await shoot(page, "12-look-revealed");
+});
+
+test("second look from what would move it up", async ({ page }) => {
+  await fakeSession(page, MEMBER);
+  const finding = pageFixture();
+  await fakeFindingPage(page, finding);
+  const panel = await open(page, finding);
+  await sheetTo(page, "half");
+  await panel.getByRole("button", { name: "Give a second look" }).first().click();
+  await shoot(page, "13-look-from-steps");
 });
 
 test("viewers", async ({ page }) => {

@@ -40,6 +40,42 @@
   font-size: 13px;
 }
 
+.fc-ladder {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fc-ladder__steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.fc-ladder__step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fc-ladder__step--current {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.fc-ladder__dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border: 1px solid rgb(0 0 0 / 0.6);
+  border-radius: 50%;
+}
+
 .fc-finding__badges {
   display: flex;
   align-items: center;
@@ -259,6 +295,17 @@
 .fc-answer-detail__hint {
   color: var(--text-muted);
   font-size: 13px;
+}
+
+/* Stays in sight at the foot of the panel while the optional detail is filled in. */
+.fc-second-look__send {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: 0 -4px;
+  padding: 10px 4px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
 }
 
 .fc-given,

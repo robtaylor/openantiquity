@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { observationFixture } from "../../../test/fixtures/findingPage.js";
 import { metaFixture as meta } from "../../../test/fixtures/meta.js";
 import { type AnswerDraft, answerBody, explanationFor, newAnswer, sameAnswer, withCheck } from "./answer.js";
+import { othersSentence } from "./RevealSummary.js";
 
 describe("answerBody", () => {
   it("sends only the answer when nothing more was said", () => {
@@ -45,5 +46,16 @@ describe("sameAnswer", () => {
       note: "new note",
     });
     expect(sameAnswer(given, "")).toEqual({ visible: "yes", feature_class: "round_barrow", not_natural: true });
+  });
+});
+
+describe("othersSentence", () => {
+  it("says how the others answered in words, leaving out anyone counted as nobody", () => {
+    expect(othersSentence({ yes: 2, unsure: 1, no: 1 })).toBe("2 other people can see it, 1 isn't sure and 1 can't.");
+    expect(othersSentence({ yes: 2, unsure: 1, no: 0 })).toBe("2 other people can see it and 1 isn't sure.");
+    expect(othersSentence({ yes: 1, unsure: 0, no: 0 })).toBe("1 other person can see it.");
+    expect(othersSentence({ yes: 0, unsure: 2, no: 1 })).toBe("2 other people aren't sure and 1 can't see it.");
+    expect(othersSentence({ yes: 0, unsure: 0, no: 3 })).toBe("3 other people can't see it.");
+    expect(othersSentence({ yes: 0, unsure: 0, no: 0 })).toBe("Nobody else has answered yet.");
   });
 });

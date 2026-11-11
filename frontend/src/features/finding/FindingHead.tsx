@@ -6,6 +6,7 @@ import { Button } from "../../ui/Button.js";
 import { FeatureIcon } from "../../ui/featureIcons.js";
 import { Meter } from "../../ui/Meter.js";
 import { TierBadge } from "../../ui/TierBadge.js";
+import { tierVar } from "../../ui/tokens.js";
 import { useAccountUi } from "../account/requireAccount.js";
 import { formatDate, labelOf, squareSentence, stateReason } from "./describe.js";
 import { seeAsFinderDid } from "./mapView.js";
@@ -22,6 +23,37 @@ function viewSummary(meta: Meta, finding: FindingDetail): string {
   }
   if (view.pitch) parts.push("tilted into 3D");
   return parts.length > 0 ? `${parts.join(", ")}.` : "The layer and light they used.";
+}
+
+/**
+ * The ladder's steps by name, below the meter, with the finding's own step
+ * marked: each tick on the meter is one of these. The steps and their words
+ * come from `/meta`.
+ */
+function Ladder({ meta, tierId, ruledOut }: { meta: Meta; tierId: string; ruledOut: boolean }) {
+  const tiers = meta.vocab.tiers;
+  return (
+    <div className="fc-ladder">
+      <p className="fc-finding__hint">
+        The meter shows how far it has got up the ladder as others check it. Each mark on it is a step:
+      </p>
+      <ol className="fc-ladder__steps" aria-label="The ladder">
+        {tiers.map((step) => {
+          const current = !ruledOut && step.id === tierId;
+          return (
+            <li
+              key={step.id}
+              className={current ? "fc-ladder__step fc-ladder__step--current" : "fc-ladder__step"}
+              aria-current={current ? "step" : undefined}
+            >
+              <span className="fc-ladder__dot" style={{ background: tierVar(step.id) }} aria-hidden />
+              {step.label}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
 }
 
 export interface FindingHeadProps {
@@ -53,16 +85,8 @@ export function FindingHead({ meta, finding, signedIn, change }: FindingHeadProp
         </span>
         <ReportSlot finding={finding} target={{ kind: "finding", id: finding.public_id }} />
       </div>
-      <Meter
-        value={assessment.score}
-        tiers={meta.vocab.tiers}
-        tierId={tier.id}
-        ruledOut={state.id === "ruled_out"}
-        showScale
-      />
-      <p className="fc-finding__hint">
-        The meter shows how far it has got on the ladder from spotted to on record, as others check it.
-      </p>
+      <Meter value={assessment.score} tiers={meta.vocab.tiers} tierId={tier.id} ruledOut={state.id === "ruled_out"} />
+      <Ladder meta={meta} tierId={tier.id} ruledOut={state.id === "ruled_out"} />
       <p className="fc-finding__change" role="status" aria-live="polite">
         {change}
       </p>

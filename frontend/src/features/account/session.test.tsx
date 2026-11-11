@@ -9,7 +9,7 @@ import { json, mapReady, renderShell, setUpShellTests, signedOutResponse } from 
 import { resetDraftsForTests } from "../drafts/store.js";
 import type { Me } from "./api.js";
 import { AccountRequiredError, useAccountUi, useRequireAccount } from "./requireAccount.js";
-import { useSession } from "./session.js";
+import { onPersonChanged, useSession } from "./session.js";
 
 vi.mock("maplibre-gl", async () => {
   const fake = await import("../../test/fakeMapLibre.js");
@@ -88,6 +88,25 @@ describe("the session", () => {
     await waitFor(() => expect(probe().getByTestId("status")).toHaveTextContent("signed-out"));
     expect(screen.queryByTestId("account-avatar")).toBeNull();
     expect(await screen.findByText("You've been signed out. Sign in again to save.")).toBeInTheDocument();
+  });
+
+  it("tells every person-change listener when someone signs out, but not on the first answer", async () => {
+    const heard = vi.fn();
+    const stop = onPersonChanged(heard);
+    try {
+      routeApi(harness.fetchMock(), { "GET /auth/me": () => json(meFixture()) });
+      renderShell("/", <SaveProbe />);
+      await waitFor(() => expect(probe().getByTestId("status")).toHaveTextContent("signed-in"));
+      expect(heard).not.toHaveBeenCalled();
+      harness.fetchMock().mockImplementationOnce(async () => signedOutResponse());
+      await act(async () => {
+        await apiFetch("/findings", { method: "POST", body: {} }).catch(() => undefined);
+      });
+      await waitFor(() => expect(probe().getByTestId("status")).toHaveTextContent("signed-out"));
+      expect(heard).toHaveBeenCalledTimes(1);
+    } finally {
+      stop();
+    }
   });
 
   it("asks again and opens the welcome sheet when any save is refused with onboarding_required", async () => {

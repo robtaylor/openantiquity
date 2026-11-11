@@ -224,7 +224,7 @@ export function reticlePlace(map: MapLibreMap): LngLat | null {
 /** When drafts are saved, the map and the list ask again so the new findings show. */
 function useRefreshOnSavedDrafts(): void {
   const client = useQueryClient();
-  const saved = useSavedDrafts((state) => state.saved);
+  const count = useSavedDrafts((state) => state.count);
   const first = useRef(true);
   // biome-ignore lint/correctness/useExhaustiveDependencies: a newly saved draft is the trigger
   useEffect(() => {
@@ -233,7 +233,7 @@ function useRefreshOnSavedDrafts(): void {
       return;
     }
     void client.invalidateQueries({ queryKey: findingKeys.all });
-  }, [saved, client]);
+  }, [count, client]);
 }
 
 /**

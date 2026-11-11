@@ -157,15 +157,39 @@ test("a second look reveals nothing before the answer, offers detail after it, a
 
   await look.getByRole("button", { name: "I can see it" }).click();
   await expect(look.getByText("What do you think it is?")).toBeVisible();
+  // The send button is in sight as soon as an answer is chosen, however long the detail.
+  await expect(look.getByRole("button", { name: "Send “I can see it”" })).toBeInViewport();
   await look.getByRole("radio", { name: "Round barrow or mound" }).click();
-  await look.getByRole("button", { name: "Send: i can see it" }).click();
+  await look.getByRole("button", { name: "Send “I can see it”" }).click();
 
-  await expect(look.getByText(/2 other people can see it, 1 isn't sure and 0 can't\./)).toBeVisible();
-  await expect(look.getByText(/So do you\./)).toBeVisible();
+  await expect(look.getByText(/2 other people can see it and 1 isn't sure\./)).toBeVisible();
+  await expect(look.getByText(/The finder marked it as: Round barrow or mound\. So did you\./)).toBeVisible();
   expect(fake.sent["PUT observation"]).toEqual([{ visible: "yes", feature_class: "round_barrow" }]);
   await expect(panel.getByRole("heading", { name: "Second looks" })).toBeVisible();
   await expect(look.getByRole("group", { name: "Can you see it?" })).toHaveCount(0);
   await expect(look.getByLabel("Your note")).toBeVisible();
+});
+
+test("giving a second look from what would move it up keeps the finding in sight above the panel", async ({ page }) => {
+  await fakeSession(page, MEMBER);
+  const finding = pageFixture();
+  await fakeFindingPage(page, finding);
+  const panel = await openFinding(page, finding);
+  await panel.getByRole("button", { name: "Give a second look" }).first().click();
+  const look = panel.getByRole("region", { name: "Your second look" });
+  await expect(look.getByRole("button", { name: "I can see it" })).toBeInViewport();
+  await expect(look).toBeFocused();
+  const isPhone = (page.viewportSize()?.width ?? 0) < 720;
+  if (isPhone) await expect(page.locator(".fc-shell")).toHaveAttribute("data-sheet", "half");
+  // The person is asked to look at the map, so the finding stays uncovered.
+  const ring = await page.locator(".fc-highlight-ring").boundingBox();
+  const sheet = await panel.boundingBox();
+  expect(ring).not.toBeNull();
+  expect(sheet).not.toBeNull();
+  if (ring && sheet) {
+    if (isPhone) expect(ring.y + ring.height).toBeLessThanOrEqual(sheet.y);
+    else expect(ring.x + ring.width).toBeLessThanOrEqual(sheet.x);
+  }
 });
 
 test("every evidence form fits the screen and asks only for what its kind needs", async ({ page }) => {

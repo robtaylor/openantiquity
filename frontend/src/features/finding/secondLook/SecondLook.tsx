@@ -1,5 +1,5 @@
 import { LogIn, Send } from "lucide-react";
-import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
+import { type ReactNode, type Ref, useEffect, useState } from "react";
 import type { Meta } from "../../../api/meta.js";
 import { Button } from "../../../ui/Button.js";
 import { toast } from "../../../ui/toastStore.js";
@@ -13,7 +13,7 @@ import type { FindingDetail, Reveal, Visible } from "../types.js";
 import { AnswerButtons } from "./AnswerButtons.js";
 import { AnswerDetail } from "./AnswerDetail.js";
 import { ANSWER_WORDS, type AnswerDraft, answerBody, newAnswer } from "./answer.js";
-import { answerDrafts, useSavedAnswers } from "./answerDrafts.js";
+import { answerDrafts, savedAnswerCount, useSavedAnswers } from "./answerDrafts.js";
 import { GivenAnswer } from "./GivenAnswer.js";
 import { RevealSummary } from "./RevealSummary.js";
 
@@ -30,7 +30,14 @@ export interface SecondLookProps {
   ref?: Ref<HTMLElement>;
 }
 
-/** What someone who hasn't answered sees before they do: the answers, and what giving one means. */
+/**
+ * What someone who hasn't answered sees: the three answers, then, once one
+ * is chosen, the optional detail and the button that sends it all. The
+ * server takes the detail only with the answer, and the class has to be
+ * said before the reveal to count as unprompted (Decision 0008), so the
+ * detail can't wait until after sending. The send button stays in sight
+ * from the moment an answer is chosen.
+ */
 function Ask({ meta, finding, ready, onRevealed }: Pick<SecondLookProps, "meta" | "finding" | "ready" | "onRevealed">) {
   const signedIn = useSignedInFirst();
   const [answer, setAnswer] = useState<AnswerDraft | null>(null);
@@ -77,7 +84,7 @@ function Ask({ meta, finding, ready, onRevealed }: Pick<SecondLookProps, "meta" 
     <>
       <p className="fc-finding__hint">
         Look at the map in the finder's view, then say whether you can see a feature there. Other people's answers stay
-        hidden until you've given yours, and your answer is final once sent.
+        hidden until you've sent yours, and your answer is final once sent.
       </p>
       <AnswerButtons value={answer?.visible ?? null} onChoose={choose} disabled={sending} />
       {answer ? (
@@ -91,7 +98,7 @@ function Ask({ meta, finding, ready, onRevealed }: Pick<SecondLookProps, "meta" 
               disabled={sending}
               onClick={() => void send(answer)}
             >
-              {sending ? "Sending…" : `Send: ${ANSWER_WORDS[answer.visible].button.toLowerCase()}`}
+              {sending ? "Sending…" : `Send “${ANSWER_WORDS[answer.visible].button}”`}
             </Button>
           </div>
         </>
@@ -113,20 +120,22 @@ export function SecondLook({ meta, finding, position, ready, onRevealed, onRefre
   const drafts = useKindDrafts(answerDrafts);
   const draft = drafts.find((entry) => entry.data.public_id === finding.public_id) ?? null;
   const signedIn = useSignedInFirst();
+  const [openedAfter] = useState(savedAnswerCount);
   const saved = useSavedAnswers((state) => state.revealed[finding.public_id]);
 
-  // A draft saved after sign-in reveals the finding as a sent answer does, once.
-  const applied = useRef<Reveal | null>(null);
+  // A draft saved after sign-in reveals the finding, once, if it was saved
+  // while this page was open. The page asks for the finding again rather than
+  // taking the reveal's copy, which may be older than what it already has.
   useEffect(() => {
-    if (!saved || applied.current === saved) return;
-    applied.current = saved;
-    setReveal(saved);
-    onRevealed(saved);
-  }, [saved, onRevealed]);
+    if (!saved) return;
+    useSavedAnswers.getState().forget(finding.public_id);
+    if (saved.seq > openedAfter) setReveal(saved.reveal);
+    onRefresh();
+  }, [saved, openedAfter, finding.public_id, onRefresh]);
 
   const shown = reveal?.finding.public_id === finding.public_id ? reveal : null;
   const observation = finding.my_observation;
-  if (!observation && !position.mayAnswer && !draft) return null;
+  if (!observation && !shown && !position.mayAnswer && !draft) return null;
 
   let body: ReactNode;
   if (observation) {
@@ -146,6 +155,9 @@ export function SecondLook({ meta, finding, position, ready, onRevealed, onRefre
         />
       </>
     );
+  } else if (shown) {
+    // Saved from a draft: the page is asking for the finding again.
+    body = <RevealSummary meta={meta} reveal={shown} />;
   } else if (draft) {
     body = (
       <div className="fc-given">

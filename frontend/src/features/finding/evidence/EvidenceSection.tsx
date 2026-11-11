@@ -122,13 +122,12 @@ export function EvidenceSection({
 
   function vote(item: Evidence, value: -1 | 0 | 1): void {
     void signedIn(async () => {
-      const before = item.my_vote ?? 0;
+      // Only the vote itself shows at once. The total is weighted by who
+      // voted, which is the server's to work out, so it waits for the refresh.
       const undo = optimistic((current) => ({
         ...current,
         evidence: current.evidence.map((entry) =>
-          entry.id === item.id
-            ? { ...entry, my_vote: value === 0 ? null : value, vote_total: entry.vote_total - before + value }
-            : entry,
+          entry.id === item.id ? { ...entry, my_vote: value === 0 ? null : value } : entry,
         ),
       }));
       try {
@@ -170,6 +169,9 @@ export function EvidenceSection({
       <p className="fc-finding__hint">
         Old maps, aerial photos, records and visits that bear on it. Evidence counts when someone other than the finder
         adds it or endorses it.
+        {groups.length > 0
+          ? " Its support is endorsements minus disputes, with more weight for experienced members."
+          : null}
       </p>
 
       {groups.length === 0 ? <p className="fc-muted">No evidence yet.</p> : null}

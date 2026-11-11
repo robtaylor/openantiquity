@@ -13,7 +13,8 @@
  * step is owed, so the session is asked for again and the welcome sheet
  * opens; a change in another tab is picked up; and whenever the person
  * changes, every query whose answer depends on the viewer is dropped and
- * asked again, so a protected finding's exact position goes with the session.
+ * asked again, so a protected finding's exact position goes with the session,
+ * and every listener given to `onPersonChanged` is told.
  */
 
 import { type QueryClient, type QueryKey, queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -131,6 +132,20 @@ function viewerIndependent(key: QueryKey): boolean {
   );
 }
 
+const personListeners = new Set<() => void>();
+
+/**
+ * Hear whenever the person changes: a sign-in, a sign-out, or another
+ * account. A feature that keeps something one viewer was allowed to see
+ * outside the query cache, such as a finding's exact place, forgets it here,
+ * at the same moment the viewer's queries are dropped. Returns a function
+ * that stops listening.
+ */
+export function onPersonChanged(listener: () => void): () => void {
+  personListeners.add(listener);
+  return () => personListeners.delete(listener);
+}
+
 export interface SessionSyncHandlers {
   /** Someone who was signed in has been signed out by the server, such as when the session ran out. */
   onSignedOutUnexpectedly?: () => void;
@@ -192,6 +207,7 @@ export function useSessionSync(handlers: SessionSyncHandlers = {}): void {
       const next = identity(event.query.state.data as Me | null | undefined);
       if (next === undefined) return;
       if (person !== undefined && next !== person) {
+        for (const listener of [...personListeners]) listener();
         void client.resetQueries({ predicate: (query) => !viewerIndependent(query.queryKey) });
       }
       person = next;
