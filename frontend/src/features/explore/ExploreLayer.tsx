@@ -2,38 +2,22 @@ import type { Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { findOverlay, type Meta } from "../../api/meta.js";
+import { findingPointAt } from "../../map/findingHits.js";
 import { kmSquareAt } from "../../map/gridref.js";
 import { isMapLive } from "../../map/MapPane.js";
 import { useMainMap } from "../../map/mainMap.js";
-import { FINDING_POINT_LAYERS } from "../../map/overlayLayers.js";
 import { useMapStore } from "../../map/store.js";
 import { overlaySourceId } from "../../map/style.js";
+import { mapToolActive } from "../../map/tool.js";
 import { screenPoint, useMapFrame } from "../../map/useMapFrame.js";
 import { findingPath, useSelectedFinding } from "../findings/selection.js";
 import { isMarkPath } from "../mark/MarkLayer.js";
+import { recordUnder } from "../records/useRecordsOnMap.js";
 import "../mark/mark.css";
 import "./explore.css";
 
-const POINT_LAYERS: readonly string[] = Object.values(FINDING_POINT_LAYERS);
 /** Zoom to go to when a square holding several findings is chosen, so they can be told apart in the list. */
 const SQUARE_ZOOM = 14;
-
-/** The finding drawn at an exact position under a point on the map, if there is one. */
-function pointFindingAt(map: MapLibreMap, event: MapMouseEvent): { publicId: string; at: [number, number] } | null {
-  const layers = POINT_LAYERS.filter((id) => map.getLayer(id) !== undefined);
-  if (layers.length === 0) return null;
-  for (const feature of map.queryRenderedFeatures(event.point, { layers })) {
-    const publicId = feature.properties?.public_id;
-    const geometry = feature.geometry;
-    if (typeof publicId !== "string") continue;
-    const at: [number, number] =
-      geometry?.type === "Point" && Array.isArray(geometry.coordinates)
-        ? [Number(geometry.coordinates[0]), Number(geometry.coordinates[1])]
-        : [event.lngLat.lng, event.lngLat.lat];
-    return { publicId, at };
-  }
-  return null;
-}
 
 /** The obscured findings in the grid square under a point, by their square's public ids. */
 function squareFindingsAt(
@@ -63,8 +47,11 @@ function squareFindingsAt(
 /**
  * Clicking a finding on the map opens its page, as choosing it from the list
  * does. A square holding one obscured finding opens it. A square holding
- * several brings Explore to it, where they are listed. While a finding is
- * being marked, taps belong to the mark.
+ * several brings Explore to it, where they are listed. Findings sit above
+ * heritage records: a finding's marker wins a click over a record under it,
+ * but a record's marker inside an obscured finding's square opens the record,
+ * because the square is only an outline. While a finding is being marked, or
+ * a map tool such as the height profile has the clicks, taps belong to them.
  */
 function useFindingClicks(map: MapLibreMap | null, meta: Meta, marking: boolean): void {
   const navigate = useNavigate();
@@ -72,13 +59,15 @@ function useFindingClicks(map: MapLibreMap | null, meta: Meta, marking: boolean)
     if (!map || marking || !isMapLive(map)) return;
     const canvas = map.getCanvas();
     const onClick = (event: MapMouseEvent): void => {
+      if (mapToolActive()) return;
       const select = useSelectedFinding.getState().select;
-      const point = pointFindingAt(map, event);
+      const point = findingPointAt(map, event);
       if (point) {
         select(point.publicId, point.at, false);
         navigate(findingPath(point.publicId));
         return;
       }
+      if (recordUnder(map, event.point)) return;
       const square = squareFindingsAt(map, meta, event);
       if (!square) return;
       const [only] = square.ids;
@@ -92,7 +81,7 @@ function useFindingClicks(map: MapLibreMap | null, meta: Meta, marking: boolean)
       navigate("/");
     };
     const onMove = (event: MapMouseEvent): void => {
-      canvas.classList.toggle("fc-canvas--finding", pointFindingAt(map, event) !== null);
+      canvas.classList.toggle("fc-canvas--finding", findingPointAt(map, event) !== null);
     };
     map.on("click", onClick);
     map.on("mousemove", onMove);

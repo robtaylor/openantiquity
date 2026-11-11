@@ -1,7 +1,8 @@
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { useLocation } from "react-router";
-import type { Meta } from "../../api/meta.js";
+import { findOverlay, type Meta } from "../../api/meta.js";
+import { useHoldOverlayWhile } from "../../map/heldOverlays.js";
 import { useHideFindingsWhile } from "../../map/hiddenFindings.js";
 import { isMapLive } from "../../map/MapPane.js";
 import { useMainMap } from "../../map/mainMap.js";
@@ -73,6 +74,7 @@ function LookHere({ map, place }: { map: MapLibreMap; place: ReviewPlace }) {
  * What a second look does to the map: while the queue is open every
  * finding's marker is taken off, because a marker at the spot gives the game
  * away (Decision 0008), and what the cache held about findings is dropped.
+ * The heritage records are held off the map too until the card is answered.
  * For each card the map goes to its place in the finder's view and a frame
  * marks the place. Mounted once, by the shell, so
  * it holds while the layer panel is open over the queue.
@@ -85,6 +87,10 @@ export function ReviewLayer({ meta }: { meta: Meta }) {
   // From the moment the queue opens, not only once a card is up: asked for before the first card arrives,
   // the findings in view would carry the title of the finding the card turns out to be.
   useHideFindingsWhile(HIDE_REASON, reviewing);
+  // A scheduled monument's square at the spot would answer the question the card asks, so the heritage
+  // records, the live sources' among them, are held off the map until the answer is in.
+  const answered = useReviewStore((state) => state.reveal !== null);
+  useHoldOverlayWhile(findOverlay(meta, "records")?.id ?? null, reviewing && !answered);
   useForgetClaimsWhile(reviewing);
   useMoveToCard(meta, card, reviewing);
   useRevealFromDraft(card);

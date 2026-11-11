@@ -13,6 +13,7 @@ Nothing is live yet. When the first version opens, this is what it does for you.
 - You can look at England's LIDAR as slope, sky-view, relief and other views made for spotting earthworks, and light it from any direction you like. You don't need an account to look at anything.
 - Designated sites and other heritage records sit on the same map, each with who published it and under what licence. Where a record office doesn't let us keep its records, the map asks it directly or links to its own site.
 - You can mark something you think is there. Other people then take a second look without seeing what you said, and the finding climbs from "Spotted" to "Seen by others" and on as people agree and add evidence.
+- While you take a second look, the heritage records are hidden as well as the findings, so a record at the spot can't answer the question for you. They come back once you've answered.
 - You can try marking, answering and scanning before you join. What you do is kept in your browser, and saved to your account when you sign in.
 - Signing in is with Google, Apple, Microsoft, Facebook or OpenStreetMap, or an emailed link. You must be 16 or over to add anything.
 - Possible burial mounds and other sites at risk from looting are shown as a one-kilometre square to anyone who isn't signed in.

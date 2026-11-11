@@ -45,6 +45,12 @@ export interface StyleState {
   showRuledOut: boolean;
   /** Sources not loading, by trouble key. An overlay is switched off while its key is set. */
   failing: Record<string, boolean>;
+  /**
+   * Overlays a feature holds off the map for now, whatever the person's
+   * switch says, such as the heritage records while a blind second-look card
+   * is up. The switch is left as it was.
+   */
+  held?: readonly string[];
 }
 
 /** Every field of `StyleState`, for telling whether a store change could restyle the map. */
@@ -55,13 +61,18 @@ const STYLE_FIELDS: Record<keyof StyleState, true> = {
   overlays: true,
   showRuledOut: true,
   failing: true,
+  held: true,
 };
 
 export const STYLE_KEYS = Object.keys(STYLE_FIELDS) as ReadonlyArray<keyof StyleState>;
 
-/** True when the overlay is switched on and not switched off for failing to load. */
-export function overlayShown(state: Pick<StyleState, "overlays" | "failing">, overlayId: string): boolean {
-  return state.overlays[overlayId]?.visible === true && !state.failing[overlayTroubleKey(overlayId)];
+/** True when the overlay is switched on, not switched off for failing to load, and not held off the map. */
+export function overlayShown(state: Pick<StyleState, "overlays" | "failing" | "held">, overlayId: string): boolean {
+  return (
+    state.overlays[overlayId]?.visible === true &&
+    !state.failing[overlayTroubleKey(overlayId)] &&
+    !state.held?.includes(overlayId)
+  );
 }
 
 /** True when the elevation data is in use: 3D is on, or a pane shows the raking view. */

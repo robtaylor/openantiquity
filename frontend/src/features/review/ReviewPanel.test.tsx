@@ -3,6 +3,7 @@ import { userEvent } from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FindingsMapData } from "../../map/findingsData.js";
 import { useHiddenFindings } from "../../map/hiddenFindings.js";
+import { RECORD_LAYERS } from "../../map/overlayLayers.js";
 import { useMapStore } from "../../map/store.js";
 import { overlaySourceId } from "../../map/style.js";
 import { type ApiRoutes, routeApi } from "../../test/apiRoutes.js";
@@ -109,6 +110,40 @@ describe("a blind card", () => {
     await waitFor(() => expect(drawn()).toEqual([]));
     await user.click(within(rail).getByRole("link", { name: "Explore" }));
     await waitFor(() => expect(drawn().length).toBeGreaterThan(0));
+  });
+
+  it("holds the heritage records off the map while a card is up, and lets them back once it is answered", async () => {
+    // A scheduled monument's square at the spot would answer the question the card asks.
+    const user = userEvent.setup();
+    serve([card("f-ring")]);
+    renderShell("/?panel=none");
+    const map = await mapReady();
+    const recordLayers = [RECORD_LAYERS.squares, RECORD_LAYERS.counts, RECORD_LAYERS.live];
+    const shown = () => recordLayers.map((layer) => map.isVisible(layer));
+    expect(shown()).toEqual([true, true, true]);
+    const rail = screen.getByRole("navigation", { name: "Modes" });
+    await user.click(within(rail).getByRole("link", { name: "Second look" }));
+    const panel = within(screen.getByRole("complementary", { name: "Second look" }));
+    await panel.findByRole("group", { name: "Can you see it?" });
+    await waitFor(() => expect(shown()).toEqual([false, false, false]));
+    // The person's own switch is left as it was.
+    expect(useMapStore.getState().overlays.records?.visible).toBe(true);
+
+    await user.click(panel.getByRole("button", { name: "I can see it" }));
+    await user.click(panel.getByRole("button", { name: "Send “I can see it”" }));
+    expect(await panel.findByRole("heading", { name: CLAIMED.title })).toBeInTheDocument();
+    await waitFor(() => expect(shown()).toEqual([true, true, true]));
+  });
+
+  it("lets the heritage records back when the queue closes", async () => {
+    const user = userEvent.setup();
+    serve([card("f-ring")]);
+    renderShell("/review");
+    const map = await mapReady();
+    await screen.findByRole("group", { name: "Can you see it?" });
+    await waitFor(() => expect(map.isVisible(RECORD_LAYERS.squares)).toBe(false));
+    await user.click(screen.getByRole("button", { name: "Close panel" }));
+    await waitFor(() => expect(map.isVisible(RECORD_LAYERS.squares)).toBe(true));
   });
 
   it("asks for nearby findings first, from where the map is", async () => {

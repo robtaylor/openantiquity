@@ -54,6 +54,8 @@ export interface MapState extends PermalinkState {
   retries: Record<string, number>;
   /** Bumped by `requestCamera` so the map knows to move. */
   cameraRequest: number;
+  /** Overlays held off the map for now, whatever their switches say. See `StyleState.held`. */
+  held: readonly string[];
 
   initialise: (meta: Meta, permalink?: Partial<PermalinkState>) => void;
   applyPermalink: (permalink: Partial<PermalinkState>) => void;
@@ -68,6 +70,8 @@ export interface MapState extends PermalinkState {
   setSourceFailing: (key: string, failing: boolean) => void;
   /** Clear a source's mark and have it tried again. Does nothing for a source that is not marked. */
   retrySource: (key: string) => void;
+  /** Hold an overlay off the map, or let it back. Its switch is left as it was. */
+  holdOverlay: (id: string, held: boolean) => void;
   setSun: (sun: Partial<SunState>) => void;
   setHillshadeExaggeration: (value: number) => void;
   setTerrainEnabled: (enabled: boolean) => void;
@@ -179,6 +183,7 @@ export const useMapStore = create<MapState>()((set, get) => {
     failing: {},
     retries: {},
     cameraRequest: 0,
+    held: [],
     camera: { lng: 0, lat: 0, zoom: 0, bearing: 0, pitch: 0 },
     mainView: "",
     compareView: null,
@@ -268,6 +273,11 @@ export const useMapStore = create<MapState>()((set, get) => {
         failing: { ...state.failing, [key]: false },
         retries: { ...state.retries, [key]: (state.retries[key] ?? 0) + 1 },
       }));
+    },
+
+    holdOverlay: (id, held) => {
+      if (get().held.includes(id) === held) return;
+      set((state) => ({ held: held ? [...state.held, id] : state.held.filter((other) => other !== id) }));
     },
 
     setSun: (sun) => {
