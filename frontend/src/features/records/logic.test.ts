@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  RECORD_BASE_FILTERS,
   RECORD_LAYERS,
   recordsLayers,
   recordsLiveSourceId,
@@ -11,9 +12,9 @@ import { metaFixture } from "../../test/fixtures/meta.js";
 import { AVENUE_RECORD, CONTEXT_LINKS, FIND_RECORD } from "../../test/fixtures/records.js";
 import { parseRecordId, recordsDownloadUrl } from "./api.js";
 import { recordLayerFilter } from "./filters.js";
-import { groupLinks, linkTitle } from "./OpenElsewherePanel.js";
+import { coverageLabel, groupLinks, linkTitle } from "./OpenElsewherePanel.js";
 import { elsewherePath } from "./paths.js";
-import { precisionText, recordShape } from "./shape.js";
+import { impreciseSquares, precisionText, recordShape } from "./shape.js";
 import { recordTarget, sourcesOf } from "./useRecordsOnMap.js";
 
 describe("parseRecordId", () => {
@@ -37,9 +38,11 @@ describe("recordsDownloadUrl", () => {
       "http://localhost",
     );
     expect(url.pathname).toBe("/api/v1/records/search");
+    // A filter with several values is a repeated parameter.
+    expect(url.searchParams.getAll("source")).toEqual(["a", "b"]);
     expect(Object.fromEntries(url.searchParams)).toEqual({
       q: "barrow",
-      source: "a,b",
+      source: "b",
       category: "find",
       bbox: "-1.8600,51.4200,-1.8500,51.4300",
       limit: "200",
@@ -59,7 +62,7 @@ describe("recordLayerFilter", () => {
   it("hides a record by its category and its one source", () => {
     expect(recordLayerFilter(RECORD_LAYERS.squares, ["find"], ["pas"], known)).toEqual([
       "all",
-      ["in", ["geometry-type"], ["literal", ["Point", "MultiPoint"]]],
+      RECORD_BASE_FILTERS[RECORD_LAYERS.squares],
       ["!", ["in", ["get", "category"], ["literal", ["find"]]]],
       ["!", ["in", ["get", "source"], ["literal", ["pas"]]]],
     ]);
@@ -76,6 +79,32 @@ describe("recordLayerFilter", () => {
 
   it("hides every count when every source is off", () => {
     expect(recordLayerFilter(RECORD_LAYERS.counts, [], known, known)).toEqual(["==", 1, 0]);
+  });
+});
+
+describe("impreciseSquares", () => {
+  const point = (id: number, precision: number | null, lon = -1.85, lat = 51.43) => ({
+    id,
+    geometry: { type: "Point" as const, coordinates: [lon, lat] },
+    properties: { id, category: "find", source: "pas-finds", precision_m: precision },
+  });
+
+  it("draws each record a tile places only to a square as its grid square, once however many tiles hold it", () => {
+    const squares = impreciseSquares([point(7, 1000), point(7, 1000), point(8, 5)]);
+    expect(squares.features).toHaveLength(1);
+    const [only] = squares.features;
+    expect(only?.geometry.type).toBe("Polygon");
+    expect(only?.properties).toMatchObject({ id: 7, category: "find", source: "pas-finds" });
+    // The same square its own page draws.
+    const page = recordShape({ lon: -1.85, lat: 51.43, precision_m: 1000, geometry: {} });
+    expect(only?.geometry).toEqual(page.collection.features[0]?.geometry);
+  });
+
+  it("leaves out exact records, and anything a tile carries that isn't a point with an id", () => {
+    expect(impreciseSquares([point(1, null), point(2, 999)]).features).toEqual([]);
+    expect(
+      impreciseSquares([{ id: undefined, geometry: { type: "Point", coordinates: [0, 0] }, properties: {} }]).features,
+    ).toEqual([]);
   });
 });
 
@@ -178,17 +207,29 @@ describe("sourcesOf", () => {
 });
 
 describe("groupLinks", () => {
-  it("groups by coverage, most local first, and drops links that aren't web addresses", () => {
+  it("groups by what each viewer shows, and within a group puts the most local first", () => {
     const groups = groupLinks(CONTEXT_LINKS.items);
-    expect(groups.map((group) => group.label)).toEqual(["England", "Great Britain", "The whole UK"]);
-    expect(groups.flatMap((group) => group.links.map((link) => link.key))).not.toContain("hostile-link");
+    expect(groups.map((group) => group.label)).toEqual(["Old maps", "Aerial photographs"]);
+    expect(groups[1]?.links.map((link) => link.key)).toEqual(["he-apex-viewer", "britain-from-above-map"]);
   });
 
-  it("keeps a coverage it has no heading for under its own name, last", () => {
-    const [england, gb] = CONTEXT_LINKS.items;
-    if (!england || !gb) throw new Error("the fixture has at least two links");
-    const groups = groupLinks([{ ...gb, coverage: "isle_of_man" }, england]);
-    expect(groups.map((group) => group.label)).toEqual(["England", "isle_of_man"]);
+  it("drops links that aren't web addresses", () => {
+    const keys = groupLinks(CONTEXT_LINKS.items).flatMap((group) => group.links.map((link) => link.key));
+    expect(keys).not.toContain("hostile-link");
+  });
+
+  it("puts a viewer of another kind under Other viewers, last", () => {
+    const [aerial, maps] = CONTEXT_LINKS.items;
+    if (!aerial || !maps) throw new Error("the fixture has at least two links");
+    const groups = groupLinks([{ ...maps, shows: "other" }, aerial]);
+    expect(groups.map((group) => group.label)).toEqual(["Aerial photographs", "Other viewers"]);
+  });
+});
+
+describe("coverageLabel", () => {
+  it("names the area a viewer covers, or keeps a name it has no words for", () => {
+    expect(coverageLabel("uk")).toBe("The whole UK");
+    expect(coverageLabel("isle_of_man")).toBe("isle_of_man");
   });
 });
 
@@ -240,10 +281,17 @@ describe("the records overlay's style", () => {
     const layers = recordsLayers(metaFixture, overlaySourceId("records"));
     const byId = (id: string) => layers.find((entry) => entry.layer.id === id);
     const squares = byId(RECORD_LAYERS.squares)?.layer as { filter?: unknown };
-    // A record with an outline is not also given a square at its middle.
-    expect(squares.filter).toEqual(["in", ["geometry-type"], ["literal", ["Point", "MultiPoint"]]]);
+    // A record with an outline is not also given a square at its middle, nor one placed only to a square a spot.
+    expect(squares.filter).toEqual([
+      "all",
+      ["in", ["geometry-type"], ["literal", ["Point", "MultiPoint"]]],
+      ["<", ["coalesce", ["get", "precision_m"], 0], 1000],
+    ]);
     const fills = byId(RECORD_LAYERS.fills);
     expect(fills?.opacity["fill-opacity"]).toBeLessThanOrEqual(0.1);
+    // Outlines wait until their shapes can be read: hundreds of thousands of them would net the terrain over.
+    expect((fills?.layer as { minzoom?: number } | undefined)?.minzoom).toBe(15);
+    expect((byId(RECORD_LAYERS.outlines)?.layer as { minzoom?: number } | undefined)?.minzoom).toBe(15);
     const outlines = byId(RECORD_LAYERS.outlines);
     expect(outlines?.opacity["line-opacity"]).toBeLessThanOrEqual(0.6);
     const counts = byId(RECORD_LAYERS.counts)?.layer as { layout: Record<string, unknown> };

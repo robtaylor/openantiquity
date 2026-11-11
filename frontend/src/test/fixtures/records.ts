@@ -1,4 +1,11 @@
-import type { ContextLinks, LiveSourceOut, RecordOut, RecordPage, SourceRef } from "../../features/records/api.js";
+import type {
+  ContextLinks,
+  LinkedFindingPage,
+  LiveSourceOut,
+  RecordOut,
+  RecordPage,
+  SourceRef,
+} from "../../features/records/api.js";
 import type { GeoResult } from "../../features/search/api.js";
 import { FINDINGS_CENTRE, offset } from "./findings.js";
 
@@ -197,12 +204,34 @@ export const GRIDREF_RESULT: GeoResult = {
   source: null,
 };
 
+/** What `GET /records/{id}/findings` answers for the avenue: the findings whose evidence links it. */
+export const AVENUE_LINKED_FINDINGS: LinkedFindingPage = {
+  items: [
+    {
+      public_id: "f-7k2m9q",
+      title: "Bank beside the avenue",
+      feature_class: "linear_bank_or_ditch",
+      tier: "seen",
+      state: "known",
+    },
+    {
+      public_id: "f-3p8x1z",
+      title: "Low mound near the stones",
+      feature_class: "round_barrow",
+      tier: "spotted",
+      state: "open",
+    },
+  ],
+  next_cursor: null,
+};
+
 /** What `GET /context/links` answers for a spot at Avebury. */
 export const CONTEXT_LINKS: ContextLinks = {
   grid_ref: "SU 1023 6987",
   items: [
     {
       key: "he-apex-viewer",
+      shows: "aerial_photographs",
       name: "Historic England Aerial Photo Explorer at a point",
       url: "https://historicengland.org.uk/images-books/archive/collections/aerial-photos/?lat=51.42860&lon=-1.85420",
       coverage: "england",
@@ -211,6 +240,7 @@ export const CONTEXT_LINKS: ContextLinks = {
     },
     {
       key: "nls-explore-at-point",
+      shows: "historic_maps",
       name: "NLS georeferenced maps viewer at a point",
       url: "https://maps.nls.uk/geo/explore/#zoom=15&lat=51.42860&lon=-1.85420",
       coverage: "gb",
@@ -219,6 +249,7 @@ export const CONTEXT_LINKS: ContextLinks = {
     },
     {
       key: "britain-from-above-map",
+      shows: "aerial_photographs",
       name: "Britain from Above map at a point",
       url: "https://britainfromabove.org.uk/en/map?lat=51.42860&lon=-1.85420",
       coverage: "uk",
@@ -227,6 +258,7 @@ export const CONTEXT_LINKS: ContextLinks = {
     },
     {
       key: "hostile-link",
+      shows: "other",
       name: "<script>alert(1)</script>A link that isn't one",
       url: "javascript:alert(1)",
       coverage: "wider",
@@ -256,6 +288,12 @@ export const WILTSHIRE_LIVE: LiveSourceOut = {
   attribution: "Wiltshire Council Archaeology Service (Wiltshire and Swindon HER)",
   link_template: "{URL}",
   limits: "maxRecordCount 1000; pagination supported",
+  answer_format: "geojson",
+  name_field: "Name",
+  id_field: "MonUID",
+  limit_param: "resultRecordCount",
+  max_limit: 1000,
+  min_zoom: 13,
 };
 
 export const ADS_LIVE: LiveSourceOut = {
@@ -272,6 +310,12 @@ export const ADS_LIVE: LiveSourceOut = {
     "Original depositor, funder if different, and 'Archaeology Data Service (distributor)' with DOI or record link",
   link_template: "https://archaeologydataservice.ac.uk/data-catalogue/resource/{id}",
   limits: null,
+  answer_format: "ads_search",
+  name_field: "data.title.text",
+  id_field: "id",
+  limit_param: "size",
+  max_limit: 50,
+  min_zoom: 14,
 };
 
 export const BRISTOL_LIVE: LiveSourceOut = {
@@ -287,6 +331,12 @@ export const BRISTOL_LIVE: LiveSourceOut = {
   attribution: "Per source HER; service copyrightText 'Bristol City Council'",
   link_template: null,
   limits: null,
+  answer_format: "geojson",
+  name_field: null,
+  id_field: "PRN",
+  limit_param: "resultRecordCount",
+  max_limit: 1000,
+  min_zoom: 13,
 };
 
 export const ABERDEENSHIRE_LIVE: LiveSourceOut = {
@@ -303,6 +353,12 @@ export const ABERDEENSHIRE_LIVE: LiveSourceOut = {
   attribution: "Aberdeenshire Council",
   link_template: "{Monument_U}",
   limits: "maxRecordCount 1000-2000",
+  answer_format: "geojson",
+  name_field: "Name",
+  id_field: "HER_Refere",
+  limit_param: "resultRecordCount",
+  max_limit: 1000,
+  min_zoom: 13,
 };
 
 export const DARTMOOR_LIVE: LiveSourceOut = {
@@ -320,6 +376,12 @@ export const DARTMOOR_LIVE: LiveSourceOut = {
   link_template:
     "https://historicengland.org.uk/listing/heritage-gateway/results/record/c39bc47e-3b72-4a06-9863-681629e456a2/{monuid}",
   limits: "maxRecordCount 2000",
+  answer_format: "geojson",
+  name_field: "name",
+  id_field: "monuid",
+  limit_param: "resultRecordCount",
+  max_limit: 2000,
+  min_zoom: 13,
 };
 
 /** Asks for one record by id, so it can't be asked about an area and is left out. */
@@ -328,6 +390,10 @@ export const SINGLE_RECORD_LIVE: LiveSourceOut = {
   key: "ads-catalogue-record",
   name: "ADS Data Catalogue single record",
   query_pattern: "https://archaeologydataservice.ac.uk/data-catalogue-api/api/getRecord/{id}",
+  answer_format: "ads_record",
+  limit_param: null,
+  max_limit: null,
+  min_zoom: null,
 };
 
 export const LIVE_SOURCES: LiveSourceOut[] = [

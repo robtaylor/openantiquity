@@ -12,9 +12,13 @@ export type RecordOut = Schemas["RecordOut"];
 export type RecordSummary = Schemas["RecordSummary"];
 export type RecordPage = Schemas["RecordPage"];
 export type SourceRef = Schemas["SourceRef"];
-export type LiveSourceOut = Schemas["LiveSourceOut"];
+export type LiveSourceOut = Schemas["LiveSource"];
+export type LiveFormat = Schemas["LiveFormat"];
+export type LinkShows = Schemas["LinkShows"];
 export type ContextLink = Schemas["ContextLink"];
 export type ContextLinks = Schemas["ContextLinks"];
+export type LinkedFinding = Schemas["LinkedFinding"];
+export type LinkedFindingPage = Schemas["Page_LinkedFinding_"];
 
 /** West, south, east, north, in degrees. */
 export type Bbox = [number, number, number, number];
@@ -38,6 +42,8 @@ export const recordKeys = {
   all: ["records"] as const,
   detail: (id: number) => ["records", "detail", id] as const,
   search: (query: RecordQuery) => ["records", "search", query] as const,
+  /** The findings linked to a record. The answer depends on who is asking. */
+  findings: (id: number) => ["records", "findings", id] as const,
   liveSources: ["records", "live-sources"] as const,
   /** One live source's answer for one area. These are never sent anywhere, only kept in this page. */
   live: (key: string, area: string) => ["records", "live", key, area] as const,
@@ -55,6 +61,21 @@ export function fetchRecord(id: number, signal?: AbortSignal): Promise<RecordOut
   return apiFetch<RecordOut>(`/records/${id}`, { signal });
 }
 
+/** How many linked findings one page of a record's page asks for. */
+export const LINKED_FINDINGS_PAGE_SIZE = 20;
+
+/** The findings whose evidence links this record, among those the viewer sees exactly. */
+export function fetchRecordFindings(
+  id: number,
+  cursor: string | null,
+  signal?: AbortSignal,
+): Promise<LinkedFindingPage> {
+  return apiFetch<LinkedFindingPage>(`/records/${id}/findings`, {
+    query: { limit: LINKED_FINDINGS_PAGE_SIZE, cursor: cursor ?? undefined },
+    signal,
+  });
+}
+
 /** Rounded to about ten metres, so the server never sees more decimals than a search needs. */
 function bboxParam(bbox: Bbox): string {
   return bbox.map((value) => value.toFixed(4)).join(",");
@@ -63,8 +84,8 @@ function bboxParam(bbox: Bbox): string {
 function searchParams(query: RecordQuery): Record<string, QueryValue> {
   return {
     q: query.q.trim() || undefined,
-    source: query.sources.length > 0 ? query.sources.join(",") : undefined,
-    category: query.categories.length > 0 ? query.categories.join(",") : undefined,
+    source: query.sources,
+    category: query.categories,
     bbox: query.bbox ? bboxParam(query.bbox) : undefined,
   };
 }

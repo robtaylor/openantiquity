@@ -21,6 +21,7 @@ import {
   coverageLayers,
   findingsLayers,
   type OverlayLayer,
+  recordsImpreciseSourceId,
   recordsLayers,
   recordsLiveSourceId,
   recordsSelectionSourceId,
@@ -238,9 +239,11 @@ function overlayParts(meta: Meta, overlay: Overlay, origin: string): OverlayPart
             tiles: overlay.tiles.map((url) => absoluteUrl(url, origin)),
             maxzoom: MARKER_TILE_MAXZOOM,
           },
-          // Filled by the records feature: what live sources sent this browser, and the open record.
+          // Filled by the records feature: what live sources sent this browser, the open record,
+          // and the squares of records in view that are placed only to a square.
           [recordsLiveSourceId(source)]: emptyGeoJson(),
           [recordsSelectionSourceId(source)]: emptyGeoJson(),
+          [recordsImpreciseSourceId(source)]: emptyGeoJson(),
         },
         layers: recordsLayers(meta, source),
       };

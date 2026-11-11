@@ -2,6 +2,8 @@ import type { Page, Route } from "@playwright/test";
 import type { RecordOut } from "../../src/features/records/api.js";
 import type { GeoResult } from "../../src/features/search/api.js";
 import {
+  AVENUE_LINKED_FINDINGS,
+  AVENUE_RECORD,
   CONTEXT_LINKS,
   GEO_RESULTS,
   GRIDREF_RESULT,
@@ -61,6 +63,12 @@ export async function serveRecordsApi(page: Page): Promise<RecordsLog> {
     const record: RecordOut | undefined = RECORDS_BY_ID[id];
     if (!record) return json(route, { error: { code: "record_not_found", message: "No such record." } }, 404);
     return json(route, record);
+  });
+
+  // The avenue has two findings linked to it, every other record none.
+  await page.route(/^https?:\/\/localhost(:\d+)?\/api\/v1\/records\/(\d+)\/findings(?:\?|$)/, (route) => {
+    const id = Number(/\/records\/(\d+)/.exec(route.request().url())?.[1]);
+    return json(route, id === AVENUE_RECORD.id ? AVENUE_LINKED_FINDINGS : { items: [], next_cursor: null });
   });
 
   await page.route(apiRoute("/records/search"), (route) => {

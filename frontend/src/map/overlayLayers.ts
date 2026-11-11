@@ -14,6 +14,12 @@ export interface OverlayLayer {
   ruledOutOnly?: boolean;
 }
 
+/**
+ * From this coarseness up a record's position is a square, not a spot, and
+ * the map draws the square. It is the same threshold as a record's own page.
+ */
+export const SQUARE_PRECISION_M = 1000;
+
 /** The SDF square used for record markers. See `markerImages.ts`. */
 export const SQUARE_IMAGE = "fieldclub-square";
 
@@ -200,6 +206,9 @@ export const RECORD_LAYERS = {
   fills: "records-fills",
   outlines: "records-outlines",
   squares: "records-squares",
+  /** Records a tile places only to a square, drawn as that square from a GeoJSON source the records feature fills. */
+  imprecise: "records-imprecise",
+  impreciseFills: "records-imprecise-fills",
   counts: "records-counts",
   live: "records-live",
   liveCentres: "records-live-centres",
@@ -211,6 +220,11 @@ export const RECORD_LAYERS = {
 /** The GeoJSON source of records a live source sent to this browser (Decision 0007). */
 export function recordsLiveSourceId(source: string): string {
   return `${source}-live`;
+}
+
+/** The GeoJSON source of squares for the records in view that are placed only to a square. */
+export function recordsImpreciseSourceId(source: string): string {
+  return `${source}-imprecise`;
 }
 
 /** The GeoJSON source holding the record whose page is open. */
@@ -227,15 +241,25 @@ export const RECORD_BASE_FILTERS: Readonly<Record<string, FilterSpecification>> 
   // A record with an outline is drawn as its outline alone, so the ground inside it stays in sight.
   [RECORD_LAYERS.fills]: ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]],
   [RECORD_LAYERS.outlines]: ["!=", ["geometry-type"], "Point"],
-  [RECORD_LAYERS.squares]: ["in", ["geometry-type"], ["literal", ["Point", "MultiPoint"]]],
+  // A record placed only to a kilometre square or coarser is drawn as its square instead, never as a spot.
+  [RECORD_LAYERS.squares]: [
+    "all",
+    ["in", ["geometry-type"], ["literal", ["Point", "MultiPoint"]]],
+    ["<", ["coalesce", ["get", "precision_m"], 0], SQUARE_PRECISION_M],
+  ],
 };
 
 /**
- * Outlines are a hairline when zoomed out, where most of the ones in view
- * are only a few pixels across, and thicken as their shapes become
- * readable.
+ * Records with an outline are drawn from this zoom. Further out most are a
+ * few pixels across, and Historic England's aerial mapping alone has half a
+ * million of them: drawn from zoom 12 they netted the terrain over and cut
+ * the frame rate while panning by two thirds. Their points' squares and the
+ * counts still show where records are.
  */
-const OUTLINE_WIDTH_BY_ZOOM: ExpressionSpecification = ["interpolate", ["linear"], ["zoom"], 13, 0.3, 15, 0.6, 17, 1.2];
+export const OUTLINE_MINZOOM = 15;
+
+/** Outlines are a hairline when they first appear and thicken as their shapes become readable. */
+const OUTLINE_WIDTH_BY_ZOOM: ExpressionSpecification = ["interpolate", ["linear"], ["zoom"], 15, 0.6, 17, 1.2];
 
 /** The counts' glyphs. They must exist on the glyph server named by the street-map overlay. */
 const COUNT_FONT = ["Noto Sans Bold"];
@@ -252,8 +276,9 @@ const COUNT_FONT = ["Noto Sans Bold"];
  *
  * Records from a live source are the same squares, hollow, because they
  * have no category and were never stored here. The record whose page is
- * open is ringed in the accent colour, and a record whose position is only
- * known to a square is drawn as that square, dashed, never as a point.
+ * open is ringed in the accent colour. A record whose position is only known
+ * to a square, whether on its page or in a tile, is drawn as that square,
+ * dashed, never as a point.
  */
 export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
   const colour = matchOn(
@@ -265,6 +290,7 @@ export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
   const hasGlyphs = meta.layers.overlays.some((overlay) => overlay.type === "openmaptiles");
   const live = recordsLiveSourceId(source);
   const selection = recordsSelectionSourceId(source);
+  const imprecise = recordsImpreciseSourceId(source);
 
   const layers: OverlayLayer[] = [
     {
@@ -272,6 +298,7 @@ export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
         id: RECORD_LAYERS.fills,
         type: "fill",
         source,
+        minzoom: OUTLINE_MINZOOM,
         "source-layer": RECORDS_SOURCE_LAYER,
         filter: RECORD_BASE_FILTERS[RECORD_LAYERS.fills],
         paint: { "fill-color": colour, "fill-antialias": false },
@@ -283,6 +310,7 @@ export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
         id: RECORD_LAYERS.outlines,
         type: "line",
         source,
+        minzoom: OUTLINE_MINZOOM,
         "source-layer": RECORDS_SOURCE_LAYER,
         filter: RECORD_BASE_FILTERS[RECORD_LAYERS.outlines],
         paint: { "line-color": colour, "line-width": OUTLINE_WIDTH_BY_ZOOM },
@@ -352,6 +380,27 @@ export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
         },
       } as LayerSpecification,
       opacity: { "icon-opacity": 1 },
+    },
+    {
+      // The faintest fill, so a square can be clicked anywhere inside it.
+      layer: {
+        id: RECORD_LAYERS.impreciseFills,
+        type: "fill",
+        source: imprecise,
+        paint: { "fill-color": colour, "fill-antialias": false },
+      } as LayerSpecification,
+      opacity: { "fill-opacity": 0.02 },
+    },
+    {
+      // Dashed, as an obscured finding's square is: a place known only to that square.
+      layer: {
+        id: RECORD_LAYERS.imprecise,
+        type: "line",
+        source: imprecise,
+        layout: { "line-join": "miter" },
+        paint: { "line-color": colour, "line-width": 1.5, "line-dasharray": [3, 2] },
+      } as LayerSpecification,
+      opacity: { "line-opacity": 0.85 },
     },
     {
       // A live record is a square ring: a light square with a dark one laid in its middle.

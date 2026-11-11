@@ -11,6 +11,8 @@ import "./search.css";
 
 /** How long typing must pause before the server is asked. */
 export const SEARCH_DEBOUNCE_MS = 250;
+/** Typing asks nothing until there are this many letters: one letter matches thousands of names. Enter asks anyway. */
+export const MIN_SEARCH_CHARS = 2;
 
 function resultDetail(result: GeoResult): string | null {
   const parts = [result.detail ?? null];
@@ -44,7 +46,7 @@ export function SearchBox() {
   const listId = `${id}-list`;
 
   useEffect(() => {
-    if (term === settled) return;
+    if (term === settled || (term !== "" && term.length < MIN_SEARCH_CHARS)) return;
     const timer = setTimeout(() => {
       setSettled(term);
       setPicked(null);
@@ -62,9 +64,11 @@ export function SearchBox() {
   });
 
   const current = term !== "" && settled === term;
+  // Long enough to have been asked about, or asked about with Enter.
+  const searchable = term !== "" && (term.length >= MIN_SEARCH_CHARS || current);
   const results = current && query.data ? query.data : [];
   const { groups, ordered } = groupResults(results);
-  const waiting = term !== "" && (!current || query.isFetching);
+  const waiting = searchable && (!current || query.isFetching);
 
   function choose(result: GeoResult): void {
     useMapStore.getState().requestCamera(cameraFor(result));
@@ -147,7 +151,7 @@ export function SearchBox() {
     navigate(elsewherePath(camera.lng, camera.lat));
   }
 
-  const expanded = open && term !== "";
+  const expanded = open && searchable;
   const optionId = (index: number) => `${id}-option-${index}`;
   const failed = current && query.isError;
   // The options are the results, "Try again" when the search failed, and last, searching the records for the text.

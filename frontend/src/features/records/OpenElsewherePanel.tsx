@@ -12,14 +12,14 @@ import { Skeleton } from "../../ui/Skeleton.js";
 import { useDebounced } from "../../ui/useDebounced.js";
 import { useDocumentTitle } from "../placeholders.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
-import { type ContextLink, fetchContextLinks, recordKeys } from "./api.js";
+import { type ContextLink, fetchContextLinks, type LinkShows, recordKeys } from "./api.js";
 import { ELSEWHERE_PATH, elsewherePath } from "./paths.js";
 import { useRecordSelection } from "./shape.js";
 import "./records.css";
 
 /**
- * Headings for the coverages the link catalogue uses. A coverage it gains
- * later is shown under its own name until it has one here.
+ * Names for the areas the link catalogue's viewers cover, most local first.
+ * A coverage it gains later is shown under its own name until it has one here.
  */
 const COVERAGE_LABELS: Readonly<Record<string, string>> = {
   england: "England",
@@ -31,6 +31,27 @@ const COVERAGE_LABELS: Readonly<Record<string, string>> = {
   wider: "Anywhere",
 };
 const COVERAGE_ORDER = Object.keys(COVERAGE_LABELS);
+
+/** Headings for what a viewer shows (`ContextLink.shows`), in the order the panel lists them. */
+const SHOWS_LABELS: Readonly<Record<LinkShows, string>> = {
+  lidar: "LIDAR",
+  historic_maps: "Old maps",
+  aerial_photographs: "Aerial photographs",
+  photographs: "Photographs",
+  records: "Heritage records",
+  other: "Other viewers",
+};
+const SHOWS_ORDER = Object.keys(SHOWS_LABELS);
+
+export function coverageLabel(coverage: string): string {
+  return COVERAGE_LABELS[coverage] ?? coverage;
+}
+
+function rankIn(order: readonly string[], value: string): number {
+  const index = order.indexOf(value);
+  return index === -1 ? order.length : index;
+}
+
 /** How long the map must hold still before the links for its middle are asked for. */
 const LINKS_SETTLE_MS = 500;
 
@@ -56,27 +77,31 @@ function uncheckedNote(unchecked: number, total: number): string {
 }
 
 export interface LinkGroup {
-  coverage: string;
+  shows: LinkShows;
   label: string;
   links: ContextLink[];
 }
 
-/** The links grouped by the area each viewer covers, the most local first. Links that aren't web addresses are dropped. */
+/**
+ * The links grouped by what each viewer shows, such as old maps or aerial
+ * photographs, and within a group the most local viewer first. Links that
+ * aren't web addresses are dropped.
+ */
 export function groupLinks(links: readonly ContextLink[]): LinkGroup[] {
-  const groups = new Map<string, ContextLink[]>();
+  const groups = new Map<LinkShows, ContextLink[]>();
   for (const link of links) {
     if (!safeHref(link.url)) continue;
-    const list = groups.get(link.coverage) ?? [];
+    const list = groups.get(link.shows) ?? [];
     list.push(link);
-    groups.set(link.coverage, list);
+    groups.set(link.shows, list);
   }
-  const rank = (coverage: string): number => {
-    const index = COVERAGE_ORDER.indexOf(coverage);
-    return index === -1 ? COVERAGE_ORDER.length : index;
-  };
   return [...groups.entries()]
-    .sort(([a], [b]) => rank(a) - rank(b))
-    .map(([coverage, list]) => ({ coverage, label: COVERAGE_LABELS[coverage] ?? coverage, links: list }));
+    .sort(([a], [b]) => rankIn(SHOWS_ORDER, a) - rankIn(SHOWS_ORDER, b))
+    .map(([shows, list]) => ({
+      shows,
+      label: SHOWS_LABELS[shows] ?? shows,
+      links: [...list].sort((a, b) => rankIn(COVERAGE_ORDER, a.coverage) - rankIn(COVERAGE_ORDER, b.coverage)),
+    }));
 }
 
 function readPoint(params: URLSearchParams): { lon: number; lat: number } | null {
@@ -95,6 +120,7 @@ function LinkItem({ link, tagged }: { link: ContextLink; tagged: boolean }) {
       <a href={href} target="_blank" rel="noopener noreferrer external">
         <ExternalLink size={16} aria-hidden />
         <span className="fc-elsewhere__name">{linkTitle(link.name)}</span>
+        <span className="fc-elsewhere__coverage">{coverageLabel(link.coverage)}</span>
         {tagged && !isChecked(link) ? <span className="fc-elsewhere__tag">unchecked</span> : null}
         <span className="fc-visually-hidden"> (opens in a new tab)</span>
       </a>
@@ -176,8 +202,8 @@ export function OpenElsewherePanel() {
     );
   } else {
     body = groups.map((group) => (
-      <section key={group.coverage} className="fc-elsewhere__group" aria-labelledby={`elsewhere-${group.coverage}`}>
-        <h3 className="fc-record__heading" id={`elsewhere-${group.coverage}`}>
+      <section key={group.shows} className="fc-elsewhere__group" aria-labelledby={`elsewhere-${group.shows}`}>
+        <h3 className="fc-record__heading" id={`elsewhere-${group.shows}`}>
           {group.label}
         </h3>
         <ul className="fc-elsewhere__links">

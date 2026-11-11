@@ -3,7 +3,7 @@ import { userEvent } from "@testing-library/user-event";
 import { useLocation } from "react-router";
 import type { Mock } from "vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { RECORD_LAYERS } from "../../map/overlayLayers.js";
+import { RECORD_BASE_FILTERS, RECORD_LAYERS } from "../../map/overlayLayers.js";
 import { useMapStore } from "../../map/store.js";
 import { overlaySourceId } from "../../map/style.js";
 import { type ApiRoutes, apiError, routeApi } from "../../test/apiRoutes.js";
@@ -12,6 +12,7 @@ import { metaFixture } from "../../test/fixtures/meta.js";
 import {
   ABERDEENSHIRE_LIVE,
   ADS_LIVE,
+  AVENUE_LINKED_FINDINGS,
   AVENUE_RECORD,
   BRISTOL_LIVE,
   CONTEXT_LINKS,
@@ -59,6 +60,9 @@ beforeEach(() => {
     "GET /context/links": () => json(CONTEXT_LINKS),
     "GET /context/live-sources": () => json({ items: LIVE_SOURCES }),
   });
+  for (const record of Object.values(RECORDS_BY_ID)) {
+    api.on(`GET /records/${record.id}/findings`, () => json({ items: [], next_cursor: null }));
+  }
   for (const record of Object.values(RECORDS_BY_ID)) api.on(`GET /records/${record.id}`, () => json(record));
   api.on("GET /records/999", () => apiError(404, "record_not_found", "No such record."));
   // Requests that leave the site go to `outside`, by host. Anything else falls through to the API routes.
@@ -114,6 +118,29 @@ describe("a record's page", () => {
     await waitFor(() => expect(selection(map)?.features.map((f) => f.geometry.type)).toEqual(["LineString", "Point"]));
   });
 
+  it("lists the findings linked to it, each with its step on the ladder", async () => {
+    api.on(`GET /records/${AVENUE_RECORD.id}/findings`, () => json(AVENUE_LINKED_FINDINGS));
+    renderShell(`/r/${AVENUE_RECORD.id}`);
+    const panel = await screen.findByRole("complementary", { name: AVENUE_RECORD.name });
+    const section = await within(panel).findByRole("region", { name: "Findings linked to it" });
+    const link = await within(section).findByRole("link", { name: /Bank beside the avenue/ });
+    expect(link).toHaveAttribute("href", "/f/f-7k2m9q");
+    // Tier is said in words, never by colour alone, and a known site says so.
+    expect(within(section).getByText("Seen by others")).toBeInTheDocument();
+    expect(within(section).getByText(/Matches a known record/)).toBeInTheDocument();
+    expect(within(section).getByRole("link", { name: /Low mound near the stones/ })).toHaveAttribute(
+      "href",
+      "/f/f-3p8x1z",
+    );
+  });
+
+  it("says when no finding has been linked to it yet", async () => {
+    renderShell(`/r/${AVENUE_RECORD.id}`);
+    const panel = await screen.findByRole("complementary", { name: AVENUE_RECORD.name });
+    const section = await within(panel).findByRole("region", { name: "Findings linked to it" });
+    expect(await within(section).findByText(/No finding has been linked to this record yet/)).toBeInTheDocument();
+  });
+
   it("draws a record published to a kilometre square as that square, dashed, and says so", async () => {
     // The map starts well away from the record, so its page has to go to it.
     window.history.replaceState(null, "", "/#m=12/53/-2/0/0");
@@ -162,6 +189,37 @@ describe("a record's page", () => {
 });
 
 describe("records on the map", () => {
+  it("draws a record its tile places only to a kilometre square as that square, and opens it when clicked", async () => {
+    renderShell();
+    const map = await mapReady();
+    map.sourceFeatures = [
+      {
+        id: FIND_RECORD.id,
+        geometry: { type: "Point", coordinates: [FIND_RECORD.lon, FIND_RECORD.lat] },
+        properties: { id: FIND_RECORD.id, category: "find", source: FIND_RECORD.source_key, precision_m: 1000 },
+      },
+    ];
+    act(() => map.fire("idle"));
+    await waitFor(() =>
+      expect((map.sourceData(`${RECORDS_SOURCE}-imprecise`) as FeatureCollection | undefined)?.features).toHaveLength(
+        1,
+      ),
+    );
+    const square = (map.sourceData(`${RECORDS_SOURCE}-imprecise`) as FeatureCollection).features[0];
+    expect(square?.geometry.type).toBe("Polygon");
+    // The tile's own square for it is never drawn as a spot.
+    expect(JSON.stringify(map.filters.get(RECORD_LAYERS.squares))).toContain("precision_m");
+
+    map.rendered = [
+      {
+        properties: { id: FIND_RECORD.id, source: FIND_RECORD.source_key },
+        layer: { id: RECORD_LAYERS.impreciseFills },
+      },
+    ];
+    act(() => map.fire("click", { point: { x: 10, y: 10 }, lngLat: { lng: FIND_RECORD.lon, lat: FIND_RECORD.lat } }));
+    expect(await screen.findByRole("complementary", { name: FIND_RECORD.name })).toBeInTheDocument();
+  });
+
   it("opens a record's page when its square is clicked, and zooms into a count", async () => {
     renderShell();
     const map = await mapReady();
@@ -208,7 +266,7 @@ describe("records on the map", () => {
     expect(designations).toHaveAttribute("aria-pressed", "false");
     expect(map.filters.get(RECORD_LAYERS.squares)).toEqual([
       "all",
-      ["in", ["geometry-type"], ["literal", ["Point", "MultiPoint"]]],
+      RECORD_BASE_FILTERS[RECORD_LAYERS.squares],
       ["!", ["in", ["get", "category"], ["literal", ["designation"]]]],
     ]);
     await user.click(screen.getByText("Sources", { exact: true }));
@@ -278,11 +336,13 @@ describe("records on the map", () => {
     expect(within(panel).getAllByText("unchecked", { exact: true })).toHaveLength(2);
     expect(within(panel).getAllByText(/haven't been able to check/)).toHaveLength(1);
     expect(
-      within(panel).getByRole("link", { name: /^Historic England Aerial Photo Explorer unchecked/ }),
+      within(panel).getByRole("link", { name: /^Historic England Aerial Photo Explorer England unchecked/ }),
     ).toBeVisible();
     expect(within(panel).queryByText(/at a point/)).toBeNull();
     expect(within(panel).queryByText(/A link that isn't one/)).toBeNull();
-    expect(within(panel).getByRole("heading", { name: "England" })).toBeInTheDocument();
+    // Grouped by what each viewer shows, each naming the area it covers.
+    expect(within(panel).getByRole("heading", { name: "Aerial photographs" })).toBeInTheDocument();
+    expect(within(panel).getByRole("heading", { name: "Old maps" })).toBeInTheDocument();
   });
 });
 

@@ -391,6 +391,13 @@
   min-width: 0;
 }
 
+/* The area the viewer covers, quieter than its name. */
+.fc-elsewhere__coverage {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
 /* A link nobody could check: words, not only a colour. */
 .fc-elsewhere__tag {
   flex: none;
@@ -421,4 +428,64 @@
 
 .fc-record-search__more > :not(summary) {
   margin: 12px;
+}
+
+/* The findings linked to a record: each a link with its pictogram, and its step in words beside it. */
+.fc-linked-findings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.fc-linked-finding {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 10px;
+  padding: 6px 10px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.fc-linked-finding__link {
+  display: flex;
+  flex: 1 1 200px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 32px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.fc-linked-finding__link svg {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.fc-linked-finding__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fc-linked-finding__title {
+  overflow: hidden;
+  font-family: var(--font-display);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fc-linked-finding__link:hover .fc-linked-finding__title {
+  text-decoration: underline;
+}
+
+.fc-linked-finding__class {
+  color: var(--text-muted);
+  font-size: 12.5px;
 }

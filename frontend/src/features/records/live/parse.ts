@@ -2,16 +2,31 @@ import { isFiniteNumber, isRecord } from "../../../api/guards.js";
 import { safeHref } from "../../../map/attribution.js";
 
 /**
- * Reading what a live source answered. The catalogue describes each
- * source's answer in words, not in a form a program can follow, so this
- * recognises the three kinds of answer the catalogue's sources give: GeoJSON
- * (the ArcGIS map services and others), the Archaeology Data Service's
- * search results, and the MediaWiki API. Anything else is unreadable, and
- * the source says so and stays off.
+ * Reading what a live source answered. The catalogue says how to read each
+ * source (Decision 0007): the format of its answer, and the fields that hold
+ * a record's name and id. Each format has one reader here, GeoJSON (the
+ * ArcGIS map services and others), the Archaeology Data Service's search
+ * results and the MediaWiki API, and an answer that doesn't fit its reader
+ * is unreadable: the source says so and stays off. Names and ids are read
+ * only from the fields the catalogue names.
  *
  * Every value is someone else's. Names are kept as plain text, cut to a
  * sensible length, and links survive only as http or https addresses.
  */
+
+import type { LiveFormat } from "../api.js";
+
+/** The formats this browser has a reader for. Others aren't offered. */
+export const READABLE_FORMATS: ReadonlySet<LiveFormat> = new Set(["geojson", "ads_search", "mediawiki_query"]);
+
+/** What the catalogue says about reading one source's answer. */
+export interface LiveReading {
+  format: LiveFormat;
+  /** A dotted path, such as "data.title.text", within one record. Null when the source names none. */
+  nameField: string | null;
+  idField: string | null;
+  linkTemplate: string | null;
+}
 
 export interface LiveRecord {
   /** Unique within its source. */
@@ -25,7 +40,7 @@ export interface LiveRecord {
 
 export interface LiveAnswer {
   records: LiveRecord[];
-  /** True when the source sent more than `cap`, and only the first `cap` are kept. */
+  /** True when the source sent more than `cap`, of which only the first `cap` are kept, or said it had more than it sent. */
   truncated: boolean;
 }
 
@@ -40,11 +55,6 @@ export class LiveResponseError extends Error {
 export const MAX_LIVE_RECORDS = 200;
 const MAX_NAME_CHARS = 160;
 
-/** Property names that usually hold a record's name, in the order they are tried. */
-const NAME_KEYS = ["name", "Name", "NAME", "title", "Title", "TITLE", "SiteName", "SITE_NAME", "MonName"];
-/** Property names that usually hold a record's identifier. */
-const ID_KEYS = ["MonUID", "monuid", "HER_Refere", "PrefRef", "id", "ID", "Filename", "OBJECTID", "FID"];
-
 type Props = Record<string, unknown>;
 
 function text(value: unknown): string | null {
@@ -55,12 +65,15 @@ function text(value: unknown): string | null {
   return isFiniteNumber(value) ? String(value) : null;
 }
 
-function first(props: Props, keys: readonly string[]): string | null {
-  for (const key of keys) {
-    const value = text(props[key]);
-    if (value !== null) return value;
+/** The value at a dotted path such as "data.title.text", as text, or null. */
+export function fieldAt(record: Props, path: string | null): string | null {
+  if (!path) return null;
+  let value: unknown = record;
+  for (const part of path.split(".")) {
+    if (!isRecord(value)) return null;
+    value = value[part];
   }
-  return null;
+  return text(value);
 }
 
 function cut(value: string): string {
@@ -134,24 +147,42 @@ interface Candidate {
   props: Props;
 }
 
-function fromGeoJson(body: Props): Candidate[] {
-  const features = Array.isArray(body.features) ? body.features : [];
-  return features.filter(isRecord).map((feature) => {
-    const props = isRecord(feature.properties) ? feature.properties : {};
-    return {
-      id: text(feature.id) ?? first(props, ID_KEYS),
-      name: first(props, NAME_KEYS),
-      position: centreOf(feature.geometry),
-      props,
-    };
-  });
+interface Candidates {
+  candidates: Candidate[];
+  /** True when the source says it held back records it had. */
+  heldBack: boolean;
 }
 
-/** The Archaeology Data Service catalogue: `hits[]` with `data.title` and `data.spatial[].geopoint`. */
-function fromSearchHits(hits: unknown[]): Candidate[] {
-  return hits.filter(isRecord).map((hit) => {
+function candidate(record: Props, reading: LiveReading, position: [number, number] | null, ownId?: unknown): Candidate {
+  return {
+    id: fieldAt(record, reading.idField) ?? text(ownId),
+    name: fieldAt(record, reading.nameField),
+    position,
+    props: record,
+  };
+}
+
+/** GeoJSON: names and ids are among each feature's properties. ArcGIS says when it held some back. */
+function fromGeoJson(body: Props, reading: LiveReading): Candidates {
+  if (body.type !== "FeatureCollection" || !Array.isArray(body.features)) {
+    throw new LiveResponseError("The answer wasn't GeoJSON");
+  }
+  const candidates = body.features.filter(isRecord).map((feature) => {
+    const props = isRecord(feature.properties) ? feature.properties : {};
+    return candidate(props, reading, centreOf(feature.geometry), feature.id);
+  });
+  const heldBack =
+    body.exceededTransferLimit === true ||
+    (isRecord(body.properties) && body.properties.exceededTransferLimit === true);
+  return { candidates, heldBack };
+}
+
+/** The Archaeology Data Service catalogue: `hits[]`, each placed by `data.spatial[].geopoint`, and `total.value`. */
+function fromSearchHits(body: Props, reading: LiveReading): Candidates {
+  if (!Array.isArray(body.hits)) throw new LiveResponseError("The answer had no search hits");
+  const hits = body.hits.filter(isRecord);
+  const candidates = hits.map((hit) => {
     const data = isRecord(hit.data) ? hit.data : {};
-    const title = isRecord(data.title) ? text(data.title.text) : text(data.title);
     let position: [number, number] | null = null;
     for (const place of Array.isArray(data.spatial) ? data.spatial : []) {
       const point = isRecord(place) && isRecord(place.geopoint) ? place.geopoint : null;
@@ -160,25 +191,32 @@ function fromSearchHits(hits: unknown[]): Candidate[] {
         break;
       }
     }
-    const id = text(hit.id);
-    return { id, name: title, position, props: { ...data, id } };
+    return candidate(hit, reading, position);
   });
+  const total = isRecord(body.total) && isFiniteNumber(body.total.value) ? body.total.value : hits.length;
+  return { candidates, heldBack: total > hits.length };
 }
 
-/** The MediaWiki API: `query.pages{}` with `title` and `coordinates[0]`. */
-function fromWikiPages(pages: Props): Candidate[] {
-  return Object.values(pages)
+/** The MediaWiki API: `query.pages{}`, each placed by `coordinates[0]`. It leaves out `query` when nothing is near. */
+function fromWikiPages(body: Props, reading: LiveReading): Candidates {
+  if (!isRecord(body.query)) {
+    if ("batchcomplete" in body) return { candidates: [], heldBack: false };
+    throw new LiveResponseError("The answer had no query");
+  }
+  const pages = isRecord(body.query.pages) ? body.query.pages : {};
+  const candidates = Object.values(pages)
     .filter(isRecord)
     .map((page) => {
       const coordinates = Array.isArray(page.coordinates) && isRecord(page.coordinates[0]) ? page.coordinates[0] : {};
       const position: [number, number] | null = isPosition([coordinates.lon, coordinates.lat])
         ? [coordinates.lon as number, coordinates.lat as number]
         : null;
-      return { id: text(page.pageid) ?? text(page.title), name: text(page.title), position, props: page };
+      return candidate(page, reading, position, page.pageid);
     });
+  return { candidates, heldBack: "continue" in body };
 }
 
-function candidatesOf(body: unknown): Candidate[] {
+function candidatesOf(body: unknown, reading: LiveReading): Candidates {
   if (!isRecord(body)) throw new LiveResponseError("The answer wasn't an object");
   // ArcGIS and MediaWiki both answer some failures with a 200 and an error object.
   if (isRecord(body.error)) {
@@ -186,24 +224,25 @@ function candidatesOf(body: unknown): Candidate[] {
       `The source refused the request: ${text(body.error.message) ?? text(body.error.info) ?? text(body.error.code) ?? "no reason given"}`,
     );
   }
-  if (body.type === "FeatureCollection") return fromGeoJson(body);
-  if (Array.isArray(body.hits)) return fromSearchHits(body.hits);
-  if (isRecord(body.query) && isRecord(body.query.pages)) return fromWikiPages(body.query.pages);
-  // MediaWiki leaves out `query` altogether when nothing is near.
-  if ("batchcomplete" in body) return [];
-  throw new LiveResponseError("The answer wasn't in a form Field Club can read");
+  switch (reading.format) {
+    case "geojson":
+      return fromGeoJson(body, reading);
+    case "ads_search":
+      return fromSearchHits(body, reading);
+    case "mediawiki_query":
+      return fromWikiPages(body, reading);
+    default:
+      throw new LiveResponseError(`Field Club can't read answers in the form "${reading.format}"`);
+  }
 }
 
 /** Turn a live source's answer into records the map can draw, at most `cap` of them. */
-export function parseLiveAnswer(
-  body: unknown,
-  source: { linkTemplate: string | null },
-  cap = MAX_LIVE_RECORDS,
-): LiveAnswer {
+export function parseLiveAnswer(body: unknown, reading: LiveReading, cap = MAX_LIVE_RECORDS): LiveAnswer {
   const records: LiveRecord[] = [];
   const ids = new Set<string>();
   let drawable = 0;
-  for (const candidate of candidatesOf(body)) {
+  const { candidates, heldBack } = candidatesOf(body, reading);
+  for (const candidate of candidates) {
     if (candidate.position === null) continue;
     drawable += 1;
     if (records.length >= cap) continue;
@@ -216,8 +255,8 @@ export function parseLiveAnswer(
       name: cut(candidate.name ?? (candidate.id ? `Record ${candidate.id}` : "A record with no name")),
       lon: candidate.position[0],
       lat: candidate.position[1],
-      url: fillLinkTemplate(source.linkTemplate, candidate.props),
+      url: fillLinkTemplate(reading.linkTemplate, candidate.props),
     });
   }
-  return { records, truncated: drawable > records.length };
+  return { records, truncated: heldBack || drawable > records.length };
 }

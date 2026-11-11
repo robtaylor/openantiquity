@@ -1,9 +1,9 @@
 import { apiFetch } from "../../../api/client.js";
-import type { components } from "../../../api/schema.js";
+import type { components, operations } from "../../../api/schema.js";
 import { type LngLat, lineLengthM, sampleCount } from "./line.js";
 
 /** `POST /terrain/profile`, as the generated schema has it. */
-export type ProfileOut = components["schemas"]["ProfileOut"];
+export type ProfileOut = operations["terrain_profile"]["responses"][200]["content"]["application/json"];
 export type ProfileSample = components["schemas"]["ProfileSample"];
 type ProfileRequest = components["schemas"]["ProfileRequest"];
 

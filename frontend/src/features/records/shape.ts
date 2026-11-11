@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { isFiniteNumber, isRecord } from "../../api/guards.js";
 import { kmSquareAt } from "../../map/gridref.js";
+import { SQUARE_PRECISION_M } from "../../map/overlayLayers.js";
 import type { RecordOut } from "./api.js";
 
 import type { Feature, FeatureCollection, Geometry, Polygon } from "./geojson.js";
@@ -13,7 +14,7 @@ import type { Feature, FeatureCollection, Geometry, Polygon } from "./geojson.js
  */
 
 /** From this coarseness up, a position is a square and not a spot. */
-export const SQUARE_PRECISION_M = 1000;
+export { SQUARE_PRECISION_M } from "../../map/overlayLayers.js";
 
 export interface RecordShape {
   collection: FeatureCollection;
@@ -72,6 +73,49 @@ export function recordShape(record: Pick<RecordOut, "lon" | "lat" | "precision_m
   // An outline gets its centre marked as well, so a small one still stands out.
   if (geometry.type !== "Point") features.push(feature({ type: "Point", coordinates: [lon, lat] }, false));
   return { collection: { type: "FeatureCollection", features }, imprecise: false, square: null };
+}
+
+/** A feature as a records tile carries it, as MapLibre hands it back. */
+export interface TileRecordFeature {
+  id?: unknown;
+  geometry: unknown;
+  properties: Record<string, unknown> | null;
+}
+
+/**
+ * The squares to draw for the records in these tile features that their
+ * source placed only to a square (`precision_m` of 1000 or more), as the
+ * same square their own page draws. A record appears once however many
+ * loaded tiles hold it. Each square keeps the record's id, category and
+ * source, so it is filtered, credited and clicked like the record.
+ */
+export function impreciseSquares(features: readonly TileRecordFeature[]): FeatureCollection {
+  const seen = new Set<number>();
+  const squares: Feature[] = [];
+  for (const tileFeature of features) {
+    const props = tileFeature.properties ?? {};
+    const id = Number(props.id ?? tileFeature.id);
+    const precision = props.precision_m;
+    if (!Number.isSafeInteger(id) || seen.has(id)) continue;
+    if (!isFiniteNumber(precision) || precision < SQUARE_PRECISION_M) continue;
+    const geometry = tileFeature.geometry;
+    if (!isRecord(geometry) || geometry.type !== "Point" || !Array.isArray(geometry.coordinates)) continue;
+    const [lon, lat] = geometry.coordinates;
+    if (!isFiniteNumber(lon) || !isFiniteNumber(lat)) continue;
+    seen.add(id);
+    const square = recordShape({ lon, lat, precision_m: precision, geometry }).collection.features[0];
+    if (!square) continue;
+    squares.push({
+      ...square,
+      properties: {
+        id,
+        category: typeof props.category === "string" ? props.category : null,
+        source: typeof props.source === "string" ? props.source : null,
+        imprecise: true,
+      },
+    });
+  }
+  return { type: "FeatureCollection", features: squares };
 }
 
 /** How exact a record's position is, in words. */

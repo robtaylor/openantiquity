@@ -15,6 +15,7 @@ import { useDocumentTitle } from "../placeholders.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { fetchRecord, parseRecordId, type RecordOut, recordKeys } from "./api.js";
 import { CategoryMark } from "./CategoryMark.js";
+import { LinkedFindings } from "./LinkedFindings.js";
 import { elsewherePath } from "./paths.js";
 import { SourceCredit } from "./SourceCredit.js";
 import { precisionText, recordShape, useRecordSelection } from "./shape.js";
@@ -100,6 +101,8 @@ function RecordBody({ record, meta }: { record: RecordOut; meta: Meta }) {
           </Link>
         </div>
       </section>
+
+      <LinkedFindings recordId={record.id} meta={meta} />
 
       <section className="fc-record__section" aria-labelledby="record-source">
         <h3 className="fc-record__heading" id="record-source">

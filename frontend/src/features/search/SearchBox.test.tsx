@@ -6,6 +6,7 @@ import { type ApiRoutes, apiError, routeApi } from "../../test/apiRoutes.js";
 import { AVENUE_RECORD, GEO_RESULTS, GRIDREF_RESULT } from "../../test/fixtures/records.js";
 import { json, mapReady, renderShell, setUpShellTests } from "../../test/shellHarness.js";
 import { useRecordSearch } from "../records/searchStore.js";
+import { SEARCH_DEBOUNCE_MS } from "./SearchBox.js";
 
 vi.mock("maplibre-gl", async () => {
   const fake = await import("../../test/fakeMapLibre.js");
@@ -48,6 +49,14 @@ describe("the search box", () => {
     await user.type(box, "ave");
     await screen.findByRole("option", { name: /West Kennet Avenue/ });
     expect(searches()).toEqual(["ave"]);
+  });
+
+  it("asks nothing for a single letter, which would match thousands of names", async () => {
+    const { user, box } = await openSearch();
+    await user.type(box, "a");
+    await new Promise((resolve) => setTimeout(resolve, SEARCH_DEBOUNCE_MS + 100));
+    expect(searches()).toEqual([]);
+    expect(box).toHaveAttribute("aria-expanded", "false");
   });
 
   it("cancels a search that the text has moved past", async () => {

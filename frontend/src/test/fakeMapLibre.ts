@@ -330,9 +330,11 @@ export class FakeMap {
     return handle;
   }
 
+  /** What `querySourceFeatures` answers with, whatever it is asked. A test sets it. */
+  sourceFeatures: unknown[] = [];
   querySourceFeatures(): unknown[] {
     this.requireStyle();
-    return [];
+    return this.sourceFeatures;
   }
 
   /** Filters set on layers, by layer id. */

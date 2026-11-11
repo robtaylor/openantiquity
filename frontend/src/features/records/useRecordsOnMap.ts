@@ -1,9 +1,23 @@
-import type { GeoJSONSource, MapGeoJSONFeature, Map as MapLibreMap, MapMouseEvent, PointLike } from "maplibre-gl";
+import type {
+  FilterSpecification,
+  GeoJSONSource,
+  MapGeoJSONFeature,
+  Map as MapLibreMap,
+  MapMouseEvent,
+  PointLike,
+} from "maplibre-gl";
 import { useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { findOverlay, type Meta } from "../../api/meta.js";
 import { isMapLive } from "../../map/MapPane.js";
-import { RECORD_LAYERS, recordsLiveSourceId, recordsSelectionSourceId } from "../../map/overlayLayers.js";
+import {
+  RECORD_LAYERS,
+  RECORDS_SOURCE_LAYER,
+  recordsImpreciseSourceId,
+  recordsLiveSourceId,
+  recordsSelectionSourceId,
+  SQUARE_PRECISION_M,
+} from "../../map/overlayLayers.js";
 import { useMapStore } from "../../map/store.js";
 import { overlayShown, overlaySourceId } from "../../map/style.js";
 import { mapToolActive } from "../../map/tool.js";
@@ -14,19 +28,37 @@ import { pickedKey, useLiveStore } from "./live/store.js";
 import { useLiveRecords } from "./live/useLiveRecords.js";
 import { useRecordsOnScreen } from "./onScreen.js";
 import { elsewherePath, recordPath } from "./paths.js";
-import { useRecordSelection } from "./shape.js";
+import { impreciseSquares, type TileRecordFeature, useRecordSelection } from "./shape.js";
 
 /** The layers a click or a hover can land on, top first. */
 const CLICKABLE = [
   RECORD_LAYERS.live,
   RECORD_LAYERS.liveCentres,
   RECORD_LAYERS.squares,
+  RECORD_LAYERS.imprecise,
+  RECORD_LAYERS.impreciseFills,
   RECORD_LAYERS.outlines,
   RECORD_LAYERS.counts,
   RECORD_LAYERS.fills,
 ];
 /** The layers whose features say which stored sources are on screen. */
-const CREDITED = [RECORD_LAYERS.squares, RECORD_LAYERS.outlines, RECORD_LAYERS.fills, RECORD_LAYERS.counts];
+const CREDITED = [
+  RECORD_LAYERS.squares,
+  RECORD_LAYERS.impreciseFills,
+  RECORD_LAYERS.outlines,
+  RECORD_LAYERS.fills,
+  RECORD_LAYERS.counts,
+];
+/** The records in loaded tiles that are placed only to a square. */
+const IMPRECISE_FILTER: FilterSpecification = [">=", ["coalesce", ["get", "precision_m"], 0], SQUARE_PRECISION_M];
+/** The layers whose features are stored records, opened by a click. */
+const RECORD_HIT_LAYERS: ReadonlySet<string> = new Set([
+  RECORD_LAYERS.squares,
+  RECORD_LAYERS.imprecise,
+  RECORD_LAYERS.impreciseFills,
+  RECORD_LAYERS.outlines,
+  RECORD_LAYERS.fills,
+]);
 /** A count is zoomed into by this many levels when clicked. */
 const COUNT_ZOOM_STEP = 2;
 
@@ -46,7 +78,7 @@ export function recordTarget(hits: readonly Hit[], at: { lng: number; lat: numbe
       if (typeof props.source === "string" && typeof props.id === "string") {
         return { kind: "live", source: props.source, id: props.id };
       }
-    } else if (layer === RECORD_LAYERS.squares || layer === RECORD_LAYERS.outlines || layer === RECORD_LAYERS.fills) {
+    } else if (RECORD_HIT_LAYERS.has(layer)) {
       const id = Number(props.id ?? hit.id);
       if (Number.isSafeInteger(id) && id > 0) return { kind: "record", id };
     } else if (layer === RECORD_LAYERS.counts) {
@@ -91,8 +123,9 @@ function setData(map: MapLibreMap, sourceId: string, data: FeatureCollection): v
  * its page, a count zooms in, and a live record is shown in the layer
  * panel, since it has no page here. A right click, or a long press where the
  * browser gives one, opens the links to other viewers for that spot. When
- * the main map comes to rest it reports which stored sources it is showing,
- * so the credits name exactly those.
+ * the main map comes to rest it draws the records its tiles place only to a
+ * square as those squares, in both panes, and reports which stored sources it
+ * is showing, so the credits name exactly those.
  */
 export function useRecordsOnMap(meta: Meta, main: MapLibreMap | null, compare: MapLibreMap | null): void {
   const overlay = findOverlay(meta, "records");
@@ -181,8 +214,24 @@ export function useRecordsOnMap(meta: Meta, main: MapLibreMap | null, compare: M
       });
     }
     if (main && isMapLive(main)) {
+      // The squares drawn last, by record id, so a map at rest isn't given the same ones again.
+      let drawnSquares = "";
       const report = (): void => {
-        if (isMapLive(main)) useRecordsOnScreen.getState().setSources(sourcesOf(query(main, CREDITED)));
+        if (!isMapLive(main)) return;
+        if (source !== null && main.getSource(source)) {
+          const squares = impreciseSquares(
+            main.querySourceFeatures(source, {
+              sourceLayer: RECORDS_SOURCE_LAYER,
+              filter: IMPRECISE_FILTER,
+            }) as TileRecordFeature[],
+          );
+          const signature = squares.features.map((feature) => feature.properties.id).join(",");
+          if (signature !== drawnSquares) {
+            drawnSquares = signature;
+            for (const map of maps) if (isMapLive(map)) setData(map, recordsImpreciseSourceId(source), squares);
+          }
+        }
+        useRecordsOnScreen.getState().setSources(sourcesOf(query(main, CREDITED)));
       };
       main.on("idle", report);
       detach.push(() => main.off("idle", report));
@@ -190,5 +239,5 @@ export function useRecordsOnMap(meta: Meta, main: MapLibreMap | null, compare: M
     return () => {
       for (const off of detach) off();
     };
-  }, [main, compare]);
+  }, [main, compare, source]);
 }

@@ -140,8 +140,15 @@ test.describe("a record's page", () => {
     await expect(original).toHaveAttribute("target", "_blank");
     await expect(original).toHaveAttribute("rel", /noopener/);
     await expect(original).toHaveAttribute("rel", /noreferrer/);
+    // The findings linked to it open their own pages.
+    const linked = record.getByRole("region", { name: "Findings linked to it" });
+    await expect(linked.getByRole("link", { name: /Bank beside the avenue/ })).toHaveAttribute("href", "/f/f-7k2m9q");
+    await expect(linked.getByText("Seen by others")).toBeAttached();
 
     await page.goto(`/r/${FIND_RECORD.id}`);
+    await expect(
+      panel(page, FIND_RECORD.name).getByText(/No finding has been linked to this record yet/),
+    ).toBeAttached();
     await expect(
       panel(page, FIND_RECORD.name).getByText(/Published only to the one-kilometre square SU\d{4}/),
     ).toBeAttached();
@@ -251,7 +258,8 @@ test.describe("open elsewhere", () => {
       await page.locator(".fc-map__pane--main canvas").click({ button: "right", position: { x: 700, y: 400 } });
     }
     const elsewhere = panel(page, "Open elsewhere");
-    await expect(elsewhere.getByRole("heading", { name: "England" })).toBeVisible();
+    await expect(elsewhere.getByRole("heading", { name: "Aerial photographs" })).toBeVisible();
+    await expect(elsewhere.getByRole("heading", { name: "Old maps" })).toBeVisible();
     await expect(elsewhere.getByText(isPhone(page) ? "The middle of the map" : "The spot you chose")).toBeVisible();
     const links = elsewhere.getByRole("link");
     await expect(links).toHaveCount(3);

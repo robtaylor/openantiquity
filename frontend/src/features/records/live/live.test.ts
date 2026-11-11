@@ -18,9 +18,11 @@ import {
   liveSourcesFrom,
 } from "./catalogue.js";
 import { fetchLiveRecords, LIVE_TIMEOUT_MS, LiveSourceError, MAX_ANSWER_BYTES } from "./client.js";
-import { fillLinkTemplate, LiveResponseError, parseLiveAnswer } from "./parse.js";
+import { fillLinkTemplate, LiveResponseError, MAX_LIVE_RECORDS, parseLiveAnswer } from "./parse.js";
 
 const AREA = { west: -1.86, south: 51.426, east: -1.848, north: 51.431 };
+/** How a plain GeoJSON source is read, with the name in `name` and no id field. */
+const GEOJSON = { format: "geojson", nameField: "name", idField: null, linkTemplate: null } as const;
 
 function source(item = WILTSHIRE_LIVE) {
   const found = liveSourceFrom(item);
@@ -72,11 +74,41 @@ describe("the live catalogue", () => {
     expect(() => liveRequestUrl(source(), AREA, "https://maps.wiltshire.gov.uk")).toThrow(LiveCatalogueError);
   });
 
+  it("keeps the catalogue's reading hints: format, fields, cap and lowest zoom", () => {
+    expect(source()).toMatchObject({
+      format: "geojson",
+      nameField: "Name",
+      idField: "MonUID",
+      limitParam: "resultRecordCount",
+      maxLimit: 1000,
+      minZoom: 13,
+    });
+    // A source with no lowest zoom of its own is asked from zoom 13.
+    expect(source({ ...WILTSHIRE_LIVE, min_zoom: null }).minZoom).toBe(13);
+    // An answer this browser has no reader for isn't offered.
+    expect(liveSourceFrom({ ...WILTSHIRE_LIVE, answer_format: "ads_map" })).toBeNull();
+  });
+
+  it("asks for no more records than the map will draw, through the source's own cap parameter", () => {
+    const url = new URL(liveRequestUrl(source(), AREA, "http://localhost"));
+    expect(url.searchParams.get("resultRecordCount")).toBe(String(MAX_LIVE_RECORDS + 1));
+    const small = new URL(liveRequestUrl(source({ ...WILTSHIRE_LIVE, max_limit: 50 }), AREA, "http://localhost"));
+    expect(small.searchParams.get("resultRecordCount")).toBe("50");
+    const uncapped = new URL(
+      liveRequestUrl(source({ ...WILTSHIRE_LIVE, limit_param: null }), AREA, "http://localhost"),
+    );
+    expect(uncapped.searchParams.has("resultRecordCount")).toBe(false);
+  });
+
   it("fills the area into the pattern, in the order the pattern asks for", () => {
     const url = new URL(liveRequestUrl(source(), AREA, "http://localhost"));
     expect(url.searchParams.get("geometry")).toBe("-1.86000,51.42600,-1.84800,51.43100");
     const ads = new URL(
-      liveRequestUrl({ key: ADS_LIVE.key, query: "area", pattern: ADS_LIVE.query_pattern }, AREA, "http://localhost"),
+      liveRequestUrl(
+        { key: ADS_LIVE.key, query: "area", pattern: ADS_LIVE.query_pattern, limitParam: null, maxLimit: null },
+        AREA,
+        "http://localhost",
+      ),
     );
     expect(ads.searchParams.get("bbox")).toBe("51.43100,-1.86000,51.42600,-1.84800");
   });
@@ -85,7 +117,6 @@ describe("the live catalogue", () => {
 describe("reading a live answer", () => {
   it("reads the recorded Wiltshire answer, with each record's own address as its link", () => {
     const answer = parseLiveAnswer(WILTSHIRE_RECORDED_ANSWER, source());
-    expect(answer.truncated).toBe(false);
     expect(answer.records.map((record) => record.name)).toEqual([
       "Avebury Vicarage",
       "Stone hole 41, Avebury henge",
@@ -93,7 +124,7 @@ describe("reading a live answer", () => {
       "Avebury Circle",
     ]);
     expect(answer.records[0]).toEqual({
-      id: "20841084",
+      id: "MWI7839",
       name: "Avebury Vicarage",
       lon: -1.8587010167953852,
       lat: 51.42754558450793,
@@ -123,7 +154,7 @@ describe("reading a live answer", () => {
           },
         ],
       },
-      { linkTemplate: ADS_LIVE.link_template },
+      { format: "ads_search", nameField: "data.title.text", idField: "id", linkTemplate: ADS_LIVE.link_template },
     );
     expect(ads.records).toEqual([
       {
@@ -140,10 +171,61 @@ describe("reading a live answer", () => {
           pages: { 7: { pageid: 7, title: "File:Avebury stones.jpg", coordinates: [{ lat: 51.42, lon: -1.85 }] } },
         },
       },
-      { linkTemplate: "https://commons.wikimedia.org/wiki/{title}" },
+      {
+        format: "mediawiki_query",
+        nameField: "title",
+        idField: "title",
+        linkTemplate: "https://commons.wikimedia.org/wiki/{title}",
+      },
     );
     expect(wiki.records[0]?.url).toBe("https://commons.wikimedia.org/wiki/File%3AAvebury%20stones.jpg");
-    expect(parseLiveAnswer({ batchcomplete: "" }, { linkTemplate: null }).records).toEqual([]);
+    expect(parseLiveAnswer({ batchcomplete: "" }, { ...GEOJSON, format: "mediawiki_query" }).records).toEqual([]);
+  });
+
+  it("reads names and ids only from the fields the catalogue names, never by guessing", () => {
+    const answer = parseLiveAnswer(
+      {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: 9,
+            geometry: { type: "Point", coordinates: [-1.8, 51.4] },
+            properties: { Name: "Not the name field", Filename: "OBL-1.jpg" },
+          },
+        ],
+      },
+      { ...GEOJSON, idField: "Filename" },
+    );
+    expect(answer.records[0]).toMatchObject({ id: "OBL-1.jpg", name: "Record OBL-1.jpg" });
+    // With no id field the feature's own id is used.
+    const plain = parseLiveAnswer(
+      {
+        type: "FeatureCollection",
+        features: [{ type: "Feature", id: 9, geometry: { type: "Point", coordinates: [-1.8, 51.4] }, properties: {} }],
+      },
+      GEOJSON,
+    );
+    expect(plain.records[0]?.id).toBe("9");
+  });
+
+  it("reads each format by its own reader, so one shape isn't taken for another", () => {
+    expect(() => parseLiveAnswer({ hits: [] }, GEOJSON)).toThrow(LiveResponseError);
+    expect(() =>
+      parseLiveAnswer({ type: "FeatureCollection", features: [] }, { ...GEOJSON, format: "ads_search" }),
+    ).toThrow(LiveResponseError);
+  });
+
+  it("says an answer was cut short when the source says it held back more", () => {
+    // It was asked for four, and ArcGIS says it had more.
+    expect(parseLiveAnswer(WILTSHIRE_RECORDED_ANSWER, source()).truncated).toBe(true);
+    const whole = { ...WILTSHIRE_RECORDED_ANSWER, exceededTransferLimit: false, properties: {} };
+    expect(parseLiveAnswer(whole, source()).truncated).toBe(false);
+    const ads = parseLiveAnswer(
+      { total: { value: 900 }, hits: [] },
+      { format: "ads_search", nameField: null, idField: "id", linkTemplate: null },
+    );
+    expect(ads.truncated).toBe(true);
   });
 
   it("treats an error object or an unknown shape as unreadable", () => {
@@ -175,11 +257,11 @@ describe("reading a live answer", () => {
                 ],
               ],
             },
-            properties: { Name: "A field" },
+            properties: { name: "A field" },
           },
         ],
       },
-      { linkTemplate: null },
+      GEOJSON,
     );
     expect(answer.records.map((record) => [record.id, record.name, record.lon, record.lat])).toEqual([
       ["1", "Record 1", -1.8, 51.4],

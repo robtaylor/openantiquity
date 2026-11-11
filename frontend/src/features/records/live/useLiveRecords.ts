@@ -10,12 +10,6 @@ import { type LiveArea, type LiveSource, liveSourcesFrom } from "./catalogue.js"
 import { fetchLiveRecords, LiveSourceError } from "./client.js";
 import { type LiveStatus, useLiveStore } from "./store.js";
 
-/**
- * Below this zoom no live source is asked anything. A view at zoom 13 is a
- * few kilometres across, which keeps each request small and keeps us from
- * asking someone else's server about a whole county.
- */
-export const LIVE_MIN_ZOOM = 13;
 /** How long the map must hold still before the live sources are asked about the view. */
 export const LIVE_SETTLE_MS = 600;
 /** An answer for one area is used again for this long, so panning back costs nothing. */
@@ -34,9 +28,17 @@ export function useLiveCatalogue(wanted: boolean): { sources: LiveSource[]; load
   return { sources: missing ? [] : sources, loading: query.isLoading, failed: query.isError && !missing };
 }
 
-/** The view, to about a hundred metres, as text so it can be compared and debounced. */
-function areaKey(bounds: readonly [number, number, number, number]): string {
-  return bounds.map((value) => value.toFixed(3)).join(",");
+/**
+ * The view, to about a hundred metres, and its whole zoom, as text so it can
+ * be compared and debounced.
+ */
+function viewKey(bounds: readonly [number, number, number, number], zoom: number): string {
+  return `${bounds.map((value) => value.toFixed(3)).join(",")}@${Math.floor(zoom)}`;
+}
+
+function viewFrom(key: string): { area: string; zoom: number } {
+  const [area = "", zoom = "0"] = key.split("@");
+  return { area, zoom: Number(zoom) };
 }
 
 function areaFrom(key: string): LiveArea {
@@ -48,7 +50,7 @@ const NO_RECORDS: FeatureCollection = { type: "FeatureCollection", features: [] 
 
 /**
  * Ask every live source that is on about the area in view, once the map has
- * settled at zoom `LIVE_MIN_ZOOM` or closer, and return what they sent as
+ * settled at the source's lowest zoom or closer, and return what they sent as
  * map features. Each source is asked once per area, and a request for an
  * area the map has left is cancelled. Nothing is retried: a source that
  * fails is turned off, with its reason kept for the layer panel.
@@ -62,11 +64,13 @@ export function useLiveRecords(shown: boolean): FeatureCollection {
   const bounds = useViewAreaStore((state) => state.bounds);
   const zoom = useViewAreaStore((state) => state.zoom);
 
-  const wanted = shown && anyOn && bounds !== null && zoom >= LIVE_MIN_ZOOM ? areaKey(bounds) : null;
+  const active = useMemo(() => sources.filter((source) => on[source.key]), [sources, on]);
+  const lowest = Math.min(...active.map((source) => source.minZoom));
+  const wanted = shown && bounds !== null && zoom >= lowest ? viewKey(bounds, zoom) : null;
   const settled = useDebounced(wanted, LIVE_SETTLE_MS, null);
   // A view that has since been left, or zoomed out of, is not asked about.
-  const area = wanted === null ? null : settled;
-  const active = useMemo(() => sources.filter((source) => on[source.key]), [sources, on]);
+  const view = wanted === null || settled === null ? null : viewFrom(settled);
+  const area = view?.area ?? null;
 
   const results = useQueries({
     queries: active.map((source) => ({
@@ -75,7 +79,7 @@ export function useLiveRecords(shown: boolean): FeatureCollection {
         if (area === null) throw new Error("A live source was asked with no area");
         return fetchLiveRecords(source, areaFrom(area), signal);
       },
-      enabled: area !== null,
+      enabled: area !== null && view !== null && view.zoom >= source.minZoom,
       retry: false,
       staleTime: LIVE_STALE_MS,
       gcTime: LIVE_STALE_MS,
@@ -87,7 +91,7 @@ export function useLiveRecords(shown: boolean): FeatureCollection {
   // Each source's state, worked out once per render and reported only when it changes.
   const statuses: Array<[LiveSource, LiveStatus]> = active.map((source, index) => {
     const result = results[index];
-    if (area === null || !result) return [source, { state: "idle" }];
+    if (area === null || !result || view === null || view.zoom < source.minZoom) return [source, { state: "idle" }];
     if (result.isError) {
       const error = result.error;
       const kind = error instanceof LiveSourceError ? error.kind : "failed";

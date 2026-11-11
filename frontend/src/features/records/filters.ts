@@ -22,8 +22,14 @@ export const useRecordFilters = create<RecordFilterState>()((set) => ({
   setHiddenSources: (keys) => set({ hiddenSources: [...new Set(keys)] }),
 }));
 
-/** The records layers drawn from vector tiles, which the filters apply to. */
-const TILE_RECORD_LAYERS = [RECORD_LAYERS.fills, RECORD_LAYERS.outlines, RECORD_LAYERS.squares] as const;
+/** The layers that draw one stored record each, from the tiles or from squares built from them, which the filters apply to. */
+const TILE_RECORD_LAYERS = [
+  RECORD_LAYERS.fills,
+  RECORD_LAYERS.outlines,
+  RECORD_LAYERS.squares,
+  RECORD_LAYERS.impreciseFills,
+  RECORD_LAYERS.imprecise,
+] as const;
 const COUNT_LAYERS = [RECORD_LAYERS.counts] as const;
 export const FILTERED_RECORD_LAYERS: readonly string[] = [...TILE_RECORD_LAYERS, ...COUNT_LAYERS];
 

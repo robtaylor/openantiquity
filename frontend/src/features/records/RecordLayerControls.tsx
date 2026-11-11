@@ -11,7 +11,7 @@ import { CategorySwatch } from "./CategoryMark.js";
 import { useRecordFilters } from "./filters.js";
 import type { LiveSource } from "./live/catalogue.js";
 import { type LiveStatus, liveStatus, pickedKey, useLiveStore } from "./live/store.js";
-import { LIVE_MIN_ZOOM, useLiveCatalogue } from "./live/useLiveRecords.js";
+import { useLiveCatalogue } from "./live/useLiveRecords.js";
 import { RECORD_SEARCH_PATH } from "./paths.js";
 import "./records.css";
 
@@ -124,13 +124,13 @@ function statusLine(source: LiveSource, state: LiveStatus, on: boolean, zoom: nu
   }
   if (state.state === "failed") return `${state.message} It's off for now.`;
   if (!on) return `From ${source.publisher}.`;
-  if (zoom < LIVE_MIN_ZOOM) return "Zoom in closer to see its records.";
+  if (zoom < source.minZoom) return "Zoom in closer to see its records.";
   if (state.state === "loading") return "Asking…";
   if (state.state === "ready") {
     const count = state.records.length;
     if (count === 0) return "Nothing from this source in view.";
     const base = count === 1 ? "1 record in view" : `${count} records in view`;
-    return state.truncated ? `${base}, the first ${count} it sent.` : `${base}.`;
+    return state.truncated ? `${base}. It has more here than it sends at once, so zoom in for the rest.` : `${base}.`;
   }
   return `From ${source.publisher}.`;
 }

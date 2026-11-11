@@ -1,4 +1,5 @@
 import type { LiveSourceOut } from "../api.js";
+import { type LiveReading, MAX_LIVE_RECORDS, READABLE_FORMATS } from "./parse.js";
 
 /**
  * The live sources (Decision 0007): indexes we may not store, which the
@@ -6,11 +7,19 @@ import type { LiveSourceOut } from "../api.js";
  * catalogue says how to ask each one. This turns a catalogue entry into a
  * request for one area, and leaves out the entries this browser can't use:
  * ones that ask for a single record rather than an area, ones whose address
- * isn't a secure web address on someone else's server, and ones it can't
- * credit as their publisher asks (see `creditableOnScreen`).
+ * isn't a secure web address on someone else's server, ones whose answer
+ * it has no reader for, and ones it can't credit as their publisher asks
+ * (see `creditableOnScreen`).
  */
 
-export interface LiveSource {
+/**
+ * The lowest zoom a source is asked from when the catalogue gives none. A
+ * view at zoom 13 is a few kilometres across, which keeps each request small
+ * and keeps us from asking someone else's server about a whole county.
+ */
+export const DEFAULT_LIVE_MIN_ZOOM = 13;
+
+export interface LiveSource extends LiveReading {
   key: string;
   name: string;
   publisher: string;
@@ -22,6 +31,11 @@ export interface LiveSource {
   pattern: string;
   /** How to link one record to its page on the publisher's site, with `{field}` placeholders. */
   linkTemplate: string;
+  /** The query parameter that caps how many records the source sends, and the most it allows. */
+  limitParam: string | null;
+  maxLimit: number | null;
+  /** The source is asked nothing while the map is zoomed out further than this. */
+  minZoom: number;
 }
 
 /** West, south, east and north edges of the view, and its centre, in degrees. */
@@ -77,12 +91,13 @@ export function creditableOnScreen(item: Pick<LiveSourceOut, "attribution" | "li
 /** The catalogue entry as a source this browser can ask, or null when it can't. */
 export function liveSourceFrom(item: LiveSourceOut): LiveSource | null {
   if (!creditableOnScreen(item) || item.link_template === null) return null;
+  if (!READABLE_FORMATS.has(item.answer_format)) return null;
   const query = queryKind(item.query_pattern);
   if (query === null) return null;
   try {
     // Filled with a real place, so the check is of the address that would be asked.
     liveRequestUrl(
-      { key: item.key, query, pattern: item.query_pattern },
+      { key: item.key, query, pattern: item.query_pattern, limitParam: item.limit_param, maxLimit: item.max_limit },
       { west: -2, south: 51, east: -1.9, north: 51.1 },
       "https://origin.invalid",
     );
@@ -97,7 +112,13 @@ export function liveSourceFrom(item: LiveSourceOut): LiveSource | null {
     coverage: item.coverage,
     query,
     pattern: item.query_pattern,
+    format: item.answer_format,
+    nameField: item.name_field,
+    idField: item.id_field,
     linkTemplate: item.link_template,
+    limitParam: item.limit_param,
+    maxLimit: item.max_limit,
+    minZoom: item.min_zoom ?? DEFAULT_LIVE_MIN_ZOOM,
   };
 }
 
@@ -122,9 +143,12 @@ function degrees(value: number): string {
 /**
  * The address to ask for an area. It must be https and must not be our own
  * server: what a live source holds is never sent to, or through, Field Club.
+ * Where the source has a cap parameter, it asks for one more record than the
+ * map draws, so a fuller answer is known to be cut short, and never more
+ * than the source allows.
  */
 export function liveRequestUrl(
-  source: Pick<LiveSource, "key" | "query" | "pattern">,
+  source: Pick<LiveSource, "key" | "query" | "pattern" | "limitParam" | "maxLimit">,
   area: LiveArea,
   ownOrigin: string = window.location.origin,
 ): string {
@@ -147,6 +171,10 @@ export function liveRequestUrl(
   if (url.protocol !== "https:") throw new LiveCatalogueError(`Live source ${source.key} isn't on https`);
   if (url.origin === new URL(ownOrigin).origin) {
     throw new LiveCatalogueError(`Live source ${source.key} points at this site, which must never hold live data`);
+  }
+  if (source.limitParam) {
+    const wanted = MAX_LIVE_RECORDS + 1;
+    url.searchParams.set(source.limitParam, String(source.maxLimit ? Math.min(source.maxLimit, wanted) : wanted));
   }
   return url.href;
 }
