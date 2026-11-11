@@ -1,8 +1,10 @@
 import { infiniteQueryOptions, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
+import { useLocation } from "react-router";
 import { isTransient } from "../../api/client.js";
 import { toast } from "../../ui/toastStore.js";
 import { useSession } from "../account/session.js";
+import { REVIEW_PATH } from "../review/ReviewLayer.js";
 import { fetchNotifications, MAX_MARK_IDS, markRead } from "./api.js";
 import { notificationKeys } from "./keys.js";
 import { markLocally, type NotificationPages, type ReadChoice, unmarkLocally, withUnreadCount } from "./readState.js";
@@ -33,15 +35,22 @@ export function useNotifications() {
   return useInfiniteQuery(notificationsQuery(status === "signed-in"));
 }
 
-/** How many are unread, or null when nobody is signed in or the count isn't known. Never a count for a visitor. */
+/**
+ * How many are unread, or null when nobody is signed in or the count isn't
+ * known. Never a count for a visitor. While the blind second-look queue is
+ * open the list is neither kept nor asked for, by its timer, a live event or
+ * a resync, because its items carry findings' titles and steps (Decision
+ * 0008), so the count isn't shown until the queue closes.
+ */
 export function useUnreadCount(): number | null {
   const { status } = useSession();
-  const signedIn = status === "signed-in";
+  const reviewing = useLocation().pathname === REVIEW_PATH;
+  const counting = status === "signed-in" && !reviewing;
   const query = useInfiniteQuery({
-    ...notificationsQuery(signedIn),
+    ...notificationsQuery(counting),
     select: (data) => data.pages[0]?.unread_count ?? null,
   });
-  return signedIn ? (query.data ?? null) : null;
+  return counting ? (query.data ?? null) : null;
 }
 
 /** "1 new notification", "3 new notifications". */

@@ -2,9 +2,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
+import { activityKeys } from "../activity/keys.js";
 import { findingKeys } from "../findings/keys.js";
 import { helpKeys } from "../help/keys.js";
 import { mentionKeys } from "../mentions/keys.js";
+import { notificationKeys } from "../notifications/keys.js";
 import { useForgetClaimsWhile } from "./forgetClaims.js";
 
 function seeded(): QueryClient {
@@ -14,6 +16,9 @@ function seeded(): QueryClient {
   client.setQueryData(findingKeys.detail("f-ring"), { title: "Ring ditch" });
   client.setQueryData(helpKeys.groups, { groups: [] });
   client.setQueryData(mentionKeys.recent, { items: [{ finding: { public_id: "f-ring", title: "Ring ditch" } }] });
+  const ring = { public_id: "f-ring", title: "Ring ditch", tier: "seen" };
+  client.setQueryData(activityKeys.feed(null, []), { pages: [{ items: [{ finding: ring }] }], pageParams: [null] });
+  client.setQueryData(notificationKeys.list, { pages: [{ items: [{ finding: ring }] }], pageParams: [null] });
   client.setQueryData(["meta"], { kept: true });
   return client;
 }
@@ -28,7 +33,7 @@ function render(client: QueryClient, active: boolean) {
 }
 
 describe("useForgetClaimsWhile", () => {
-  it("drops every finding, help wanted and recent mentions query when the queue opens, and nothing else", () => {
+  it("drops every finding, help wanted, recent mentions, activity and notifications query when the queue opens, and nothing else", () => {
     const client = seeded();
     const { rerender } = render(client, false);
     expect(client.getQueryCache().findAll({ queryKey: findingKeys.all })).toHaveLength(3);
@@ -37,6 +42,8 @@ describe("useForgetClaimsWhile", () => {
     expect(client.getQueryCache().findAll({ queryKey: findingKeys.all })).toHaveLength(0);
     expect(client.getQueryCache().findAll({ queryKey: helpKeys.all })).toHaveLength(0);
     expect(client.getQueryData(mentionKeys.recent)).toBeUndefined();
+    expect(client.getQueryCache().findAll({ queryKey: activityKeys.all })).toHaveLength(0);
+    expect(client.getQueryCache().findAll({ queryKey: notificationKeys.all })).toHaveLength(0);
     expect(client.getQueryData(["meta"])).toEqual({ kept: true });
   });
 });

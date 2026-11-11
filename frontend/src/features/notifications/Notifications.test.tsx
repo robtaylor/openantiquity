@@ -153,6 +153,22 @@ describe("the unread count", () => {
     expect(announcer).toBeEmptyDOMElement();
   });
 
+  it("is neither kept nor asked for during a second look, live events and resyncs included", async () => {
+    const routes = serve();
+    renderShell("/review");
+    await mapReady();
+    await screen.findByRole("heading", { name: "Second look" });
+    act(() => FakeEventSource.current().open());
+    act(() => FakeEventSource.current().activity({ id: 21, kind: "tier_changed", finding: "f-ring", actor: null }));
+    act(() => FakeEventSource.current().signal("resync"));
+    await new Promise((resolve) => setTimeout(resolve, 2300));
+    expect(routes.callsTo("GET /notifications")).toHaveLength(0);
+    expect(screen.queryByTestId("notification-count")).toBeNull();
+
+    await userEvent.setup().click(screen.getByRole("link", { name: "Explore" }));
+    expect(await screen.findByRole("link", { name: "Account, 2 new notifications" })).toBeInTheDocument();
+  });
+
   it("on a phone, shows on More and on the Account item under it", async () => {
     const user = userEvent.setup();
     usePhoneLayout();
