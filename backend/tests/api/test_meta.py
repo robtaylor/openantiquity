@@ -223,6 +223,9 @@ def test_sources_lists_enabled_sources_with_attribution(sources: None, client: T
             "licence_url": None,
             "attribution": "© Someone",
             "reuse": "open",
+            # A row with no label or credit of its own shows its full terms.
+            "licence_label": "OGL v3.0",
+            "credit": "© Someone",
             "homepage": None,
             "coverage": None,
             "category": "monument",
@@ -238,6 +241,8 @@ def test_sources_lists_enabled_sources_with_attribution(sources: None, client: T
             "licence_url": None,
             "attribution": "© Historic England",
             "reuse": "open",
+            "licence_label": "OGL v3.0",
+            "credit": "© Historic England",
             "homepage": "https://historicengland.org.uk/listing/the-list/",
             "coverage": None,
             "category": "designation",

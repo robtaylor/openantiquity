@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from fieldclub.schemas.common import ApiModel, GeoJSONFeature, RecordCount, geojson_geometry, to_geojson
 from fieldclub.vocab import LinkShows, LiveFormat
@@ -21,7 +21,12 @@ if TYPE_CHECKING:
 
 
 class SourceRef(ApiModel):
-    """What a record must be shown with: who published it and under what terms."""
+    """What a record must be shown with: who published it and under what terms.
+
+    `licence` and `attribution` are the terms in full, with the research's
+    notes, for the source's page and for exports. Beside the map show
+    `licence_label`, the licence's short name, and `credit`, the credit line.
+    """
 
     key: str
     name: str
@@ -30,6 +35,20 @@ class SourceRef(ApiModel):
     licence_url: str | None
     attribution: str
     reuse: str
+    licence_label: str
+    credit: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def _shown_terms(cls, data: Any) -> Any:
+        """A row stored before it had a label and a credit shows its licence and attribution instead."""
+        if not isinstance(data, dict):
+            data = {name: getattr(data, name) for name in cls.model_fields if hasattr(data, name)}
+        return {
+            **data,
+            "licence_label": data.get("licence_label") or data.get("licence"),
+            "credit": data.get("credit") or data.get("attribution"),
+        }
 
 
 class SourceOut(SourceRef):
@@ -306,6 +325,8 @@ def record_feature(result: RecordResult) -> GeoJSONFeature:
         "licence_url": source.licence_url,
         "attribution": source.attribution,
         "reuse": source.reuse,
+        "licence_label": source.licence_label or source.licence,
+        "credit": source.credit or source.attribution,
     }
     if result.distance_m is not None:
         properties["distance_m"] = round(result.distance_m, 1)

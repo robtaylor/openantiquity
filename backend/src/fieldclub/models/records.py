@@ -57,6 +57,12 @@ class Source(Base):
     licence: Mapped[str] = mapped_column(Text)
     licence_url: Mapped[str | None] = mapped_column(Text)
     attribution: Mapped[str] = mapped_column(Text)
+    # What a visitor is shown beside the data: the licence's short name, such
+    # as "OGL v3", and a credit line, kept apart from the notes above
+    # (`fieldclub.credits`). Empty for a row written before they existed, which
+    # `schemas.records.SourceRef` then fills from the licence and attribution.
+    licence_label: Mapped[str | None] = mapped_column(Text)
+    credit: Mapped[str | None] = mapped_column(Text)
     # What the licence allows, per Decision 0004. No default: every source
     # has to say.
     reuse: Mapped[str] = mapped_column(Text)

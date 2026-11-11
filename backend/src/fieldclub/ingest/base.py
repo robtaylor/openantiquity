@@ -23,7 +23,7 @@ from shapely.geometry import Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.prepared import prep
 
-from fieldclub import http
+from fieldclub import credits, http
 from fieldclub.config import Settings, get_settings
 from fieldclub.vocab import RecordCategory, SourceAccess, SourceReuse
 
@@ -121,6 +121,10 @@ class SourceInfo:
     homepage: str | None = None
     coverage: str | None = None
     enabled: bool = True
+    # What a visitor is shown: the licence's short name and a credit line. Taken
+    # from `fieldclub.credits` by the key when not given here.
+    licence_label: str | None = None
+    credit: str | None = None
 
     def __post_init__(self) -> None:
         assert _KEY_PATTERN.fullmatch(self.key), (
@@ -131,6 +135,13 @@ class SourceInfo:
         assert self.access in SourceAccess, f"source {self.key} has unknown access {self.access!r}"
         assert self.reuse in SourceReuse, f"source {self.key} has unknown reuse class {self.reuse!r}"
         assert self.category, f"source {self.key} needs a category"
+        shown = credits.credit_for(self.key)
+        if shown is not None:
+            # A frozen dataclass sets its own fields this way.
+            if self.licence_label is None:
+                object.__setattr__(self, "licence_label", shown.licence_label)
+            if self.credit is None:
+                object.__setattr__(self, "credit", shown.credit)
 
 
 @dataclass

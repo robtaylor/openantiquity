@@ -290,14 +290,17 @@ def _upsert_batch(db: Session, rows: list[dict[str, Any]], stats: RunStats) -> N
 def upsert_source(db: Session, info: SourceInfo, obtained: datetime | None = None) -> None:
     """Create or refresh the `sources` row. `enabled` is left alone once the row exists.
 
-    The attribution's `[year]` and `[date]` are filled from `obtained`, or from now.
+    The attribution's and the credit's `[year]` and `[date]` are filled from `obtained`, or from now.
     """
+    day = (obtained or datetime.now(UTC)).date()
     values = {
         "name": info.name,
         "publisher": info.publisher,
         "licence": info.licence,
         "licence_url": info.licence_url,
-        "attribution": fill_attribution(info.attribution, (obtained or datetime.now(UTC)).date()),
+        "attribution": fill_attribution(info.attribution, day),
+        "licence_label": info.licence_label,
+        "credit": fill_attribution(info.credit, day) if info.credit is not None else None,
         "homepage": info.homepage,
         "coverage": info.coverage,
         "category": str(info.category),

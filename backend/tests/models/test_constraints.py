@@ -143,6 +143,8 @@ CONTRACT_COLUMNS: dict[type, set[str]] = {
         "licence",
         "licence_url",
         "attribution",
+        "licence_label",
+        "credit",
         "reuse",
         "homepage",
         "coverage",
