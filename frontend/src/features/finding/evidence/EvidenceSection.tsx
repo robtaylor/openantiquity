@@ -194,6 +194,13 @@ export function EvidenceSection({
                   item={item}
                   pending={item.id < 0}
                   mayVote={mayAdd && !own && !position.isFinder}
+                  whyNoVote={
+                    own
+                      ? "Others endorse or dispute what you add."
+                      : position.isFinder
+                        ? "Others endorse or dispute the evidence on your finding."
+                        : null
+                  }
                   mayVerify={position.mayVerify && !own && !position.isFinder}
                   mayDelete={own}
                   onVote={(value) => vote(item, value)}
@@ -252,12 +259,13 @@ export function EvidenceSection({
         ) : choosing ? (
           <div className="fc-evidence-add">
             <h4>What kind of evidence?</h4>
+            {/* Each kind is explained beside it, because a tooltip never reaches touch or the keyboard. */}
             <ul className="fc-kind-list">
               {meta.vocab.evidence_kinds.map((kind) => (
-                <li key={kind.id}>
+                <li key={kind.id} className="fc-kind-list__item">
                   <Button
                     size="sm"
-                    title={kind.hint}
+                    aria-describedby={`fc-kind-hint-${kind.id}`}
                     onClick={() => {
                       setChoosing(false);
                       void signedIn(() => setForm(openForm(kind.id)));
@@ -265,6 +273,9 @@ export function EvidenceSection({
                   >
                     {kind.label}
                   </Button>
+                  <span className="fc-finding__hint" id={`fc-kind-hint-${kind.id}`}>
+                    {kind.hint}
+                  </span>
                 </li>
               ))}
             </ul>

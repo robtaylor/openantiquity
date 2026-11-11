@@ -5,8 +5,8 @@
  * kind's form asks for mirrors what `POST /findings/{id}/evidence` takes for
  * it (`check_evidence_fields` in the backend), because `/meta` doesn't say
  * yet. The server stays the judge: a refusal's message is shown next to the
- * form. A kind this build doesn't know gets a plain form with a title, an
- * address and a note.
+ * form. A kind this build doesn't know gets a plain form with a title, a
+ * link and a note.
  */
 
 import type { ViewState } from "../findings/types.js";
@@ -47,7 +47,7 @@ const NOTE: FieldSpec = { id: "note", label: "Note (optional)", hint: "What it s
 const STANCE: FieldSpec = { id: "stance", label: "Does it support the finding?" };
 
 const CITED: Omit<FormSpec, "fields"> = {
-  oneOf: { fields: ["title", "url", "reference"], message: "Say which it is: a title, an address or a reference." },
+  oneOf: { fields: ["title", "url", "reference"], message: "Say which it is: a title, a link or a reference." },
 };
 
 /** What a site visit, a survey and a dig each ask for: when, who, and what it found. */
@@ -57,7 +57,7 @@ function dated(what: string, reference: boolean): FormSpec {
     { id: "organisation", label: "Who did it (optional)", hint: "A person, a society or a company." },
     { id: "outcome", label: `What the ${what} found`, required: true },
     { id: "note", label: "What was seen (optional)" },
-    { id: "url", label: "Address of the report (optional)" },
+    { id: "url", label: "Link to the report (optional)", hint: "Where the report can be read online." },
   ];
   if (reference) fields.push({ id: "reference", label: "Report reference (optional)" });
   return { fields };
@@ -72,7 +72,7 @@ const OFFICIAL: FormSpec = {
       hint: "As the record gives it, such as MWI12345 or list entry 1008391.",
     },
     { id: "title", label: "Name of the record (optional)" },
-    { id: "url", label: "Address of the record (optional)" },
+    { id: "url", label: "Link to the record (optional)", hint: "Where the record can be seen online." },
     NOTE,
   ],
 };
@@ -89,7 +89,12 @@ const SPECS: Partial<Record<EvidenceKindId, FormSpec>> = {
         label: "Source",
         hint: "Who took it and when, such as Historic England, 1976, or Google Earth, June 2018.",
       },
-      { id: "url", label: "Address", required: true, hint: "A link to the photo, or to the viewer that shows it." },
+      {
+        id: "url",
+        label: "Link",
+        required: true,
+        hint: "Where the photo can be seen online, or the viewer that shows it.",
+      },
       NOTE,
       STANCE,
     ],
@@ -98,7 +103,7 @@ const SPECS: Partial<Record<EvidenceKindId, FormSpec>> = {
     ...CITED,
     fields: [
       { id: "title", label: "Which map", hint: "Such as OS 6-inch, Wiltshire sheet XXVIII, 1888." },
-      { id: "url", label: "Address (optional)", hint: "A link to the map at this place." },
+      { id: "url", label: "Link (optional)", hint: "Where the map can be seen online, at this place." },
       { id: "reference", label: "Sheet or reference (optional)" },
       NOTE,
       STANCE,
@@ -108,7 +113,7 @@ const SPECS: Partial<Record<EvidenceKindId, FormSpec>> = {
     ...CITED,
     fields: [
       { id: "title", label: "Title", hint: "The book, article or report, with its author and year." },
-      { id: "url", label: "Address (optional)" },
+      { id: "url", label: "Link (optional)", hint: "Where it can be read online." },
       { id: "reference", label: "Page or reference (optional)" },
       NOTE,
       STANCE,
@@ -118,7 +123,7 @@ const SPECS: Partial<Record<EvidenceKindId, FormSpec>> = {
     ...CITED,
     fields: [
       { id: "title", label: "Title", hint: "The publication that records it, with its author and year." },
-      { id: "url", label: "Address (optional)" },
+      { id: "url", label: "Link (optional)", hint: "Where it can be read online." },
       { id: "reference", label: "Page or reference (optional)" },
       NOTE,
     ],
@@ -145,7 +150,7 @@ const SPECS: Partial<Record<EvidenceKindId, FormSpec>> = {
 
 const GENERIC: FormSpec = {
   ...CITED,
-  fields: [{ id: "title", label: "Title" }, { id: "url", label: "Address (optional)" }, NOTE, STANCE],
+  fields: [{ id: "title", label: "Title" }, { id: "url", label: "Link (optional)" }, NOTE, STANCE],
 };
 
 export function formSpec(kindId: string): FormSpec {
@@ -228,7 +233,7 @@ export function composeEvidence(
   }
   const url = text("url");
   if (url !== null && !isWebAddress(url)) {
-    return { ok: false, field: "url", message: "The address should start with https://." };
+    return { ok: false, field: "url", message: "The link should start with https://." };
   }
   const date = text("occurred_on");
   if (date !== null && date > today(now))

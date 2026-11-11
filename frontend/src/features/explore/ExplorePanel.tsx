@@ -13,6 +13,7 @@ import { DraftBadge } from "../drafts/DraftBadge.js";
 import { useKindDrafts } from "../drafts/savers.js";
 import { type FilterKey, filterableStates, hasFilters, useFindingFilters } from "../findings/filters.js";
 import { findingPath, useSelectedFinding } from "../findings/selection.js";
+import { whereRef } from "../findings/square.js";
 import type { FindingSummary } from "../findings/types.js";
 import { findingDrafts } from "../mark/findingDrafts.js";
 import { MARK_PATH } from "../mark/MarkPanel.js";
@@ -56,7 +57,7 @@ function FindingRow({ meta, finding }: { meta: Meta; finding: FindingSummary }) 
           </span>
           {location.obscured ? (
             <span className="fc-explore__where">
-              Somewhere in square <span className="fc-mono">{location.square ?? location.grid_ref}</span>
+              Somewhere in square <span className="fc-mono">{whereRef(location)}</span>
             </span>
           ) : null}
         </span>

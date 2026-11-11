@@ -9,6 +9,7 @@ import { Meter } from "../../ui/Meter.js";
 import { TierBadge } from "../../ui/TierBadge.js";
 import { tierVar } from "../../ui/tokens.js";
 import { useAccountUi } from "../account/requireAccount.js";
+import { whereRef } from "../findings/square.js";
 import { distanceWords, formatDate, labelOf, squareSentence, stateReason } from "./describe.js";
 import { seeAsFinderDid } from "./mapView.js";
 import { ReportSlot } from "./Slots.js";
@@ -138,14 +139,13 @@ export function FindingHead({ meta, finding, signedIn, change }: FindingHeadProp
         {place ? (
           <div>
             <dt>Near</dt>
-            <dd>
-              {place.name}, {distanceWords(place.distance_m)}
-            </dd>
+            {/* A distance from the middle of a square would look more exact than the square is. */}
+            <dd>{location.obscured ? place.name : `${place.name}, ${distanceWords(place.distance_m)}`}</dd>
           </div>
         ) : null}
         <div>
           <dt>{location.obscured ? "Square" : "Grid reference"}</dt>
-          <dd className="fc-mono">{location.obscured ? (location.square ?? location.grid_ref) : location.grid_ref}</dd>
+          <dd className="fc-mono">{whereRef(location)}</dd>
         </div>
       </dl>
 

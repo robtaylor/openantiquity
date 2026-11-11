@@ -1,5 +1,5 @@
 import { LogIn, Send } from "lucide-react";
-import { type ReactNode, type Ref, useEffect, useState } from "react";
+import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
 import type { Meta } from "../../../api/meta.js";
 import { Button } from "../../../ui/Button.js";
 import { toast } from "../../../ui/toastStore.js";
@@ -58,7 +58,7 @@ function Ask({ meta, finding, ready, onRevealed }: Pick<SecondLookProps, "meta" 
       throw error;
     }
     if (!(await signedIn())) {
-      toast("Your answer is kept in this browser. Sign in when you're ready, and it will be saved.");
+      toast("Your answer is kept in this browser until you sign in.");
     }
   }
 
@@ -135,29 +135,33 @@ export function SecondLook({ meta, finding, position, ready, onRevealed, onRefre
 
   const shown = reveal?.finding.public_id === finding.public_id ? reveal : null;
   const observation = finding.my_observation;
+  const news = useRef<HTMLDivElement>(null);
+  const revealing = shown !== null;
+  // The reveal starts at its top, on a half-open sheet too, whatever the form before it was scrolled to.
+  useEffect(() => {
+    if (revealing) news.current?.scrollIntoView?.({ block: "start" });
+  }, [revealing]);
   if (!observation && !shown && !position.mayAnswer && !draft) return null;
 
   let body: ReactNode;
   if (observation) {
     body = (
-      <>
-        {shown ? <RevealSummary meta={meta} reveal={shown} /> : null}
-        <GivenAnswer
-          key={`${observation.updated_at}-${observation.withdrawn}`}
-          meta={meta}
-          finding={finding}
-          observation={observation}
-          onRevealed={(next) => {
-            setReveal(next);
-            onRevealed(next);
-          }}
-          onWithdrawn={onRefresh}
-        />
-      </>
+      <GivenAnswer
+        key={`${observation.updated_at}-${observation.withdrawn}`}
+        meta={meta}
+        finding={finding}
+        observation={observation}
+        revealed={revealing}
+        onRevealed={(next) => {
+          setReveal(next);
+          onRevealed(next);
+        }}
+        onWithdrawn={onRefresh}
+      />
     );
   } else if (shown) {
-    // Saved from a draft: the page is asking for the finding again.
-    body = <RevealSummary meta={meta} reveal={shown} />;
+    // Saved from a draft: the page is asking for the finding again. The reveal above is all there is to show.
+    body = null;
   } else if (draft) {
     body = (
       <div className="fc-given">
@@ -194,6 +198,10 @@ export function SecondLook({ meta, finding, position, ready, onRevealed, onRefre
       tabIndex={-1}
     >
       <h3 id="fc-second-look-title">Your second look</h3>
+      {/* There before the answer, so the reveal is read out when it arrives. */}
+      <div className="fc-second-look__news" role="status" ref={news}>
+        {shown ? <RevealSummary meta={meta} reveal={shown} /> : null}
+      </div>
       {body}
     </section>
   );

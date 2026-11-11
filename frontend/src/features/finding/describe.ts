@@ -7,7 +7,7 @@
 
 import type { EvidenceKind, Meta } from "../../api/meta.js";
 import type { Sensitivity } from "../findings/types.js";
-import type { CreditKind, Evidence, FindingDetail, NextStep } from "./types.js";
+import type { CreditKind, Evidence, FindingDetail, NextStep, NextStepCode as StepCode } from "./types.js";
 
 export function labelOf(list: ReadonlyArray<{ id: string; label: string }>, id: string): string {
   return list.find((entry) => entry.id === id)?.label ?? id.replaceAll("_", " ");
@@ -143,16 +143,29 @@ export type StepAction =
   /** Ask other people: copy the page's link. */
   | { kind: "share"; label: string };
 
-/** Steps that a second look meets. */
-const ANSWER_CODES = new Set(["need_observers", "need_class_agreement", "need_check", "need_trusted_review"]);
+/**
+ * For every step code in the API, whether a second look meets it: the
+ * backend's `ANSWER_CODES` in `services/findings.py`. Typed over every code
+ * the schema has, so a code added there doesn't build until it is placed
+ * here.
+ */
+export const MET_BY_SECOND_LOOK = {
+  need_observers: true,
+  need_strand: false,
+  need_class_agreement: true,
+  need_check: true,
+  need_trusted_review: true,
+  need_ground: false,
+  need_official: false,
+} as const satisfies Record<StepCode, boolean>;
 
 /** True for a step that a second look meets, and so is offered only blind (Decision 0008). */
 export function isAnswerStep(code: string): boolean {
-  return ANSWER_CODES.has(code);
+  return Object.hasOwn(MET_BY_SECOND_LOOK, code) && MET_BY_SECOND_LOOK[code as StepCode];
 }
 
 /** Which group of evidence kinds in `/meta` meets each evidence step. */
-const STEP_GROUPS: Record<string, string> = { need_ground: "field", need_official: "official" };
+const STEP_GROUPS: Partial<Record<StepCode, string>> = { need_ground: "field", need_official: "official" };
 
 export function addLabel(kind: EvidenceKind): string {
   return `Add ${lowerFirst(kind.label)}`;
@@ -168,7 +181,7 @@ export function addLabel(kind: EvidenceKind): string {
 export function stepActions(step: NextStep, meta: Meta, position: ViewerPosition): StepAction[] {
   if (!position.takesWork) return [];
   const actions: StepAction[] = [];
-  if (ANSWER_CODES.has(step.code)) {
+  if (MET_BY_SECOND_LOOK[step.code]) {
     if (position.mayAnswer) actions.push({ kind: "answer", label: "Give a second look" });
     else if (position.isFinder) actions.push({ kind: "share", label: "Copy a link to ask others" });
     return actions;

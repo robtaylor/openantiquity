@@ -54,7 +54,7 @@ describe("the Explore panel", () => {
     expect(within(list).getByRole("link", { name: /Finding disputed/ })).toHaveTextContent("Disputed");
 
     const hidden = within(list).getByRole("link", { name: /Finding protected/ });
-    expect(hidden).toHaveTextContent(/Somewhere in square SU\d{4}/);
+    expect(hidden).toHaveTextContent(/Somewhere in square SU \d{2} \d{2}/);
   });
 
   it("asks the server with the filters, for the list and the map alike", async () => {

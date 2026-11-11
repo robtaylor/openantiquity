@@ -82,7 +82,7 @@ test("three people take a finding from spotted to seen by others to corroborated
     await ann.page.reload();
     await annPanel.getByRole("button", { name: "Add aerial photo" }).click();
     await annPanel.getByLabel("Source").fill("Historic England, 1976");
-    await annPanel.getByLabel("Address").fill("https://example.org/aerial/1976");
+    await annPanel.getByLabel("Link", { exact: true }).fill("https://example.org/aerial/1976");
     await annPanel.getByRole("button", { name: "Add it" }).click();
     await expect(annPanel.locator(".fc-evidence").filter({ hasText: "Historic England, 1976" })).not.toContainText(
       "Saving…",

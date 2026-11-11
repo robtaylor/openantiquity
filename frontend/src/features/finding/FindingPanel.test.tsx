@@ -10,6 +10,7 @@ import {
   evidenceFixture,
   FINDER,
   finderView,
+  OTHER,
   observationFixture,
   pageFixture,
   revealFixture,
@@ -112,6 +113,22 @@ describe("a finding's head", () => {
     expect(call?.url.searchParams.get("lon")).toBe(String(finding.location.lon));
   });
 
+  it("names the place near a square without a distance, which would look more exact than the square", async () => {
+    const finding = squareFixture();
+    const routes = serve(finding, null);
+    routes.on("GET /geo/point", () =>
+      json({
+        grid_ref: "SU 10 69",
+        nation: "england",
+        elevation: 160,
+        place: { name: "Avebury", kind: "village", distance_m: 640, source: null },
+      }),
+    );
+    const { panel } = await open(finding, null, routes);
+    expect(await panel.findByText("Avebury")).toBeInTheDocument();
+    expect(panel.queryByText(/m away/)).toBeNull();
+  });
+
   it("restores the finder's view: layer, light and zoom", async () => {
     const user = userEvent.setup();
     const { panel } = await open(
@@ -126,7 +143,7 @@ describe("a finding's head", () => {
 
   it("shows a signed-out visitor a protected finding's square, says why, and offers sign-in", async () => {
     const { panel } = await open(squareFixture(), null);
-    expect(panel.getByText("SU1069")).toBeInTheDocument();
+    expect(panel.getByText("SU 10 69")).toBeInTheDocument();
     expect(panel.getByText(/not the place itself/)).toHaveTextContent(/Sign in to see it\./);
     expect(panel.queryByRole("button", { name: "See it as the finder did" })).toBeNull();
     expect(panel.queryByRole("group", { name: "Can you see it?" })).toBeNull();
@@ -260,7 +277,7 @@ describe("a second look on the page", () => {
     act(() => useSavedAnswers.getState().record(revealFixture(theirs, pageFixture(), {})));
     const { panel, routes } = await open(squareFixture(), null);
     expect(panel.queryByRole("region", { name: "Your second look" })).toBeNull();
-    expect(panel.getByText("SU1069")).toBeInTheDocument();
+    expect(panel.getByText("SU 10 69")).toBeInTheDocument();
     expect(panel.queryByText("SU 1025 6996")).toBeNull();
     expect(useSavedAnswers.getState().revealed).toEqual({});
     expect(routes.callsTo("GET /findings/f-ring").length).toBeGreaterThan(0);
@@ -349,6 +366,14 @@ describe("evidence", () => {
     expect(within(official).getByText(/Not verified yet/)).toBeInTheDocument();
   });
 
+  it("says why there are no votes on your own evidence, and on evidence about your own finding", async () => {
+    // Mary Anning added this one.
+    const { panel } = await open(seenFixture({ evidence: [evidenceFixture({ id: 1, contributor: OTHER })] }));
+    expect(panel.queryByRole("button", { name: "Endorse" })).toBeNull();
+    expect(panel.getByText("Others endorse or dispute what you add.")).toBeInTheDocument();
+    expect(panel.getByText("Support +1")).toBeInTheDocument();
+  });
+
   it("puts an endorsement back, with a toast, when the server refuses it", async () => {
     const user = userEvent.setup();
     const { panel, routes } = await open(seenFixture({ evidence: [evidenceFixture({ id: 1, contributor: EXPERT })] }));
@@ -386,7 +411,11 @@ describe("evidence", () => {
       ),
     );
     await user.click(panel.getByRole("button", { name: "Add evidence" }));
-    await user.click(panel.getByRole("button", { name: "Site visit" }));
+    // Each kind is explained in words on the page, not in a tooltip that touch and keyboards never see.
+    const visit = panel.getByRole("button", { name: "Site visit" });
+    expect(visit).toHaveAccessibleDescription(/Notes from someone who has been to look/);
+    expect(panel.getByText(/Notes from someone who has been to look/)).toBeVisible();
+    await user.click(visit);
     const form = within(await panel.findByRole("form", { name: "Add site visit" }));
     expect(form.getByRole("note")).toHaveTextContent(/landowner's permission/);
     await user.type(form.getByLabelText("When"), "2026-11-08");
@@ -518,7 +547,7 @@ describe("evidence", () => {
     ).toEqual(["Not listed", "Wiltshire HER"]);
     await user.selectOptions(where, "her-wilts");
     await user.type(form.getByLabelText("Record identifier"), "MWI4567");
-    await user.type(form.getByLabelText("Record address"), "https://her.example.org/MWI4567");
+    await user.type(form.getByLabelText("Link to the record"), "https://her.example.org/MWI4567");
     await user.click(form.getByRole("radio", { name: "Related" }));
     await user.click(form.getByRole("button", { name: "Link it" }));
     await waitFor(() => expect(routes.callsTo("POST /findings/f-ring/evidence")).toHaveLength(1));

@@ -228,6 +228,11 @@
   outline: none;
 }
 
+/* The reveal's live region is there, empty, before the answer: it takes no room until it has something to say. */
+.fc-second-look__news:empty {
+  margin-bottom: -10px;
+}
+
 .fc-answers {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -398,9 +403,14 @@
 }
 
 .fc-kind-list {
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 6px;
+  gap: 12px;
+}
+
+.fc-kind-list__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
 }
 
 .fc-evidence {
@@ -523,6 +533,14 @@
 
 .fc-evidence-add:focus {
   outline: none;
+}
+
+/* The open form's heading, such as "Add old map": a heading, not a hint. */
+.fc-evidence-add > h4 {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
 }
 
 .fc-evidence-form textarea.fc-input,
@@ -658,8 +676,9 @@
   font-size: 14px;
 }
 
-.fc-people__row--withdrawn {
-  opacity: 0.6;
+/* Taken back: said in words and set in italic, at full contrast. Dimming it would fall below 4.5 to 1. */
+.fc-people__row--withdrawn .fc-muted {
+  font-style: italic;
 }
 
 .fc-people__note {
@@ -751,4 +770,22 @@
   font-size: 13px;
   color: var(--text-muted);
   overflow-wrap: anywhere;
+}
+
+/* No votes to give: the total, and why, which may need a second line. */
+p.fc-vote {
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+p.fc-vote .fc-vote__total {
+  padding-left: 0;
+}
+
+/* On a phone a finding's title is its claim, and it appears nowhere else on the page, so once the sheet is up
+   from its peek stop the title wraps rather than being cut short. At peek there is room for one line only. */
+.fc-sheet:not([data-stop="peek"]):has(.fc-finding) .fc-panel__title {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }

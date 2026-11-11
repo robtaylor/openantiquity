@@ -104,7 +104,7 @@ test("a signed-out visitor sees a protected finding's square, why, and how to se
   const finding = squareFixture();
   await fakeFindingPage(page, finding);
   const panel = await openFinding(page, finding);
-  await expect(panel.getByText("SU1069", { exact: true })).toBeVisible();
+  await expect(panel.getByText("SU 10 69", { exact: true })).toBeVisible();
   await expect(panel.getByText(/not the place itself/)).toContainText("Sign in to see it.");
   await expect(panel.getByRole("group", { name: "Can you see it?" })).toHaveCount(0);
   await expect(panel.getByRole("button", { name: "See it as the finder did" })).toHaveCount(0);

@@ -14,7 +14,9 @@ import {
   changeMessage,
   formatDate,
   groupEvidence,
+  isAnswerStep,
   lowerFirst,
+  MET_BY_SECOND_LOOK,
   positionOf,
   squareSentence,
   stateReason,
@@ -205,5 +207,22 @@ describe("groupEvidence", () => {
       ["aerial", [2]],
       ["historic_map", [1, 3]],
     ]);
+  });
+});
+
+describe("isAnswerStep", () => {
+  it("matches the steps the backend's ANSWER_CODES says a second look meets", () => {
+    // services/findings.py, ANSWER_CODES. Change both together.
+    const met = Object.entries(MET_BY_SECOND_LOOK)
+      .filter(([, value]) => value)
+      .map(([code]) => code);
+    expect(met.sort()).toEqual(["need_check", "need_class_agreement", "need_observers", "need_trusted_review"]);
+  });
+
+  it("is false for a code this build doesn't know, and for names on the object's prototype", () => {
+    expect(isAnswerStep("need_observers")).toBe(true);
+    expect(isAnswerStep("need_ground")).toBe(false);
+    expect(isAnswerStep("need_something_new")).toBe(false);
+    expect(isAnswerStep("toString")).toBe(false);
   });
 });

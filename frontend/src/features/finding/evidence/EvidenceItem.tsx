@@ -56,6 +56,8 @@ export interface EvidenceItemProps {
   item: Evidence;
   /** This person may vote on it: they see the exact place and neither added it nor found the finding. */
   mayVote: boolean;
+  /** When they may not, why, in a line shown where the votes would be. Without one, the votes are left out. */
+  whyNoVote?: string | null;
   mayVerify: boolean;
   mayDelete: boolean;
   /** Being saved, so it can't be acted on yet. */
@@ -82,6 +84,7 @@ export function EvidenceItem({
   meta,
   item,
   mayVote,
+  whyNoVote = null,
   mayVerify,
   mayDelete,
   pending = false,
@@ -169,30 +172,37 @@ export function EvidenceItem({
       ) : null}
 
       <div className="fc-evidence__actions">
-        {/* biome-ignore lint/a11y/useSemanticElements: a fieldset can't lay out a toolbar row */}
-        <div className="fc-vote" role="group" aria-label="Endorse or dispute">
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={<ThumbsUp size={15} aria-hidden />}
-            aria-pressed={item.my_vote === 1}
-            disabled={!mayVote || pending}
-            onClick={() => onVote(item.my_vote === 1 ? 0 : 1)}
-          >
-            Endorse
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={<ThumbsDown size={15} aria-hidden />}
-            aria-pressed={item.my_vote === -1}
-            disabled={!mayVote || pending}
-            onClick={() => onVote(item.my_vote === -1 ? 0 : -1)}
-          >
-            Dispute
-          </Button>
-          <span className="fc-vote__total">Support {supportOf(item.vote_total)}</span>
-        </div>
+        {mayVote ? (
+          // biome-ignore lint/a11y/useSemanticElements: a fieldset can't lay out a toolbar row
+          <div className="fc-vote" role="group" aria-label="Endorse or dispute">
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<ThumbsUp size={15} aria-hidden />}
+              aria-pressed={item.my_vote === 1}
+              disabled={pending}
+              onClick={() => onVote(item.my_vote === 1 ? 0 : 1)}
+            >
+              Endorse
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<ThumbsDown size={15} aria-hidden />}
+              aria-pressed={item.my_vote === -1}
+              disabled={pending}
+              onClick={() => onVote(item.my_vote === -1 ? 0 : -1)}
+            >
+              Dispute
+            </Button>
+            <span className="fc-vote__total">Support {supportOf(item.vote_total)}</span>
+          </div>
+        ) : (
+          <p className="fc-vote">
+            <span className="fc-vote__total">Support {supportOf(item.vote_total)}</span>
+            {whyNoVote ? <span className="fc-finding__hint">{whyNoVote}</span> : null}
+          </p>
+        )}
         {official && !item.verified_by && mayVerify ? (
           <Button size="sm" icon={<BadgeCheck size={15} aria-hidden />} disabled={pending} onClick={onVerify}>
             Verify

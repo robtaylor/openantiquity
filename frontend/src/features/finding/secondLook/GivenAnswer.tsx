@@ -19,6 +19,8 @@ export interface GivenAnswerProps {
   onRevealed: (reveal: Reveal) => void;
   /** After the answer is taken back: ask for the finding again. */
   onWithdrawn: () => void;
+  /** The reveal above already says what the answer was, so it isn't said twice. */
+  revealed?: boolean;
 }
 
 /**
@@ -27,7 +29,14 @@ export interface GivenAnswerProps {
  * which stops it counting, and then counted again as it was, but never
  * replaced by a different one.
  */
-export function GivenAnswer({ meta, finding, observation, onRevealed, onWithdrawn }: GivenAnswerProps) {
+export function GivenAnswer({
+  meta,
+  finding,
+  observation,
+  onRevealed,
+  onWithdrawn,
+  revealed = false,
+}: GivenAnswerProps) {
   const [note, setNote] = useState(observation.note ?? "");
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -62,11 +71,15 @@ export function GivenAnswer({ meta, finding, observation, onRevealed, onWithdraw
   return (
     <div className="fc-given">
       <p>
-        <strong>{ANSWER_WORDS[observation.visible].given}</strong>
-        {what}.{" "}
+        {revealed ? null : (
+          <>
+            <strong>{ANSWER_WORDS[observation.visible].given}</strong>
+            {what}.{" "}
+          </>
+        )}
         {observation.withdrawn
           ? "You took this answer back, so it doesn't count."
-          : "Your answer is final, but you can add or change its note."}
+          : "You can't change your answer. You can add a note, or take it back so it stops counting."}
       </p>
       {observation.withdrawn ? (
         <Button size="sm" disabled={busy} onClick={() => void send(sameAnswer(observation))}>

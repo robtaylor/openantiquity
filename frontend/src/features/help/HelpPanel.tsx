@@ -11,6 +11,7 @@ import { Skeleton } from "../../ui/Skeleton.js";
 import { TierBadge } from "../../ui/TierBadge.js";
 import { labelOf } from "../finding/describe.js";
 import { reasonOf } from "../finding/feedback.js";
+import { whereRef } from "../findings/square.js";
 import { useDocumentTitle } from "../placeholders.js";
 import { REVIEW_PATH } from "../review/ReviewLayer.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
@@ -161,7 +162,7 @@ function TaskRow({ meta, kind, item }: { meta: Meta; kind: HelpKind; item: TaskI
           </span>
           <span className="fc-explore__where">
             {place.obscured ? "Somewhere in square " : "At "}
-            <span className="fc-mono">{place.obscured ? (place.square ?? place.grid_ref) : place.grid_ref}</span>
+            <span className="fc-mono">{whereRef(place)}</span>
           </span>
           {step ? <span className="fc-help__step">{step.prompt}</span> : null}
         </span>

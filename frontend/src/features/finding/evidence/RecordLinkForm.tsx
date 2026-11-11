@@ -59,8 +59,8 @@ export function composeRecordLink(values: RecordLinkValues): ComposedLink {
   }
   const reference = values.reference.trim();
   const url = values.url.trim();
-  if (!reference || !url) return { ok: false, field: null, message: "Give the record's identifier and its address." };
-  if (!/^https?:\/\//.test(url)) return { ok: false, field: null, message: "The address should start with https://." };
+  if (!reference || !url) return { ok: false, field: null, message: "Give the record's identifier and a link to it." };
+  if (!/^https?:\/\//.test(url)) return { ok: false, field: null, message: "The link should start with https://." };
   const body: EvidenceIn = { kind: "record_link", stance: "supports", relation: values.relation, reference, url };
   if (values.sourceKey) body.source_key = values.sourceKey;
   return { ok: true, body };
@@ -219,7 +219,8 @@ export function RecordLinkForm({ meta, publicId, values, problem, onChange, onSu
         {values.external ? (
           <>
             <p className="fc-finding__hint">
-              Some records can only be linked, not copied here, so we keep just the record's identifier and address.
+              Some records can only be linked, not copied here, so we keep just the record's identifier and a link to
+              it.
             </p>
             {linkOnly.length > 0 ? (
               <Field label="Where it's from (optional)">
@@ -251,7 +252,7 @@ export function RecordLinkForm({ meta, publicId, values, problem, onChange, onSu
                 />
               )}
             </Field>
-            <Field label="Record address" hint="The link to the record's own page.">
+            <Field label="Link to the record" hint="Where the record's own page is online.">
               {(control) => (
                 <input
                   {...control}
