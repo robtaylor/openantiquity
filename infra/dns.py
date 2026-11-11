@@ -13,7 +13,12 @@
 Only the record sets the file lists are read or written. Everything else in a
 zone, such as Gandi's own mail records, is left as it is. A record set is one
 name and type with all its values, and apply replaces it whole. Safe to run
-again: a record set that already matches is not written.
+again: a record set that already matches is not written, and removals are
+made before additions, so a run that stopped half-way is finished by the next.
+
+Two guards against a slip in the file. NS and SOA record sets can't be listed
+at all, because they hold the zone together. Replacing or removing an MX
+record set, which would stop the domain's mail, needs `apply --allow-mail`.
 
 The token is Gandi's personal access token for these domains, read from
 `GANDI_DNS_SSL` in the environment or in the untracked `.env` at the repository
@@ -40,6 +45,14 @@ TOKEN_VAR = "GANDI_DNS_SSL"
 # Gandi's own limits for a record set's time to live.
 MIN_TTL = 300
 MAX_TTL = 2_592_000
+# How many of a zone's records `show` asks for at a time.
+PAGE_SIZE = 100
+
+# Record sets that hold the zone together. The file may not list them.
+PROTECTED_TYPES = frozenset({"NS", "SOA"})
+# Types whose values are host names. Gandi wants each written in full, ending in a dot, and a
+# name without one would be read as relative to the zone.
+HOST_TYPES = frozenset({"ALIAS", "CNAME", "MX", "SRV"})
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RECORDS = Path(__file__).resolve().with_name("dns.toml")
@@ -100,6 +113,8 @@ def load(path: Path) -> list[Wanted]:
         name, kind = entry.get("name"), entry.get("type")
         if not isinstance(name, str) or not name or not isinstance(kind, str) or not kind:
             raise DnsError(f"{where} needs a name and a type")
+        if kind.upper() in PROTECTED_TYPES:
+            raise DnsError(f"{where} lists a {kind.upper()} record set, which this tool never changes")
         absent = entry.get("absent", False)
         values = entry.get("values", [])
         ttl = entry.get("ttl")
@@ -115,6 +130,10 @@ def load(path: Path) -> list[Wanted]:
                 raise DnsError(f"{where} needs values, a list of at least one string")
             if not isinstance(ttl, int) or not MIN_TTL <= ttl <= MAX_TTL:
                 raise DnsError(f"{where} needs a ttl between {MIN_TTL} and {MAX_TTL} seconds")
+            if len({_normal(kind.upper(), value) for value in values}) != len(values):
+                raise DnsError(f"{where} gives the same value more than once in values")
+            if kind.upper() in HOST_TYPES and not all(value.strip().endswith(".") for value in values):
+                raise DnsError(f"{where} needs each of its values to be a full host name ending in a dot")
         for domain in domains:
             key = (domain, name, kind.upper())
             if key in seen:
@@ -135,6 +154,12 @@ def load(path: Path) -> list[Wanted]:
     return wanted
 
 
+def _normal(kind: str, value: str) -> str:
+    """A value as it is compared: trimmed, and lower-cased where it is a host name."""
+    value = value.strip()
+    return value.lower() if kind in HOST_TYPES else value
+
+
 def read_token(env_file: Path, environ: Mapping[str, str] | None = None) -> str:
     """The token from the environment, or else from the env file. It is never printed."""
     environ = os.environ if environ is None else environ
@@ -153,13 +178,15 @@ def gandi_client(token: str, transport: httpx.BaseTransport | None = None) -> ht
     )
 
 
-def _ask(client: httpx.Client, method: str, path: str, **kwargs: Any) -> httpx.Response:
+def _ask(
+    client: httpx.Client, method: str, path: str, *, missing_ok: bool = False, **kwargs: Any
+) -> httpx.Response:
     """One request. A refusal is reported with the status and Gandi's message, never the request."""
     try:
         response = client.request(method, path, **kwargs)
     except httpx.HTTPError as error:
         raise DnsError(f"{method} {path} failed: {type(error).__name__}") from None
-    if response.status_code >= 400 and not (method == "GET" and response.status_code == 404):
+    if response.status_code >= 400 and not (missing_ok and response.status_code == 404):
         try:
             message = str(response.json().get("message", ""))
         except ValueError:
@@ -172,12 +199,35 @@ def _path(wanted: Wanted) -> str:
     return f"/domains/{wanted.domain}/records/{wanted.name}/{wanted.type}"
 
 
+def _json(response: httpx.Response, method: str, path: str, shape: type) -> Any:
+    """The answer's JSON, checked to be the list or object the caller expects."""
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    if not isinstance(body, shape):
+        raise DnsError(f"{method} {path} answered {response.status_code} with something this tool can't read")
+    return body
+
+
+def _check_zones(client: httpx.Client, domains: Sequence[str]) -> None:
+    """Stop before anything is compared if a zone isn't there, so a misspelt one is never read as empty."""
+    for domain in domains:
+        response = _ask(client, "GET", f"/domains/{domain}", missing_ok=True)
+        if response.status_code == 404:
+            raise DnsError(f"The zone {domain} isn't at Gandi, or this token can't see it")
+
+
 def _held(client: httpx.Client, wanted: Wanted) -> Held | None:
-    response = _ask(client, "GET", _path(wanted))
+    response = _ask(client, "GET", _path(wanted), missing_ok=True)
     if response.status_code == 404:
         return None
-    body = response.json()
-    return Held(ttl=body.get("rrset_ttl"), values=tuple(body.get("rrset_values", [])))
+    body = _json(response, "GET", _path(wanted), dict)
+    values = body.get("rrset_values", [])
+    if not isinstance(values, list) or not all(isinstance(value, str) for value in values):
+        raise DnsError(f"GET {_path(wanted)} answered with values this tool can't read")
+    ttl = body.get("rrset_ttl")
+    return Held(ttl=ttl if isinstance(ttl, int) else None, values=tuple(values))
 
 
 def _action(wanted: Wanted, held: Held | None) -> Action:
@@ -185,13 +235,17 @@ def _action(wanted: Wanted, held: Held | None) -> Action:
         return "same" if held is None else "remove"
     if held is None:
         return "add"
-    # A record set's values have no order.
-    same = sorted(held.values) == sorted(wanted.values) and held.ttl == wanted.ttl
-    return "same" if same else "replace"
+    # A record set's values have no order, and host names no case.
+    have = sorted(_normal(wanted.type, value) for value in held.values)
+    want = sorted(_normal(wanted.type, value) for value in wanted.values)
+    # Where Gandi doesn't say what the time to live is, there is nothing to compare it with.
+    same_ttl = held.ttl is None or held.ttl == wanted.ttl
+    return "same" if have == want and same_ttl else "replace"
 
 
 def plan(client: httpx.Client, wanted: Sequence[Wanted]) -> list[Change]:
     """Compare each listed record set with what Gandi holds. Reads only."""
+    _check_zones(client, sorted({record.domain for record in wanted}))
     changes: list[Change] = []
     for record in wanted:
         held = _held(client, record)
@@ -199,15 +253,25 @@ def plan(client: httpx.Client, wanted: Sequence[Wanted]) -> list[Change]:
     return changes
 
 
-def apply(client: httpx.Client, changes: Sequence[Change]) -> None:
-    """Write each record set the plan says differs, and nothing else."""
-    for change in changes:
-        record = change.wanted
+def apply(client: httpx.Client, changes: Sequence[Change], *, allow_mail: bool = False) -> None:
+    """Write each record set the plan says differs, and nothing else.
+
+    Removals go first. A CNAME can't share a name with another type, so moving a name from one
+    to the other only works in that order, and a run that failed half-way is finished by the next.
+    """
+    differing = [change for change in changes if change.action != "same"]
+    mail = [change.wanted for change in differing if change.wanted.type == "MX" and change.action != "add"]
+    if mail and not allow_mail:
+        names = ", ".join(f"{record.name} MX in {record.domain}" for record in mail)
+        raise DnsError(f"This would replace or remove mail records ({names}). To do that, add --allow-mail")
+    for change in differing:
+        if change.action == "remove":
+            _ask(client, "DELETE", _path(change.wanted))
+    for change in differing:
         if change.action in ("add", "replace"):
+            record = change.wanted
             body = {"rrset_ttl": record.ttl, "rrset_values": list(record.values)}
             _ask(client, "PUT", _path(record), json=body)
-        elif change.action == "remove":
-            _ask(client, "DELETE", _path(record))
 
 
 def _line(change: Change) -> str:
@@ -221,13 +285,24 @@ def _line(change: Change) -> str:
 
 
 def _show(client: httpx.Client, domains: Sequence[str]) -> None:
+    _check_zones(client, domains)
     for domain in domains:
         print(f"== {domain}")
-        for item in _ask(client, "GET", f"/domains/{domain}/records").json():
-            values = ", ".join(item.get("rrset_values", []))
-            print(
-                f"   {item['rrset_name']:<22} {item['rrset_type']:<6} {item.get('rrset_ttl', ''):<7} {values}"
-            )
+        path = f"/domains/{domain}/records"
+        # Gandi sends a zone's records a page at a time.
+        page = 1
+        while True:
+            answer = _ask(client, "GET", path, params={"page": page, "per_page": PAGE_SIZE})
+            items = _json(answer, "GET", path, list)
+            for item in items:
+                if not isinstance(item, dict):
+                    raise DnsError(f"GET {path} answered with a record this tool can't read")
+                values = ", ".join(str(value) for value in item.get("rrset_values", []))
+                name, kind = item.get("rrset_name", ""), item.get("rrset_type", "")
+                print(f"   {name:<22} {kind:<6} {item.get('rrset_ttl', '')!s:<7} {values}")
+            if len(items) < PAGE_SIZE:
+                break
+            page += 1
 
 
 def main(argv: Sequence[str] | None = None, client: httpx.Client | None = None) -> int:
@@ -237,6 +312,9 @@ def main(argv: Sequence[str] | None = None, client: httpx.Client | None = None) 
         "--records", type=Path, default=RECORDS, help="the records file (default: infra/dns.toml)"
     )
     parser.add_argument("--env-file", type=Path, default=REPO_ROOT / ".env", help="where the token is kept")
+    parser.add_argument(
+        "--allow-mail", action="store_true", help="let apply replace or remove MX record sets"
+    )
     args = parser.parse_args(argv)
     try:
         wanted = load(args.records)
@@ -249,7 +327,7 @@ def main(argv: Sequence[str] | None = None, client: httpx.Client | None = None) 
             print(_line(change))
         differing = [change for change in changes if change.action != "same"]
         if args.command == "apply":
-            apply(client, changes)
+            apply(client, changes, allow_mail=args.allow_mail)
             print(f"{len(differing)} record set(s) changed.")
         else:
             print(f"{len(differing)} record set(s) would change.")

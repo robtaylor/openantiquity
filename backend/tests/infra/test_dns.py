@@ -44,6 +44,7 @@ class FakeGandi:
         self.calls: list[tuple[str, str]] = []
         self.tokens: set[str] = set()
         self.refuse: int | None = None
+        self.unreachable = False
 
     def client(self) -> httpx.Client:
         return dns.gandi_client(TOKEN, transport=httpx.MockTransport(self.handle))
@@ -51,6 +52,8 @@ class FakeGandi:
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.calls.append((request.method, request.url.path))
         self.tokens.add(request.headers.get("Authorization", ""))
+        if self.unreachable:
+            raise httpx.ConnectError("no route to host", request=request)
         if self.refuse is not None:
             body = {"code": self.refuse, "message": "Permission denied to change the zone"}
             return httpx.Response(self.refuse, json=body)
@@ -59,12 +62,16 @@ class FakeGandi:
         zone = self.zones.get(domain)
         if zone is None:
             return httpx.Response(404, json={"message": "The resource could not be found."})
+        if not rest:
+            return httpx.Response(200, json={"fqdn": domain})
         if rest == ["records"] and request.method == "GET":
             items = [
                 {"rrset_name": name, "rrset_type": kind, **record}
                 for (name, kind), record in sorted(zone.items())
             ]
-            return httpx.Response(200, json=items)
+            page = int(request.url.params.get("page", "1"))
+            size = int(request.url.params.get("per_page", "100"))
+            return httpx.Response(200, json=items[(page - 1) * size : page * size])
         assert len(rest) == 3, request.url.path
         assert rest[0] == "records", request.url.path
         key = (rest[1], rest[2])
@@ -73,6 +80,11 @@ class FakeGandi:
                 return httpx.Response(404, json={"message": "Can't find the DNS record"})
             return httpx.Response(200, json={"rrset_name": key[0], "rrset_type": key[1], **zone[key]})
         if request.method == "PUT":
+            others = {kind for (name, kind) in zone if name == key[0] and kind != key[1]}
+            if (key[1] == "CNAME" and others) or "CNAME" in others:
+                return httpx.Response(
+                    409, json={"message": "A CNAME can't share its name with another record"}
+                )
             sent = json.loads(request.content)
             zone[key] = {"rrset_ttl": sent["rrset_ttl"], "rrset_values": sent["rrset_values"]}
             return httpx.Response(201, json={"message": "DNS Record Created"})
@@ -296,3 +308,136 @@ def test_the_repository_s_own_records_file_is_valid() -> None:
         "openantiquity.com",
         "openantiquity.co.uk",
     }
+
+
+def test_a_name_moves_from_a_cname_to_an_address_in_one_run(gandi: FakeGandi, tmp_path: Path) -> None:
+    # The address is listed first, as someone would write it. The removal still has to go first.
+    text = _record(name='"www"', values='["198.51.100.7"]') + _record(
+        name='"www"', type='"CNAME"', absent="true", ttl="", values=""
+    )
+    wanted = dns.load(records(tmp_path, text))
+
+    dns.apply(gandi.client(), dns.plan(gandi.client(), wanted))
+
+    org = gandi.zones["example.org"]
+    assert ("www", "CNAME") not in org
+    assert org[("www", "A")] == held(300, "198.51.100.7")
+    assert [method for method, _ in gandi.writes()] == ["DELETE", "PUT"]
+
+
+def test_a_zone_that_is_not_there_stops_the_plan(gandi: FakeGandi, tmp_path: Path) -> None:
+    text = _record(domains='["exmaple.org"]', name='"www"', type='"CNAME"', absent="true", ttl="", values="")
+
+    with pytest.raises(dns.DnsError, match=r"exmaple\.org"):
+        dns.plan(gandi.client(), dns.load(records(tmp_path, text)))
+
+    assert gandi.writes() == []
+
+
+def test_mail_records_are_not_replaced_or_removed_without_saying_so(gandi: FakeGandi, tmp_path: Path) -> None:
+    text = _record(type='"MX"', values='["10 mail.example."]')
+    plan = dns.plan(gandi.client(), dns.load(records(tmp_path, text)))
+    assert [change.action for change in plan] == ["replace"]
+
+    with pytest.raises(dns.DnsError, match="--allow-mail"):
+        dns.apply(gandi.client(), plan)
+    assert gandi.writes() == []
+
+    dns.apply(gandi.client(), plan, allow_mail=True)
+    assert gandi.zones["example.org"][("@", "MX")] == held(300, "10 mail.example.")
+
+
+def test_adding_mail_records_where_there_are_none_needs_no_leave(gandi: FakeGandi, tmp_path: Path) -> None:
+    text = _record(domains='["example.net"]', type='"MX"', values='["10 mail.example."]')
+
+    dns.apply(gandi.client(), dns.plan(gandi.client(), dns.load(records(tmp_path, text))))
+
+    assert gandi.zones["example.net"][("@", "MX")] == held(300, "10 mail.example.")
+
+
+@pytest.mark.parametrize(
+    ("text", "complaint"),
+    [
+        (_record(type='"NS"', values='["ns1.example."]'), "never changes"),
+        (_record(type='"SOA"', absent="true", ttl="", values=""), "never changes"),
+        (_record(name='"www"', type='"CNAME"', values='["target.example"]'), "ending in a dot"),
+        (_record(type='"MX"', values='["10 mail.example"]'), "ending in a dot"),
+        (_record(values='["198.51.100.7", "198.51.100.7"]'), "more than once"),
+    ],
+)
+def test_the_file_cannot_list_what_would_break_a_zone(tmp_path: Path, text: str, complaint: str) -> None:
+    with pytest.raises(dns.DnsError, match=complaint):
+        dns.load(records(tmp_path, text))
+
+
+def test_host_names_that_differ_only_in_case_are_not_a_change(gandi: FakeGandi, tmp_path: Path) -> None:
+    text = _record(name='"www"', type='"CNAME"', ttl="10800", values='["Parking.Example."]')
+
+    plan = dns.plan(gandi.client(), dns.load(records(tmp_path, text)))
+
+    assert [change.action for change in plan] == ["same"]
+
+
+def test_a_record_set_gandi_gives_no_time_to_live_for_is_compared_by_its_values(
+    gandi: FakeGandi, tmp_path: Path
+) -> None:
+    gandi.zones["example.net"][("@", "A")] = {"rrset_values": ["198.51.100.7"]}
+    text = _record(domains='["example.net"]')
+
+    plan = dns.plan(gandi.client(), dns.load(records(tmp_path, text)))
+
+    assert [change.action for change in plan] == ["same"]
+
+
+def test_the_apply_command_changes_the_zones_and_says_how_many(
+    gandi: FakeGandi, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = records(tmp_path, WANTED)
+
+    status = dns.main(["apply", "--records", str(path)], client=gandi.client())
+
+    assert status == 0
+    assert "4 record set(s) changed." in capsys.readouterr().out
+    assert gandi.zones["example.org"][("@", "A")] == held(300, "198.51.100.7")
+
+
+def test_show_lists_every_record_of_each_zone_the_file_names(
+    gandi: FakeGandi, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    gandi.zones["example.net"].update(
+        {(f"host{n:03}", "A"): held(300, f"198.51.100.{n % 250}") for n in range(120)}
+    )
+
+    status = dns.main(["show", "--records", str(records(tmp_path, WANTED))], client=gandi.client())
+
+    printed = capsys.readouterr().out
+    assert status == 0
+    assert "spool.mail.example." in printed
+    # More than one page of records, and none is missed.
+    assert "host000" in printed
+    assert "host119" in printed
+    assert gandi.writes() == []
+
+
+@pytest.mark.parametrize("failure", ["refused", "unreachable", "unreadable"])
+def test_a_failure_is_one_line_on_the_error_stream_without_the_token(
+    gandi: FakeGandi, tmp_path: Path, capsys: pytest.CaptureFixture[str], failure: str
+) -> None:
+    client = gandi.client()
+    if failure == "refused":
+        gandi.refuse = 401
+    elif failure == "unreachable":
+        gandi.unreachable = True
+    else:
+        client = dns.gandi_client(
+            TOKEN, transport=httpx.MockTransport(lambda _: httpx.Response(200, text="<html>"))
+        )
+
+    status = dns.main(["apply", "--records", str(records(tmp_path, WANTED))], client=client)
+
+    captured = capsys.readouterr()
+    assert status == 1
+    assert captured.err.startswith("dns: ")
+    assert captured.err.count("\n") == 1
+    assert "Traceback" not in captured.err
+    assert TOKEN not in captured.err + captured.out
