@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
@@ -34,8 +36,59 @@ def test_views_in_order() -> None:
         "slope",
         "openness",
         "raking",
+        "ea_hillshade",
+        "nls_hillshade",
+        "nls_air_photos_1944",
+        "eox_sentinel_2016",
+        "nls_six_inch_1888",
+        "nls_25k_1945",
+        "nls_one_inch_1920s",
+        "nls_bartholomew_1897",
+        "nls_bartholomew_1940s",
+        "nls_ten_mile",
         "osm_standard",
+        "bgs_bedrock_625k",
+        "bgs_superficial_50k",
     ]
+
+
+def test_views_come_grouped_as_the_layer_panel_shows_them() -> None:
+    groups = [view["group"] for view in dump()["views"]]
+    order = ["lidar", "imagery", "historic", "map", "geology"]
+    assert groups == sorted(groups, key=order.index)
+
+
+WORKLIST = Path(__file__).resolve().parents[2] / "docs" / "sources" / "worklists" / "map-layers.json"
+
+
+@pytest.fixture(scope="module")
+def worklist() -> dict[str, dict]:
+    return {entry["id"]: entry for entry in json.loads(WORKLIST.read_text(encoding="utf-8"))}
+
+
+def test_every_work_list_layer_is_offered_or_left_out_with_a_reason(worklist: dict[str, dict]) -> None:
+    offered, left_out = set(layers.FROM_WORKLIST), set(layers.LEFT_OUT)
+    assert not offered & left_out
+    assert offered | left_out == set(worklist)
+    assert all(reason.strip() for reason in layers.LEFT_OUT.values())
+
+
+def test_a_published_layer_is_the_work_lists_word_for_word(worklist: dict[str, dict]) -> None:
+    views = {view.id: view for view in layers.build_layers().views}
+    for worklist_id, view_id in layers.FROM_WORKLIST.items():
+        entry, view = worklist[worklist_id], views[view_id]
+        assert isinstance(view, RasterView), view_id
+        assert entry["key_required"] is False, worklist_id
+        assert entry["cors"].startswith("yes"), worklist_id
+        assert entry["group"] == view.group, worklist_id
+        assert view.tiles == entry["source"]["tiles"], worklist_id
+        assert view.tile_size == entry["source"]["tileSize"], worklist_id
+        assert view.attribution == entry["attribution"], worklist_id
+        assert view.maxzoom == (entry["maxzoom"] or view.maxzoom), worklist_id
+        assert view.minzoom == (entry["minzoom"] or 0), worklist_id
+        assert view.bounds == (tuple(entry["bounds"]) if entry["bounds"] else None), worklist_id
+        assert view.licence_url.startswith("https://"), worklist_id
+        assert view.reuse in (SourceReuse.OPEN, SourceReuse.SHARE_ALIKE, SourceReuse.NON_COMMERCIAL)
 
 
 def test_composite_matches_the_documented_shape_exactly() -> None:
@@ -230,7 +283,12 @@ def test_lidar_attribution_is_the_environment_agency_wording_under_ogl() -> None
         in layers.LIDAR_ATTRIBUTION
     )
     catalogue = dump()
-    lidar = [view for view in catalogue["views"] if view["group"] == "lidar"]
+    # Field Club's own: the comparison layers others publish carry their own credit.
+    lidar = [
+        view
+        for view in catalogue["views"]
+        if view["group"] == "lidar" and view["id"] not in layers.FROM_WORKLIST.values()
+    ]
     assert len(lidar) == 7
     assert {view["attribution"] for view in lidar} == {layers.LIDAR_ATTRIBUTION}
     assert catalogue["dem"]["attribution"] == layers.LIDAR_ATTRIBUTION
