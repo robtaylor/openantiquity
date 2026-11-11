@@ -1,0 +1,144 @@
+/* Scan a square. Everything uses the tokens; hints keep the style of a finding's page. */
+.fc-scan,
+.fc-scan__looking,
+.fc-scan__recorded,
+.fc-scan__loading,
+.fc-scan__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fc-scan {
+  gap: 16px;
+}
+
+.fc-scan__actions {
+  gap: 6px;
+}
+
+.fc-scan__actions .fc-finding__hint {
+  margin-bottom: 6px;
+}
+
+.fc-scan__intro {
+  color: var(--text);
+}
+
+/* Each square's question takes focus, so its ring stands off the text. */
+.fc-scan__intro:focus-visible {
+  outline-offset: 4px;
+  border-radius: var(--radius-sm);
+}
+
+.fc-scan__place {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-scan__place .fc-mono {
+  color: var(--text);
+}
+
+.fc-scan__looking > .fc-button--ghost {
+  align-self: flex-start;
+}
+
+.fc-scan__marked:empty,
+.fc-scan-coverage:empty {
+  display: none;
+}
+
+.fc-scan__marked {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.fc-scan__skip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+/* The reward: a small running count, never a ranking. */
+.fc-scan__count {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  animation: fc-scan-reward var(--duration) var(--ease) both;
+}
+
+.fc-scan__count svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent-strong);
+}
+
+@keyframes fc-scan-reward {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.fc-scan__thanks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 16px;
+}
+
+.fc-scan__save {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.fc-scan__notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.fc-scan__coverage {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.fc-scan-coverage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-scan__empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

@@ -265,7 +265,8 @@ function overlayParts(meta: Meta, overlay: Overlay, origin: string): OverlayPart
     case "coverage":
       return {
         sources: { [source]: emptyGeoJson() },
-        layers: coverageLayers(source),
+        // The counts are written with the street map's glyphs, so only where the catalogue names some.
+        layers: coverageLayers(source, Boolean(findOverlay(meta, "openmaptiles")?.glyphs)),
       };
   }
 }

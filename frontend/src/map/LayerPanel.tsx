@@ -14,6 +14,7 @@ import { currentView } from "../features/investigations/savedView.js";
 import { TerrainTools } from "../features/layers/TerrainTools.js";
 import { ViewPreview } from "../features/layers/ViewPreview.js";
 import { LiveSourceControls, RecordFilterControls } from "../features/records/RecordLayerControls.js";
+import { ScanCoverageStatus } from "../features/scan/ScanCoverageStatus.js";
 import { Button } from "../ui/Button.js";
 import { Slider } from "../ui/Slider.js";
 import { Switch } from "../ui/Switch.js";
@@ -195,6 +196,7 @@ function OverlayRow({ meta, overlay }: { meta: Meta; overlay: Overlay }) {
               onChange={setShowRuledOut}
             />
           ) : null}
+          {overlay.type === "coverage" ? <ScanCoverageStatus /> : null}
           {overlay.type === "records" ? (
             <>
               <RecordFilterControls meta={meta} />

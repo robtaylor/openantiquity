@@ -2,6 +2,7 @@ import type { Page, Route } from "@playwright/test";
 import { NO_FINDINGS } from "../../src/features/findings/types.js";
 import { pageFixture, suggestionsFixture } from "../../src/test/fixtures/findingPage.js";
 import { investigationFixture } from "../../src/test/fixtures/investigations.js";
+import { SQUARE_SPOT, squareAt } from "../../src/test/fixtures/squares.js";
 import { solidPng } from "./png.js";
 
 /**
@@ -12,7 +13,9 @@ import { solidPng } from "./png.js";
  * findings (for the map and for the list), a fixed height for any spot,
  * one-metre elevation everywhere, nobody signed in, nothing waiting for a
  * second look, no help wanted, no mentions, no activity, and no investigations
- * listed, though any one asked for by its id is there, empty. A test can
+ * listed, though any one asked for by its id is there, empty. The next square
+ * to scan is the one under the point asked about, and nobody has scanned
+ * anything. A test can
  * answer any of them differently with a route of its own, which Playwright
  * tries first.
  */
@@ -207,6 +210,18 @@ export async function stubBackend(page: Page, log: NetworkLog = newLog()): Promi
     if (path === "/api/v1/terrain/coverage") {
       count("coverage");
       const body = coverageEverywhere(new URL(route.request().url()));
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    }
+    if (path === "/api/v1/squares/next" && route.request().method() === "GET") {
+      count("squares");
+      const url = new URL(route.request().url());
+      const lon = Number(url.searchParams.get("lon") ?? SQUARE_SPOT[0]);
+      const lat = Number(url.searchParams.get("lat") ?? SQUARE_SPOT[1]);
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(squareAt(lon, lat)) });
+    }
+    if (path === "/api/v1/squares/coverage") {
+      count("squares");
+      const body = { type: "FeatureCollection", features: [] };
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
     }
     if (path === "/api/v1/geo/point") {

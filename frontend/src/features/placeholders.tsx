@@ -1,4 +1,4 @@
-import { Activity, BookOpen, Info, type LucideIcon, MapPinned, ScanSearch, UserRound } from "lucide-react";
+import { Activity, BookOpen, Info, type LucideIcon, MapPinned, UserRound } from "lucide-react";
 import { useEffect } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { EmptyState } from "../ui/EmptyState.js";
@@ -26,12 +26,6 @@ export interface PlaceholderRoute {
 }
 
 export const PLACEHOLDER_ROUTES: PlaceholderRoute[] = [
-  {
-    path: "/scan",
-    title: "Scan a square",
-    icon: ScanSearch,
-    body: "You'll be sent to a one-kilometre square that few people have looked at, to mark what you see or to say there's nothing obvious.",
-  },
   {
     path: "/activity",
     title: "Activity",

@@ -18,6 +18,7 @@ import { ProfileCrosshair } from "../features/layers/MapNotices.js";
 import { useProfileOnMap } from "../features/layers/profile/useProfileOnMap.js";
 import { useTerrainLoadingOnMap } from "../features/layers/terrainLoading.js";
 import { useRecordsOnMap } from "../features/records/useRecordsOnMap.js";
+import { useScanOnMap } from "../features/scan/useScanOnMap.js";
 import { clamp } from "../ui/math.js";
 import { MapFailure } from "./MapFailure.js";
 import { isMapLive, MapPane } from "./MapPane.js";
@@ -106,6 +107,7 @@ function MapPanes({ meta, insets }: MapViewProps) {
   useCoverageOnMap(meta, mainMap, shownCompare);
   useProfileOnMap(mainMap, shownCompare);
   useAreaOnMap(mainMap, shownCompare);
+  useScanOnMap(meta, mainMap, shownCompare);
   useTerrainLoadingOnMap(meta, mainMap);
   useTileRefresh(meta, [mainMap, shownCompare]);
 

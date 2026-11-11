@@ -489,11 +489,15 @@ export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
 
 /**
  * Scan coverage: one-kilometre squares shaded by how many people have looked
- * at them. The source is GeoJSON with a `count` on each square.
+ * at them. The source is GeoJSON with `scans` on each square (`GET
+ * /squares/coverage`). The shading stays light, so the terrain under it is
+ * still the thing to look at, and from zoom 12, when a square is big enough
+ * to hold it, the count is written in it where the map has glyphs, so the
+ * number never rests on the shade alone.
  */
-export function coverageLayers(source: string): OverlayLayer[] {
-  const count: ExpressionSpecification = ["coalesce", ["get", "count"], 0];
-  return [
+export function coverageLayers(source: string, hasGlyphs = false): OverlayLayer[] {
+  const scans: ExpressionSpecification = ["coalesce", ["get", "scans"], ["get", "count"], 0];
+  const layers: OverlayLayer[] = [
     {
       layer: {
         id: "coverage-fill",
@@ -501,7 +505,7 @@ export function coverageLayers(source: string): OverlayLayer[] {
         source,
         paint: { "fill-color": COLOURS.accent, "fill-antialias": false },
       },
-      opacity: { "fill-opacity": ["interpolate", ["linear"], count, 0, 0, 1, 0.14, 5, 0.3, 20, 0.45] },
+      opacity: { "fill-opacity": ["interpolate", ["linear"], scans, 0, 0, 1, 0.1, 3, 0.17, 10, 0.25] },
     },
     {
       layer: {
@@ -510,7 +514,27 @@ export function coverageLayers(source: string): OverlayLayer[] {
         source,
         paint: { "line-color": COLOURS.accent, "line-width": 0.75 },
       },
-      opacity: { "line-opacity": 0.5 },
+      opacity: { "line-opacity": 0.45 },
     },
   ];
+  if (hasGlyphs) {
+    layers.push({
+      layer: {
+        id: "coverage-count",
+        type: "symbol",
+        source,
+        minzoom: 12,
+        layout: {
+          "text-field": ["to-string", scans],
+          "text-font": COUNT_FONT,
+          "text-size": 12,
+          "text-allow-overlap": true,
+          "text-ignore-placement": true,
+        },
+        paint: { "text-color": COLOURS.text, "text-halo-color": OUTLINE, "text-halo-width": 1.5 },
+      },
+      opacity: { "text-opacity": 0.85 },
+    });
+  }
+  return layers;
 }

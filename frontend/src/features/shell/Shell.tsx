@@ -56,6 +56,9 @@ import { RecordPage } from "../records/RecordPage.js";
 import { RecordSearchPanel } from "../records/RecordSearchPanel.js";
 import { REVIEW_PATH, ReviewLayer } from "../review/ReviewLayer.js";
 import { ReviewPanel } from "../review/ReviewPanel.js";
+import { SCAN_PATH } from "../scan/api.js";
+import { ScanLayer } from "../scan/ScanLayer.js";
+import { ScanPanel } from "../scan/ScanPanel.js";
 import { SearchBox } from "../search/SearchBox.js";
 import { BrandMark, ModeRail } from "./ModeRail.js";
 import { BARE_MAP_PARAM, searchWithPanel } from "./navigation.js";
@@ -262,6 +265,7 @@ function ReadyShell({ meta }: { meta: Meta }) {
         <ExploreLayer meta={meta} />
         <MarkLayer />
         <ReviewLayer meta={meta} />
+        <ScanLayer />
 
         <div className="fc-stage">
           <div className="fc-stage__search">
@@ -321,6 +325,7 @@ function ReadyShell({ meta }: { meta: Meta }) {
             <Route path={REVIEW_PATH} element={<ReviewPanel meta={meta} />} />
             <Route path={HELP_PATH} element={<HelpPanel meta={meta} />} />
             <Route path={`${HELP_PATH}/:kind`} element={<HelpKindPanel meta={meta} />} />
+            <Route path={SCAN_PATH} element={<ScanPanel meta={meta} />} />
             <Route path="/account" element={<AccountPage />} />
             <Route path={EMAIL_LINK_PATH} element={<EmailLinkPage />} />
             <Route path="/r/:id" element={<RecordPage />} />
