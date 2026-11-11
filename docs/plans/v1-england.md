@@ -17,7 +17,7 @@ A deployed Field Club covering England. People explore 1 m LIDAR in archaeologic
 - WS0 and WS1 are shipped in the first commits on `main`.
 - The whole backend is on `main`: terrain, sign-in, findings with the confidence engine, the record index with its connectors, the collaboration and moderation routes, and the scheduled jobs. It serves 93 routes and its suite stood at about 4,960 tests on 2026-11-11. Each track was built in its own worktree, reviewed adversarially, fixed, and rebased onto `main`, and the places where tracks meet were reviewed twice more.
 - The interface on `main` covers joining, Explore, marking a finding, a finding's page, second looks, help wanted, heritage records, search, the layer panel and the terrain tools. The rest of WS7 is being built.
-- The development database holds about 1.45 million records from 36 sources, a gazetteer of 273,525 place names, and the nation and county boundaries.
+- The development database holds about 1.45 million records from 31 sources, a gazetteer of 273,525 place names, and the nation and county boundaries.
 - Decisions 0010 to 0015 were written during the build, each from a review finding or a seam between tracks. All are Proposed until WS9 checks them against the code.
 - The Google Cloud project `fieldclub-uk` exists. Nothing is applied to it: its billing link waits on the owner (`owner-actions.md`, WS2).
 - Defra supplied England's 2022 composite DTM in bulk on the day it was asked, ticket DSP3-11967. See `owner-actions.md` and `../sources/lidar-england-bulk-supply.md`. Eleven tiles around Avebury and Stonehenge are in the local mirror folder for development.
@@ -113,7 +113,7 @@ The core loop. See Decisions 0003, 0005 and 0008.
 
 ### WS5 — Records
 
-**Status:** Shipped 2026-11-11 for the sources that are records. Thirty-six sources are stored, with counts equal to the research's wherever a source is stored whole. Sources that turned out not to be records have no connector and are listed in `ARCHITECTURE.md` under Ingest: access land, the landscape characterisation grid, the woodland opportunity map, Defra's survey indexes and the monument-type thesaurus. Wikidata is stored as a cross-walk and kept off the map (Decision 0011).
+**Status:** Shipped 2026-11-11 for the sources that are records. Thirty-one sources hold records, with counts equal to the research's wherever a source is stored whole, and three more fill the gazetteer and the boundaries. Sources that turned out not to be records have no connector and are listed in `ARCHITECTURE.md` under Ingest: access land, the landscape characterisation grid, the woodland opportunity map, Defra's survey indexes and the monument-type thesaurus. Wikidata is stored as a cross-walk and kept off the map (Decision 0011).
 
 England's open records, stored, searchable and linked. See Decision 0007 and `sources/records-england.md`.
 
