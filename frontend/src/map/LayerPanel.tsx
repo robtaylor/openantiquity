@@ -45,6 +45,16 @@ export function orderedViews(views: readonly View[]): View[] {
 }
 
 /**
+ * What an overlay of each kind shows, where its name alone doesn't say.
+ * The kinds are the schema's own. The catalogue sends no description of an
+ * overlay, so the words are here, by kind, never by id.
+ */
+const OVERLAY_HINTS: Partial<Record<Overlay["type"], string>> = {
+  coverage:
+    "Shades each one-kilometre square by how many people have looked it over in “Scan a square”. It says nothing about where there is LIDAR.",
+};
+
+/**
  * A layer's credit and licence, shown while the layer is on. The licence is
  * named, as a link to its terms, unless the credit already links it by name.
  */
@@ -144,7 +154,12 @@ function OverlayRow({ meta, overlay }: { meta: Meta; overlay: Overlay }) {
   const ruledOut = meta.vocab.states.find((s) => s.id === "ruled_out");
   return (
     <div className="fc-overlay-row" data-overlay={overlay.id}>
-      <Switch label={overlay.title} checked={state.visible} onChange={(visible) => setVisible(overlay.id, visible)} />
+      <Switch
+        label={overlay.title}
+        hint={OVERLAY_HINTS[overlay.type]}
+        checked={state.visible}
+        onChange={(visible) => setVisible(overlay.id, visible)}
+      />
       {state.visible && unavailable ? (
         <p className="fc-overlay-row__notice" role="status">
           This layer isn't loading right now.

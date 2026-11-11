@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Meta } from "../api/meta.js";
 import { metaFixture } from "../test/fixtures/meta.js";
 import { TIER_COLOURS } from "../ui/tokens.js";
+import { SQUARES_ALL_FROM_ZOOM } from "./overlayLayers.js";
 import { LIMITS } from "./permalink.js";
 import { defaultsFromMeta, overlayTroubleKey } from "./store.js";
 import {
@@ -394,6 +395,17 @@ describe("buildStyle", () => {
     for (const category of metaFixture.vocab.record_categories) {
       expect(colour[colour.indexOf(category.id) + 1]).toBe(category.colour);
     }
+  });
+
+  it("thins record squares where a village's would merge into one block, and draws them all from zoom 15", () => {
+    const style = buildStyle(metaFixture, stateFor(metaFixture), "composite", OPTIONS);
+    const layout = layer(style, "records-squares").layout as Record<string, unknown>;
+    const overlap = layout["icon-allow-overlap"];
+    expect(overlap).toEqual(["step", ["zoom"], false, SQUARES_ALL_FROM_ZOOM, true]);
+    expect(SQUARES_ALL_FROM_ZOOM).toBe(15);
+    // Each square kept takes its place, so the next keeps clear of it.
+    expect(layout["icon-ignore-placement"]).toEqual(["step", ["zoom"], false, SQUARES_ALL_FROM_ZOOM, true]);
+    expect(layout["icon-padding"]).toBeDefined();
   });
 
   it("follows overlay visibility, opacity and availability", () => {

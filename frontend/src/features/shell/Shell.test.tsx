@@ -3,8 +3,10 @@ import { userEvent } from "@testing-library/user-event";
 import { Link } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import { META_RETRY_DELAY_MS } from "../../api/useMeta.js";
+import { coordinateText, gridRefText } from "../../map/StatusBar.js";
 import { useMapStore } from "../../map/store.js";
 import { RAKING_LAYER, viewLayerId } from "../../map/style.js";
+import { useMapCover, visibleCentre } from "../../map/visibleArea.js";
 import { FakeMap } from "../../test/fakeMapLibre.js";
 import { metaFixture } from "../../test/fixtures/meta.js";
 import { liveMaps, mapReady, renderShell, setUpShellTests, usePhoneLayout } from "../../test/shellHarness.js";
@@ -15,6 +17,13 @@ vi.mock("maplibre-gl", async () => {
 });
 
 const harness = setUpShellTests();
+
+/** The ground at the middle of the part of the map the chrome leaves showing. */
+function shownMiddle(): { lng: number; lat: number } {
+  const { cover } = useMapCover.getState();
+  expect(cover.left).toBeGreaterThan(0);
+  return visibleCentre(useMapStore.getState().camera, cover);
+}
 
 describe("Shell", () => {
   it("loads /meta, then shows the map with every region of the layout", async () => {
@@ -50,10 +59,12 @@ describe("Shell", () => {
     expect(map.isVisible(viewLayerId("slope"))).toBe(false);
     expect(map.getCanvas()).toHaveAttribute("aria-label", "Map: Composite");
 
-    // Status readout: the centre of the map, as there is no pointer yet.
+    // Status readout: the middle of what the rail and the status bar leave showing, as there is no pointer yet.
     // The readout is a six-figure reference: the conversion behind it is not good enough for eight.
-    expect(screen.getByTestId("status-gridref")).toHaveTextContent(/^SU 102 699$/);
-    expect(screen.getByTestId("status-coords")).toHaveTextContent("51.42860, -1.85420");
+    const middle = shownMiddle();
+    expect(screen.getByTestId("status-gridref")).toHaveTextContent(/^SU 10\d 70\d$/);
+    expect(screen.getByTestId("status-gridref")).toHaveTextContent(gridRefText(middle.lng, middle.lat) ?? "");
+    expect(screen.getByTestId("status-coords")).toHaveTextContent(coordinateText(middle.lng, middle.lat));
     expect(screen.getByTestId("status-zoom")).toHaveTextContent("z14.0");
     // Attribution comes from /meta with links in it. The one-line readout shows the words only.
     const credits = screen.getByRole("button", { name: /Environment Agency/ });
@@ -91,7 +102,8 @@ describe("Shell", () => {
     act(() => map.fire("mousemove", { lngLat: { lng: -5.9305779, lat: 54.5965219 } }));
     expect(screen.getByTestId("status-gridref")).toHaveTextContent(/^J 33\d 7\d\d$/);
     act(() => map.fire("mouseout"));
-    expect(screen.getByTestId("status-gridref")).toHaveTextContent(/^SU 102 699$/);
+    const middle = shownMiddle();
+    expect(screen.getByTestId("status-gridref")).toHaveTextContent(gridRefText(middle.lng, middle.lat) ?? "");
     act(() => map.userMove({ lng: 2.35, lat: 48.86, zoom: 11.26 }));
     expect(screen.getByTestId("status-gridref")).toHaveTextContent("Off the grid");
     expect(screen.getByTestId("status-zoom")).toHaveTextContent("z11.3");

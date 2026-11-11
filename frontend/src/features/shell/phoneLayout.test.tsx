@@ -53,6 +53,25 @@ describe("a phone with a sheet open", () => {
     expect(screen.getByRole("slider", { name: "Sun direction" })).toBeInTheDocument();
   });
 
+  it("folds the raking light to its dial, and opens the sliders on a tap", async () => {
+    const user = userEvent.setup();
+    usePhoneLayout();
+    renderShell("/#m=14/51.4286/-1.8542/0/0&v=raking");
+    await mapReady();
+    act(() => useMapStore.getState().setMainView("raking"));
+    const raking = screen.getByRole("region", { name: "Raking light" });
+    expect(within(raking).getByRole("slider", { name: "Sun direction" })).toBeInTheDocument();
+    expect(within(raking).queryByRole("slider", { name: "Sun height" })).toBeNull();
+    const toggle = within(raking).getByRole("button", { name: "Show the sun height and relief" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    expect(within(raking).getByRole("slider", { name: "Sun height" })).toBeInTheDocument();
+    expect(within(raking).getByRole("button", { name: "Hide the sun height and relief" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+  });
+
   it("follows the sheet down to its lowest stop", async () => {
     setWindowHeight(844);
     const user = userEvent.setup();

@@ -286,7 +286,7 @@ function ReadyShell({ meta }: { meta: Meta }) {
             <DraftsBar />
           </div>
           <div className="fc-stage__raking" inert={stageCovered}>
-            <RakingControl meta={meta} />
+            <RakingControl meta={meta} collapsible={isPhone} />
           </div>
           <div className="fc-stage__primary" inert={stageCovered}>
             <MarkButton />

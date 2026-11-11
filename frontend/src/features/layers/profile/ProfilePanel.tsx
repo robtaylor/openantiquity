@@ -1,4 +1,4 @@
-import { Crosshair, Link2, Spline, Trash2, Undo2, Unplug } from "lucide-react";
+import { Crosshair, Link2, MountainSnow, Spline, Trash2, Undo2, Unplug } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import { ApiError } from "../../../api/client.js";
@@ -148,6 +148,15 @@ export function ProfilePanel() {
         <Skeleton height={180} />
       </div>
     );
+  } else if (profile.data.samples.every((sample) => sample.elevation === null)) {
+    body = (
+      <EmptyState icon={<MountainSnow size={22} />} title="There's no height data along this line">
+        <p>
+          The one-metre LIDAR doesn't reach anywhere along it. Draw the line somewhere else, or turn on "Where there's
+          one-metre LIDAR" in the layer panel to see where it does.
+        </p>
+      </EmptyState>
+    );
   } else {
     body = (
       <>
@@ -203,6 +212,11 @@ export function ProfilePanel() {
             Start again
           </Button>
         </div>
+        {points.length >= MAX_LINE_POINTS ? (
+          <p className="fc-field__hint" role="status">
+            This line has the most points it can take, {MAX_LINE_POINTS}. Remove the last point to move its end.
+          </p>
+        ) : null}
         {body}
         {profile.data ? (
           <Button

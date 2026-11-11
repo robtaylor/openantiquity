@@ -90,3 +90,26 @@ export function centreForVisible(
     lat: latitudeOf(mercatorY(lat) + (offset.y / worldPx) * 2 * Math.PI),
   };
 }
+
+/**
+ * The ground at the middle of the uncovered map, for a camera that points at
+ * `lng`/`lat`: what "the middle of the map" means to someone looking at it,
+ * with the panel or the sheet over part of it. It turns the screen offset by
+ * the bearing, and takes the map as flat, as a tilted map's middle is near
+ * enough for a readout. The inverse of `centreForVisible` for a north-up map.
+ */
+export function visibleCentre(
+  camera: { lng: number; lat: number; zoom: number; bearing?: number },
+  cover: MapCover,
+): { lng: number; lat: number } {
+  const offset = visibleOffset(cover);
+  if (offset.x === 0 && offset.y === 0) return { lng: camera.lng, lat: camera.lat };
+  const bearing = ((camera.bearing ?? 0) * Math.PI) / 180;
+  const east = offset.x * Math.cos(bearing) - offset.y * Math.sin(bearing);
+  const south = offset.x * Math.sin(bearing) + offset.y * Math.cos(bearing);
+  const worldPx = 512 * 2 ** camera.zoom;
+  return {
+    lng: camera.lng + (east / worldPx) * 360,
+    lat: latitudeOf(mercatorY(camera.lat) - (south / worldPx) * 2 * Math.PI),
+  };
+}

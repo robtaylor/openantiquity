@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { centreForVisible, NO_COVER, uncoveredBounds, visibleOffset } from "./visibleArea.js";
+import { centreForVisible, NO_COVER, uncoveredBounds, visibleCentre, visibleOffset } from "./visibleArea.js";
 
 describe("the uncovered map", () => {
   const phone = { left: 0, right: 0, top: 68, bottom: 450 };
@@ -37,5 +37,28 @@ describe("the uncovered map", () => {
     // The spot is to show above the middle of the window, so the camera points south of it.
     expect(centre.lng).toBeCloseTo(-1.85, 9);
     expect(centre.lat).toBeLessThan(51.43);
+  });
+
+  it("finds the ground at the middle of what's showing, the other way from centreForVisible", () => {
+    const desktop = { left: 56, right: 400, top: 0, bottom: 28 };
+    const camera = { lng: -1.85, lat: 51.43, zoom: 16 };
+    expect(visibleCentre(camera, NO_COVER)).toEqual({ lng: -1.85, lat: 51.43 });
+    const middle = visibleCentre(camera, desktop);
+    // The panel is on the right, so the middle of what's showing is west of the camera, and a little north.
+    expect(middle.lng).toBeLessThan(camera.lng);
+    expect(middle.lat).toBeGreaterThan(camera.lat);
+    const back = centreForVisible(middle.lng, middle.lat, camera.zoom, desktop);
+    expect(back.lng).toBeCloseTo(camera.lng, 9);
+    expect(back.lat).toBeCloseTo(camera.lat, 9);
+  });
+
+  it("turns the offset with the map", () => {
+    // East up: the panel on the right covers the south, so the middle of what's showing is to the north.
+    const turned = visibleCentre(
+      { lng: -1.85, lat: 51.43, zoom: 16, bearing: 90 },
+      { left: 0, right: 400, top: 0, bottom: 0 },
+    );
+    expect(turned.lng).toBeCloseTo(-1.85, 9);
+    expect(turned.lat).toBeGreaterThan(51.43);
   });
 });

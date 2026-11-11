@@ -188,6 +188,15 @@
   width: 100%;
 }
 
+/* Folded to the dial, the card is only as wide as the dial, and the map beside it takes touches. */
+.fc-shell[data-layout="phone"] .fc-stage__raking:has(.fc-raking--collapsed) {
+  right: auto;
+}
+
+.fc-shell[data-layout="phone"] .fc-raking--collapsed {
+  width: fit-content;
+}
+
 /* Search */
 .fc-search form {
   position: relative;

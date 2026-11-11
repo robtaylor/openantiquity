@@ -1,6 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Spline } from "lucide-react";
 import { Link } from "react-router";
+import { useMapStore } from "../../map/store.js";
+import { viewTroubleKey } from "../../map/trouble.js";
 import { Button } from "../../ui/Button.js";
 import { Switch } from "../../ui/Switch.js";
 import { yearsText } from "./coverage/coverage.js";
@@ -11,6 +13,12 @@ import "./layers.css";
 
 function CoverageDetail() {
   const summary = useCoverageStore((state) => state.summary);
+  // Coverage is what Defra publishes, not what could be drawn. When a view on screen isn't loading, it says so.
+  const drawing = useMapStore(
+    (state) =>
+      !state.failing[viewTroubleKey(state.mainView)] &&
+      (state.compareView === null || !state.failing[viewTroubleKey(state.compareView)]),
+  );
   const queryClient = useQueryClient();
   switch (summary.status) {
     case "idle":
@@ -48,6 +56,9 @@ function CoverageDetail() {
       return (
         <p className="fc-field__hint" data-testid="coverage-summary">
           In view: {what.filter(Boolean).join(", ")}.
+          {drawing
+            ? null
+            : " The terrain isn't loading here at the moment, so the map may be blank where these say there is data."}
         </p>
       );
     }

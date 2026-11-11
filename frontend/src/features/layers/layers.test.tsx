@@ -2,8 +2,11 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RasterView } from "../../api/meta.js";
+import { coordinateText } from "../../map/StatusBar.js";
 import { useMapStore } from "../../map/store.js";
 import { useMapTool } from "../../map/tool.js";
+import { viewTroubleKey } from "../../map/trouble.js";
+import { useMapCover, visibleCentre } from "../../map/visibleArea.js";
 import { type ApiRoutes, apiError, routeApi } from "../../test/apiRoutes.js";
 import { BORDER_COVERAGE } from "../../test/fixtures/coverage.js";
 import { metaFixture } from "../../test/fixtures/meta.js";
@@ -12,7 +15,7 @@ import { useToastStore } from "../../ui/toastStore.js";
 import { useCoverageStore } from "./coverage/store.js";
 import { COVERAGE_LAYERS } from "./coverage/useCoverageOnMap.js";
 import type { ProfileOut } from "./profile/api.js";
-import { framingFor } from "./profile/line.js";
+import { framingFor, MAX_LINE_POINTS } from "./profile/line.js";
 import { useProfileHover } from "./profile/store.js";
 import { PROFILE_LAYERS, PROFILE_SOURCE } from "./profile/useProfileOnMap.js";
 
@@ -310,6 +313,31 @@ describe("the height profile", () => {
     expect(map.doubleClickZoom.isEnabled()).toBe(true);
     expect(screen.queryByTestId("profile-crosshair")).toBeNull();
   });
+
+  it("says so when there is no height data anywhere along the line", async () => {
+    api.on("POST /terrain/profile", () => {
+      const answer = profileAnswer(2);
+      return json({ ...answer, samples: answer.samples.map((sample) => ({ ...sample, elevation: null })) });
+    });
+    open("/profile?line=-1.853,51.4286,-1.849,51.4286#m=16/51.4286/-1.851/0/0&v=composite");
+    await mapReady();
+    expect(await screen.findByRole("heading", { name: "There's no height data along this line" })).toBeInTheDocument();
+    expect(screen.queryByRole("slider", { name: "Height along the line" })).toBeNull();
+    const panel = screen.getByRole("complementary", { name: "Height profile" });
+    expect(within(panel).queryByText("– m")).toBeNull();
+  });
+
+  it("says why no more points can be added once the line has as many as it can take", async () => {
+    const many = Array.from({ length: MAX_LINE_POINTS }, (_, i) => `${(-1.853 + i * 0.00002).toFixed(5)},51.4286`);
+    open(`/profile?line=${many.join(",")}#m=16/51.4286/-1.851/0/0&v=composite`);
+    const map = await mapReady();
+    await screen.findByRole("slider", { name: "Height along the line" });
+    expect(screen.getByRole("button", { name: "Add a point at the cross" })).toBeDisabled();
+    expect(screen.getByText(/This line has the most points it can take, 200/)).toBeInTheDocument();
+    const before = window.location.search;
+    act(() => map.fire("click", { point: { x: 10, y: 10 }, lngLat: { lng: -1.84, lat: 51.4286 } }));
+    expect(window.location.search).toBe(before);
+  });
 });
 
 describe("coverage", () => {
@@ -343,6 +371,27 @@ describe("coverage", () => {
     await waitFor(() => expect(map.isVisible(COVERAGE_LAYERS.coverageLine)).toBe(true));
     expect(await within(panel).findByTestId("coverage-summary")).toHaveTextContent(
       /In view: 2022 composite, flown between 2005 and 2022, with \d+ of \d+ squares empty\./,
+    );
+  });
+
+  it("doesn't let the data in view stand unqualified when the terrain on screen isn't loading", async () => {
+    const user = userEvent.setup();
+    open(`/?panel=layers${BORDER.slice(1)}`);
+    await mapReady();
+    const panel = screen.getByRole("complementary", { name: "Layers" });
+    await user.click(within(panel).getByRole("switch", { name: "Where there's one-metre LIDAR" }));
+    const summary = await within(panel).findByTestId("coverage-summary");
+    expect(summary).not.toHaveTextContent(/isn't loading/);
+    act(() => useMapStore.getState().setSourceFailing(viewTroubleKey("composite"), true));
+    expect(summary).toHaveTextContent(/The terrain isn't loading here at the moment/);
+  });
+
+  it("says what the scan coverage overlay shows, as it is a different coverage", async () => {
+    open("/?panel=layers");
+    await mapReady();
+    const panel = screen.getByRole("complementary", { name: "Layers" });
+    expect(within(panel).getByRole("switch", { name: "Scan coverage" })).toHaveAccessibleDescription(
+      /how many people have looked it over/,
     );
   });
 
@@ -395,6 +444,17 @@ describe("the camera and the status bar", () => {
     expect(map.getPitch()).toBe(0);
     expect(map.getBearing()).toBe(0);
     await waitFor(() => expect(screen.queryByRole("button", { name: "Back to plan view" })).toBeNull());
+  });
+
+  it("reads out the middle of what's showing, not of the window, when a panel covers part of the map", async () => {
+    open("/profile#m=16/51.4286/-1.85/0/0&v=composite");
+    await mapReady();
+    const { cover } = useMapCover.getState();
+    expect(cover.right).toBeGreaterThan(0);
+    const middle = visibleCentre(useMapStore.getState().camera, cover);
+    const coords = screen.getByTestId("status-coords");
+    expect(coords).toHaveTextContent(coordinateText(middle.lng, middle.lat));
+    expect(coords).not.toHaveTextContent(coordinateText(-1.85, 51.4286));
   });
 
   it("copies the grid reference of the middle of the map", async () => {

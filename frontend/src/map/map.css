@@ -148,6 +148,24 @@
   box-shadow: var(--shadow);
 }
 
+/* The dial alone, with the button that opens the sliders. */
+.fc-raking--collapsed {
+  gap: 6px;
+  width: fit-content;
+  padding: 6px;
+}
+
+/* At the card's top right, after the sliders it opens, though it comes before them in the page. */
+.fc-raking__toggle {
+  flex: none;
+  align-self: flex-start;
+  order: 1;
+}
+
+.fc-raking__controls[hidden] {
+  display: none;
+}
+
 .fc-raking__controls {
   display: flex;
   flex-direction: column;

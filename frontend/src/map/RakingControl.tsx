@@ -1,6 +1,7 @@
-import { Sun } from "lucide-react";
-import { memo, useId } from "react";
+import { SlidersHorizontal, Sun } from "lucide-react";
+import { memo, useId, useState } from "react";
 import { type Meta, rakingView } from "../api/meta.js";
+import { IconButton } from "../ui/IconButton.js";
 import { Slider } from "../ui/Slider.js";
 import { compassPoint } from "./compass.js";
 import { LIMITS } from "./permalink.js";
@@ -18,9 +19,17 @@ export function useVisibleRakingView(meta: Meta): string | null {
 
 /**
  * Sun controls for the raking light view. They float on the map, so the
- * terrain stays in sight while the light moves.
+ * terrain stays in sight while the light moves. Where the map is small, on a
+ * phone, the control is `collapsible`: it starts as the dial alone, and a
+ * button beside it opens the sliders.
  */
-export const RakingControl = memo(function RakingControl({ meta }: { meta: Meta }) {
+export const RakingControl = memo(function RakingControl({
+  meta,
+  collapsible = false,
+}: {
+  meta: Meta;
+  collapsible?: boolean;
+}) {
   const visible = useVisibleRakingView(meta);
   const sun = useMapStore((state) => state.sun);
   const exaggeration = useMapStore((state) => state.hillshadeExaggeration);
@@ -28,17 +37,34 @@ export const RakingControl = memo(function RakingControl({ meta }: { meta: Meta 
   const setSun = useMapStore((state) => state.setSun);
   const setExaggeration = useMapStore((state) => state.setHillshadeExaggeration);
   const hintId = useId();
+  const controlsId = useId();
+  const [opened, setOpened] = useState(false);
   if (visible === null) return null;
+  const open = !collapsible || opened;
 
   return (
-    <section className="fc-raking" aria-label="Raking light">
+    <section className={open ? "fc-raking" : "fc-raking fc-raking--collapsed"} aria-label="Raking light">
       <SunDial
         azimuth={sun.azimuth}
         bearing={bearing}
+        size={open ? undefined : 64}
         describedBy={hintId}
         onChange={(azimuth) => setSun({ azimuth })}
       />
-      <div className="fc-raking__controls">
+      {collapsible ? (
+        <IconButton
+          className="fc-raking__toggle"
+          size="sm"
+          label={open ? "Hide the sun height and relief" : "Show the sun height and relief"}
+          aria-expanded={open}
+          aria-controls={controlsId}
+          onClick={() => setOpened((now) => !now)}
+        >
+          <SlidersHorizontal size={16} aria-hidden />
+        </IconButton>
+      ) : null}
+      {/* Hidden, not taken away, so the dial's description is still there to read. */}
+      <div className="fc-raking__controls" id={controlsId} hidden={!open}>
         <p className="fc-raking__title">
           <Sun size={16} aria-hidden />
           Light from the {compassPoint(sun.azimuth)}

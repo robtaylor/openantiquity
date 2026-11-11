@@ -8,6 +8,7 @@ import { Attribution, attributionText, useAttributions } from "./attribution.js"
 import { formatGridRef, wgs84ToGrid } from "./gridref.js";
 import { useMapStore, usePointerStore } from "./store.js";
 import { usePointDetail } from "./usePointDetail.js";
+import { useMapCover, visibleCentre } from "./visibleArea.js";
 
 /**
  * Figures in the grid reference shown in the readout: six, a 100 m square.
@@ -40,8 +41,10 @@ export function heightText(metres: number | null): string {
 function PointerReadout({ compact }: { compact: boolean }) {
   const pointer = usePointerStore((state) => state.position);
   const camera = useMapStore((state) => state.camera);
+  const cover = useMapCover((state) => state.cover);
 
-  const position = pointer ?? { lng: camera.lng, lat: camera.lat };
+  // With no pointer on the map, the middle of the part that isn't under the panel or the sheet.
+  const position = pointer ?? visibleCentre(camera, cover);
   const gridRef = gridRefText(position.lng, position.lat);
   const where = pointer ? "under the pointer" : "at the centre of the map";
   const { detail, missing } = usePointDetail(compact ? null : position);

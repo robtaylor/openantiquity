@@ -258,6 +258,12 @@ export const RECORD_BASE_FILTERS: Readonly<Record<string, FilterSpecification>> 
  */
 export const OUTLINE_MINZOOM = 15;
 
+/**
+ * From this zoom every record that is a point has its square. Further out
+ * they are thinned. It is where outlines appear too.
+ */
+export const SQUARES_ALL_FROM_ZOOM = OUTLINE_MINZOOM;
+
 /** Outlines are a hairline when they first appear and thicken as their shapes become readable. */
 const OUTLINE_WIDTH_BY_ZOOM: ExpressionSpecification = ["interpolate", ["linear"], ["zoom"], 15, 0.6, 17, 1.2];
 
@@ -370,8 +376,14 @@ export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
         layout: {
           "icon-image": SQUARE_IMAGE,
           "icon-size": ["interpolate", ["linear"], ["zoom"], 8, 0.6, 14, 1, 18, 1.3],
-          "icon-allow-overlap": true,
-          "icon-ignore-placement": true,
+          // Further out than SQUARES_ALL_FROM_ZOOM a village's listed buildings
+          // would merge into one block over the earthworks round it, so there
+          // squares keep apart, with a gap between them. A square must take
+          // its place for the next to keep clear of it, so there they take
+          // part in placement. Those left out come back as the map zooms in.
+          "icon-allow-overlap": ["step", ["zoom"], false, SQUARES_ALL_FROM_ZOOM, true],
+          "icon-ignore-placement": ["step", ["zoom"], false, SQUARES_ALL_FROM_ZOOM, true],
+          "icon-padding": ["interpolate", ["linear"], ["zoom"], 12, 10, 14, 6, SQUARES_ALL_FROM_ZOOM, 2],
         },
         paint: {
           "icon-color": colour,
