@@ -74,7 +74,7 @@ Build these once in `src/ui/` and reuse them: `Button` (primary, secondary, ghos
 
 - Every action gives feedback within 100 ms. Saves are optimistic and roll back with a toast on failure.
 - Transitions run 150 to 200 ms. A tier change animates the meter and swaps the badge. `prefers-reduced-motion` turns all of it off.
-- Nothing that contributes data needs more than one tap after the first. Second look answers are single buttons. Optional detail appears after the answer, never before.
+- Nothing that contributes data needs more than one tap after the first. Second look answers are single buttons. Optional detail appears after the answer, never before. A second look is the one exception: its answer and optional detail are sent together by a second press, because an answer is final once sent (Decision 0014).
 - Signed-out people can mark, answer and scan. Their work is a draft in the browser, shown with a "not saved yet" badge, and a quiet bar says how many drafts are waiting. Pressing save opens the sign-in sheet over what they were doing. After sign-in the drafts are saved without being re-entered, and the page returns to the same view.
 - The sign-in sheet shows one button per provider in the provider's own style, with "email me a link" underneath. It says in one sentence why an account is needed.
 - Empty states say what to do next. Errors say what happened and offer a retry.
