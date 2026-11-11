@@ -119,12 +119,12 @@ def test_running_twice_gives_the_same_rows(db):
 
 ## 6. Run it for real
 
-From `backend/`, with `var/` pointing at the shared runtime directory:
+From `backend/`. Downloads are kept under the repository's `var/ingest/` wherever the command is run from, so don't set `FIELDCLUB_VAR_DIR` for this: a relative value is read from the repository root, not from `backend/`.
 
 ```
 uv run python -m fieldclub.db                                  # once, to apply any schema additions
-FIELDCLUB_VAR_DIR=../var uv run fieldclub-ingest run <key> --limit 50
-FIELDCLUB_VAR_DIR=../var uv run fieldclub-ingest run <key>
+uv run fieldclub-ingest run <key> --limit 50
+uv run fieldclub-ingest run <key>
 ```
 
 Compare the count with the work-list's `expected_count`. The scheduled monuments gave 20,006 on 2026-11-10, the same as the research recorded. A run that is more than a few percent out means a filter, a page limit or a CRS is wrong.
