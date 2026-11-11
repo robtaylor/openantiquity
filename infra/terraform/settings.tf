@@ -65,6 +65,15 @@ locals {
       # Up to service_max_instances x 8 connections, well inside the tier's limit.
       FIELDCLUB_DB_POOL_SIZE    = "4"
       FIELDCLUB_DB_MAX_OVERFLOW = "4"
+      # A stream ends itself, with `closed`, before Cloud Run's 600 s request
+      # timeout (service.tf) cuts it off, and the browser opens the next one.
+      FIELDCLUB_EVENTS_MAX_STREAM_S = "540"
+      # Streams hold a request slot each, so leave an instance four slots for
+      # everything else. A stream refused with too_many_streams is polled instead.
+      FIELDCLUB_EVENTS_MAX_STREAMS = tostring(max(1, var.service_concurrency - 4))
+      # Cloud Run kills an instance ten seconds after SIGTERM. The server ends
+      # its streams at once and closes the rest after this many seconds.
+      FIELDCLUB_SHUTDOWN_GRACE_S = "5"
     },
   )
 }

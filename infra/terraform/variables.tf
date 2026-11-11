@@ -77,9 +77,9 @@ variable "service_cpu" {
 }
 
 variable "service_memory" {
-  description = "Memory per service instance."
+  description = "Memory per service instance. A photo upload and a Defra fetch at once need about 1.1 GiB (infra/README.md, Sizing)."
   type        = string
-  default     = "1Gi"
+  default     = "1536Mi"
 }
 
 variable "service_concurrency" {
@@ -234,14 +234,14 @@ variable "national_build_args" {
 
 variable "schedules" {
   description = <<-EOT
-    Cron schedules (Europe/London) for the recurring jobs. An empty string
-    leaves a job unscheduled, which is the default: both run `fieldclub-jobs`,
-    which the image doesn't have yet. Once it does, "15 */6 * * *" for the
-    channel scan and "30 4 * * *" for the source refresh.
+    Cron schedules (Europe/London) for the recurring jobs, which run
+    `fieldclub-jobs`. An empty string leaves a job unscheduled. The channel
+    scan runs every six hours and the source refresh daily at 04:30, before
+    the morning's visitors.
   EOT
   type = object({
-    scan_channels   = optional(string, "")
-    refresh_sources = optional(string, "")
+    scan_channels   = optional(string, "15 */6 * * *")
+    refresh_sources = optional(string, "30 4 * * *")
   })
   default = {}
 }

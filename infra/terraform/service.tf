@@ -16,8 +16,8 @@ resource "google_cloud_run_v2_service" "web" {
   template {
     service_account                  = google_service_account.workload["service"].email
     max_instance_request_concurrency = var.service_concurrency
-    # Long enough for a slow tile that has to fetch its source first; the
-    # event stream reconnects by itself when a connection reaches it.
+    # Long enough for a slow tile that has to fetch its source first. An event
+    # stream ends itself before this (FIELDCLUB_EVENTS_MAX_STREAM_S in settings.tf).
     timeout = "600s"
 
     scaling {

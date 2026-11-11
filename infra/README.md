@@ -26,7 +26,7 @@ export P=<field-club-project-id>
 
 - **Cloud Run service `fieldclub`** serves the API, the tiles and the built frontend from one image. It scales to zero.
 - **Cloud Run jobs** run the same image with another command: `fieldclub-schema`, `fieldclub-ingest`, `fieldclub-scan-channels`, `fieldclub-refresh-sources`, `fieldclub-elevation-copy` and `fieldclub-national-build`.
-- **Cloud Scheduler** starts any ingest listed in `ingest_schedules`. The channel scan and the source refresh are left unscheduled until the image has their `fieldclub-jobs` command; then set `schedules` (its description gives the intended times).
+- **Cloud Scheduler** runs the channel scan every six hours and the source refresh daily at 04:30 (`schedules`; an empty string leaves one unscheduled), and starts any ingest listed in `ingest_schedules`. The source refresh runs every bulk connector and reference loader that is due, one after another, so its job has an ingest's six hours, 2 GiB and downloads kept in the cache bucket.
 - **Cloud SQL** for PostgreSQL 17, Enterprise edition, `db-g1-small`, 20 GB SSD that grows by itself, seven daily backups.
 - **Three private buckets**: `<project>-elevation` (the mirror), `<project>-cache` (rendered tiles, cached elevation and ingest downloads, with deletion rules) and `<project>-photos` (uploads, kept). Terraform refuses to destroy the elevation bucket (`prevent_destroy`), no workload may delete or replace a file in the mirror, and anything deleted by hand is kept for seven days by soft delete. Tearing the project down means removing the `prevent_destroy` line first.
 - **Secret Manager** holds twelve secrets, all created empty.
@@ -267,7 +267,7 @@ gcloud sql backups restore <backup-id> --restore-instance=fieldclub --project="$
 
 ## Sizing
 
-### The service: 1 vCPU, 1 GiB, 20 requests per instance, 0 to 3 instances
+### The service: 1 vCPU, 1.5 GiB, 20 requests per instance, 0 to 3 instances
 
 Endpoints are synchronous and run on FastAPI's thread pool (Decision 0001). A terrain tile is CPU work: ARCHITECTURE.md's terrain section has the combined blend at about 75 ms of numpy per 512 px tile, and about 100 ms with encoding.
 
@@ -290,7 +290,9 @@ Concurrency is 20, not 4, because most requests wait rather than compute: cached
 
 That sets a ceiling. Three instances of 20 slots are 60 requests at once, and each open tab holds one slot with its event stream, so about 60 open tabs fill the service and further requests wait or are refused. Raise `service_max_instances` or `service_concurrency` before that, minding the database connections below.
 
-1 GiB holds the 370 MiB measured plus a source tile fetched from Defra while the copy is incomplete. A fetch stages up to 90 MB on the in-memory disk and its 1.8 s conversion peaked at 236 MiB.
+1.5 GiB holds the 370 MiB measured, a source tile fetched from Defra while the copy is incomplete, and a photo upload at the same time. A fetch stages up to 90 MB on the in-memory disk and its 1.8 s conversion peaked at 236 MiB. A photo is decoded one at a time in a process, and the largest accepted, a 50 million pixel PNG, peaks at about 400 MB (`services/media.py`), so the three together come to about 1.1 GiB, more than 1 GiB holds. The extra half GiB adds about $1.10 a month at the 900,000 s of the cost table below.
+
+An event stream holds its request slot until it ends. Each one ends itself after 540 s (`FIELDCLUB_EVENTS_MAX_STREAM_S`), before the 600 s request timeout would cut it off, and the browser opens the next. An instance takes at most `service_concurrency` less four streams (`FIELDCLUB_EVENTS_MAX_STREAMS`), so tiles and JSON always have four slots; a stream refused with `too_many_streams` makes the web client poll instead.
 
 Three instances at most caps cost and connections: each instance holds up to 8 database connections, so 24 at most, inside the 50 that `db-g1-small` allows. The four jobs that use the database hold up to 4 each, 16 more, so 40 with everything busy. During a deploy the old revision's instances keep their connections until they stop, so for a short while the service can hold up to 48 and, with the jobs, pass 50. A connection refused then is an error for that request. Avoid starting jobs during a deploy, or move up a tier before raising `service_max_instances`.
 

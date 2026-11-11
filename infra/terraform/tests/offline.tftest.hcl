@@ -143,8 +143,23 @@ run "jobs_get_only_what_they_use" {
   }
 
   assert {
-    condition     = length(google_cloud_scheduler_job.run) == 0
-    error_message = "Nothing is scheduled by default: fieldclub-jobs isn't in the image yet."
+    condition     = length(google_cloud_scheduler_job.run) == 2
+    error_message = "The channel scan and the source refresh are scheduled by default."
+  }
+
+  assert {
+    condition     = tonumber(local.service_env["FIELDCLUB_EVENTS_MAX_STREAM_S"]) < 600
+    error_message = "An event stream must end itself before Cloud Run's 600 s request timeout."
+  }
+
+  assert {
+    condition     = tonumber(local.service_env["FIELDCLUB_EVENTS_MAX_STREAMS"]) < var.service_concurrency
+    error_message = "Event streams must leave an instance slots for other requests."
+  }
+
+  assert {
+    condition     = local.jobs["refresh-sources"].timeout == local.jobs["ingest"].timeout && local.jobs["refresh-sources"].mount.bucket == "cache"
+    error_message = "The source refresh runs ingests, so it gets an ingest's time and its downloads."
   }
 
   assert {
@@ -200,16 +215,16 @@ run "the_cdn_adds_a_proxy_and_closes_run_app" {
   }
 }
 
-run "scheduled_jobs_once_the_command_exists" {
+run "a_recurring_job_can_be_left_unscheduled" {
   command = plan
 
   variables {
-    schedules = { scan_channels = "15 */6 * * *", refresh_sources = "30 4 * * *" }
+    schedules = { refresh_sources = "" }
   }
 
   assert {
-    condition     = length(google_cloud_scheduler_job.run) == 2
-    error_message = "The channel scan and the source refresh are scheduled once asked for."
+    condition     = keys(google_cloud_scheduler_job.run) == ["scan-channels"]
+    error_message = "An empty schedule leaves that job unscheduled, and the other keeps its default."
   }
 }
 

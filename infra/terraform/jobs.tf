@@ -5,8 +5,8 @@
 #   gcloud run jobs execute fieldclub-ingest --region europe-west2 --wait \
 #       --args=run,he-nhle-scheduled-monuments
 #
-# fieldclub-jobs (scan-channels, refresh-sources) is a console script the
-# backend gains in the same wave as this file; see infra/README.md.
+# fieldclub-jobs (scan-channels, refresh-sources) is the backend's console
+# script for the scheduled jobs; see infra/README.md.
 
 locals {
   # Each job says only what differs from the defaults below.
@@ -38,11 +38,17 @@ locals {
       timeout = "1800s"
       retries = 1
     }
+    # Runs every bulk source and reference loader that is due, one after
+    # another, so it gets what a single ingest gets: the memory, the time and
+    # the downloads kept in the cache bucket.
     "refresh-sources" = {
       command = ["fieldclub-jobs"]
       args    = ["refresh-sources"]
-      memory  = "1Gi"
+      memory  = "2Gi"
+      timeout = "21600s"
       retries = 1
+      env     = { FIELDCLUB_VAR_DIR = "/mnt/var" }
+      mount   = { bucket = "cache", path = "/mnt/var/ingest", only_dir = "ingest" }
     }
     # The one-off copy of England's 5,877 tiles. Each task takes an equal share
     # by size and holds one SFTP connection; see infra/README.md.
