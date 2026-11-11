@@ -2,7 +2,7 @@
 
 This page lists link templates for opening the same place or record in an external viewer, as the research pass of 2026-11-10 found them. A deep link is what [Decision 0007](../architecture/decisions/0007-the-record-index-stores-only-what-licences-allow.md) calls the `deeplink` access mode: Decision 0007 proposes that Field Club show a link and hold nothing else. The hosts behind the largest record systems, Historic England, the Portable Antiquities Scheme, trove.scot and the Archaeology Data Service, returned a bot challenge to every scripted request. Their templates were read from archived pages and publishers' own links, so most are marked "not tested" and need one check in a real browser.
 
-Nothing on this page has been built. The "Verified" column records what the research saw on 2026-11-10 and means the following.
+`GET /context/links` serves every link on this page except the four in `EXCLUDED_LINKS` (`backend/tests/records/context_data.py`), which the research said a browser must check first. The "Verified" column records what the research saw on 2026-11-10 and means the following.
 
 - **yes**: the page loaded with HTTP 200 from a script or in a real browser on that date. The Notes column says which.
 - **redirect only**: the host answered a script on that date with a redirect to the new address, but the final page was blocked or not followed.

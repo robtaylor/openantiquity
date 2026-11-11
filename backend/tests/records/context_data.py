@@ -70,7 +70,11 @@ POINT_PLACEHOLDERS = ("{lat}", "{lon}", "{easting}", "{northing}")
 # kilometre (the Wiltshire HER's 25,432 points over 3,485 km², 468,176
 # obliques over England), so a few hundred come back, under every cap of
 # 1,000 or more. Sources with a smaller cap, or that search a fixed radius,
-# start at zoom 14, a quarter of that area. The ADS map search answers any
+# start at zoom 14, a quarter of that area. That doesn't keep the ADS
+# catalogue search under its cap of 50: its work-list gotcha counted 900 hits
+# in about 15 km², so a zoom-14 viewport holds several hundred. The browser
+# pages it with `page` past the first 50, and its `min_zoom` only bounds how
+# many pages that takes. The ADS map search answers any
 # viewport with a grid beyond 500 hits, so it is asked from zoom 10. A
 # request by record id has no zoom and no cap.
 GEOJSON = "geojson"

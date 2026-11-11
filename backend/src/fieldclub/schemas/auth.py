@@ -26,7 +26,9 @@ class Me(ApiModel):
     """
 
     # The account's own id, which never changes, so a browser can tell whose
-    # drafts are whose after a change of handle. Never part of `PublicUser`.
+    # drafts are whose after a change of handle. Never part of `PublicUser`,
+    # but not secret: moderators see it as `TargetOut.id` of a person who was
+    # reported or acted on.
     id: int
     handle: str
     display_name: str

@@ -10,8 +10,9 @@ everything from the models plus `models/extras.sql`, and is safe to run again.
 
 from __future__ import annotations
 
+import argparse
 import logging
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from importlib import resources
 
 from sqlalchemy import Engine, MetaData, create_engine, text
@@ -153,8 +154,13 @@ def create_schema(engine: Engine | None = None) -> None:
     logger.info("Schema is up to date (%d tables)", len(Base.metadata.tables))
 
 
-def main() -> None:
+def main(argv: Sequence[str] | None = None) -> None:
     """`python -m fieldclub.db` builds the schema in the configured database."""
+    parser = argparse.ArgumentParser(
+        prog="python -m fieldclub.db",
+        description="Create the extensions, tables and extras in FIELDCLUB_DATABASE_URL. Safe to run again.",
+    )
+    parser.parse_args(argv)
     logging.basicConfig(level=get_settings().log_level)
     create_schema()
     print(f"Schema created in {get_engine().url.render_as_string(hide_password=True)}")

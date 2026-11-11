@@ -308,7 +308,7 @@ class Mention(Base):
 
     id: Mapped[IdPk]
     created_at: Mapped[CreatedAt]
-    finding_id: Mapped[int] = fk("findings.id", ondelete="CASCADE")
+    finding_id: Mapped[int] = fk("findings.id", ondelete="CASCADE", index=True)
     user_id: Mapped[int | None] = fk("users.id", ondelete="SET NULL")
     kind: Mapped[str] = mapped_column(Text)
     url: Mapped[str] = mapped_column(Text)

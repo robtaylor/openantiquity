@@ -149,8 +149,11 @@ def test_every_table_pointing_at_findings_indexes_the_link(database: Engine) -> 
     for table in sorted(EXPECTED_TABLES):
         if "finding_id" not in {column["name"] for column in inspector.get_columns(table)}:
             continue
+        # A partial index serves only queries whose WHERE implies its own, so it doesn't count.
         leading = {
-            index["column_names"][0] for index in inspector.get_indexes(table) if index["column_names"]
+            index["column_names"][0]
+            for index in inspector.get_indexes(table)
+            if index["column_names"] and "postgresql_where" not in index.get("dialect_options", {})
         }
         leading |= {constraint["column_names"][0] for constraint in inspector.get_unique_constraints(table)}
         primary = inspector.get_pk_constraint(table)["constrained_columns"]
@@ -272,3 +275,23 @@ def test_sessions_use_this_test_database(database: Engine) -> None:
     assert database.url.database.startswith("fieldclub_test_")
     with fieldclub_db.SessionLocal() as session:
         assert session.scalar(text("SELECT current_database()")) == database.url.database
+
+
+@pytest.mark.parametrize("args", [["--help"], ["--frobnicate"], ["extra"]])
+def test_the_schema_command_builds_nothing_when_asked_anything_else(
+    monkeypatch: pytest.MonkeyPatch, args: list[str]
+) -> None:
+    def refuse() -> None:
+        raise AssertionError("the schema was built")
+
+    monkeypatch.setattr(fieldclub_db, "create_schema", refuse)
+    with pytest.raises(SystemExit) as stopped:
+        fieldclub_db.main(args)
+    assert stopped.value.code == (0 if args == ["--help"] else 2)
+
+
+def test_the_schema_command_builds_the_schema_with_no_arguments(monkeypatch: pytest.MonkeyPatch) -> None:
+    built: list[bool] = []
+    monkeypatch.setattr(fieldclub_db, "create_schema", lambda: built.append(True))
+    fieldclub_db.main([])
+    assert built == [True]
