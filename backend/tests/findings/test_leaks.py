@@ -11,6 +11,7 @@ degrees, both grid references, and easting and northing.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -68,10 +69,19 @@ def exact_strings(level: Sensitivity) -> list[str]:
     ]
 
 
+# The time of day in an ISO timestamp, down to its fraction of a second.
+_TIMES = re.compile(r"\d{2}:\d{2}:\d{2}\.\d+")
+
+
 def check(
     text: str, allowed: set[Sensitivity], present: set[Sensitivity] | None = None, *, where: str
 ) -> None:
-    """Every level's exact position is absent unless allowed, and present where it must be."""
+    """Every level's exact position is absent unless allowed, and present where it must be.
+
+    Times are taken out first: a timestamp such as `11:07:51.776491` carries no
+    position, but its seconds can spell one, which made this check fail at random.
+    """
+    text = _TIMES.sub("", text)
     for level in LEVELS:
         leaked = [s for s in exact_strings(level) if s in text]
         if level not in allowed:
