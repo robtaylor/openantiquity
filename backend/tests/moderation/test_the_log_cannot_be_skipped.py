@@ -45,6 +45,24 @@ FOR_THE_CALLER = {
     ("POST", f"{API}/media"): "uploads as the caller",
     ("POST", f"{API}/reports"): "reports as the caller",
     ("POST", f"{API}/terrain/profile"): "reads elevation, changes nothing",
+    ("POST", f"{API}/notifications/read"): "the caller's own notifications",
+    ("PUT", f"{API}/squares/{{ref}}"): "the caller's own survey of a square",
+    ("POST", f"{API}/investigations"): "starts an investigation as the caller",
+    ("PATCH", f"{API}/investigations/{{public_id}}"): "its owner and editors only",
+    ("DELETE", f"{API}/investigations/{{public_id}}"): "its owner only: investigation_owner_only",
+    ("POST", f"{API}/investigations/{{public_id}}/items"): "its owner and editors only",
+    ("PATCH", f"{API}/investigations/{{public_id}}/items/{{item_id}}"): "its owner and editors only",
+    ("POST", f"{API}/investigations/{{public_id}}/items/{{item_id}}/move"): "its owner and editors only",
+    ("DELETE", f"{API}/investigations/{{public_id}}/items/{{item_id}}"): "its owner and editors only",
+    ("PUT", f"{API}/investigations/{{public_id}}/members/{{handle}}"): "its owner only",
+    ("DELETE", f"{API}/investigations/{{public_id}}/members/{{handle}}"): "its owner, or the member leaving",
+    ("POST", f"{API}/investigations/{{public_id}}/invitation"): "the caller's own invitation",
+    ("POST", f"{API}/findings/{{public_id}}/mentions"): "adds a mention as the caller",
+    ("POST", f"{API}/mentions/preview"): "fetches an address, stores nothing",
+    # Not yet true. The mentions track lets a moderator remove someone else's mention here with no
+    # reason and no log entry. It was written beside this rule, not under it: a moderator should
+    # hide a mention through /mod/mentions/{id}/hide instead, as with comments and evidence.
+    ("DELETE", f"{API}/mentions/{{mention_id}}"): "the person who added it (and, for now, a moderator)",
 }
 
 
