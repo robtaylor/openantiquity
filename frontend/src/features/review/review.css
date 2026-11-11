@@ -19,6 +19,12 @@
   color: var(--text);
 }
 
+/* Each card's question takes focus, so its ring stands off the text. */
+.fc-review__intro:focus-visible {
+  outline-offset: 4px;
+  border-radius: var(--radius-sm);
+}
+
 .fc-review__place {
   color: var(--text-muted);
   font-size: 13px;

@@ -29,8 +29,12 @@ export function othersSentence({ yes, unsure, no }: Comparison["others"]): strin
  * compares with the finder's and everyone else's, and whether it moved the
  * finding. Shown only from the server's reply to the answer, so nothing here
  * can appear before it is given.
+ *
+ * It isn't a live region itself, because one that arrives already filled is
+ * often not read out. The page puts it in a region that was there before,
+ * or points the control that takes focus at it through `id`.
  */
-export function RevealSummary({ meta, reveal }: { meta: Meta; reveal: Reveal }) {
+export function RevealSummary({ meta, reveal, id }: { meta: Meta; reveal: Reveal; id?: string }) {
   const { comparison, observation } = reveal;
   const moved = changeMessage(
     meta,
@@ -40,7 +44,7 @@ export function RevealSummary({ meta, reveal }: { meta: Meta; reveal: Reveal }) 
   const yours = observation.feature_class;
   const classes = meta.vocab.feature_classes;
   return (
-    <div className="fc-reveal" role="status">
+    <div className="fc-reveal" id={id}>
       <p className="fc-reveal__answer">
         <strong>{ANSWER_WORDS[observation.visible].given}.</strong> {othersSentence(comparison.others)}
       </p>

@@ -1,5 +1,5 @@
 import { Coffee, HandHelping, LogIn, RotateCcw, ScanSearch, Send, SkipForward, Unplug } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { Link } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { Button } from "../../ui/Button.js";
@@ -35,19 +35,42 @@ function Ask({ meta, card, draft }: { meta: Meta; card: ReviewCard; draft: KindD
   const sending = useReviewStore((state) => state.sending);
   const { setAnswer, skip } = useReviewStore.getState();
   const { ready } = useSession();
-  const { isPhone } = usePanelEnvironment();
+  const { isPhone, shouldTakeFocus } = usePanelEnvironment();
   const send = useSendAnswer(meta);
+  const question = useRef<HTMLParagraphElement>(null);
+  const sendBar = useRef<HTMLDivElement>(null);
+  /** An answer given by its key: focus goes to the send button, so Enter sends it. */
+  const byKey = useRef(false);
+
+  // Each card starts at its question, so the keyboard and a screen reader start there too, not from the top of
+  // the page: unless focus is somewhere else on purpose, or the page has only just loaded (see `PanelFrame`).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new card is the trigger
+  useEffect(() => {
+    const active = document.activeElement;
+    const lost = active === null || active === document.body;
+    const inPanel = active !== null && question.current?.closest(".fc-panel")?.contains(active) === true;
+    if (inPanel || (lost && shouldTakeFocus())) question.current?.focus({ preventScroll: true });
+  }, [card.public_id]);
+
+  useEffect(() => {
+    if (!answer || !byKey.current) return;
+    byKey.current = false;
+    sendBar.current?.querySelector("button")?.focus({ preventScroll: true });
+  }, [answer]);
 
   function choose(visible: Visible): void {
     if (sending) return;
     const now = useReviewStore.getState().answer;
     setAnswer(now ? { ...now, visible } : newAnswer(visible));
   }
-  useAnswerKeys(!sending, choose);
+  useAnswerKeys(!sending, (visible) => {
+    byKey.current = true;
+    choose(visible);
+  });
 
   return (
     <div className="fc-review__ask">
-      <p className="fc-review__intro">
+      <p className="fc-review__intro" ref={question} tabIndex={-1}>
         A second look is someone else checking a finding without being told what its finder thought. Look in the frame
         on the map, in the view the finder used. Can you see a feature there?
       </p>
@@ -56,13 +79,13 @@ function Ask({ meta, card, draft }: { meta: Meta; card: ReviewCard; draft: KindD
       </p>
       <AnswerButtons value={answer?.visible ?? null} onChoose={choose} disabled={sending} keyHints={!isPhone} />
       <p className="fc-finding__hint">
-        {isPhone ? "" : "Press 1, 2 or 3 to answer. "}
+        {isPhone ? "" : "Press 1, 2 or 3 to answer, then Enter to send. "}
         You'll see what the finder thought, and what others said, once you've sent your answer.
       </p>
       {answer ? (
         <>
           <AnswerDetail meta={meta} answer={answer} onChange={setAnswer} />
-          <div className="fc-second-look__send">
+          <div className="fc-second-look__send" ref={sendBar}>
             <Button
               variant="primary"
               block

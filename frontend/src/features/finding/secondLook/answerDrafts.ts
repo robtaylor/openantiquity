@@ -14,7 +14,7 @@ import { create } from "zustand";
 import { isRecord } from "../../../api/guards.js";
 import { onPersonChanged } from "../../account/session.js";
 import { defineDraftKind } from "../../drafts/savers.js";
-import { DRAFT_KINDS } from "../../drafts/store.js";
+import { DRAFT_KINDS, type Draft, discardDraft, listDrafts } from "../../drafts/store.js";
 import { putObservation } from "../api.js";
 import { ANSWERS, type ObservationIn, type Reveal } from "../types.js";
 
@@ -85,3 +85,18 @@ export const answerDrafts = defineDraftKind<AnswerDraftData>({
   },
   describe: () => "A second look",
 });
+
+/** The drafts in this browser that answer the finding: one at most, as a new answer replaces the old. */
+export function answerDraftsFor(publicId: string): readonly Draft[] {
+  return listDrafts().filter((draft) => answerDrafts.read(draft)?.public_id === publicId);
+}
+
+/**
+ * Forget any draft answer to the finding, once an answer to it has been
+ * sent another way. Left, a draft that failed to save would be offered
+ * again, and the server can only refuse it, because an answer is final
+ * (Decision 0008).
+ */
+export function discardAnswerDrafts(publicId: string): void {
+  for (const draft of answerDraftsFor(publicId)) discardDraft(draft.id);
+}

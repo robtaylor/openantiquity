@@ -2,10 +2,10 @@ import type { Locator, Page } from "@playwright/test";
 import { DRAFTS_STORAGE_KEY } from "../src/features/drafts/store.js";
 import { findingCollection } from "../src/test/fixtures/findings.js";
 import { fakeSession, meWith } from "./support/account.js";
-import { boxOf, openMap } from "./support/app.js";
+import { boxOf, openMap, overlaps } from "./support/app.js";
 import { expect, test } from "./support/fixtures.js";
 import { serveFindings } from "./support/markerTiles.js";
-import { apiRoute } from "./support/network.js";
+import { apiRoute, FINDING_PAGE_ROUTE } from "./support/network.js";
 import { fakeQueue, queuedFinding } from "./support/review.js";
 
 /**
@@ -157,6 +157,25 @@ test("answers, sees how it compares and that it moved up, and goes on with one p
   expect(queue.answers["f-bank"]).toBeUndefined();
 });
 
+test("opened from Explore, the frame is in the middle of the map left uncovered, clear of the primary button", async ({
+  page,
+}) => {
+  await fakeSession(page, MEMBER);
+  await fakeQueue(page, [CLAIMED]);
+  // Explore rests the phone sheet at peek, and the queue at half: the card waits for the sheet to get there.
+  await openMap(page, `/${VIEW}`);
+  await page.getByRole("navigation", { name: "Modes" }).getByRole("link", { name: "Second look" }).click();
+  await expect(page.locator(".fc-look-here")).toBeVisible();
+  await expect(async () => {
+    const frame = await boxOf(page.locator(".fc-look-here"));
+    const stage = await boxOf(page.locator(".fc-stage"));
+    const button = await boxOf(page.getByRole("button", { name: "Mark a finding" }));
+    expect(overlaps(frame, button), "the primary button covers the frame").toBe(false);
+    expect(Math.abs(frame.y + frame.height / 2 - (stage.y + stage.height / 2))).toBeLessThan(4);
+    expect(Math.abs(frame.x + frame.width / 2 - (stage.x + stage.width / 2))).toBeLessThan(4);
+  }).toPass();
+});
+
 test("a signed-out answer is a draft through a provider's round trip, saved once, then revealed", async ({ page }) => {
   const session = await fakeSession(page);
   const queue = await fakeQueue(page, [CLAIMED]);
@@ -200,6 +219,41 @@ test("a signed-out answer is a draft through a provider's round trip, saved once
 test.describe("failures", () => {
   // The browser reports the refused request as a console error, which is the point here.
   test.use({ pageProblems: "page-errors" });
+
+  test("a draft answer that failed to save, changed and sent from the card, is not offered again", async ({ page }) => {
+    const session = await fakeSession(page);
+    const queue = await fakeQueue(page, [CLAIMED]);
+    let failNext = true;
+    await page.route(FINDING_PAGE_ROUTE, (route) => {
+      if (route.request().method() !== "PUT" || !failNext) return route.fallback();
+      failNext = false;
+      return route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: '{"error":{"code":"internal","message":"Broke."}}',
+      });
+    });
+    await openMap(page, `/review${VIEW}`);
+    const look = panel(page);
+    await look.getByRole("button", { name: "Not sure", exact: true }).click();
+    await look.getByRole("button", { name: "Send “Not sure”" }).click();
+    await page.route(apiRoute("/auth/oauth/google/start"), (route) => {
+      const next = new URL(route.request().url()).searchParams.get("next") ?? "/";
+      session.set(MEMBER);
+      return route.fulfill({ status: 302, headers: { Location: next } });
+    });
+    await page.getByRole("dialog", { name: "Sign in" }).getByRole("link", { name: "Continue with Google" }).click();
+    await expect(look.getByText(/It couldn't be saved/)).toBeVisible();
+
+    await look.getByRole("button", { name: "Change my answer" }).click();
+    await look.getByRole("button", { name: "I can see it", exact: true }).click();
+    await look.getByRole("button", { name: "Send “I can see it”" }).click();
+    await expect(look.getByRole("heading", { name: CLAIMED.title })).toBeVisible();
+    expect(queue.answers["f-ring"]).toEqual([{ visible: "yes" }]);
+    await expect(page.getByRole("region", { name: "Drafts" })).toHaveCount(0);
+    const left = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "{}"), DRAFTS_STORAGE_KEY);
+    expect(left.drafts).toEqual([]);
+  });
 
   test("an empty queue says so and offers other work, and a failed one offers a retry", async ({ page }) => {
     let fail = true;

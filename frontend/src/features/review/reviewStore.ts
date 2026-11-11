@@ -7,20 +7,20 @@
  * place and a view. Nothing about the finder's claim is kept until the
  * answer's reply reveals it (Decision 0008).
  *
- * The current card is also kept in this tab's `sessionStorage`, so that a
- * provider's sign-in, which reloads the page, comes back to the card whose
- * answer is waiting as a draft. It is read back only when that draft is
- * still there, and is forgotten when the person changes otherwise, because a
- * card's place is exact and the next person may not be allowed to see it
- * (Decision 0005).
+ * While the current card's answer is waiting as a draft, the card is also
+ * kept in this tab's `sessionStorage`, so that a provider's sign-in, which
+ * reloads the page, comes back to it. It is written only while that draft
+ * exists, removed as soon as it doesn't, and read back only when the draft
+ * is still there, because a card's place is exact and the next person may
+ * not be allowed to see it (Decision 0005).
  */
 
 import { create } from "zustand";
 import { isRecord } from "../../api/guards.js";
 import { onPersonChanged } from "../account/session.js";
-import { listDrafts } from "../drafts/store.js";
+import { subscribeDrafts } from "../drafts/store.js";
 import type { AnswerDraft } from "../finding/secondLook/answer.js";
-import { answerDrafts } from "../finding/secondLook/answerDrafts.js";
+import { answerDraftsFor } from "../finding/secondLook/answerDrafts.js";
 import type { Reveal } from "../finding/types.js";
 import type { ReviewCard } from "./types.js";
 
@@ -59,10 +59,9 @@ export interface ReviewState {
   reset: () => void;
 }
 
-function readStoredCard(): ReviewCard | null {
+function parseStoredCard(raw: string | null): ReviewCard | null {
+  if (raw === null) return null;
   try {
-    const raw = sessionStorage.getItem(CARD_STORAGE_KEY);
-    if (raw === null) return null;
     const value: unknown = JSON.parse(raw);
     if (!isRecord(value) || typeof value.public_id !== "string" || !isRecord(value.place)) return null;
     const card = value as unknown as ReviewCard;
@@ -70,6 +69,19 @@ function readStoredCard(): ReviewCard | null {
   } catch {
     return null;
   }
+}
+
+/** The card kept over a provider's round trip, if its draft is still here. A copy that isn't wanted is removed. */
+export function readStoredCard(): ReviewCard | null {
+  let raw: string | null = null;
+  try {
+    raw = sessionStorage.getItem(CARD_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+  const card = parseStoredCard(raw);
+  if (card === null && raw !== null) storeCard(null);
+  return card;
 }
 
 function storeCard(card: ReviewCard | null): void {
@@ -83,7 +95,7 @@ function storeCard(card: ReviewCard | null): void {
 
 /** True when this browser holds an answer to the finding as a draft. */
 export function hasDraft(publicId: string): boolean {
-  return listDrafts().some((draft) => answerDrafts.read(draft)?.public_id === publicId);
+  return answerDraftsFor(publicId).length > 0;
 }
 
 const FRESH = {
@@ -127,9 +139,16 @@ export const useReviewStore = create<ReviewState>()((set, get) => ({
   reset: () => set({ ...FRESH }),
 }));
 
+/** Keep the current card in `sessionStorage` exactly while its answer is waiting as a draft. */
+function keepCardForSignIn(): void {
+  const { current } = useReviewStore.getState();
+  storeCard(current !== null && hasDraft(current.public_id) ? current : null);
+}
+
 useReviewStore.subscribe((next, previous) => {
-  if (next.current !== previous.current) storeCard(next.current);
+  if (next.current !== previous.current) keepCardForSignIn();
 });
+subscribeDrafts(keepCardForSignIn);
 
 // A new person gets a queue of their own. The card stays only when its answer is waiting as their draft.
 onPersonChanged(() => {

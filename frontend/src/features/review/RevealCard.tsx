@@ -11,6 +11,9 @@ import { RevealSummary } from "../finding/secondLook/RevealSummary.js";
 import type { Reveal } from "../finding/types.js";
 import { findingPath } from "../findings/selection.js";
 
+/** The summary, which "Next finding" is described by, so it is read out with the button that takes focus. */
+const SUMMARY_ID = "fc-review-reveal-summary";
+
 export interface RevealCardProps {
   meta: Meta;
   reveal: Reveal;
@@ -40,7 +43,7 @@ export function RevealCard({ meta, reveal, onNext }: RevealCardProps) {
 
   return (
     <section className="fc-review__reveal" aria-labelledby="fc-review-revealed" ref={section}>
-      <RevealSummary meta={meta} reveal={reveal} />
+      <RevealSummary meta={meta} reveal={reveal} id={SUMMARY_ID} />
 
       <div className="fc-review__finding">
         <p className="fc-review__eyebrow">What the finder marked</p>
@@ -73,12 +76,18 @@ export function RevealCard({ meta, reveal, onNext }: RevealCardProps) {
           </p>
         ) : null}
         <p className="fc-finding__hint">
-          Your answer is final now. You can add a note to it, or take it back, on the finding's page.
+          You can't change your answer now. On the finding's page you can add a note to it, or take it back so it stops
+          counting.
         </p>
       </div>
 
       <div className="fc-second-look__send fc-review__actions" ref={actions}>
-        <Button variant="primary" icon={<ArrowRight size={16} aria-hidden />} onClick={onNext}>
+        <Button
+          variant="primary"
+          icon={<ArrowRight size={16} aria-hidden />}
+          onClick={onNext}
+          aria-describedby={SUMMARY_ID}
+        >
           Next finding
         </Button>
         <Link className="fc-button fc-button--ghost fc-button--md" to={findingPath(finding.public_id)}>

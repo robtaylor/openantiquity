@@ -63,6 +63,29 @@ export function uncoveredOffset(): ScreenOffset {
   };
 }
 
+/**
+ * Run `then` once the part of the map nothing covers has stopped moving. A
+ * panel opening, or the phone sheet going to another stop, slides it for
+ * 150 to 200 ms, and a place centred while it slides is centred for where it
+ * was. Waits one frame first, so the render that moved it has been drawn.
+ * Returns a function that calls the whole thing off.
+ */
+export function whenStageSettled(then: () => void): () => void {
+  let cancelled = false;
+  function check(): void {
+    if (cancelled) return;
+    // Asking for the animations brings the styles up to date, so a slide that has just been set going is among them.
+    const moving = document.querySelector(".fc-stage")?.getAnimations?.() ?? [];
+    if (moving.length === 0) then();
+    else void Promise.allSettled(moving.map((animation) => animation.finished)).then(check);
+  }
+  const frame = requestAnimationFrame(check);
+  return () => {
+    cancelled = true;
+    cancelAnimationFrame(frame);
+  };
+}
+
 function bounded(value: number | null | undefined, range: { min: number; max: number }): number | undefined {
   return value === null || value === undefined || !Number.isFinite(value)
     ? undefined
@@ -146,7 +169,9 @@ export function useFindingOnMap(finding: FindingDetail): void {
   }, [publicId, lon, lat, obscured]);
   useEffect(() => {
     if (moved.current === publicId) return;
-    moved.current = publicId;
-    goToFinding(finding);
+    return whenStageSettled(() => {
+      moved.current = publicId;
+      goToFinding(finding);
+    });
   }, [publicId, finding]);
 }

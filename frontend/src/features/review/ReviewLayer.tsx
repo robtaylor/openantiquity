@@ -6,9 +6,10 @@ import { useHideFindingsWhile } from "../../map/hiddenFindings.js";
 import { isMapLive } from "../../map/MapPane.js";
 import { useMainMap } from "../../map/mainMap.js";
 import { screenPoint, useMapFrame } from "../../map/useMapFrame.js";
-import { seeViewAt } from "../finding/mapView.js";
+import { seeViewAt, whenStageSettled } from "../finding/mapView.js";
 import { useSavedAnswers } from "../finding/secondLook/answerDrafts.js";
 import { useApplyFinding } from "../finding/useFinding.js";
+import { useForgetClaimsWhile } from "./forgetClaims.js";
 import { useReviewStore } from "./reviewStore.js";
 import type { ReviewCard, ReviewPlace } from "./types.js";
 import "./review.css";
@@ -30,9 +31,8 @@ function useMoveToCard(meta: Meta, card: ReviewCard | null, reviewing: boolean):
     if (!reviewing) movedFor.current = null;
     if (!card || movedFor.current === card.public_id) return;
     movedFor.current = card.public_id;
-    // After the render that brings up the panel, so the part of the map it leaves uncovered is known.
-    const frame = requestAnimationFrame(() => seeViewAt(meta, [card.place.lon, card.place.lat], card.view_state));
-    return () => cancelAnimationFrame(frame);
+    // Once the panel, or the sheet at its stop, has settled, so the part of the map it leaves uncovered is known.
+    return whenStageSettled(() => seeViewAt(meta, [card.place.lon, card.place.lat], card.view_state));
   }, [meta, card, reviewing]);
 }
 
@@ -72,8 +72,9 @@ function LookHere({ map, place }: { map: MapLibreMap; place: ReviewPlace }) {
 /**
  * What a second look does to the map: while the queue is open every
  * finding's marker is taken off, because a marker at the spot gives the game
- * away (Decision 0008), and for each card the map goes to its place in the
- * finder's view and a frame marks the place. Mounted once, by the shell, so
+ * away (Decision 0008), and what the cache held about findings is dropped.
+ * For each card the map goes to its place in the finder's view and a frame
+ * marks the place. Mounted once, by the shell, so
  * it holds while the layer panel is open over the queue.
  */
 export function ReviewLayer({ meta }: { meta: Meta }) {
@@ -84,6 +85,7 @@ export function ReviewLayer({ meta }: { meta: Meta }) {
   // From the moment the queue opens, not only once a card is up: asked for before the first card arrives,
   // the findings in view would carry the title of the finding the card turns out to be.
   useHideFindingsWhile(HIDE_REASON, reviewing);
+  useForgetClaimsWhile(reviewing);
   useMoveToCard(meta, card, reviewing);
   useRevealFromDraft(card);
   useMapFrame(card ? map : null);

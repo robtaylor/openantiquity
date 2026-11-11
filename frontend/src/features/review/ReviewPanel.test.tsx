@@ -162,6 +162,30 @@ describe("a blind card", () => {
     expect(await panel.findByRole("button", { name: "I can see it" })).toHaveAttribute("aria-pressed", "false");
     expect(panel.queryByRole("heading", { name: CLAIMED.title })).toBeNull();
     expect(useReviewStore.getState().current?.public_id).toBe("f-next");
+    // The button that was pressed has gone: the next card's question has focus, not the top of the page.
+    expect(panel.getByText(/Can you see a feature there\?/)).toHaveFocus();
+  });
+
+  it("answers by key and sends with Enter: the send button takes focus after a key, not after a click", async () => {
+    const user = userEvent.setup();
+    const routes = serve([card("f-ring")]);
+    const panel = await openQueue();
+    await panel.findByRole("group", { name: "Can you see it?" });
+    await user.keyboard("2");
+    expect(panel.getByRole("button", { name: "Send “Not sure”" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(await panel.findByRole("heading", { name: CLAIMED.title })).toBeInTheDocument();
+    expect(routes.callsTo("PUT /findings/f-ring/observation").map((call) => call.body)).toEqual([
+      { visible: "unsure" },
+    ]);
+  });
+
+  it("leaves focus on an answer that was clicked", async () => {
+    const user = userEvent.setup();
+    serve([card("f-ring")]);
+    const panel = await openQueue();
+    await user.click(await panel.findByRole("button", { name: "I can see it" }));
+    expect(panel.getByRole("button", { name: "I can see it" })).toHaveFocus();
   });
 
   it("skips a card without sending anything", async () => {

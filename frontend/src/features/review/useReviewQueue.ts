@@ -10,7 +10,7 @@ import { DraftBusyError, DraftTooLargeError } from "../drafts/store.js";
 import { putObservation } from "../finding/api.js";
 import { reasonOf, useSignedInFirst } from "../finding/feedback.js";
 import { type AnswerDraft, answerBody } from "../finding/secondLook/answer.js";
-import { answerDrafts } from "../finding/secondLook/answerDrafts.js";
+import { answerDrafts, discardAnswerDrafts } from "../finding/secondLook/answerDrafts.js";
 import { useApplyFinding } from "../finding/useFinding.js";
 import { fetchReviewCards } from "./api.js";
 import { reviewKeys } from "./keys.js";
@@ -88,7 +88,8 @@ export function useReviewQueue(): QueueStatus {
  * step, it goes at once and the reply reveals the finding. Otherwise it is
  * kept as a draft (replacing an earlier draft for the same finding, which
  * can still be changed until it is saved) and the sign-in sheet opens; the
- * reveal waits until the drafts machinery has saved it.
+ * reveal waits until the drafts machinery has saved it. An answer sent at
+ * once replaces any draft answer to the same finding that failed to save.
  */
 export function useSendAnswer(meta: Meta): (card: ReviewCard, answer: AnswerDraft) => Promise<void> {
   const { ready } = useSession();
@@ -113,13 +114,15 @@ export function useSendAnswer(meta: Meta): (card: ReviewCard, answer: AnswerDraf
         }
         store.setAnswer(null);
         if (!(await signedIn())) {
-          toast("Your answer is kept in this browser. Sign in when you're ready, and it will be saved.");
+          toast("Your answer is kept in this browser until you sign in.");
         }
         return;
       }
       store.setSending(true);
       try {
         const reveal = await putObservation(card.public_id, body);
+        // A draft of an earlier answer that failed to save is done with: this answer is the one that counts.
+        discardAnswerDrafts(card.public_id);
         apply(reveal.finding);
         useReviewStore.getState().revealed(reveal);
       } catch (error) {
