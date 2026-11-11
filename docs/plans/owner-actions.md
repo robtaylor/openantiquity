@@ -15,13 +15,16 @@ The plan serves [v1-england.md](v1-england.md) and the decisions on accounts ([0
 - The owner has a name, role and contact address to sign with. Every draft ends with a placeholder for them.
 - Field Club facts used in every draft: free, non-commercial, citizen-science, contributors aged 16 and over, no private messaging, contributions under CC BY 4.0, deployed on Google Cloud.
 
-## Where things stand (2026-11-10)
+## Where things stand (2026-11-11)
 
 - WS1 England LIDAR: done on 2026-11-10. Defra supplied the 2022 composite in bulk with no time limit, ticket DSP3-11967.
 - WS2 Google Cloud project: the project `fieldclub-uk` exists, without billing. The v1 deployment workstream and the full LIDAR copy wait on the billing link.
 - WS3 Sign-in credentials: to do. Only OpenStreetMap and Google were looked at by the research.
 - WS4 Other keys and accounts: to do. None is needed for the first build.
-- WS5 to WS12 Record holders and LIDAR wording: to do. No letter sent.
+- WS5 Archaeology Data Service: letter sent on 2026-11-11. Awaiting a reply.
+- WS6 to WS8 Historic England, the Portable Antiquities Scheme and local record offices in England: to do. No letter sent.
+- WS9 Scotland, Wales, Northern Ireland and the islands: the letter to Historic Environment Scotland was sent on 2026-11-11. Awaiting a reply. The other letters in the workstream aren't sent.
+- WS10 to WS12: to do. No letter sent.
 - WS13 Browser checklist: to do.
 - WS14 to WS18 Legal steps before launch: to do. The operating entity isn't chosen yet, and several steps wait on it.
 - WS19 Courtesy notices: to do.
@@ -141,7 +144,7 @@ These need a person's details, so the research didn't create them.
 
 ### WS5 — Archaeology Data Service
 
-**Status:** To do.
+**Status:** Sent on 2026-11-11. Awaiting a reply.
 
 **Contact.** ADS Helpdesk, help@archaeologydataservice.ac.uk, the address the research found on the ADS Deposit Agreement page. The research also named a contact form at https://archaeologydataservice.ac.uk/contact/.
 
@@ -155,7 +158,7 @@ These need a person's details, so the research didn't create them.
 
 **Meanwhile.** The browser queries ADS directly and Field Club stores only record identifiers and addresses, as Decision 0007 sets out. The research flagged that this exposes users' IP addresses and queries to ADS, which needs a line in the privacy notice in WS16.
 
-**Draft:**
+**Draft.** Sent on 2026-11-11:
 
 ```text
 To: help@archaeologydataservice.ac.uk
@@ -522,7 +525,7 @@ With thanks,
 
 ### WS9 — Record holders in Scotland, Wales, Northern Ireland and the islands
 
-**Status:** To do.
+**Status:** In progress. The letter to Historic Environment Scotland was sent on 2026-11-11 and awaits a reply. The others aren't sent.
 
 **What it unblocks.** All three nations' national indexes and designations are open and need no letter. The asks below cover the gaps around them.
 
@@ -542,7 +545,7 @@ On NRHE Areas, the research found the spatialdata.gov.scot download link was a g
 
 **Meanwhile.** Deep links, and a manual browser download of NRHE Areas and the radiocarbon index through the checklist in WS13.
 
-**Draft, Historic Environment Scotland:**
+**Draft, Historic Environment Scotland.** Sent on 2026-11-11 with small changes by the owner, so the sent text differs a little from this draft:
 
 ```text
 To: trove@hes.scot
