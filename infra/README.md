@@ -19,7 +19,7 @@ export P=<field-club-project-id>
 | `terraform/` | The project's resources. `example.tfvars` lists the inputs |
 | `terraform/modules/cdn/` | The optional load balancer and CDN, off by default |
 | `terraform/tests/` | Offline checks with the Google provider mocked |
-| `../.github/workflows/ci.yml` | Checks on every push and pull request |
+| `../.github/workflows/ci.yml` | Checks on pushes to main and on pull requests |
 | `../.github/workflows/deploy.yml` | Run by hand: build, push and plan. It doesn't apply |
 
 ## What gets built
@@ -66,12 +66,14 @@ It checks the project and its billing, enables the three APIs Terraform needs to
 
 ```
 cd infra/terraform
-cp example.tfvars terraform.tfvars        # fill in project_id, billing_account, contact
+cp example.tfvars terraform.tfvars        # fill in project_id, billing_account, contact, terms_url
 terraform init -backend-config="bucket=$P-tfstate"
 terraform apply
 ```
 
 With `run_workloads = false` this makes the registry, buckets, database, empty secrets, service accounts and budget. It takes about ten minutes, most of it the database.
+
+`terms_url` is the address of the contributor terms that the welcome step asks everyone to accept: a path on the site or an https address. The workloads aren't created without it (step 6), and the backend refuses to start in production without it. `terms_summary` replaces the short summary shown beside it; empty keeps the backend's own. The site's `/about` page has no terms yet, so the default `/about#terms` would link to nothing.
 
 Leave `github_repository` empty for now: the federation is set up in step 12. `budget.currency` must be the billing account's own currency, shown on its overview page, or the budget is refused.
 
@@ -145,7 +147,7 @@ for secret in $(terraform output -json secrets | python3 -c 'import json,sys; pr
 done
 ```
 
-A provider's or the mail relay's secret may stay empty while its id is unset. Then set `run_workloads = true` and `image_tag` to the tag just pushed, and `terraform apply`. The service starts on `terraform output service_url`.
+A provider's or the mail relay's secret may stay empty while its id is unset. Then set `run_workloads = true`, `image_tag` to the tag just pushed and `schedules = { scan_channels = "", refresh_sources = "" }`, and `terraform apply`. The schedules stay off until step 10: a scheduled job could otherwise start before the tables exist, and the first nightly refresh would ingest every source while the elevation copy is running. The service starts on `terraform output service_url`.
 
 The service is public from this moment, but the tables don't exist until step 7, so until then the API answers with errors. Nobody has the address yet; run step 7 straight away.
 
@@ -200,7 +202,9 @@ gcloud run jobs execute fieldclub-ingest --region=europe-west2 --project="$P" --
   --args=run,he-nhle-scheduled-monuments
 ```
 
-One execution runs one source. Downloads are kept in the cache bucket under `ingest/` for 90 days, so the next run can ask the publisher whether a file changed. To ingest a source on a schedule, add it to `ingest_schedules`, for example `{ "he-nhle-scheduled-monuments" = "0 3 1 * *" }`.
+One execution runs one source. Downloads are kept in the cache bucket under `ingest/` for 90 days, so the next run can ask the publisher whether a file changed.
+
+Once the first ingests are in, remove the `schedules` line from `terraform.tfvars` and apply, which turns the channel scan and the nightly source refresh on. The refresh runs every enabled bulk connector and reference loader with no completed full run, or whose last one is older than its `max_age`, so it already covers every bulk source. `ingest_schedules` is only for a source that needs a different cadence, for example `{ "he-nhle-scheduled-monuments" = "0 3 1 * *" }`.
 
 ### 11. Point the domain
 

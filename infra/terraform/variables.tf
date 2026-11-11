@@ -70,6 +70,27 @@ variable "contact" {
   default     = ""
 }
 
+variable "terms_url" {
+  description = <<-EOT
+    Where the contributor terms are, as a path on the site or a full https
+    address. The welcome step asks everyone to accept what it links to, so
+    the workloads can't be run without it.
+  EOT
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.terms_url == "" || can(regex("^(/[^/\\\\]|https://)", var.terms_url))
+    error_message = "A path on the site, such as /terms, or an https address."
+  }
+}
+
+variable "terms_summary" {
+  description = "The short summary of the terms the welcome step shows. Empty keeps the backend's own."
+  type        = string
+  default     = ""
+}
+
 variable "service_cpu" {
   description = "vCPUs per service instance. See infra/README.md, Sizing."
   type        = string

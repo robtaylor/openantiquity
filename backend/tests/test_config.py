@@ -32,6 +32,7 @@ def prod_env(clean_env: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
     clean_env.setenv("FIELDCLUB_ENV", "prod")
     clean_env.setenv("FIELDCLUB_SECRET_KEY", "a-long-random-value")
     clean_env.setenv("FIELDCLUB_TRUSTED_PROXY_HOPS", "1")
+    clean_env.setenv("FIELDCLUB_TERMS_URL", "https://example.org/terms")
     return clean_env
 
 
@@ -55,6 +56,7 @@ def test_environment_variables_use_the_fieldclub_prefix(clean_env: pytest.Monkey
     clean_env.setenv("FIELDCLUB_ENV", "prod")
     clean_env.setenv("FIELDCLUB_SECRET_KEY", "a-long-random-value")
     clean_env.setenv("FIELDCLUB_TRUSTED_PROXY_HOPS", "1")
+    clean_env.setenv("FIELDCLUB_TERMS_URL", "/terms")
     clean_env.setenv("FIELDCLUB_PORT", "9000")
     clean_env.setenv("FIELDCLUB_SESSION_DAYS", "30")
     config = settings()
@@ -129,6 +131,7 @@ def test_production_refuses_to_start_with_dev_login_on(prod_env: pytest.MonkeyPa
 def test_production_must_say_how_many_proxies_it_is_behind(clean_env: pytest.MonkeyPatch) -> None:
     clean_env.setenv("FIELDCLUB_ENV", "prod")
     clean_env.setenv("FIELDCLUB_SECRET_KEY", "a-long-random-value")
+    clean_env.setenv("FIELDCLUB_TERMS_URL", "/terms")
     with pytest.raises(ConfigError, match="FIELDCLUB_TRUSTED_PROXY_HOPS"):
         settings()
     # Zero is a fine answer for a server reached directly. It has to be given.
@@ -136,6 +139,16 @@ def test_production_must_say_how_many_proxies_it_is_behind(clean_env: pytest.Mon
     assert settings().trusted_proxy_hops == 0
     clean_env.setenv("FIELDCLUB_TRUSTED_PROXY_HOPS", "2")
     assert settings().trusted_proxy_hops == 2
+
+
+def test_production_must_say_where_the_contributor_terms_are(prod_env: pytest.MonkeyPatch) -> None:
+    # The default points at a page the site doesn't have yet, and the welcome step asks
+    # everyone to accept what it links to.
+    prod_env.delenv("FIELDCLUB_TERMS_URL")
+    with pytest.raises(ConfigError, match="FIELDCLUB_TERMS_URL"):
+        settings()
+    prod_env.setenv("FIELDCLUB_TERMS_URL", "/about#terms")
+    assert settings().terms_url == "/about#terms", "said out loud, any address will do"
 
 
 @pytest.mark.parametrize("marker", ["K_SERVICE", "CLOUD_RUN_JOB"])

@@ -19,6 +19,7 @@ variables {
   billing_account = "000000-000000-000000"
   run_workloads   = true
   image_tag       = "abc1234"
+  terms_url       = "https://example.org/terms"
 }
 
 run "foundations_only_on_the_first_apply" {
@@ -41,6 +42,45 @@ run "foundations_only_on_the_first_apply" {
   assert {
     condition     = !contains(local.services, "compute.googleapis.com")
     error_message = "Compute Engine stays off without the CDN, because it brings an Editor service account."
+  }
+}
+
+run "the_workloads_need_the_contributor_terms" {
+  command = plan
+
+  variables {
+    terms_url = ""
+  }
+
+  expect_failures = [google_cloud_run_v2_service.web]
+}
+
+run "the_terms_reach_every_workload" {
+  command = plan
+
+  variables {
+    terms_summary = "Short terms."
+  }
+
+  assert {
+    condition     = local.common_env["FIELDCLUB_TERMS_URL"] == "https://example.org/terms" && local.service_env["FIELDCLUB_TERMS_SUMMARY"] == "Short terms."
+    error_message = "Every workload gets the terms address, and the service the summary when one is given."
+  }
+}
+
+run "every_mounted_bucket_is_writable_by_its_job" {
+  command = plan
+
+  # A job's bucket mount is read-write, so its service account needs objectUser on the
+  # whole bucket, or the mount or the first write fails.
+  assert {
+    condition = alltrue([
+      for name, job in local.jobs : job.mount.bucket == "" || anytrue([
+        for access in values(local.bucket_access) :
+        access.workload == name && access.bucket == job.mount.bucket && access.role == "roles/storage.objectUser" && try(access.only, "") == ""
+      ])
+    ])
+    error_message = "Every job that mounts a bucket has objectUser on that bucket."
   }
 }
 

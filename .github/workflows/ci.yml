@@ -1,4 +1,4 @@
-# Every push and pull request: both check suites, the docs lint, and the
+# Pushes to main and pull requests: both check suites, the docs lint, and the
 # deployment code. Third-party actions are pinned by commit; the comment
 # beside each says which release that commit is.
 name: CI

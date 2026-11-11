@@ -26,6 +26,7 @@ locals {
       "service/cache"                = { workload = "service", bucket = "cache", role = "roles/storage.objectUser" }
       "service/photos"               = { workload = "service", bucket = "photos", role = "roles/storage.objectUser" }
       "ingest/cache"                 = { workload = "ingest", bucket = "cache", role = "roles/storage.objectUser" }
+      "refresh-sources/cache"        = { workload = "refresh-sources", bucket = "cache", role = "roles/storage.objectUser" }
       "service/elev-read"            = { workload = "service", bucket = "elevation", role = "roles/storage.objectViewer" }
       "elevation-copy/elev-read"     = { workload = "elevation-copy", bucket = "elevation", role = "roles/storage.objectViewer" }
       "elevation-copy/elev-add"      = { workload = "elevation-copy", bucket = "elevation", role = "roles/storage.objectCreator" }

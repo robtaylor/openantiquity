@@ -13,6 +13,13 @@ resource "google_cloud_run_v2_service" "web" {
   # every request comes through the proxy count the settings expect.
   ingress = var.cdn.enabled ? "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" : "INGRESS_TRAFFIC_ALL"
 
+  lifecycle {
+    precondition {
+      condition     = var.terms_url != ""
+      error_message = "Set terms_url: the welcome step links to the contributor terms, and production refuses to start without it."
+    }
+  }
+
   template {
     service_account                  = google_service_account.workload["service"].email
     max_instance_request_concurrency = var.service_concurrency

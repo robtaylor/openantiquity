@@ -99,7 +99,8 @@ class Settings(BaseSettings):
     min_age: int = Field(default=16, ge=16, le=18)
     # The contributor terms the welcome step asks people to accept, as `/meta`
     # gives them: a short summary for the sheet, and where the full terms are.
-    # The address is a path on this site or a full https address.
+    # The address is a path on this site or a full https address. Production
+    # must set it, because the default names a page the site may not have.
     terms_summary: str = Field(
         default=(
             "You're 16 or over. What you add is public and published under CC BY 4.0, so anyone may "
@@ -243,6 +244,12 @@ class Settings(BaseSettings):
             raise ConfigError("FIELDCLUB_MAIL_BACKEND=log writes sign-in links to the log. Use smtp in prod.")
         if self.mail_backend == "smtp" and not (self.smtp_host and self.mail_from):
             raise ConfigError("FIELDCLUB_MAIL_BACKEND=smtp needs FIELDCLUB_SMTP_HOST and FIELDCLUB_MAIL_FROM")
+        if is_prod and "terms_url" not in self.model_fields_set:
+            # The welcome step asks everyone to accept what this links to.
+            raise ConfigError(
+                "FIELDCLUB_TERMS_URL must be set in production: the address of the contributor terms "
+                "the welcome step asks people to accept."
+            )
         return self
 
     @property

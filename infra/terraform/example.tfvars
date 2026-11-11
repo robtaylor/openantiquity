@@ -14,6 +14,10 @@ image_tag     = "latest"
 public_url = ""
 contact    = "https://example.org/fieldclub-contact"
 
+# The contributor terms the welcome step asks people to accept. Required
+# before the workloads run (step 5).
+terms_url = "https://example.org/fieldclub-terms"
+
 # Sign-in providers: set an id once its secret has a value.
 google_client_id = ""
 osm_client_id    = ""

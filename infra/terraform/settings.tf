@@ -22,7 +22,11 @@ locals {
     FIELDCLUB_TRUSTED_PROXY_HOPS = "0"
     FIELDCLUB_DB_POOL_SIZE       = "2"
     FIELDCLUB_DB_MAX_OVERFLOW    = "2"
+    # Production refuses to start without it (see var.terms_url).
+    FIELDCLUB_TERMS_URL = var.terms_url
   }
+
+  terms_env = var.terms_summary == "" ? {} : { FIELDCLUB_TERMS_SUMMARY = var.terms_summary }
 
   sftp_env = { DEFRA_SFTP_KNOWN_HOSTS = "${local.known_hosts_dir}/${local.known_hosts_file}" }
 
@@ -56,6 +60,7 @@ locals {
 
   service_env = merge(
     local.common_env,
+    local.terms_env,
     local.provider_env,
     local.mail_env,
     var.service_fetches_elevation ? local.sftp_env : {},

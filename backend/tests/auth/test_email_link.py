@@ -447,7 +447,14 @@ def test_there_is_no_mailer_unless_one_is_chosen() -> None:
 
 def test_the_log_mailer_is_refused_in_production() -> None:
     with pytest.raises(ConfigError, match="MAIL_BACKEND=log"):
-        settings(env="prod", secret_key="s" * 40, trusted_proxy_hops=1, dev_login=False, mail_backend="log")
+        settings(
+            env="prod",
+            secret_key="s" * 40,
+            trusted_proxy_hops=1,
+            terms_url="/terms",
+            dev_login=False,
+            mail_backend="log",
+        )
 
 
 def test_smtp_needs_a_host_and_a_sender() -> None:
