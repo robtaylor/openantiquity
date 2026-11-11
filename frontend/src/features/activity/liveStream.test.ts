@@ -189,6 +189,45 @@ describe("the live stream", () => {
     expect(live.onResync).toHaveBeenCalledTimes(1);
   });
 
+  it("gives up on the browser's own reconnecting when it keeps failing, and backs off instead", async () => {
+    const live = setUp();
+    live.stream.start();
+    // The server is down: the browser stays in CONNECTING and errors again and again.
+    live.latest().lose();
+    expect(live.statuses.at(-1)).toBe("connecting");
+    expect(live.open()).toHaveLength(1);
+    live.latest().lose();
+    expect(live.open()).toHaveLength(0);
+    expect(live.statuses.at(-1)).toBe("waiting");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(live.latestId).toHaveBeenCalledTimes(1);
+
+    // The next try fails at once, and the wait after it is longer.
+    await vi.advanceTimersByTimeAsync(RETRY_FIRST_MS);
+    expect(live.sources).toHaveLength(2);
+    live.latest().lose();
+    expect(live.open()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(RETRY_FIRST_MS);
+    expect(live.sources).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(RETRY_FIRST_MS);
+    expect(live.sources).toHaveLength(3);
+
+    // In ten minutes of a dead server, a handful of tries, not two hundred.
+    for (let i = 0; i < 20; i += 1) {
+      live.latest().lose();
+      await vi.advanceTimersByTimeAsync(30_000);
+    }
+    expect(live.sources.length).toBeLessThan(10);
+
+    // Once it opens, one lost connection is again left to the browser.
+    await vi.advanceTimersByTimeAsync(RETRY_MAX_MS * 1.2);
+    live.latest().open();
+    expect(live.statuses.at(-1)).toBe("live");
+    live.latest().lose();
+    expect(live.statuses.at(-1)).toBe("connecting");
+    expect(live.open()).toHaveLength(1);
+  });
+
   it("after a refusal, reopens with a growing delay and asks the feed now and then meanwhile", async () => {
     const live = setUp();
     live.latestId.mockResolvedValueOnce(10).mockResolvedValueOnce(10).mockResolvedValueOnce(12);

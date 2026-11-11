@@ -131,6 +131,28 @@ describe("the unread count", () => {
     expect(within(account).getByTestId("notification-count")).toHaveTextContent("2");
   });
 
+  it("is said out loud when it goes up, but not for the count the page loads with, nor when it goes down", async () => {
+    let items = INBOX;
+    const routes = serve();
+    routes.on("GET /notifications", () => json(inbox(items)));
+    renderShell();
+    await mapReady();
+    await screen.findByRole("link", { name: "Account, 2 new notifications" });
+    const announcer = screen.getByTestId("notification-announcer");
+    expect(announcer).toHaveAttribute("aria-live", "polite");
+    expect(announcer).toBeEmptyDOMElement();
+
+    act(() => FakeEventSource.current().open());
+    items = [notification({ id: 13 }), ...INBOX];
+    act(() => FakeEventSource.current().activity({ id: 22, kind: "tier_changed", finding: "f-ring", actor: null }));
+    await waitFor(() => expect(announcer).toHaveTextContent("3 new notifications"), { timeout: 3000 });
+
+    items = INBOX.map((item) => ({ ...item, read: true }));
+    act(() => FakeEventSource.current().activity({ id: 23, kind: "tier_changed", finding: "f-ring", actor: null }));
+    await waitFor(() => expect(screen.getByRole("link", { name: "Account" })).toBeInTheDocument(), { timeout: 3000 });
+    expect(announcer).toBeEmptyDOMElement();
+  });
+
   it("on a phone, shows on More and on the Account item under it", async () => {
     const user = userEvent.setup();
     usePhoneLayout();

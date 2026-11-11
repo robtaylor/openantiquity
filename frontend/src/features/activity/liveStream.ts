@@ -15,7 +15,10 @@
  *   little so every browser doesn't come back at once, and what is on screen
  *   is refetched once it is open, because events were missed meanwhile.
  * - The stream simply ending, or the connection breaking: the browser
- *   reconnects by itself, and the reopened stream refetches what is on screen.
+ *   reconnects by itself once, and the reopened stream refetches what is on
+ *   screen. If that reconnection fails too (the server is down, or a proxy
+ *   drops the connection), it is treated as a refusal below, because a browser
+ *   would otherwise try again every few seconds for ever.
  * - A refusal before the stream starts (`too_many_streams`, `rate_limited`,
  *   a proxy's 502): a browser never retries those. It is reopened after a
  *   growing delay, and meanwhile the feed is asked now and then whether
@@ -37,6 +40,8 @@ export const RETRY_FIRST_MS = 5_000;
 export const RETRY_MAX_MS = 5 * 60_000;
 /** While the stream is refused, how often the feed is asked whether anything has happened. */
 export const POLL_MS = 60_000;
+/** Errors in a row, with no open between them, that the browser may retry by itself before the stream gives up. */
+export const SELF_RETRIES = 1;
 
 /**
  * - "connecting": opening, or the browser is reconnecting by itself.
@@ -124,6 +129,8 @@ export class LiveStream {
   private stopWatching: (() => void) | null = null;
   /** Refusals in a row, for the growing delay. */
   private failures = 0;
+  /** Errors since the stream last opened, across reopens. */
+  private errorsSinceOpen = 0;
   /** Set whenever events may have gone by unheard, so the next open refetches. */
   private missed = false;
   /** The newest event id heard, by the stream or by asking the feed. */
@@ -180,6 +187,7 @@ export class LiveStream {
     source.addEventListener("open", () => {
       if (!current()) return;
       this.failures = 0;
+      this.errorsSinceOpen = 0;
       this.stopPolling();
       this.setStatus("live");
       if (this.missed) {
@@ -209,12 +217,14 @@ export class LiveStream {
     source.addEventListener("error", () => {
       if (!current()) return;
       this.missed = true;
-      if (source.readyState !== CLOSED) {
+      this.errorsSinceOpen += 1;
+      if (source.readyState !== CLOSED && this.errorsSinceOpen <= SELF_RETRIES) {
         // The browser is reconnecting by itself.
         this.setStatus("connecting");
         return;
       }
-      // Refused before it started: the browser won't try again.
+      // Refused before it started, so the browser won't try again, or its own
+      // reconnecting keeps failing: either way, wait longer each time.
       this.closeSource();
       this.failures += 1;
       this.reopenIn(retryDelay(this.failures, this.environment.random));

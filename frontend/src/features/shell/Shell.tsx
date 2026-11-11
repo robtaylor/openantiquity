@@ -54,6 +54,7 @@ import { MARK_PATH, MarkPanel } from "../mark/MarkPanel.js";
 import { RECENT_MENTIONS_PATH } from "../mentions/paths.js";
 import { RecentMentionsPanel } from "../mentions/RecentMentionsPanel.js";
 import { MOD_ROUTE, ModerationPanel } from "../moderation/ModerationPanel.js";
+import { NotificationAnnouncer } from "../notifications/NotificationAnnouncer.js";
 import { PROFILE_ROUTE, ProfilePanel as PersonPanel } from "../people/ProfilePanel.js";
 import { APP_NAME, NotFoundPanel, PLACEHOLDER_ROUTES, PlaceholderPanel } from "../placeholders.js";
 import { OpenElsewherePanel } from "../records/OpenElsewherePanel.js";
@@ -263,6 +264,7 @@ function ReadyShell({ meta }: { meta: Meta }) {
       style={{ "--map-covered-bottom": `${coveredBottom}px`, "--sheet-clear": `${sheetClear}px` } as CSSProperties}
     >
       <h1 className="fc-visually-hidden">{meta.app.name}</h1>
+      <NotificationAnnouncer />
 
       {isPhone ? null : <ModeRail compact={isShort} />}
 
