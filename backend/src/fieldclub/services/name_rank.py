@@ -11,7 +11,7 @@ The search box ranks places and records together, by three numbers each:
      ("Sutton Hook Wood", "Avebury" for "ave");
    - 1: it holds the query as whole words ("... ship burial) at Sutton Hoo");
    - 0: a loose match by spelling.
-2. **Weight** (`place_weight`, `record_weight`), lower first: places and
+2. **Weight** (`PLACE`, `record_weight`), lower first: places and
    designations of national importance (scheduled monuments, World Heritage
    Sites, registered parks, gardens and battlefields, protected wrecks),
    then other records, then the minor names: the 380,000 listed buildings,
@@ -110,10 +110,6 @@ def record_weight(source_key: str, category: str) -> int:
     if source_key in MINOR_SOURCES or category in MINOR_CATEGORIES:
         return MINOR
     return OTHER
-
-
-def place_weight() -> int:
-    return PLACE
 
 
 def band(fit: int, weight: int) -> int:

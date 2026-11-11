@@ -240,7 +240,7 @@ def places(db: Session, text: str, limit: int = PLACE_LIMIT) -> list[GeoHit]:
                 zoom=PLACE_ZOOM.get(place.kind.lower(), 14),
                 ref=str(place.id),
                 source=source,
-                weight=name_rank.place_weight(),
+                weight=name_rank.PLACE,
             )
         )
     return hits
