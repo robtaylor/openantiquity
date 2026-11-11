@@ -30,6 +30,7 @@ from fieldclub.auth.oauth import FORM_POST_CALLBACK_PATHS
 from fieldclub.config import Settings, get_settings
 from fieldclub.db import create_schema, describe
 from fieldclub.errors import install_error_handlers
+from fieldclub.redirects import CanonicalHostMiddleware
 from fieldclub.services import events
 
 logger = logging.getLogger(__name__)
@@ -252,6 +253,9 @@ def create_app(settings: Settings | None = None, *, include_dev_routes: bool | N
     # Middleware, not router dependencies, so that no route can be added without them.
     app.add_middleware(ClientHeaderMiddleware, exempt=CLIENT_HEADER_EXEMPT)
     app.add_middleware(PrivateByDefaultMiddleware)
+    if settings.redirect_hosts:
+        # Added last, so it runs first: another name gets its redirect and nothing else.
+        app.add_middleware(CanonicalHostMiddleware, hosts=settings.redirect_hosts, target=settings.public_url)
 
     for found in discover_routers():
         if found.dev_only and not include_dev_routes:

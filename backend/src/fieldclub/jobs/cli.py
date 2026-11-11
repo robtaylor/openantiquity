@@ -2,11 +2,15 @@
 
     fieldclub-jobs scan-channels [--max-channels N] [--delay SECONDS]
     fieldclub-jobs refresh-sources
+    fieldclub-jobs due
     fieldclub-jobs add-channel <UC... channel id> [--title TEXT] [--disable]
 
 Each job logs a one-line summary and exits 0 when everything it tried
 worked, or 1 when anything failed, so the scheduler can raise the alarm.
 A failure doesn't stop the rest of the run.
+
+`due` is for a scheduler that starts it every hour: it runs whichever of the
+other two is due (`fieldclub.jobs.due`), the scan first.
 """
 
 from __future__ import annotations
@@ -18,7 +22,7 @@ from collections.abc import Sequence
 
 from fieldclub.config import get_settings
 from fieldclub.db import SessionLocal
-from fieldclub.jobs import channels, sources
+from fieldclub.jobs import channels, due, sources
 
 logger = logging.getLogger("fieldclub.jobs")
 
@@ -53,6 +57,9 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--delay", type=_seconds, default=defaults.delay_s, metavar="SECONDS")
 
     commands.add_parser("refresh-sources", help="run each bulk source whose data is older than it should be")
+    commands.add_parser(
+        "due", help="run whichever of scan-channels and refresh-sources is due, for an hourly start"
+    )
 
     add = commands.add_parser("add-channel", help="watch a YouTube channel, or change one already watched")
     add.add_argument("channel_id", help="the channel's id, which starts with UC")
@@ -71,6 +78,19 @@ def refresh_sources() -> int:
     stats = sources.refresh()
     logger.info("%s", stats.summary())
     return 1 if stats.failed else 0
+
+
+def run_due() -> int:
+    with SessionLocal() as db:
+        wanted = due.what_is_due(db, due.utc_now())
+    logger.info("due: %s", ", ".join(wanted.names()) or "nothing")
+    failed = False
+    if wanted.scan_channels:
+        defaults = channels.ScanLimits()
+        failed = scan_channels(defaults.max_channels, defaults.delay_s) != 0
+    if wanted.refresh_sources:
+        failed = refresh_sources() != 0 or failed
+    return 1 if failed else 0
 
 
 def add_channel(channel_id: str, title: str | None, disable: bool) -> int:
@@ -97,6 +117,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return scan_channels(args.max_channels, args.delay)
         if args.command == "refresh-sources":
             return refresh_sources()
+        if args.command == "due":
+            return run_due()
         assert args.command == "add-channel", f"unhandled command {args.command!r}"
         return add_channel(args.channel_id, args.title, args.disable)
     except Exception:

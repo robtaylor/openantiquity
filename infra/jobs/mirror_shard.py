@@ -1,19 +1,18 @@
-"""One task's share of the whole-country elevation copy, for a Cloud Run job.
+"""Shares of the whole-country elevation copy, run one after another on one machine.
 
-    python /app/jobs/mirror_shard.py [--concurrency 1]
+    python /app/jobs/mirror_shard.py --shares 4 --share 1 [--share 3] [--concurrency 1]
 
-Cloud Run starts every task of a job with the same command and tells each one
-which it is through CLOUD_RUN_TASK_INDEX and CLOUD_RUN_TASK_COUNT. This splits
-the England catalogue into that many shares of about equal size, the same way
-in every task, and runs `fieldclub-terrain mirror` on this task's share. Each
-task holds one connection to Defra's server unless told otherwise, so the
-job's parallelism is the number of connections the job opens. A task stops
-early if the supply refuses the login or several tiles fail in a row
-(`fieldclub-terrain mirror`), so a broken supply isn't asked about every tile.
-The job has no database, so it leaves the LIDAR `sources` rows to
-`fieldclub-terrain sources` (`--skip-sources`; infra/README.md, step 7).
+The England catalogue is split into `--shares` shares of about equal size, the
+same way on every run, and `fieldclub-terrain mirror` is run on each `--share`
+named, numbered from 1, in the order given. On Fly two machines run two shares
+each (infra/README.md), so the copy holds two connections to Defra's server.
+Each share holds one connection unless told otherwise. A share stops early if
+the supply refuses the login or several tiles fail in a row (`fieldclub-terrain
+mirror`), and then the run stops with that share's exit status, so a broken
+supply isn't asked about every tile. The LIDAR `sources` rows are left to
+`fieldclub-terrain sources` (`--skip-sources`; infra/README.md).
 
-A tile already in the mirror is skipped, so a failed or interrupted task can be
+A tile already in the mirror is skipped, so a failed or interrupted share can be
 run again and only fetches what is still missing.
 """
 
@@ -21,7 +20,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import sys
 
 from fieldclub.terrain import cli
@@ -48,19 +46,32 @@ def shares(tiles: list[SourceTile], count: int) -> list[list[str]]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="One task's share of the whole-country elevation copy.")
+    parser = argparse.ArgumentParser(description="Shares of the whole-country elevation copy.")
+    parser.add_argument(
+        "--shares", type=int, required=True, help="how many shares the catalogue is split into"
+    )
+    parser.add_argument(
+        "--share", type=int, action="append", required=True, help="a share to run, from 1; may be repeated"
+    )
     # The range `fieldclub-terrain mirror --concurrency` accepts.
     parser.add_argument("--concurrency", type=int, default=1, choices=range(1, 5), metavar="1-4")
     args = parser.parse_args(argv)
-    index = int(os.environ.get("CLOUD_RUN_TASK_INDEX", "0"))
-    count = int(os.environ.get("CLOUD_RUN_TASK_COUNT", "1"))
-    assert 0 <= index < count, f"task {index} of {count} is out of range"
-    share = shares(list(england_catalogue()), count)[index]
+    if args.shares < 1:
+        parser.error("--shares must be at least 1")
+    if bad := [share for share in args.share if not 1 <= share <= args.shares]:
+        parser.error(f"--share {bad[0]} isn't between 1 and {args.shares}")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    logger.info("Task %d of %d: %d tiles", index + 1, count, len(share))
-    if not share:
-        return 0
-    return cli.main(["mirror", *share, "--concurrency", str(args.concurrency), "--skip-sources"])
+    split = shares(list(england_catalogue()), args.shares)
+    for number in args.share:
+        share = split[number - 1]
+        logger.info("Share %d of %d: %d tiles", number, args.shares, len(share))
+        if not share:
+            continue
+        status = cli.main(["mirror", *share, "--concurrency", str(args.concurrency), "--skip-sources"])
+        if status != 0:
+            logger.error("Share %d of %d stopped with status %d", number, args.shares, status)
+            return status
+    return 0
 
 
 if __name__ == "__main__":

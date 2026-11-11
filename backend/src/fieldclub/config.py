@@ -12,7 +12,8 @@ import re
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
+from urllib.parse import urlsplit
 
 from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -73,6 +74,9 @@ def database_address(url: str) -> str:
     return f"postgresql+psycopg://{credentials}{at}{host}{colon}{port}{slash}{path}"
 
 
+# A host name and nothing else: no scheme, port or path.
+_HOST_NAME = r"^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$"
+
 # Where each terrain folder is when it isn't set, below `var_dir`.
 _TERRAIN_UNDER_VAR = {
     "terrain_mirror": "lidar/england/mirror",
@@ -99,6 +103,10 @@ class Settings(BaseSettings):
     # Cloud Run tells the container which port to listen on through PORT.
     port: int = Field(default=8000, validation_alias=AliasChoices("FIELDCLUB_PORT", "PORT"))
     public_url: str = "http://localhost:5173"
+    # The site's other names, such as its `www.` name and other domains. A
+    # request for one is answered 308 with the same path on `public_url`
+    # (fieldclub.redirects). Any name not listed is served as it is.
+    redirect_hosts: list[Annotated[str, Field(pattern=_HOST_NAME)]] = []
     frontend_dist: Path = _REPO_ROOT / "frontend" / "dist"
     trusted_proxy_hops: int = Field(default=0, ge=0)
     # A header the proxy in front sets to the visitor's address, overwriting
@@ -313,6 +321,12 @@ class Settings(BaseSettings):
             raise ConfigError(
                 "FIELDCLUB_TRUSTED_PROXY_HOPS is 0 on Cloud Run, where every request arrives through "
                 "Google's proxy. Set it to 1, or 2 behind a load balancer as well."
+            )
+        site = urlsplit(self.public_url).hostname
+        if site and site in {host.lower() for host in self.redirect_hosts}:
+            raise ConfigError(
+                f"FIELDCLUB_REDIRECT_HOSTS names {site}, the site's own address in FIELDCLUB_PUBLIC_URL, "
+                "which would redirect to itself."
             )
         if self.storage_backend == "s3" and not self.s3_bucket:
             raise ConfigError("FIELDCLUB_S3_BUCKET is required when FIELDCLUB_STORAGE_BACKEND is 's3'.")
