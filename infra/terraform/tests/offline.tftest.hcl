@@ -20,6 +20,17 @@ variables {
   run_workloads   = true
   image_tag       = "abc1234"
   terms_url       = "https://example.org/terms"
+
+  # `terraform test` reads a terraform.tfvars beside the configuration, as plan
+  # and apply do. These are pinned to their defaults so that the owner's own
+  # settings for the real project can't change what the tests see.
+  service_public            = true
+  service_fetches_elevation = true
+  schedules                 = {}
+  ingest_schedules          = {}
+  cdn                       = {}
+  contact                   = ""
+  budget                    = {}
 }
 
 run "foundations_only_on_the_first_apply" {
@@ -135,7 +146,7 @@ run "providers_are_wired_only_when_configured" {
 
   variables {
     google_client_id = "example.apps.googleusercontent.com"
-    mail             = { host = "smtp.example.org", username = "fieldclub", from = "Field Club <signin@example.org>" }
+    mail             = { host = "smtp.example.org", username = "fieldclub", from = "Open Antiquity <signin@example.org>" }
   }
 
   assert {
