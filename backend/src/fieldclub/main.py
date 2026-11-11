@@ -125,9 +125,13 @@ async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        # Imported here, so that importing this module alone loads no GDAL.
+        from fieldclub.terrain.service import close_terrain
+
         await events.stop_hub()
         http.close_client()
         safe_fetch.close_client()
+        close_terrain()
 
 
 class _HashedAssets(StaticFiles):

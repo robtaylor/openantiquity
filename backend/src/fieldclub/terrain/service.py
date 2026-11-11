@@ -95,9 +95,11 @@ class TerrainStatus:
     overview: OverviewStatus
 
 
-# Where a point's height came from: the 1 m data; the overview, or nothing, while the 1 m tile
-# there is being prepared; or nowhere, outside the 1 m data.
-HeightStatus = Literal["ready", "preparing", "none"]
+# Where a point's height came from: `ready`, the 1 m data. Where the 1 m data exists but its tile
+# isn't in the mirror, the overview's, or nothing, and why: `preparing` while the tile is being
+# added in the background, `failed` while its last attempt's failure is remembered, and
+# `not_mirrored` when nothing has asked for it lately. `none` outside the 1 m data.
+HeightStatus = Literal["ready", "preparing", "failed", "not_mirrored", "none"]
 
 
 @dataclass(frozen=True)
@@ -190,11 +192,22 @@ class Terrain:
         if not math.isnan(value):
             return PointHeight(round(value, 2), "ready")
         covering = self.catalogue.covering((easting, northing, easting, northing))
-        status: HeightStatus = (
-            "preparing" if any(not self.mirror.has(tile.name) for tile in covering) else "none"
-        )
         value = float(self.overview.snapshot().sample(eastings, northings)[0])
-        return PointHeight(None if math.isnan(value) else round(value, 2), status)
+        elevation = None if math.isnan(value) else round(value, 2)
+        return PointHeight(
+            elevation, self._missing_status({t.name for t in covering if not self.mirror.has(t.name)})
+        )
+
+    def _missing_status(self, missing: set[str]) -> HeightStatus:
+        """Why the 1 m tiles `missing` from the mirror under a point aren't there."""
+        if not missing:
+            return "none"
+        if self.prefetch is not None:
+            if missing & self.prefetch.pending():
+                return "preparing"
+            if missing & self.prefetch.failed():
+                return "failed"
+        return "not_mirrored"
 
     def mirrored(self) -> frozenset[str]:
         """The 5 km tiles in the mirror now, as listed at most once a minute."""
@@ -294,6 +307,22 @@ def get_tile_workers() -> TileWorkers:
     """The process's threads for drawing terrain tiles. A FastAPI dependency, so tests can override it."""
     settings = get_settings()
     return TileWorkers(settings.terrain_render_workers, settings.terrain_render_queue)
+
+
+def close_terrain() -> None:
+    """Stop the process's background fetches and tile threads, if they were started. For shutdown.
+
+    Queued work is cancelled; work in hand isn't waited for. The next call to
+    `get_terrain` or `get_tile_workers` builds them afresh.
+    """
+    if get_terrain.cache_info().currsize:
+        prefetch = get_terrain().prefetch
+        if prefetch is not None:
+            prefetch.close()
+        get_terrain.cache_clear()
+    if get_tile_workers.cache_info().currsize:
+        get_tile_workers().close()
+        get_tile_workers.cache_clear()
 
 
 def default_editions() -> tuple[str, str]:

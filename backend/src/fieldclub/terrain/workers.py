@@ -54,4 +54,5 @@ class TileWorkers:
                 self._in_hand -= 1
 
     def close(self) -> None:
+        """Draw nothing more, and drop the tiles waiting their turn."""
         self._pool.shutdown(wait=False, cancel_futures=True)

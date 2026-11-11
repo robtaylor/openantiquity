@@ -15,8 +15,14 @@ caller answers `elevation_preparing` with a `Retry-After`.
   costs threads only in this pool.
 - A tile whose last background attempt failed is answered with that failure
   for `FAILURE_MEMORY_S`, so a map asking again learns it rather than hearing
-  "being prepared" for ever. The mirror's own memory of failed tiles
-  (`Mirror.refuse_if_failed`) is asked first, and is longer.
+  "being prepared" for ever. The answer is the one the foreground would give,
+  with its own code and status (502 `elevation_fetch_failed` for one tile's
+  failed fetch, 503 `elevation_supply_refused` when the supply refuses us),
+  and a `Retry-After` for when the tile will be tried again. The mirror's
+  own memory of failed tiles (`Mirror.refuse_if_failed`) is asked next, and
+  is longer.
+- A remembered failure was logged when it happened, so answering it again is
+  `expected` and logs no traceback.
 
 `fieldclub-terrain mirror` and `warm` don't use this: they fetch in the
 foreground, as a command should.
@@ -25,6 +31,7 @@ foreground, as a command should.
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from collections.abc import Callable, Sequence
@@ -33,7 +40,7 @@ from concurrent.futures import wait as wait_for
 
 from fieldclub.errors import AppError
 from fieldclub.terrain.catalogue import normalise_name
-from fieldclub.terrain.errors import ElevationUnavailableError
+from fieldclub.terrain.errors import ElevationPreparingError, ElevationUnavailableError
 from fieldclub.terrain.mirror import Mirror
 
 logger = logging.getLogger(__name__)
@@ -58,8 +65,8 @@ class Prefetcher:
         self._clock = clock
         self._guard = threading.Lock()
         self._pending: dict[str, Future[None]] = {}
-        # Tiles whose last background attempt failed: when to try again, and the failure's code and message.
-        self._failed: dict[str, tuple[float, str, str]] = {}
+        # Tiles whose last background attempt failed: when to try again, and the failure.
+        self._failed: dict[str, tuple[float, AppError]] = {}
 
     def request(self, names: Sequence[str]) -> list[str]:
         """Start adding the tiles of `names` the mirror lacks, and return those still missing.
@@ -83,17 +90,27 @@ class Prefetcher:
             failed = self._failed.get(name)
             if failed is None:
                 return
-            until, code, message = failed
-            if self._clock() >= until:
+            until, error = failed
+            left = until - self._clock()
+            if left <= 0:
                 del self._failed[name]
                 return
-        # A new error each time, under the failure's own code: one raised again gathers tracebacks.
-        raise ElevationUnavailableError(message, code=code)
+        # A copy each time, of the failure's own class, code and status: one raised again gathers tracebacks.
+        again = _replica(error)
+        again.expected = True
+        again.headers = {**(error.headers or {}), "Retry-After": str(max(1, math.ceil(left)))}
+        raise again
 
     def pending(self) -> frozenset[str]:
         """The tiles being added now, or waiting their turn."""
         with self._guard:
             return frozenset(self._pending)
+
+    def failed(self) -> frozenset[str]:
+        """The tiles whose last background attempt failed, while the failure is remembered."""
+        now = self._clock()
+        with self._guard:
+            return frozenset(name for name, (until, _) in self._failed.items() if now < until)
 
     def wait(self, timeout: float | None = None) -> None:
         """Wait for every tile being added now. For tests and for shutting down."""
@@ -103,7 +120,12 @@ class Prefetcher:
         assert not not_done, f"{len(not_done)} tiles were still being added after {timeout} s"
 
     def close(self) -> None:
-        """Start nothing more. A tile being converted finishes; queued ones are dropped."""
+        """Start nothing more, and drop the tiles waiting their turn.
+
+        A tile being added now isn't waited for. If the process exits first,
+        nothing partial was published, and the next request for the tile
+        starts it again.
+        """
         self._pool.shutdown(wait=False, cancel_futures=True)
 
     def _add(self, name: str) -> None:
@@ -125,5 +147,19 @@ class Prefetcher:
                 self._pending.pop(name, None)
 
     def _remember(self, name: str, error: AppError) -> None:
+        assert not isinstance(error, ElevationPreparingError), "a tile being prepared isn't a failure"
+        # Without its traceback, which would hold the frames of the attempt alive.
+        error = _replica(error)
         with self._guard:
-            self._failed[name] = (self._clock() + self._failure_memory_s, error.code, error.message)
+            self._failed[name] = (self._clock() + self._failure_memory_s, error)
+
+
+def _replica[E: AppError](error: E) -> E:
+    """The same error, class, code, status and all, without the traceback of where it was raised.
+
+    Made without calling `__init__`, which some subclasses give other arguments.
+    """
+    again = type(error).__new__(type(error))
+    again.__dict__.update(error.__dict__)
+    again.args = error.args
+    return again

@@ -327,13 +327,15 @@ class Mirror:
         """Raise `ElevationUnavailableError` when this process or the folder says the tile failed lately."""
         until = self._failed.get(name)
         if until is not None and self._clock() < until:
-            raise ElevationUnavailableError(f"{name} couldn't be added a short while ago.")
+            raise ElevationUnavailableError(f"{name} couldn't be added a short while ago.", expected=True)
         since = self._failed_since(name)
         if since is not None:
             age = (self._now() - since).total_seconds()
             if age < self._unreadable_retry_s:
                 self._failed[name] = self._clock() + self._unreadable_retry_s - age
-                raise ElevationUnavailableError(f"Every copy of {name} was unreadable when last fetched.")
+                raise ElevationUnavailableError(
+                    f"Every copy of {name} was unreadable when last fetched.", expected=True
+                )
 
     def _failed_since(self, name: str) -> datetime | None:
         """When the folder's record says every copy of the tile was found unreadable, if it has one."""

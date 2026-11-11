@@ -15,11 +15,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from fieldclub.terrain.catalogue import SourceTile
+from fieldclub.terrain.errors import SupplyRefusedError
 from fieldclub.terrain.grid import tile_at
 from fieldclub.terrain.mirror import Fetched, LocalSourceFetcher
 from fieldclub.terrain.prefetch import Prefetcher
 from fieldclub.terrain.render import RenderedTile
-from fieldclub.terrain.service import Terrain, get_terrain, get_tile_workers
+from fieldclub.terrain.service import Terrain, close_terrain, get_terrain, get_tile_workers
 from fieldclub.terrain.workers import TileWorkers
 from tests.helpers import BASE_URL, WEB, error_code
 from tests.terrain.fakes import TO_LONLAT, local_mirror, local_terrain, write_source_tile
@@ -188,14 +189,66 @@ def test_a_profile_says_the_data_is_being_prepared_instead_of_waiting(
     assert all(sample["elevation"] is not None for sample in answered.json()["samples"])
 
 
-def test_a_point_says_its_data_is_being_prepared_and_starts_nothing(
+def test_a_point_says_its_data_isnt_mirrored_and_starts_nothing(
     api: TestClient, terrain: Terrain, fetcher: CountingFetcher
 ) -> None:
     lon, lat = INSIDE
     body = api.get("/api/v1/geo/point", params={"lon": lon, "lat": lat}).json()
-    assert body["elevation_status"] == "preparing"
+    # Nothing has asked for the tile, so nothing is preparing it.
+    assert body["elevation_status"] == "not_mirrored"
     assert fetcher.calls == []
     assert prefetch_of(terrain).pending() == frozenset()
+
+
+def test_a_point_says_its_data_is_being_prepared_only_while_it_is(
+    api: TestClient, terrain: Terrain, fetcher: CountingFetcher
+) -> None:
+    lon, lat = INSIDE
+    assert error_code(api.get(tile_path())) == "elevation_preparing"
+    preparing = api.get("/api/v1/geo/point", params={"lon": lon, "lat": lat}).json()
+    assert preparing["elevation_status"] == "preparing"
+    fetcher.release.set()
+    prefetch_of(terrain).wait(timeout=60)
+    ready = api.get("/api/v1/geo/point", params={"lon": lon, "lat": lat}).json()
+    assert ready["elevation_status"] == "ready"
+
+
+def test_a_point_whose_data_failed_to_be_added_says_so(
+    api: TestClient, terrain: Terrain, fetcher: CountingFetcher
+) -> None:
+    # SU16ne is in the catalogue, but the fetcher has no file for it.
+    lon, lat = TO_LONLAT.transform(417_500, 167_500)
+    x, y = tile_at(lon, lat, 15)
+    fetcher.release.set()
+    assert error_code(api.get(f"/tiles/lidar/composite/15/{x}/{y}.png")) == "elevation_preparing"
+    prefetch_of(terrain).wait(timeout=60)
+    body = api.get("/api/v1/geo/point", params={"lon": lon, "lat": lat}).json()
+    assert body["elevation_status"] == "failed"
+
+
+# --------------------------------------------------------------------------
+# Logging
+# --------------------------------------------------------------------------
+
+
+def test_expected_answers_log_no_error(
+    api: TestClient, terrain: Terrain, fetcher: CountingFetcher, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Being prepared, busy and a remembered failure are normal traffic, not failures to report."""
+    lon, lat = TO_LONLAT.transform(417_500, 167_500)
+    x, y = tile_at(lon, lat, 15)
+    failing = f"/tiles/lidar/composite/15/{x}/{y}.png"
+    with caplog.at_level("DEBUG"):
+        assert error_code(api.get(tile_path())) == "elevation_preparing"
+        fetcher.release.set()
+        assert error_code(api.get(failing)) == "elevation_preparing"
+        prefetch_of(terrain).wait(timeout=60)
+        remembered = api.get(failing)
+    assert remembered.status_code >= 500
+    errors = [record for record in caplog.records if record.levelname in ("ERROR", "CRITICAL")]
+    assert errors == []
+    assert "Traceback" not in caplog.text
+    assert "elevation_preparing" in caplog.text
 
 
 # --------------------------------------------------------------------------
@@ -280,3 +333,48 @@ def test_a_flood_of_slow_tiles_leaves_meta_answered_promptly(
     assert {error_code(response) for response in turned_away} == {"tiles_busy"}
     assert all(response.headers["retry-after"] == "1" for response in turned_away)
     assert workers.in_hand == 0
+
+
+# --------------------------------------------------------------------------
+# Remembered failures and shutting down
+# --------------------------------------------------------------------------
+
+
+class RefusedFetcher:
+    def fetch(self, tile: SourceTile, work_dir: Path) -> Fetched | None:
+        raise SupplyRefusedError("Defra's bulk supply rejected the user name or password.")
+
+
+def test_a_refused_supply_is_remembered_under_its_own_code_and_status(tmp_path: Path) -> None:
+    mirror = local_mirror(tmp_path, sources=tmp_path / "none", extra=["SU16ne"], fetchers=[RefusedFetcher()])
+    prefetch = Prefetcher(mirror, 1)
+    try:
+        assert prefetch.request(["SU16ne"]) == ["SU16ne"]
+        prefetch.wait(timeout=60)
+        assert prefetch.failed() == {"SU16ne"}
+        with pytest.raises(SupplyRefusedError) as raised:
+            prefetch.request(["SU16ne"])
+    finally:
+        prefetch.close()
+    error = raised.value
+    assert (error.status_code, error.code) == (503, "elevation_supply_refused")
+    assert error.expected
+    assert 1 <= int((error.headers or {})["Retry-After"]) <= 60
+
+
+def test_shutting_down_stops_the_background_threads_and_forgets_them(monkeypatch: pytest.MonkeyPatch) -> None:
+    closed: list[str] = []
+    monkeypatch.setattr(Prefetcher, "close", lambda self: closed.append("prefetch"))
+    monkeypatch.setattr(TileWorkers, "close", lambda self: closed.append("workers"))
+    get_terrain.cache_clear()
+    get_tile_workers.cache_clear()
+    close_terrain()
+    # Nothing was built, so nothing is built to be closed.
+    assert closed == []
+    assert get_terrain.cache_info().currsize == 0
+    first = get_tile_workers()
+    get_terrain()
+    close_terrain()
+    assert sorted(closed) == ["prefetch", "workers"]
+    assert get_tile_workers() is not first
+    close_terrain()

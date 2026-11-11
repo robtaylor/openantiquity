@@ -435,7 +435,7 @@ def test_a_point_never_fetches_and_has_no_height_where_nothing_is_mirrored(
     body = api.get("/api/v1/geo/point", params={"lon": lon, "lat": lat}).json()
     assert body["elevation"] is None
     # The 1 m data exists there and isn't in the mirror yet, and the read didn't start fetching it.
-    assert body["elevation_status"] == "preparing"
+    assert body["elevation_status"] == "not_mirrored"
     assert prefetch_of(terrain).pending() == frozenset()
     assert not terrain.mirror.has("SU16nw")
 
@@ -469,23 +469,38 @@ def test_a_refused_bulk_supply_never_puts_its_address_in_the_log(
         defra_sftp_password=SecretStr("not-a-real-password"),
         defra_sftp_known_hosts=known_hosts,
     )
-    fetcher = SftpFetcher(lambda: sftp.defra_connector(settings), max_failures=2, sleep=lambda seconds: None)
-    mirror = local_mirror(tmp_path, sources=mirror_dir / "src", extra=["SU16ne"], fetchers=[fetcher])
-    prefetch = Prefetcher(mirror, 1)
-    terrain = local_terrain(mirror, tmp_path / "tiles", prefetch=prefetch)
-    app.dependency_overrides[get_terrain] = lambda: terrain
+
+    def terrain_of(work: Path, *, background: bool) -> Terrain:
+        fetcher = SftpFetcher(
+            lambda: sftp.defra_connector(settings), max_failures=2, sleep=lambda seconds: None
+        )
+        mirror = local_mirror(work, sources=mirror_dir / "src", extra=["SU16ne"], fetchers=[fetcher])
+        prefetch = Prefetcher(mirror, 1) if background else None
+        return local_terrain(mirror, work / "tiles", prefetch=prefetch)
+
+    behind = terrain_of(tmp_path / "behind", background=True)
+    prefetch = prefetch_of(behind)
     start = TO_LONLAT.transform(414_900, 167_000)
     end = TO_LONLAT.transform(415_100, 167_000)
     line = {"line": {"type": "LineString", "coordinates": [list(start), list(end)]}, "samples": 5}
     with caplog.at_level("DEBUG"):
+        app.dependency_overrides[get_terrain] = lambda: behind
         preparing = client.post("/api/v1/terrain/profile", json=line)
         prefetch.wait(timeout=60)
-        response = client.post("/api/v1/terrain/profile", json=line)
+        remembered = client.post("/api/v1/terrain/profile", json=line)
+        # The same failure met in the foreground, which logs its traceback.
+        foreground = terrain_of(tmp_path / "foreground", background=False)
+        app.dependency_overrides[get_terrain] = lambda: foreground
+        failed = client.post("/api/v1/terrain/profile", json=line)
     prefetch.close()
     assert error_code(preparing) == "elevation_preparing"
-    assert response.status_code == 503
-    assert error_code(response) == "elevation_fetch_failed"
+    # A remembered failure answers as the foreground does, with when it will be tried again.
+    for response in (remembered, failed):
+        assert response.status_code == 502
+        assert error_code(response) == "elevation_fetch_failed"
+    assert 1 <= int(remembered.headers["retry-after"]) <= 60
     assert "Traceback" in caplog.text
     for secret in ("127.0.0.1", "port 1", "someone-secret", "not-a-real-password", "composite/2022"):
         assert secret not in caplog.text, secret
-        assert secret not in response.text, secret
+        assert secret not in remembered.text, secret
+        assert secret not in failed.text, secret

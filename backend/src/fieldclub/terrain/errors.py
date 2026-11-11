@@ -24,7 +24,16 @@ class FetchFailedError(UpstreamError):
 
 
 class SupplyRefusedError(FetchFailedError):
-    """The bulk supply refused the login or showed the wrong host key. Asking again won't help."""
+    """The bulk supply refused the login or showed the wrong host key. Asking again won't help.
+
+    Its own code and a 503, unlike the 502 of one tile's failed fetch: no tile
+    can be fetched until the supply's credentials are put right, so a map
+    should stop asking for 1 m tiles rather than retry each one.
+    """
+
+    status_code = 503
+    code = "elevation_supply_refused"
+    message = "The bulk supply of elevation is refusing us just now, so no new area can be prepared."
 
 
 class SourceUnreadableError(DataIntegrityError):
@@ -46,6 +55,7 @@ class ElevationPreparingError(AppError):
     status_code = 503
     code = "elevation_preparing"
     message = "Elevation for this area is being prepared. Try again in a minute."
+    expected = True
 
     def __init__(self, tiles: list[str], retry_after_s: int = PREPARING_RETRY_S) -> None:
         assert tiles, "something must be missing for an area to be being prepared"
@@ -58,6 +68,7 @@ class TilesBusyError(AppError):
     status_code = 503
     code = "tiles_busy"
     message = "The map is busy. Try again in a moment."
+    expected = True
 
     def __init__(self) -> None:
         super().__init__(headers={"Retry-After": "1"})

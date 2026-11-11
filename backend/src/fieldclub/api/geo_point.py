@@ -39,10 +39,13 @@ class GeoPoint(BaseModel):
     county: str | None
     # Ground height in metres, or null where there is no elevation data.
     elevation: float | None
-    # `ready` when the height is from the 1 m data. `preparing` while the 1 m
-    # data for this spot exists but isn't in the mirror yet: the height, if
-    # any, is the national overview's, to the nearest 8 m cell. `none` outside
-    # the 1 m data. This read never waits for data, nor starts fetching it.
+    # `ready` when the height is from the 1 m data. Where the 1 m data for this
+    # spot exists but isn't in the mirror yet, the height, if any, is the
+    # national overview's, to the nearest 8 m cell, and the status says why:
+    # `preparing` while it is being added (a map tile or profile here asked
+    # for it), `failed` while its last attempt's failure is remembered, and
+    # `not_mirrored` when nothing has asked for it. `none` outside the 1 m
+    # data. This read never waits for data, nor starts fetching it.
     elevation_status: HeightStatus
     # The boundary sources that gave the nation and county, whose attribution goes with them.
     sources: list[SourceRef]

@@ -24,11 +24,17 @@ class AppError(Exception):
     Subclasses set `status_code`, `code` and a default `message`. A raise site
     can override the message, and the code when a more specific one helps the
     client decide what to do.
+
+    `expected` marks a 5xx answer that is part of normal use, such as "being
+    prepared, try again" or a failure already logged when it first happened:
+    the handler logs it at INFO without a traceback, so it can't bury a real
+    failure. A raise site can set it for one error.
     """
 
     status_code: int = 500
     code: str = "internal_error"
     message: str = "Something went wrong."
+    expected: bool = False
 
     def __init__(
         self,
@@ -37,11 +43,14 @@ class AppError(Exception):
         code: str | None = None,
         details: Any = None,
         headers: dict[str, str] | None = None,
+        expected: bool | None = None,
     ) -> None:
         if message is not None:
             self.message = message
         if code is not None:
             self.code = code
+        if expected is not None:
+            self.expected = expected
         self.details = details
         self.headers = headers
         super().__init__(self.message)
@@ -224,7 +233,10 @@ def install_error_handlers(app: FastAPI) -> None:
     async def app_error(_: Request, exc: Exception) -> JSONResponse:
         assert isinstance(exc, AppError)
         if exc.status_code >= 500:
-            logger.error("%s: %s", type(exc).__name__, exc.message, exc_info=exc)
+            if exc.expected:
+                logger.info("%s (%s): %s", type(exc).__name__, exc.code, exc.message)
+            else:
+                logger.error("%s: %s", type(exc).__name__, exc.message, exc_info=exc)
         return JSONResponse(exc.to_body(), status_code=exc.status_code, headers=exc.headers)
 
     async def validation_error(_: Request, exc: Exception) -> JSONResponse:
