@@ -31,7 +31,13 @@ export class FakeEventSource extends EventTarget {
   }
 
   /** An `activity` event, as the server sends it. */
-  activity(event: { id: number; kind: string; finding?: string | null; actor?: string | null }): void {
+  activity(event: {
+    id: number;
+    kind: string;
+    finding?: string | null;
+    investigation?: string | null;
+    actor?: string | null;
+  }): void {
     const data = JSON.stringify({ finding: null, investigation: null, actor: null, ...event });
     this.dispatchEvent(new MessageEvent("activity", { data }));
   }

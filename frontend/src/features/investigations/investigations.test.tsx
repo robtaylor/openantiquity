@@ -4,6 +4,7 @@ import { useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useViewAreaStore } from "../../map/store.js";
 import { type ApiRoutes, routeApi } from "../../test/apiRoutes.js";
+import { FakeEventSource, useFakeEventSource } from "../../test/fakeEventSource.js";
 import {
   ADA,
   AVEBURY_AREA,
@@ -94,6 +95,24 @@ describe("the list", () => {
     expect(within(list).getByText("Sign in to see your investigations")).toBeInTheDocument();
     // Nothing that needs an account is asked for.
     expect(api.calls.some((call) => call.url.searchParams.get("scope") === "mine")).toBe(false);
+  });
+
+  it("shows one as soon as a live event says it was published", async () => {
+    useFakeEventSource();
+    renderShell("/investigations");
+    const list = await panel("Investigations");
+    expect(await within(list).findByText(/No public investigations/)).toBeInTheDocument();
+    act(() => FakeEventSource.current().open());
+    const id = fake.seed({ title: "Just published", owner: GUS, visibility: "public" });
+    act(() =>
+      FakeEventSource.current().activity({
+        id: 30,
+        kind: "investigation_published",
+        actor: GUS.handle,
+        investigation: id,
+      }),
+    );
+    expect(await within(list).findByRole("link", { name: /Just published/ })).toBeInTheDocument();
   });
 
   it("narrows the public list to those whose area is in view", async () => {
@@ -429,6 +448,35 @@ describe("a notebook", () => {
     await user.click(within(dialog).getByRole("button", { name: "Leave" }));
     await waitFor(() => expect(fake.store.get(id)?.members).toHaveLength(1));
     await waitFor(() => expect(screen.getByTestId("address")).toHaveTextContent("/investigations"));
+  });
+
+  it("offers Report to anyone but its owner, and names it by its public id", async () => {
+    const reported = vi.fn();
+    api.on("POST /reports", (call) => {
+      reported(call.body);
+      return json({ id: 1, created_at: "2026-11-11T10:00:00Z" }, 201);
+    });
+    signIn(MARY);
+    const id = fake.seed({ title: "Someone else's", owner: GUS, visibility: "public" });
+    const user = userEvent.setup();
+    renderShell(`/i/${id}`);
+    const page = await panel("Someone else's");
+    await user.click(await within(page).findByRole("button", { name: "Report this investigation" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "Report this investigation" }));
+    await user.click(dialog.getByRole("radio", { name: /Spam/ }));
+    await user.click(dialog.getByRole("button", { name: "Send report" }));
+    await waitFor(() =>
+      expect(reported).toHaveBeenCalledWith({ target_kind: "investigation", target_id: id, reason: "spam" }),
+    );
+  });
+
+  it("offers its owner no Report", async () => {
+    signIn(ADA);
+    const id = fake.seed({ title: "Mine", owner: ADA, visibility: "public" });
+    renderShell(`/i/${id}`);
+    const page = await panel("Mine");
+    await within(page).findByText(/started/);
+    expect(within(page).queryByRole("button", { name: "Report this investigation" })).toBeNull();
   });
 
   it("says when there's no such investigation", async () => {

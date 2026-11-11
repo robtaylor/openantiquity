@@ -15,6 +15,7 @@ import { type ReactNode, useState } from "react";
 import type { Meta } from "../../api/meta.js";
 import { Button } from "../../ui/Button.js";
 import { formatDate, labelOf } from "../finding/describe.js";
+import { ReportButton } from "../reports/ReportButton.js";
 import { mentionHref, mentionTitle, safeThumbnail, startWords } from "./describe.js";
 import type { Mention } from "./types.js";
 import "./mentions.css";
@@ -98,6 +99,7 @@ export interface MentionCardProps {
 /**
  * One mention: its picture, its title linked to it, what it is and who made
  * it, who added it here or that the channel scan found it, and its note.
+ * Whoever added it may remove it, and anyone else may report it.
  */
 export function MentionCard({ meta, mention, own = false, pending = false, onRemove, children }: MentionCardProps) {
   return (
@@ -139,6 +141,10 @@ export function MentionCard({ meta, mention, own = false, pending = false, onRem
               {/* Told apart from the other cards' buttons in a list of them. */}
               <span className="fc-visually-hidden"> {mentionTitle(mention)}</span>
             </Button>
+          </div>
+        ) : !own && !pending ? (
+          <div className="fc-mention__actions">
+            <ReportButton target={{ kind: "mention", id: mention.id }} ownerHandle={mention.added_by?.handle ?? null} />
           </div>
         ) : null}
       </div>

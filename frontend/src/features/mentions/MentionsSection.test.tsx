@@ -352,6 +352,31 @@ describe("removing a mention", () => {
     expect(section.getByRole("status")).toHaveTextContent("The mention is removed.");
   });
 
+  it("offers Report on the others, the ones the channel scan found among them, and not on one's own", async () => {
+    const routes = serve(pageFixture(), [
+      mentionFixture({ id: 3, added_by: mine }),
+      paperMentionFixture({ id: 4, auto_detected: false }),
+      mentionFixture({ id: 5, auto_detected: true, added_by: null }),
+    ]);
+    routes.on("POST /reports", () => json({ id: 1, created_at: "2026-11-11T10:00:00Z" }, 201));
+    const { section } = await open(routes);
+    const list = within(await section.findByRole("list", { name: "Mentions of this finding" }));
+    const [own, paper, found] = list.getAllByRole("article") as HTMLElement[];
+    expect(within(own as HTMLElement).queryByRole("button", { name: "Report this mention" })).toBeNull();
+    expect(within(found as HTMLElement).getByRole("button", { name: "Report this mention" })).toBeVisible();
+    const user = userEvent.setup();
+    await user.click(within(paper as HTMLElement).getByRole("button", { name: "Report this mention" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "Report this mention" }));
+    await user.click(dialog.getByRole("radio", { name: /Spam/ }));
+    await user.click(dialog.getByRole("button", { name: "Send report" }));
+    await waitFor(() => expect(routes.callsTo("POST /reports")).toHaveLength(1));
+    expect(routes.callsTo("POST /reports")[0]?.body).toEqual({
+      target_kind: "mention",
+      target_id: "4",
+      reason: "spam",
+    });
+  });
+
   it("puts it back with a toast when the server refuses", async () => {
     const routes = serve(pageFixture(), [mentionFixture({ id: 3, added_by: mine })]);
     routes.on("DELETE /mentions/3", () => apiError(403, "mention_forbidden", "No."));

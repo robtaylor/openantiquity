@@ -11,6 +11,7 @@ import { Skeleton } from "../../ui/Skeleton.js";
 import { useSession } from "../account/session.js";
 import { whenStageSettled } from "../finding/mapView.js";
 import { useDocumentTitle } from "../placeholders.js";
+import { ReportButton } from "../reports/ReportButton.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { AddItems } from "./AddItems.js";
 import {
@@ -27,6 +28,7 @@ import { Markdown } from "./Markdown.js";
 import { InvitationBanner, People } from "./People.js";
 import { Settings, showArea } from "./Settings.js";
 import { isNotFound, type Notebook, useInvestigation, useItems, useMembers, useNotebook } from "./useInvestigation.js";
+import { useLiveInvestigations } from "./useLiveInvestigations.js";
 import "./investigations.css";
 
 function EditDialog({
@@ -211,6 +213,7 @@ function NotebookBody({ meta, detail }: { meta: Meta; detail: InvestigationDetai
             Edit the title, summary and notes
           </Button>
         ) : null}
+        <ReportButton target={{ kind: "investigation", id: detail.public_id }} ownerHandle={detail.owner.handle} />
       </div>
 
       {detail.notes ? (
@@ -255,6 +258,7 @@ export function InvestigationPage({ meta }: { meta: Meta }) {
   const panelKey = investigationPath(id);
   const detail = query.data;
   useDocumentTitle(detail?.title ?? "Investigation");
+  useLiveInvestigations();
 
   let body: ReactNode;
   if (detail) {

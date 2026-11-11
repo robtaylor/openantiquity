@@ -28,6 +28,7 @@ import { bboxParam } from "./area.js";
 import { dateText, itemCountText, VISIBILITY } from "./describe.js";
 import { investigationKeys } from "./keys.js";
 import { InvitationAnswer } from "./People.js";
+import { useLiveInvestigations } from "./useLiveInvestigations.js";
 import "./investigations.css";
 
 /** The lists, as the address names them. */
@@ -285,6 +286,7 @@ function isList(value: string | null): value is ListId {
  */
 export function InvestigationsPanel() {
   useDocumentTitle("Investigations");
+  useLiveInvestigations();
   const session = useSession();
   const id = useId();
   const [params, setParams] = useSearchParams();
