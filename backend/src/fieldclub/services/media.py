@@ -435,6 +435,25 @@ def upload(db: Session, user: User, raw: bytes, *, storage: Storage | None = Non
     return media
 
 
+def forget_account(db: Session, user: User, *, storage: Storage | None = None) -> int:
+    """Delete every photo a person uploaded, file and row, when they delete their account.
+
+    A photo is personal data, unlike the evidence it was attached to, which
+    stays without it (`evidence.media_id` is set to null). The caller commits.
+    Returns how many photos went.
+    """
+    photos = db.scalars(select(Media).where(Media.user_id == user.id).with_for_update()).all()
+    keys = [photo.storage_key for photo in photos]
+    for photo in photos:
+        db.delete(photo)
+    db.flush()
+    storage = storage or media_storage()
+    for key in keys:
+        # A refused photo's file has gone already, and deleting a missing file is harmless.
+        storage.delete(key)
+    return len(keys)
+
+
 # --------------------------------------------------------------------------
 # Reading
 # --------------------------------------------------------------------------

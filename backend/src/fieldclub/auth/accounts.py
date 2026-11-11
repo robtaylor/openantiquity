@@ -24,7 +24,7 @@ from fieldclub.auth.handles import (
 )
 from fieldclub.errors import AppError
 from fieldclub.models import AuthIdentity, Follow, MagicLink, Notification, User
-from fieldclub.services import ids, investigations
+from fieldclub.services import ids, investigations, media
 from fieldclub.vocab import Role
 
 logger = logging.getLogger(__name__)
@@ -142,16 +142,24 @@ def dev_user(
 def delete_account(db: Session, user: User, *, now: datetime | None = None) -> None:
     """Delete an account at its owner's request. The caller commits.
 
-    The email address, the provider identities, the sessions and any unused
-    sign-in links go. So do the person's follows and notifications, which
-    were only ever for them to read. The row stays, marked deleted and
-    stripped of everything personal, so that findings, observations and
-    evidence keep an author: they were published under an open licence and
-    other people's work builds on them. They are credited to "Former member"
-    from now on, and the old handle no longer leads to them.
+    Personal data goes: the email address, the provider identities, the
+    sessions and any unused sign-in links, the bio, settings and picture,
+    the person's follows and notifications, which were only ever for them to
+    read, and every photo they uploaded, file and row. Their private
+    investigations go too, and their memberships and invitations elsewhere
+    (`investigations.forget_account`).
 
-    Role and reputation are kept, because they set the weight of what the
-    person contributed.
+    The public record of their contributions stays, because it was published
+    under an open licence and other people's work builds on it (Decisions
+    0002 and 0009): findings, second looks, evidence, votes, comments,
+    mentions, square surveys and the items they added to investigations. So
+    does the record moderation keeps: reports they made or that are about
+    them, and the moderation log. The row stays, marked deleted and stripped
+    of everything personal, so all of these keep an author, credited to
+    "Former member" from now on, and the old handle no longer leads to them.
+
+    Role, reputation and its itemised events are kept, because they set the
+    weight of what the person contributed. Nobody else can read the events.
     """
     assert user.id is not None, "the user must be flushed before it can be deleted"
     assert not user.is_deleted, f"user {user.id} is already deleted"
@@ -168,6 +176,8 @@ def delete_account(db: Session, user: User, *, now: datetime | None = None) -> N
     db.execute(delete(Notification).where(Notification.user_id == user.id))
     # Private investigations go; shared ones pass to an editor (see `forget_account`).
     investigations.forget_account(db, user)
+    # A photo is personal data: its file and row go, and the evidence it was on stays without it.
+    media.forget_account(db, user)
 
     user.email = None
     user.email_verified_at = None
