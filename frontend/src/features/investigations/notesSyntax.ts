@@ -38,9 +38,40 @@ function pushAll(out: Inline[], inlines: readonly Inline[]): void {
   }
 }
 
+/**
+ * Notes come from other people and can be long (50,000 characters), so the
+ * parse has to stay quick whatever is in them. Looking ahead for a closing
+ * marker is the only costly part. Each run remembers its last search for each
+ * marker, so a hundred unclosed openers don't each scan to the end, and every
+ * look ahead draws on one budget, a fixed multiple of the note's length. Once
+ * it is spent, what is left is shown as written. Emphasis nests at most
+ * `MAX_DEPTH` deep, and an address is at most `MAX_ADDRESS` long.
+ */
+export const MAX_DEPTH = 8;
+const MAX_ADDRESS = 2048;
+const BUDGET_PER_CHAR = 40;
+
+interface Run {
+  /** Characters that may still be looked at ahead of the parse, shared by every nested run. */
+  budget: { left: number };
+  /** The last search for each closing marker in this run: where it started and what it found. */
+  closers: Map<string, { from: number; found: number }>;
+  /** The same for the `](` that ends a link's words. */
+  labelEnd: { from: number; found: number } | null;
+}
+
+function newRun(budget: Run["budget"]): Run {
+  return { budget, closers: new Map(), labelEnd: null };
+}
+
 /** Where a `**` or a single `*` or `_` that closes emphasis starting at `from` is, or -1. */
-function closing(source: string, marker: string, from: number): number {
+function closing(source: string, marker: string, from: number, run: Run): number {
+  // The first closer after an earlier start is also the first after any later start before it.
+  const last = run.closers.get(marker);
+  if (last && from > last.from && (last.found < 0 || from < last.found)) return last.found;
+  let found = -1;
   for (let i = from; i < source.length; i++) {
+    if (--run.budget.left < 0) return -1;
     if (source[i] === "\\") {
       i++;
       continue;
@@ -54,15 +85,19 @@ function closing(source: string, marker: string, from: number): number {
       continue;
     }
     if (i === from || /\s/.test(source[i - 1] ?? "")) continue;
-    return i;
+    found = i;
+    break;
   }
-  return -1;
+  run.closers.set(marker, { from, found });
+  return found;
 }
 
 /** Where the `)` that closes a link's address starting at `from` is, allowing balanced brackets inside, or -1. */
-function closingParen(source: string, from: number): number {
+function closingParen(source: string, from: number, run: Run): number {
   let depth = 0;
-  for (let i = from; i < source.length; i++) {
+  const end = Math.min(source.length, from + MAX_ADDRESS);
+  for (let i = from; i < end; i++) {
+    if (--run.budget.left < 0) return -1;
     const char = source[i];
     if (char === "(") depth++;
     else if (char === ")") {
@@ -73,17 +108,38 @@ function closingParen(source: string, from: number): number {
   return -1;
 }
 
+/** The `](` at or after `from`, or -1, remembering the search as `closing` does. */
+function labelEndFrom(source: string, from: number, run: Run): number {
+  const last = run.labelEnd;
+  if (last && from > last.from && (last.found < 0 || from <= last.found)) return last.found;
+  const found = source.indexOf("](", from);
+  run.budget.left -= (found < 0 ? source.length : found) - from;
+  run.labelEnd = { from, found };
+  return found;
+}
+
 /** `[words](address)` starting at `start`, or null when there isn't one. */
-function link(source: string, start: number): { label: string; href: string; end: number } | null {
-  const labelEnd = source.indexOf("](", start + 1);
-  if (labelEnd < 0 || source.slice(start + 1, labelEnd).includes("[")) return null;
-  const hrefEnd = closingParen(source, labelEnd + 2);
+function link(source: string, start: number, run: Run): { label: string; href: string; end: number } | null {
+  if (run.budget.left < 0) return null;
+  const labelEnd = labelEndFrom(source, start + 1, run);
+  if (labelEnd < 0) return null;
+  // Words with a `[` of their own aren't a link's. The nearest `[` is never further than the next one parsed.
+  const bracket = source.indexOf("[", start + 1);
+  if (bracket >= 0 && bracket < labelEnd) return null;
+  const hrefEnd = closingParen(source, labelEnd + 2, run);
   if (hrefEnd < 0) return null;
   return { label: source.slice(start + 1, labelEnd), href: source.slice(labelEnd + 2, hrefEnd), end: hrefEnd + 1 };
 }
 
 /** One line's, or one paragraph's, emphasis and links. */
 export function parseInline(source: string): Inline[] {
+  return inline(source, { left: BUDGET_PER_CHAR * source.length + 1000 }, 0);
+}
+
+function inline(source: string, budget: Run["budget"], depth: number): Inline[] {
+  const run = newRun(budget);
+  // Deeper than this, markers are shown as written.
+  const nests = depth < MAX_DEPTH;
   const out: Inline[] = [];
   let i = 0;
   while (i < source.length) {
@@ -93,17 +149,17 @@ export function parseInline(source: string): Inline[] {
       i += 2;
       continue;
     }
-    if (char === "*" || char === "_") {
+    if (nests && (char === "*" || char === "_")) {
       const double = source.startsWith(`${char}${char}`, i) && char === "*";
       const marker = double ? "**" : char;
       const from = i + marker.length;
       const opensWord = !/\s/.test(source[from] ?? " ");
       // `_` inside a word, as in snake_case, is a letter, not emphasis.
       const midWord = char === "_" && /\w/.test(source[i - 1] ?? "");
-      const end = opensWord && !midWord ? closing(source, marker, from) : -1;
+      const end = opensWord && !midWord ? closing(source, marker, from, run) : -1;
       const closesWord = end >= 0 && !(char === "_" && /\w/.test(source[end + 1] ?? ""));
       if (end > from && closesWord) {
-        out.push({ type: double ? "strong" : "em", children: parseInline(source.slice(from, end)) });
+        out.push({ type: double ? "strong" : "em", children: inline(source.slice(from, end), budget, depth + 1) });
         i = end + marker.length;
         continue;
       }
@@ -111,10 +167,10 @@ export function parseInline(source: string): Inline[] {
       i = from;
       continue;
     }
-    if (char === "[") {
-      const found = link(source, i);
+    if (nests && char === "[") {
+      const found = link(source, i, run);
       if (found) {
-        const children = parseInline(found.label);
+        const children = inline(found.label, budget, depth + 1);
         const href = safeHref(found.href.trim());
         if (href) out.push({ type: "link", href, children });
         else pushAll(out, children);
@@ -150,7 +206,8 @@ export function parseMarkdown(source: string): Block[] {
   }
 
   for (const raw of source.replace(/\r\n?/g, "\n").split("\n")) {
-    const line = raw.replace(/\s+$/, "");
+    // trimEnd, not a regular expression: `\s+$` backtracks over every run of spaces inside a long line.
+    const line = raw.trimEnd();
     if (line.trim() === "") {
       flush();
       continue;

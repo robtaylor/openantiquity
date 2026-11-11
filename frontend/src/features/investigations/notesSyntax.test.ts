@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type Block, type Inline, parseInline, parseMarkdown } from "./notesSyntax.js";
+import { type Block, type Inline, MAX_DEPTH, parseInline, parseMarkdown } from "./notesSyntax.js";
 
 const text = (value: string): Inline => ({ type: "text", text: value });
 
@@ -90,5 +90,53 @@ describe("parseMarkdown", () => {
       { type: "heading", level: 2, children: [text("A")] },
       { type: "paragraph", children: [text("B")] },
     ]);
+  });
+});
+
+describe("parseMarkdown on hostile text", () => {
+  /** How long a parse takes, in milliseconds, the best of three so a busy machine doesn't decide it. */
+  function timed(source: string): number {
+    let best = Number.POSITIVE_INFINITY;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const start = performance.now();
+      parseMarkdown(source);
+      best = Math.min(best, performance.now() - start);
+    }
+    return best;
+  }
+
+  // Each is at or above the longest note the server takes, 50,000 characters.
+  it.each([
+    ["unclosed underscores", "_a ".repeat(17000)],
+    ["unclosed stars", "*a ".repeat(17000)],
+    ["unclosed doubles", "**a ".repeat(13000)],
+    ["openers before a closer that ends mid-word", `${"_x ".repeat(17000)}a_b`],
+    ["unfinished links", "[a](".repeat(12500)],
+    ["brackets", `${"[".repeat(50000)}](https://example.org)`],
+    ["deep nesting", `${"**".repeat(12500)}x${"**".repeat(12500)}`],
+    ["a long line of spaces", `${" ".repeat(50000)}x`],
+  ])("reads %s quickly", (_name, source) => {
+    expect(timed(source)).toBeLessThan(50);
+  });
+
+  it("nests emphasis no deeper than it allows, showing deeper markers as written", () => {
+    const source = `${"**".repeat(20)}x${"**".repeat(20)}`;
+    let depth = 0;
+    let node: Inline | undefined = parseInline(source)[0];
+    while (node && node.type !== "text") {
+      depth++;
+      node = node.children[0];
+    }
+    expect(depth).toBe(MAX_DEPTH);
+    expect(node?.type === "text" && node.text.includes("**")).toBe(true);
+  });
+
+  it("still reads emphasis and links in a long ordinary note", () => {
+    const paragraph = "A bank, *faint*, beside a **ditch**; see [the HER](https://example.org/her). ".repeat(600);
+    const [block] = parseMarkdown(paragraph);
+    expect(block?.type).toBe("paragraph");
+    const children = block?.type === "paragraph" ? block.children : [];
+    expect(children.filter((node) => node.type === "link")).toHaveLength(600);
+    expect(children.filter((node) => node.type === "em")).toHaveLength(600);
   });
 });
