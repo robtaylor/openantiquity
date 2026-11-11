@@ -14,9 +14,25 @@ pixel with data. Further out it takes the national overview's height where
 the overview has one (the selection's `fill`), and `NODATA_ELEVATION_M`
 where nothing does. The overview is built from the same mirror, so in a full
 mirror it adds heights only where the 1 m data can't be read. What is left is
-the sea, and the land beyond England: sea level is the right height for the
-first, and the step it makes at the Welsh and Scottish borders stays until
-those nations have elevation of their own.
+the sea, the land beyond England, and any gap inside England that neither
+holds. Sea level is right for the sea. Elsewhere it is wrong, and visibly so
+in 3D terrain and DEM hillshade:
+
+- at the Welsh and Scottish borders it makes a step, until those nations have
+  elevation of their own;
+- the 2022 composite has no tiles over 351 km2 of the North York Moors (SE89
+  and SE99sw, about 250 m high), so every DEM tile there draws a pit at sea
+  level with cliffs of 200 to 400 m at its edge, and so does any void inside
+  the data wider than twice the buffer. The remedy is Defra's post-2022
+  tiles, which cover the gap (`docs/sources/lidar.md`). The styles draw such
+  gaps transparent, so only the DEM shows them.
+
+A rebuilt overview changes the URL token of every tile, high zooms included,
+although tiles from zoom 13 up never read it: `/meta` gives one token per style
+for all zooms, and the DEM tiles at those zooms do take the overview as their
+fill. So a rebuild renews the browser's and any CDN's copies of high-zoom
+tiles, while their server-side keys, which carry only their source's edition,
+stay valid.
 
 A tile's cacheability and version come from one `Selection`, chosen once per
 request, so a tile is never stored or sent as immutable under a build other
@@ -54,6 +70,7 @@ logger = logging.getLogger(__name__)
 # What a Terrarium tile says far from any data: sea level, which is what
 # most of England's no-data is. MapLibre needs a number for every pixel, and
 # any other constant would put a step at the coast instead of the borders.
+# It is wrong inside England's interior gaps: see the module docstring.
 NODATA_ELEVATION_M = 0.0
 TERRARIUM_OFFSET = 32768.0
 DEM_VERSION = "2"

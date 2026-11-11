@@ -57,7 +57,7 @@ One audited rename from the working name to `fieldclub` across directories, impo
 
 ### WS2 — Terrain
 
-**Status:** In progress. The mirror, the visualisations, the tile endpoints, the height profile, the coverage layer and the mirror command shipped on 2026-11-10. The national overview (Decision 0010), capture years on the coverage layer, the LIDAR `sources` rows, the bucket lock and the resumable whole-country mirror job followed the same day. Left: running the mirror job and the overview build in the cloud (WS8), and the browser screenshot.
+**Status:** In progress. The mirror, the visualisations, the tile endpoints, the height profile, the coverage layer and the mirror command shipped on 2026-11-10. The national overview (Decision 0010), capture years on the coverage layer, the LIDAR `sources` rows, the bucket lock and the resumable whole-country mirror job followed the same day. Left: running the mirror job and the overview build in the cloud (WS8), and the browser screenshot. Known artefact: the 2022 composite has no tiles over 351 km² of the North York Moors, so the DEM there draws a sea-level pit with cliffs of 200 to 400 m at its edge, in 3D terrain and DEM hillshade. The remedy is Defra's post-2022 tiles, which cover it; until then the gap stays.
 
 England's elevation behind one interface, the visualisations, and the tile endpoints. See Decision 0006 and `sources/lidar.md`.
 

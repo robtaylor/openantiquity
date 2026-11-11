@@ -13,9 +13,10 @@ mirrored since the build still draws. Such a read can change as the mirror
 fills, so it isn't cacheable, and nor is a read that touches a tile neither
 holds yet. A read that touches only built tiles is cacheable: its pixels
 change only with the build, which changes the edition and the version token.
-Past `max_fallback_tiles` mirrored tiles in view (a zoom of about 10 or less
-over a fresh mirror) the mirror isn't read: those tiles draw after the next
-build.
+Only the tiles mirrored since the build and the mirrored tiles beside them
+are read, because the build holds the rest. Past `max_fallback_tiles` of
+them in view (a zoom of about 10 or less over a mirror filling fast) the
+mirror isn't read: those tiles draw after the next build.
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ from collections.abc import Callable
 
 import numpy as np
 
-from fieldclub.terrain.catalogue import Catalogue
+from fieldclub.terrain.catalogue import TILE_METRES, Catalogue, tile_origin
 from fieldclub.terrain.grid import nominal_ground_resolution, window_for
 from fieldclub.terrain.mirror import Mirror
 from fieldclub.terrain.national import NATIONAL_FORMAT, RESOLUTION_M, RESOLUTIONS, Manifest, NationalStore
@@ -99,16 +100,30 @@ class OverviewSnapshot:
         touched = self.touched(bounds, width, height)
         if touched <= self.built:
             return out
-        mirrored = self._mirrored() & touched
-        if not mirrored - self.built:
+        mirrored = self._mirrored()
+        fresh = (mirrored & touched) - self.built
+        if not fresh:
             return out
-        if len(mirrored) > self._max_fallback:
-            logger.info(
-                "%d mirrored tiles in view, so those since the build wait for the next", len(mirrored)
-            )
+        if len(fresh) > self._max_fallback:
+            logger.info("%d tiles mirrored since the build in view; they wait for the next", len(fresh))
             return out
-        drawn = self._mirror_source(mirrored).read(bounds, width, height)
+        drawn = self._mirror_source(self._with_neighbours(fresh, mirrored)).read(bounds, width, height)
         return np.where(np.isnan(drawn), out, drawn).astype(np.float32)
+
+    def _with_neighbours(self, fresh: frozenset[str], mirrored: frozenset[str]) -> frozenset[str]:
+        """`fresh` and the mirrored tiles beside them, so the sampler has data across their edges.
+
+        The build holds the rest of the view. Without the neighbours, a pixel
+        whose 16 cells straddle a fresh tile's edge would have no data in
+        either read. The sampler's margin is far less than a tile, so the
+        tiles next to each fresh one are enough.
+        """
+        near: set[str] = set(fresh)
+        for name in fresh:
+            west, south = tile_origin(name)
+            box = (west - 1, south - 1, west + TILE_METRES + 1, south + TILE_METRES + 1)
+            near.update(tile.name for tile in self.catalogue.covering(box))
+        return frozenset(near & mirrored)
 
     def _mirror_source(self, names: frozenset[str]) -> CogMosaicSource:
         """The mirror's tiles in `names`, read at the overview's levels, never fetching."""

@@ -16,6 +16,7 @@ from fieldclub.terrain.grid import TILE_SIZE, TileNotFoundError, Window, nominal
 from fieldclub.terrain.render import (
     DEM_KIND,
     ELEVATION_FORMAT,
+    NODATA_ELEVATION_M,
     TileRenderer,
     UnknownStyleError,
     fill_near_gaps,
@@ -130,6 +131,25 @@ def test_dem_tiles_fill_the_edge_of_the_data_for_the_buffer_then_sea_level(tmp_p
     reach = elevation_buffer(15)
     assert (heights[:, : 256 + reach] == 80.0).all()
     assert (heights[:, 256 + reach + 1 :] == 0.0).all()
+
+
+def test_a_void_inside_the_data_wider_than_the_reach_draws_sea_level(tmp_path: Path) -> None:
+    """A known artefact, kept visible: inland gaps such as the North York Moors' are drawn at 0 m.
+
+    Neither source can tell them from the sea. If this starts failing, the
+    render docstring, ARCHITECTURE.md and the WS2 plan entry describe it too.
+    """
+    x, y = tile_at(*AVEBURY, 15)
+    window = Window.tile(15, x, y)
+    west, east = window.x_centres()[100], window.x_centres()[400]
+    moor = FunctionSource(lambda xs, ys: np.where((xs > west) & (xs < east), np.nan, 250.0))
+    heights = terrarium_decode(
+        decode_png(single_source_renderer(moor, LocalStorage(tmp_path), fill=moor).dem_png(15, x, y).png)
+    )
+    reach = elevation_buffer(15)
+    assert (heights[:, : 100 + reach] == 250.0).all()
+    assert NODATA_ELEVATION_M == 0.0
+    assert (heights[:, 101 + reach : 400 - reach] == NODATA_ELEVATION_M).all()
 
 
 def test_beyond_the_reach_dem_tiles_take_the_fill_where_it_has_data(tmp_path: Path) -> None:

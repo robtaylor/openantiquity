@@ -29,7 +29,13 @@ def test_the_rows_match_the_work_list() -> None:
         assert info.licence_url == entry["licence_url"]
         assert info.reuse == entry["reuse"]
         assert info.coverage == entry["coverage"]
-        assert entry["licence"].startswith("Open Government Licence v3")
+        # The project's spelling of the same licence (see the module docstring).
+        assert entry["licence"] == "Open Government Licence v3"
+        assert info.licence == "Open Government Licence v3.0"
+        # The project's own vocabularies, not the work list's.
+        assert entry["category"] == "lidar_index"
+        assert info.category == "elevation"
+        assert info.access == "bulk"
 
 
 def test_registering_twice_leaves_one_row_each(db: Session) -> None:

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -36,7 +37,7 @@ from fieldclub.terrain.cog import COG_FORMAT
 from fieldclub.terrain.mirror import Fetcher, LocalSourceFetcher, Mirror, SftpFetcher, mirror_store
 from fieldclub.terrain.national import NationalStore
 from fieldclub.terrain.overview import Overview, overview_edition
-from fieldclub.terrain.render import Selection, TileRenderer
+from fieldclub.terrain.render import Selection, TileRenderer, tile_version
 from fieldclub.terrain.sources import mirror_source
 from fieldclub.terrain.styles import FINE_MINZOOM
 
@@ -79,6 +80,23 @@ class Terrain:
     def editions(self) -> tuple[str, str]:
         """What the tiles are drawn from now: the 1 m mirror and the overview's current build."""
         return self.fine.edition, self.overview.edition
+
+    def url_versions(self) -> Callable[[str], str]:
+        """The tokens `/meta` puts in tile URLs, from the editions read once.
+
+        When the overview's manifest can't be read (a bucket error, or a
+        malformed `national.json` before any build was ever read), the tokens
+        are those of no build, so `/meta` still answers and no URL it offers is
+        sent as immutable.
+        """
+        try:
+            editions = self.editions()
+        except Exception:
+            logger.exception(
+                "Couldn't read the overview's build; /meta offers tile URLs that aren't immutable"
+            )
+            editions = default_editions()
+        return lambda kind: tile_version(kind, editions)
 
     def select(self, zoom: int) -> Selection:
         snapshot = self.overview.snapshot()

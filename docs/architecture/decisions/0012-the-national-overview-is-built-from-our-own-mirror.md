@@ -38,6 +38,8 @@ A 512-pixel tile at zoom 12 spans about 6 km and touches up to nine 5 km tiles, 
 - Coverage below zoom 13 is only as complete as the mirror. Until a build holds a tile, low zooms draw it from the mirror uncached, and past 64 such tiles in view they don't draw it at all.
 - Old builds' cached tiles stay in the tile cache until something removes them.
 - A fresh machine has no chunks, so its first build reads every mirrored tile again.
+- A build of all of England needs about 8 GB of local disk: 4.2 GB of chunks and the 3.5 GB COG, staged before it is uploaded.
+- A rebuild changes the URL token of every terrain tile, zoom 13 and up included, so browsers and caches fetch those tiles again although their pixels haven't changed.
 
 ## Walk-back options
 

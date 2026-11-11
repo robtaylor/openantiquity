@@ -12,6 +12,15 @@ two of the work list's Defra LIDAR entries (`docs/sources/worklists/sources.json
 The work list's other two `defra-lidar-` entries, the post-2022 tiles and
 the 10 m composite, have no row: nothing of theirs is stored or shown.
 
+The attribution and licence URL are the work list's, word for word. Three
+fields follow the project rather than the work list: the licence is spelt
+"Open Government Licence v3.0", as in `layers.py` and the other connectors;
+the category is `elevation`, because the work list's `lidar_index` is a
+record category and nothing here is a record; and `access` is the
+`SourceAccess` of Decision 0007, how Field Club holds the data, which is
+`bulk` for both, although the survey index is read over WFS (the work list's
+`access_method` is how it is fetched).
+
 `register_sources` writes both rows and is idempotent. Every
 `fieldclub-terrain` command that stores elevation calls it first, and
 `fieldclub-terrain sources` runs it on its own, for a deployment.

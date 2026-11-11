@@ -14,4 +14,4 @@ router = APIRouter(tags=["meta"])
 @router.get("/meta", response_model=Meta)
 def get_meta(db: Db, settings: AppSettings, terrain: TerrainDep) -> Meta:
     """Vocabularies, tier definitions, the layer catalogue, sign-in providers and source attributions."""
-    return build_meta(db, settings, tile_version=terrain.renderer.version)
+    return build_meta(db, settings, tile_version=terrain.url_versions())

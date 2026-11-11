@@ -9,6 +9,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from fieldclub.layers import default_tile_version
 from fieldclub.terrain.blobs import LocalFolder
 from fieldclub.terrain.grid import HALF_WORLD, TILE_SIZE, Window, lonlat_to_mercator, resolution, tile_at
 from fieldclub.terrain.mirror import Mirror
@@ -181,3 +182,50 @@ def test_meta_offers_the_token_of_the_current_build(
     assert after.endswith(f"?v={terrain.renderer.version('composite')}")
     dem = client.get("/api/v1/meta").json()["layers"]["dem"]["tiles"][0]
     assert dem.endswith(f"?v={terrain.renderer.version('dem')}")
+
+
+def test_only_tiles_mirrored_since_the_build_count_against_the_fallback_cap(
+    terrain: Terrain, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A cap of one: the built tiles in view must not use it up.
+    overview = Overview(terrain.mirror, terrain.overview.store, refresh_s=0, max_fallback_tiles=1)
+    zoom = 10
+    x, y = centre_tile(zoom)
+    window = Window.tile(zoom, x, y, elevation_buffer(zoom))
+    snapshot = overview.snapshot()
+    assert LATER in snapshot.touched(window.bounds, window.width, window.height)
+    assert len(snapshot.touched(window.bounds, window.width, window.height) & snapshot.built) > 1
+    before = snapshot.read(window.bounds, window.width, window.height)
+    terrain.mirror.ensure(LATER)
+    read_from: list[frozenset[str]] = []
+    real = snapshot._mirror_source
+
+    def spy(names: frozenset[str]) -> object:
+        read_from.append(names)
+        return real(names)
+
+    monkeypatch.setattr(snapshot, "_mirror_source", spy)
+    after = snapshot.read(window.bounds, window.width, window.height)
+    assert np.isfinite(after).sum() > np.isfinite(before).sum()
+    # The fresh tile and the built ones beside it, for the sampler's margin; not the far side of the block.
+    assert read_from == [{"SU27nw", "SU17ne", "SU17se", "SU27sw"}]
+
+
+class UnreadableStore(NationalStore):
+    def manifest(self) -> None:
+        raise RuntimeError("the bucket can't be reached")
+
+
+def test_meta_still_answers_when_the_overview_cannot_be_read(
+    app: FastAPI, client: TestClient, terrain: Terrain, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    store = UnreadableStore(LocalFolder(tmp_path / "national"))
+    broken = Terrain(terrain.mirror, Overview(terrain.mirror, store), terrain.renderer.storage)
+    app.dependency_overrides[get_terrain] = lambda: broken
+    response = client.get("/api/v1/meta")
+    assert response.status_code == 200
+    views = {view["id"]: view for view in response.json()["layers"]["views"]}
+    # The token of no build, so no URL it offers is served as immutable.
+    assert views["composite"]["tiles"][0].endswith(f"?v={default_tile_version('composite')}")
+    assert response.json()["layers"]["dem"]["tiles"][0].endswith(f"?v={default_tile_version('dem')}")
+    assert "Couldn't read the overview's build" in caplog.text
