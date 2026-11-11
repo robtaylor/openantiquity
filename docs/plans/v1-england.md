@@ -94,7 +94,7 @@ Provider sign-in, the emailed link, the welcome sheet and account deletion. See 
 
 ### WS4 — Findings and confidence
 
-**Status:** In progress. The server side shipped on 2026-11-10: the confidence engine, findings, second looks, evidence, discussion, the review queue, reputation and exports. Left: the end-to-end test through the interface.
+**Status:** In progress. The server side shipped on 2026-11-10: the confidence engine, findings, second looks, evidence, discussion, the review queue, reputation and exports. The end-to-end test through the interface passes on `f1/findings` (`frontend/e2e-full/finding.spec.ts`), waiting to be rebased onto `main`.
 
 The core loop. See Decisions 0003, 0005 and 0008.
 
@@ -149,7 +149,7 @@ Investigations, mentions, follow-ups, activity and moderation. See Decision 0009
 
 **Status:** Not started. Follows the API of WS3 to WS6.
 
-Findings track (`f1/findings`), as of 2026-11-11: built are marking a finding, Explore's list of the findings in view, and a finding's page with its second look, evidence, discussion and the finder's controls. Not built: the blind second-look queue and the help-wanted lists. The "Second look" and "Help wanted" tabs still open placeholder panels, and `secondLook/` holds the answer buttons, the detail, the reveal and the draft kind for the queue to reuse.
+Findings track (`f1/findings`), as of 2026-11-11: built are marking a finding, Explore's list of the findings in view, and a finding's page with its second look, evidence, discussion and the finder's controls. Its full-stack test takes a finding from spotted to corroborated with three accounts. Not built: the blind second-look queue and the help-wanted lists. The "Second look" and "Help wanted" tabs still open placeholder panels, and `secondLook/` holds the answer buttons, the detail, the reveal and the draft kind for the queue to reuse.
 
 Every screen over the map. See `UI.md`.
 
