@@ -7,7 +7,8 @@ category in layer `record_counts`, with `category`, `count` and `sources`
 centroid falls, so it is counted once however many tiles its outline
 touches. From `FEATURES_FROM_ZOOM` up, layer `records` holds the records
 themselves, clipped to the tile, with `id`, `name`, `category`, `type`,
-`source` and `reuse`. A source's licence and attribution come from
+`source`, `reuse` and `precision_m` (how exact the position is, in metres,
+when the source says). A source's licence and attribution come from
 `GET /api/v1/sources` by the `source` key.
 
 A tile at a feature zoom with more than `MAX_TILE_FEATURES` records gets
@@ -71,6 +72,9 @@ TILE_TEMPLATE = "/tiles/records/{z}/{x}/{y}.mvt"
 IMMUTABLE_CACHE = "public, max-age=31536000, immutable"
 # Without it, or with an old one, an hour fresh and a day stale, so an ingest shows the same day.
 UNVERSIONED_CACHE = "public, max-age=3600, stale-while-revalidate=86400"
+# What a tile holds. Raise it when a layer gains or loses a property, so the
+# token changes and no browser keeps an immutable tile of the old shape.
+TILE_FORMAT = 2
 
 
 class InvalidTileFilterError(BadRequestError):
@@ -108,6 +112,7 @@ _FEATURES = text(
     SELECT ST_AsMVT(features, 'records', :extent, 'geom', 'id')
     FROM (
         SELECT r.id, r.name, r.category, r.record_type AS type, r.source_key AS source, s.reuse,
+               r.precision_m,
                ST_AsMVTGeom(ST_Transform(r.geom, 3857), bounds.tile, :extent, :buffer, true) AS geom
         FROM records r
         JOIN sources s ON s.key = r.source_key
@@ -254,9 +259,9 @@ class TileVersion:
 def tile_version(db: Session) -> TileVersion:
     """A token of what the tiles are drawn from, and whether tiles under it can still change.
 
-    The token covers the last run to finish in any status, because a failed
-    run keeps the batches it committed, the start of every run still going,
-    and the enabled sources.
+    The token covers what a tile holds (`TILE_FORMAT`), the last run to
+    finish in any status, because a failed run keeps the batches it
+    committed, the start of every run still going, and the enabled sources.
     """
     finished = db.scalar(select(func.max(IngestRun.finished_at)))
     running = db.scalars(
@@ -266,7 +271,12 @@ def tile_version(db: Session) -> TileVersion:
     ).all()
     enabled = db.scalars(select(Source.key).where(Source.enabled).order_by(Source.key)).all()
     stamp = finished.isoformat() if finished is not None else "never"
-    parts = [stamp, *(f"running {started.isoformat()}" for started in running), *enabled]
+    parts = [
+        f"format {TILE_FORMAT}",
+        stamp,
+        *(f"running {started.isoformat()}" for started in running),
+        *enabled,
+    ]
     token = hashlib.sha256("\n".join(parts).encode()).hexdigest()[:12]
     return TileVersion(token=token, settled=not running)
 

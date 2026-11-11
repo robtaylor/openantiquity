@@ -2,6 +2,11 @@
 
 `format=geojson` on search and nearby is the export: a FeatureCollection whose
 every feature carries its source key, licence, attribution and reuse class.
+
+Search, nearby, a record and the sources are the same for every viewer, so
+each is sent as publicly cacheable for a few minutes (`deps.shared`). The
+findings linked to a record and the suggestions for a finding depend on the
+viewer and are private.
 """
 
 from __future__ import annotations
@@ -12,9 +17,9 @@ from fastapi import APIRouter, Path, Query
 from fastapi.responses import Response
 from pydantic import StringConstraints
 
-from fieldclub.api.deps import BBoxQuery, Db, OptionalUser, PageQuery, private
+from fieldclub.api.deps import BBoxQuery, Db, OptionalUser, PageQuery, private, shared
 from fieldclub.schemas import records as schema
-from fieldclub.schemas.common import GeoJSONFeatureCollection, parse_bbox
+from fieldclub.schemas.common import GeoJSONFeatureCollection, Page, parse_bbox
 from fieldclub.services import findings, records
 from fieldclub.vocab import RecordCategory
 
@@ -37,12 +42,15 @@ def _values(values: list[str] | list[RecordCategory] | None) -> list[str] | None
 
 def _geojson(results: list[records.RecordResult]) -> Response:
     collection = GeoJSONFeatureCollection(features=[schema.record_feature(result) for result in results])
-    return Response(collection.model_dump_json(), media_type=GEOJSON)
+    exported = Response(collection.model_dump_json(), media_type=GEOJSON)
+    shared(exported)
+    return exported
 
 
 @router.get("/records/search", response_model=schema.RecordPage)
 def search_records(
     db: Db,
+    response: Response,
     *,
     q: Annotated[str | None, Query(max_length=records.MAX_QUERY_CHARS)] = None,
     source: SourceParam = None,
@@ -52,6 +60,7 @@ def search_records(
     format: Format = "json",
 ) -> schema.RecordPage | Response:
     """Records by text, source, category and area, best match first."""
+    shared(response)
     found, next_cursor = records.search(
         db,
         q,
@@ -71,6 +80,7 @@ def search_records(
 @router.get("/records/nearby", response_model=schema.RecordHits)
 def nearby_records(
     db: Db,
+    response: Response,
     lon: Annotated[float, Query(ge=-180, le=180)],
     lat: Annotated[float, Query(ge=-90, le=90)],
     radius: Annotated[float, Query(gt=0, le=records.MAX_RADIUS_M, description="metres")] = 1000,
@@ -80,6 +90,7 @@ def nearby_records(
     format: Format = "json",
 ) -> schema.RecordHits | Response:
     """Records near a point, nearest first, with the distance to each in metres."""
+    shared(response)
     found = records.nearby(
         db,
         lon,
@@ -95,14 +106,47 @@ def nearby_records(
 
 
 @router.get("/records/{record_id}", response_model=schema.RecordOut)
-def get_record(db: Db, record_id: Annotated[int, Path(ge=1, le=2**63 - 1)]) -> schema.RecordOut:
+def get_record(
+    db: Db, response: Response, record_id: Annotated[int, Path(ge=1, le=2**63 - 1)]
+) -> schema.RecordOut:
     """One record with its geometry, and its source's licence and attribution."""
+    shared(response)
     return schema.record_out(records.get_record(db, record_id))
 
 
+@router.get("/records/{record_id}/findings", response_model=Page[schema.LinkedFinding])
+def record_findings(
+    db: Db,
+    viewer: OptionalUser,
+    response: Response,
+    record_id: Annotated[int, Path(ge=1, le=2**63 - 1)],
+    page: PageQuery,
+) -> Page[schema.LinkedFinding]:
+    """The findings linked to this record that you may see exactly, oldest first.
+
+    Apart from the record's page, because this depends on who is asking and the page doesn't.
+    """
+    private(response)
+    found = records.linked_findings(db, record_id, viewer, limit=page.limit, cursor=page.cursor)
+    return Page[schema.LinkedFinding](
+        items=[
+            schema.LinkedFinding(
+                public_id=finding.public_id,
+                title=finding.title,
+                feature_class=finding.feature_class,
+                tier=finding.tier,
+                state=finding.state,
+            )
+            for finding in found.findings
+        ],
+        next_cursor=found.next_cursor,
+    )
+
+
 @router.get("/sources", response_model=list[schema.SourceOut])
-def list_sources(db: Db) -> list[schema.SourceOut]:
+def list_sources(db: Db, response: Response) -> list[schema.SourceOut]:
     """Every source in the index, with its licence, attribution, reuse class and record count."""
+    shared(response)
     return [schema.SourceOut.model_validate(source) for source in records.list_sources(db)]
 
 

@@ -63,6 +63,7 @@ class Link:
     name: str
     url: str
     coverage: str
+    shows: str
     verified: str
     no_frame: bool
 
@@ -140,6 +141,14 @@ def links_for(db: Session, lon: float, lat: float, zoom: int = DEFAULT_ZOOM) -> 
         url = _fill(link, lon, lat, zoom, grid) if applies else None
         if url is not None:
             links.append(
-                Link(link["key"], link["name"], url, link["coverage"], link["verified"], link["no_frame"])
+                Link(
+                    link["key"],
+                    link["name"],
+                    url,
+                    link["coverage"],
+                    link["shows"],
+                    link["verified"],
+                    link["no_frame"],
+                )
             )
     return PointLinks(reference, links)

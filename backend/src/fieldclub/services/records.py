@@ -46,11 +46,18 @@ from sqlalchemy.orm import Session
 
 from fieldclub import gridref
 from fieldclub.errors import AppError, BadRequestError, NotFoundError
-from fieldclub.models import Finding, Record, Source, User
+from fieldclub.models import Evidence, Finding, Record, Source, User
 from fieldclub.models.common import SRID
-from fieldclub.schemas.common import MAX_OFFSET, check_bbox, offset_from_cursor, offset_page
+from fieldclub.schemas.common import (
+    MAX_OFFSET,
+    check_bbox,
+    int_from_cursor,
+    offset_from_cursor,
+    offset_page,
+    paginate,
+)
 from fieldclub.services import findings, geo, record_tiles, sensitivity
-from fieldclub.vocab import COVERAGE_RECORD_TYPES, FeatureClass
+from fieldclub.vocab import COVERAGE_RECORD_TYPES, FeatureClass, FindingState
 
 # The search box sends at most this much. The API refuses longer, and the
 # service cuts anything longer that reaches it another way.
@@ -428,6 +435,47 @@ def get_record(db: Session, record_id: int) -> RecordResult:
     if row is None:
         raise RecordNotFoundError()
     return _results([row])[0]
+
+
+@dataclass(frozen=True)
+class LinkedFindingPage:
+    findings: list[Finding]
+    next_cursor: str | None
+
+
+def linked_findings(
+    db: Session, record_id: int, viewer: User | None, *, limit: int, cursor: str | None = None
+) -> LinkedFindingPage:
+    """The findings whose evidence links this record, as `viewer` may list them, oldest first.
+
+    A link counts while its evidence stands (`findings.standing_evidence_clause`).
+    Withdrawn findings are left out for everyone, and hidden ones for all but
+    their finder and moderators. So is every finding whose exact position the
+    viewer doesn't see: its page leaves out the record it links for them
+    (`redacted` evidence), because naming the record would place the finding
+    as closely as the record is placed. `RecordNotFoundError` when the record
+    isn't in the index.
+    """
+    get_record(db, record_id)
+    linked = select(Evidence.finding_id).where(
+        Evidence.record_id == record_id, findings.standing_evidence_clause()
+    )
+    query = (
+        select(Finding)
+        .where(
+            Finding.id.in_(linked),
+            Finding.state != FindingState.WITHDRAWN.value,
+            findings.not_hidden_clause(viewer),
+            sensitivity.as_sql(sensitivity.sees_exact_clause(viewer)),
+        )
+        .order_by(Finding.id)
+    )
+    if cursor is not None:
+        query = query.where(Finding.id > int_from_cursor(cursor))
+    rows = db.scalars(query.limit(limit + 1)).all()
+    items, next_cursor = paginate(rows, limit, lambda finding: [finding.id])
+    assert all(sensitivity.sees_exact(finding, viewer) for finding in items), "the SQL rule is sees_exact"
+    return LinkedFindingPage(items, next_cursor)
 
 
 def list_sources(db: Session) -> list[Source]:

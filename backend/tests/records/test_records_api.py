@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
-from fieldclub.services import records
-from fieldclub.vocab import FeatureClass
+from fieldclub.models import Evidence
+from fieldclub.services import findings, records
+from fieldclub.services.findings import EvidenceFields
+from fieldclub.vocab import EvidenceKind, FeatureClass, Relation
+from tests.findings.support import create
 from tests.helpers import ClientAs, MakeFinding, MakeUser, add_record, add_source, error_code
 from tests.records.support import OVERTON, SILBURY, SILBURY_MOUND, add_finds_source
 
@@ -256,3 +262,99 @@ def test_suggested_records_for_an_unknown_finding(client: TestClient) -> None:
     response = client.get("/api/v1/findings/ZZZZZZ/suggested-records")
     assert response.status_code == 404
     assert error_code(response) == "finding_not_found"
+
+
+# --------------------------------------------------------------------------
+# The findings linked to a record
+# --------------------------------------------------------------------------
+
+
+def _link(db: Session, finding, user, record_id: int):
+    evidence, _ = findings.add_evidence(
+        db,
+        findings.lock(db, finding),
+        user,
+        EvidenceFields(kind=EvidenceKind.RECORD_LINK, record_id=record_id, relation=Relation.SAME_AS),
+    )
+    db.commit()
+    return evidence
+
+
+def test_a_record_lists_the_findings_linked_to_it(
+    client: TestClient, db: Session, index: dict[str, int], make_user: MakeUser
+) -> None:
+    finder = make_user()
+    first = create(db, finder, title="Bank by the hill")
+    second = create(db, finder, title="Second bank")
+    unlinked = create(db, finder, title="Nothing to do with it")
+    _link(db, first, finder, index["silbury"])
+    _link(db, second, make_user(), index["silbury"])
+    _link(db, second, make_user(), index["silbury"])
+    _link(db, unlinked, finder, index["bowl"])
+    response = client.get(f"/api/v1/records/{index['silbury']}/findings")
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [
+            {
+                "public_id": found.public_id,
+                "title": found.title,
+                "feature_class": "enclosure",
+                "tier": found.tier,
+                "state": found.state,
+            }
+            for found in (first, second)
+        ],
+        "next_cursor": None,
+    }
+    page = client.get(f"/api/v1/records/{index['silbury']}/findings", params={"limit": 1}).json()
+    assert [item["public_id"] for item in page["items"]] == [first.public_id]
+    rest = client.get(
+        f"/api/v1/records/{index['silbury']}/findings", params={"limit": 1, "cursor": page["next_cursor"]}
+    ).json()
+    assert ([item["public_id"] for item in rest["items"]], rest["next_cursor"]) == ([second.public_id], None)
+
+
+def test_withdrawn_hidden_and_unlinked_findings_are_left_out(
+    client: TestClient, client_as: ClientAs, db: Session, index: dict[str, int], make_user: MakeUser
+) -> None:
+    finder = make_user()
+    withdrawn = create(db, finder)
+    hidden = create(db, finder)
+    taken_back = create(db, finder)
+    for found in (withdrawn, hidden, taken_back):
+        _link(db, found, finder, index["silbury"])
+    findings.withdraw_finding(db, findings.lock(db, withdrawn), finder)
+    hidden.hidden_at = datetime.now(UTC)
+    removed = db.scalars(select(Evidence).where(Evidence.finding_id == taken_back.id)).one()
+    findings.delete_evidence(db, removed.id, finder)
+    db.commit()
+    path = f"/api/v1/records/{index['silbury']}/findings"
+    assert client.get(path).json()["items"] == []
+    # The finder and moderators still see a hidden finding, as in every list.
+    assert [item["public_id"] for item in client_as(finder).get(path).json()["items"]] == [hidden.public_id]
+    assert [item["public_id"] for item in client_as(make_user("moderator")).get(path).json()["items"]] == [
+        hidden.public_id
+    ]
+
+
+def test_an_unknown_records_findings(client: TestClient, index: dict[str, int]) -> None:
+    response = client.get("/api/v1/records/999999/findings")
+    assert (response.status_code, error_code(response)) == (404, "record_not_found")
+
+
+def test_record_reads_are_the_same_for_everyone_and_cacheable_for_a_few_minutes(
+    client: TestClient, index: dict[str, int]
+) -> None:
+    for path in (
+        f"/api/v1/records/{index['silbury']}",
+        "/api/v1/records/search?q=barrow",
+        "/api/v1/records/search?q=barrow&format=geojson",
+        "/api/v1/records/nearby?lon=-1.85&lat=51.41",
+        "/api/v1/records/nearby?lon=-1.85&lat=51.41&format=geojson",
+        "/api/v1/sources",
+    ):
+        response = client.get(path)
+        assert response.status_code == 200, path
+        assert response.headers["cache-control"] == "public, max-age=300", path
+    # An error is never cached as public.
+    assert client.get("/api/v1/records/999999").headers["cache-control"].startswith("private")

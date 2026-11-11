@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, Field
 
 from fieldclub.schemas.common import ApiModel, GeoJSONFeature, RecordCount, geojson_geometry, to_geojson
+from fieldclub.vocab import LinkShows, LiveFormat
 
 if TYPE_CHECKING:
     from fieldclub.models import Source
@@ -73,6 +74,19 @@ class RecordOut(RecordSummary):
     geometry: dict[str, Any]
     source_updated_at: datetime | None
     ingested_at: datetime
+
+
+class LinkedFinding(BaseModel):
+    """A finding whose evidence links a record, as listed on the record's page.
+
+    Only findings the viewer sees exactly are listed, so none is obscured.
+    """
+
+    public_id: str
+    title: str
+    feature_class: str
+    tier: str
+    state: str
 
 
 class RecordPage(BaseModel):
@@ -139,22 +153,37 @@ class GeoResults(BaseModel):
 # --------------------------------------------------------------------------
 
 
-class LiveSourceOut(BaseModel):
+class LiveSource(BaseModel):
+    """A source the browser queries itself, with how to ask, how to read the answer and how to credit it."""
+
     key: str
     name: str
     publisher: str
     coverage: str
     endpoint: str
+    # `{west}`, `{south}`, `{east}` and `{north}` (or `{lat}` and `{lon}`, or `{id}`) are filled in
+    # by the browser. It carries no cap: add `limit_param` for that.
     query_pattern: str
     response_fields: str
     licence: str
     attribution: str
     link_template: str | None
     limits: str | None
+    answer_format: LiveFormat
+    # Dot paths inside one item of the answer to the record's identifier and
+    # its name. Null where the research didn't name the field.
+    id_field: str | None
+    name_field: str | None
+    # The query parameter that caps how many come back, and the most it takes.
+    limit_param: str | None
+    max_limit: int | None
+    # The lowest map zoom at which to ask, so one viewport's answer stays
+    # under the cap. Null for a request by record id.
+    min_zoom: int | None
 
 
 class LiveSources(BaseModel):
-    items: list[LiveSourceOut]
+    items: list[LiveSource]
 
 
 class ContextLink(BaseModel):
@@ -162,6 +191,8 @@ class ContextLink(BaseModel):
     name: str
     url: str
     coverage: str
+    # What the viewer shows at the place.
+    shows: LinkShows
     # yes, redirect_only or not_tested, as the research found it on 2026-11-10.
     verified: str
     # The publisher forbids framing, so open it in a new tab.

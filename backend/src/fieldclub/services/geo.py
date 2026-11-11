@@ -1,4 +1,4 @@
-"""Where a point is (which nation and county), and boxes as SQL."""
+"""Where a point is (which nation and county, and the nearest place), and boxes as SQL."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.orm import Session
 
 from fieldclub.errors import DataIntegrityError
-from fieldclub.models import AdminArea, Source
+from fieldclub.models import AdminArea, Place, Source
 from fieldclub.models.common import SRID
 from fieldclub.vocab import AdminAreaKind, Nation
 
@@ -22,6 +22,51 @@ NEAR_NATION_M = 10_000.0
 # nation or county shown. `admin_areas` keeps no source of its own, so the
 # loaders in `ingest/reference/ons_boundaries.py` are tested against this.
 AREA_SOURCES = {AdminAreaKind.NATION: "ons-countries-2025", AdminAreaKind.COUNTY: "ons-counties-2025"}
+
+
+# A place is offered as the nearest only within this distance, in metres.
+NEAREST_PLACE_M = 10_000.0
+# Settlements, from a hamlet up: the hundreds of `places.rank` are 4 and over
+# (`ingest/reference/os_open_names.py`). A hill or a wood is no name for a finding.
+SETTLEMENT_RANK = 400
+# How many places the index's nearest-first scan hands over to be measured on the
+# sphere. Degrees of longitude are shorter than degrees of latitude, so the
+# index's order is close to the true one, not the same.
+_NEAREST_CANDIDATES = 16
+
+
+@dataclass(frozen=True)
+class NearestPlace:
+    name: str
+    kind: str
+    distance_m: float
+    # The key of the source the place came from, whose attribution goes with it.
+    source: str
+
+
+def nearest_place(
+    db: Session, lon: float, lat: float, *, within_m: float = NEAREST_PLACE_M
+) -> NearestPlace | None:
+    """The settlement in `places` nearest a WGS84 position, within `within_m`, or None."""
+    assert within_m > 0, "a distance must be positive"
+    here = func.ST_SetSRID(func.ST_MakePoint(lon, lat), SRID)
+    distance = func.ST_Distance(func.Geography(Place.geom), func.Geography(here))
+    candidates = (
+        select(Place.name, Place.kind, Place.source, distance.label("distance"))
+        .where(Place.rank >= SETTLEMENT_RANK)
+        .order_by(Place.geom.op("<->")(here))
+        .limit(_NEAREST_CANDIDATES)
+        .subquery()
+    )
+    row = db.execute(
+        select(candidates)
+        .where(candidates.c.distance <= within_m)
+        .order_by(candidates.c.distance, candidates.c.name)
+        .limit(1)
+    ).first()
+    if row is None:
+        return None
+    return NearestPlace(name=row.name, kind=row.kind, distance_m=float(row.distance), source=row.source)
 
 
 @dataclass(frozen=True)

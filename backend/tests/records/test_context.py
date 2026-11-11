@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from fieldclub import gridref
 from fieldclub.services import context
+from fieldclub.vocab import LinkShows, LiveFormat
 from tests.helpers import AVEBURY, admin_area
 from tests.records import context_data
 
@@ -68,8 +69,55 @@ def test_the_live_sources_endpoint(client: TestClient) -> None:
     assert ads["link_template"] == "https://archaeologydataservice.ac.uk/data-catalogue/resource/{id}"
     assert set(ads) == {
         "key", "name", "publisher", "coverage", "endpoint", "query_pattern", "response_fields",
-        "licence", "attribution", "link_template", "limits",
+        "licence", "attribution", "link_template", "limits", "answer_format", "id_field",
+        "name_field", "limit_param", "max_limit", "min_zoom",
     }  # fmt: skip
+    assert (ads["answer_format"], ads["id_field"], ads["name_field"]) == (
+        "ads_search",
+        "id",
+        "data.title.text",
+    )
+    assert (ads["limit_param"], ads["max_limit"], ads["min_zoom"]) == ("size", 50, 14)
+
+
+def test_each_live_source_says_how_to_read_it_without_guessing() -> None:
+    worklist = json.loads((context_data.WORKLISTS / "sources.json").read_text(encoding="utf-8"))
+    shapes = {
+        entry["key"]: entry["response_shape"] + " ".join(entry["gotchas"]) for entry in worklist["live"]
+    }
+    # "Full record as search hits".
+    shapes["ads-catalogue-record"] += shapes["ads-catalogue-search"]
+    for item in context.live_sources():
+        key, pattern = item["key"], item["query_pattern"]
+        assert item["answer_format"] in set(LiveFormat), key
+        if "f=geojson" in pattern:
+            assert item["answer_format"] == LiveFormat.GEOJSON, key
+        # A field named is one the work-list names.
+        for field in (item["id_field"], item["name_field"]):
+            assert field is None or field.split(".")[-1] in shapes[key], (key, field)
+        # The pattern carries no cap of its own: the browser adds `limit_param`.
+        assert (item["limit_param"] is None) is (item["max_limit"] is None), key
+        if item["limit_param"] is not None:
+            assert f"{item['limit_param']}=" not in pattern, key
+            assert item["max_limit"] > 0
+        assert "resultRecordCount=2" not in pattern
+        # Only a request by id has no zoom to ask from.
+        assert (item["min_zoom"] is None) is ("{id}" in pattern), key
+        assert item["min_zoom"] is None or 0 <= item["min_zoom"] <= 20
+
+
+def test_each_deep_link_says_what_its_viewer_shows(client: TestClient) -> None:
+    worklist = json.loads((context_data.WORKLISTS / "deep-links.json").read_text(encoding="utf-8"))
+    assert all(entry["shows"] in set(LinkShows) for entry in worklist)
+    shows = {link["key"]: link["shows"] for link in context.deep_links()}
+    assert shows["nls-explore-at-point"] == "historic_maps"
+    assert shows["nls-side-by-side-lidar"] == "lidar"
+    assert shows["ncap-air-photo-finder"] == "aerial_photographs"
+    assert shows["he-nhle-list-entry"] == "records"
+    assert shows["geograph-photo"] == "photographs"
+    items = client.get("/api/v1/context/links", params={"lon": AVEBURY[0], "lat": AVEBURY[1]}).json()["items"]
+    assert items
+    assert all(item["shows"] == shows[item["key"]] for item in items)
 
 
 def by_key(found: context.PointLinks) -> dict[str, str]:

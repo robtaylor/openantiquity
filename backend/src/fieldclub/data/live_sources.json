@@ -5,12 +5,18 @@
   "publisher": "Archaeology Data Service, University of York",
   "coverage": "uk",
   "endpoint": "https://archaeologydataservice.ac.uk/data-catalogue-api/api/search",
-  "query_pattern": "https://archaeologydataservice.ac.uk/data-catalogue-api/api/search?q=&size=50&page=1&bbox={north},{west},{south},{east}",
+  "query_pattern": "https://archaeologydataservice.ac.uk/data-catalogue-api/api/search?q=&page=1&bbox={north},{west},{south},{east}",
   "response_fields": "total.value; hits[].id; hits[].data.title.text; data.description.text; data.resourceType; data.ariadneSubject[].prefLabel; data.spatial[].geopoint {lat,lon} or boundingbox/polygon WKT with centroid; data.landingPage (null for many inventory records); data.accessRights; data.publisher[]; data.originalId; data.otherId",
   "licence": "Per record (accessRights). ADS-published records: ADS Terms of Use and Access (research, learning and teaching only; no supply to third parties). PAS: CC-BY. HES and Historic England wrecks: OGL v3. RCAHMW: CC BY NC ND. No API terms published.",
   "attribution": "Original depositor, funder if different, and 'Archaeology Data Service (distributor)' with DOI or record link",
   "link_template": "https://archaeologydataservice.ac.uk/data-catalogue/resource/{id}",
-  "limits": "No published limits; about 350 requests at 1 per second saw no throttling. 50 per page, 10,000-result window."
+  "limits": "No published limits; about 350 requests at 1 per second saw no throttling. 50 per page, 10,000-result window.",
+  "answer_format": "ads_search",
+  "id_field": "id",
+  "name_field": "data.title.text",
+  "limit_param": "size",
+  "max_limit": 50,
+  "min_zoom": 14
  },
  {
   "key": "ads-catalogue-map",
@@ -23,7 +29,13 @@
   "licence": "As search: per record; ADS Terms for ADS-published records",
   "attribution": "Original depositor, funder if different, and 'Archaeology Data Service (distributor)' with DOI or record link",
   "link_template": "https://archaeologydataservice.ac.uk/data-catalogue/resource/{id}",
-  "limits": "None published; 0.5 MB for 450 markers"
+  "limits": "None published; 0.5 MB for 450 markers",
+  "answer_format": "ads_map",
+  "id_field": "id",
+  "name_field": null,
+  "limit_param": null,
+  "max_limit": null,
+  "min_zoom": 10
  },
  {
   "key": "ads-catalogue-record",
@@ -36,7 +48,13 @@
   "licence": "Per record (accessRights)",
   "attribution": "Original depositor, funder if different, and 'Archaeology Data Service (distributor)' with DOI or record link",
   "link_template": "https://archaeologydataservice.ac.uk/data-catalogue/resource/{id}",
-  "limits": "None published"
+  "limits": "None published",
+  "answer_format": "ads_record",
+  "id_field": "id",
+  "name_field": "data.title.text",
+  "limit_param": null,
+  "max_limit": null,
+  "min_zoom": null
  },
  {
   "key": "he-aerial-photos-obliques",
@@ -44,12 +62,18 @@
   "publisher": "Historic England Archive",
   "coverage": "england",
   "endpoint": "https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/Obliques_20260529_Full_view/FeatureServer/0",
-  "query_pattern": "https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/Obliques_20260529_Full_view/FeatureServer/0/query?where=1%3D1&geometry={west},{south},{east},{north}&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=*&outSR=4326&resultRecordCount=2&f=geojson",
+  "query_pattern": "https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/Obliques_20260529_Full_view/FeatureServer/0/query?where=1%3D1&geometry={west},{south},{east},{north}&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=*&outSR=4326&f=geojson",
   "response_fields": "GeoJSON points; properties FRAME_NO, OBLIQUE_FILM_NUMBER, FLIGHT_NUMBER, DATE_FLOWN, Copyright, Filename, YEAR_FLOWN, photographer, pilot",
   "licence": "NOT STATED. Public ArcGIS item 3f52b72803504446b3c1add33f67b0b3 with empty licence and credit fields; not on the Open Data Hub.",
   "attribution": "Use the per-record Copyright field; typically '© Historic England Archive'",
   "link_template": "https://historicengland.org.uk/images-books/archive/collections/aerial-photos/record/{Filename}",
-  "limits": "2,000 per page on the 20260529 service; the older 20250304 views have maxRecordCount 15"
+  "limits": "2,000 per page on the 20260529 service; the older 20250304 views have maxRecordCount 15",
+  "answer_format": "geojson",
+  "id_field": "Filename",
+  "name_field": null,
+  "limit_param": "resultRecordCount",
+  "max_limit": 2000,
+  "min_zoom": 13
  },
  {
   "key": "he-aerial-photos-verticals",
@@ -57,12 +81,18 @@
   "publisher": "Historic England Archive",
   "coverage": "england",
   "endpoint": "https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/Verticals_20260529_poly_Full_view/FeatureServer/0",
-  "query_pattern": "https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/Verticals_20260529_poly_Full_view/FeatureServer/0/query?where=1%3D1&geometry={west},{south},{east},{north}&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=*&outSR=4326&resultRecordCount=2&f=geojson",
+  "query_pattern": "https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/Verticals_20260529_poly_Full_view/FeatureServer/0/query?where=1%3D1&geometry={west},{south},{east},{north}&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=*&outSR=4326&f=geojson",
   "response_fields": "GeoJSON polygons (frame footprint); properties FRAME_NUMBER, SORTIE_NUMBER, LIBRARY_NUMBER, DATE_FLOWN, DATE_ACCURACY, Copyright, Filename, YEAR_FLOWN",
   "licence": "NOT STATED. Public ArcGIS item 7476a999827e469e84373f640243a492 with empty licence field.",
   "attribution": "Per-record Copyright field, e.g. 'Source Historic England Archive (USAAF photography)'",
   "link_template": "https://historicengland.org.uk/images-books/archive/collections/aerial-photos/record/{Filename}",
-  "limits": "2,000 per page on the 20260529 service; older views 15"
+  "limits": "2,000 per page on the 20260529 service; older views 15",
+  "answer_format": "geojson",
+  "id_field": "Filename",
+  "name_field": null,
+  "limit_param": "resultRecordCount",
+  "max_limit": 2000,
+  "min_zoom": 13
  },
  {
   "key": "bristol-kyp-devon-hist-2021-v2",
@@ -75,7 +105,13 @@
   "licence": "Devon: licence and copyright constraints with no text; Exmoor layer catalogued as 'Open Government Licence'",
   "attribution": "Per source HER; service copyrightText 'Bristol City Council'",
   "link_template": null,
-  "limits": "maxRecordCount 1000 or 2000 per service; pagination supported"
+  "limits": "maxRecordCount 1000 or 2000 per service; pagination supported",
+  "answer_format": "geojson",
+  "id_field": "MONUMENT_UID",
+  "name_field": "NAME",
+  "limit_param": "resultRecordCount",
+  "max_limit": 1000,
+  "min_zoom": 13
  },
  {
   "key": "bristol-kyp-som-hist-2022",
@@ -88,7 +124,13 @@
   "licence": "Unspecified",
   "attribution": "Per source HER; service copyrightText 'Bristol City Council'",
   "link_template": null,
-  "limits": "maxRecordCount 1000 or 2000 per service; pagination supported"
+  "limits": "maxRecordCount 1000 or 2000 per service; pagination supported",
+  "answer_format": "geojson",
+  "id_field": "PRN",
+  "name_field": "NAME",
+  "limit_param": "resultRecordCount",
+  "max_limit": 1000,
+  "min_zoom": 13
  },
  {
   "key": "bristol-kyp-glo-hist-2021",
@@ -101,7 +143,13 @@
   "licence": "Blank in Bristol's catalogue",
   "attribution": "Per source HER; service copyrightText 'Bristol City Council'",
   "link_template": null,
-  "limits": "maxRecordCount 1000 or 2000 per service; pagination supported"
+  "limits": "maxRecordCount 1000 or 2000 per service; pagination supported",
+  "answer_format": "geojson",
+  "id_field": null,
+  "name_field": null,
+  "limit_param": "resultRecordCount",
+  "max_limit": 1000,
+  "min_zoom": 13
  },
  {
   "key": "bristol-kyp-wilts-her-2022-v2",
@@ -114,7 +162,13 @@
   "licence": "Unspecified",
   "attribution": "Per source HER; service copyrightText 'Bristol City Council'",
   "link_template": null,
-  "limits": "maxRecordCount 1000 or 2000 per service; pagination supported"
+  "limits": "maxRecordCount 1000 or 2000 per service; pagination supported",
+  "answer_format": "geojson",
+  "id_field": null,
+  "name_field": null,
+  "limit_param": "resultRecordCount",
+  "max_limit": 1000,
+  "min_zoom": 13
  },
  {
   "key": "bristol-kyp-banes-hist-2024",
@@ -127,7 +181,13 @@
   "licence": "Unspecified",
   "attribution": "Per source HER; service copyrightText 'Bristol City Council'",
   "link_template": null,
-  "limits": "maxRecordCount 1000 or 2000 per service; pagination supported"
+  "limits": "maxRecordCount 1000 or 2000 per service; pagination supported",
+  "answer_format": "geojson",
+  "id_field": "PRN",
+  "name_field": "NAME",
+  "limit_param": "resultRecordCount",
+  "max_limit": 1000,
+  "min_zoom": 13
  },
  {
   "key": "bristol-kyp-nsom-hist-2022-v2",
@@ -140,7 +200,13 @@
   "licence": "'Public Sector End User Licence'",
   "attribution": "Per source HER; service copyrightText 'Bristol City Council'",
   "link_template": null,
-  "limits": "maxRecordCount 1000 or 2000 per service; pagination supported"
+  "limits": "maxRecordCount 1000 or 2000 per service; pagination supported",
+  "answer_format": "geojson",
+  "id_field": "MonUID",
+  "name_field": null,
+  "limit_param": "resultRecordCount",
+  "max_limit": 1000,
+  "min_zoom": 13
  },
  {
   "key": "bristol-kyp-sgc-hist-2020-v2",
@@ -153,7 +219,13 @@
   "licence": "Unspecified",
   "attribution": "Per source HER; service copyrightText 'Bristol City Council'",
   "link_template": null,
-  "limits": "maxRecordCount 1000 or 2000 per service; pagination supported"
+  "limits": "maxRecordCount 1000 or 2000 per service; pagination supported",
+  "answer_format": "geojson",
+  "id_field": "PRN",
+  "name_field": null,
+  "limit_param": "resultRecordCount",
+  "max_limit": 1000,
+  "min_zoom": 13
  },
  {
   "key": "bristol-kyp-her-2026",
@@ -166,7 +238,13 @@
   "licence": "'GIS User Agreement for external use'",
   "attribution": "Per source HER; service copyrightText 'Bristol City Council'",
   "link_template": null,
-  "limits": "maxRecordCount 1000 or 2000 per service; pagination supported"
+  "limits": "maxRecordCount 1000 or 2000 per service; pagination supported",
+  "answer_format": "geojson",
+  "id_field": "PRN",
+  "name_field": null,
+  "limit_param": "resultRecordCount",
+  "max_limit": 1000,
+  "min_zoom": 13
  },
  {
   "key": "bristol-kyp-worcester-city",
@@ -179,7 +257,13 @@
   "licence": "Unspecified",
   "attribution": "Per source HER; service copyrightText 'Bristol City Council'",
   "link_template": null,
-  "limits": "maxRecordCount 1000 or 2000 per service; pagination supported"
+  "limits": "maxRecordCount 1000 or 2000 per service; pagination supported",
+  "answer_format": "geojson",
+  "id_field": "MonUID",
+  "name_field": null,
+  "limit_param": "resultRecordCount",
+  "max_limit": 1000,
+  "min_zoom": 13
  },
  {
   "key": "enpa-exmoor-her",
@@ -192,7 +276,13 @@
   "licence": "Unstated on the items (credits '© Copyright 2024 Exmoor National Park'); Bristol's catalogue lists the KYP Exmoor layer as 'Open Government Licence'",
   "attribution": "© Exmoor National Park Authority; records containing NRHE data: 'This record includes National Record of the Historic Environment Information provided by Historic England on [date] licensed under the Open Government Licence'",
   "link_template": "https://www.exmoorher.co.uk/Monument/{MonUID}",
-  "limits": "maxRecordCount 2000"
+  "limits": "maxRecordCount 2000",
+  "answer_format": "geojson",
+  "id_field": "MonUID",
+  "name_field": "Name",
+  "limit_param": "resultRecordCount",
+  "max_limit": 2000,
+  "min_zoom": 13
  },
  {
   "key": "dnpa-dartmoor-her",
@@ -205,7 +295,13 @@
   "licence": "Unstated. Item credits: '© Crown copyright and database rights 2026 OS AC0000823576'.",
   "attribution": "Dartmoor National Park Authority; © Crown copyright and database rights 2026 OS AC0000823576",
   "link_template": "https://historicengland.org.uk/listing/heritage-gateway/results/record/c39bc47e-3b72-4a06-9863-681629e456a2/{monuid}",
-  "limits": "maxRecordCount 2000"
+  "limits": "maxRecordCount 2000",
+  "answer_format": "geojson",
+  "id_field": "monuid",
+  "name_field": "name",
+  "limit_param": "resultRecordCount",
+  "max_limit": 2000,
+  "min_zoom": 13
  },
  {
   "key": "wiltshire-her-monuments",
@@ -218,7 +314,13 @@
   "licence": "Unstated. Service sits in the 'Website' folder, not Wiltshire's 'OpenData' folder.",
   "attribution": "Wiltshire Council Archaeology Service (Wiltshire and Swindon HER)",
   "link_template": "{URL}",
-  "limits": "maxRecordCount 1000; pagination supported"
+  "limits": "maxRecordCount 1000; pagination supported",
+  "answer_format": "geojson",
+  "id_field": "MonUID",
+  "name_field": "Name",
+  "limit_param": "resultRecordCount",
+  "max_limit": 1000,
+  "min_zoom": 13
  },
  {
   "key": "wolverhampton-walsall-her",
@@ -231,7 +333,13 @@
   "licence": "Unstated on the ArcGIS items. The 2016 data.gov.uk record cites 'Public Sector End User Licence - INSPIRE' and has no resources.",
   "attribution": "City of Wolverhampton Council / Wolverhampton and Walsall HER",
   "link_template": "{More_info}",
-  "limits": "maxRecordCount 2000"
+  "limits": "maxRecordCount 2000",
+  "answer_format": "geojson",
+  "id_field": "MonUID",
+  "name_field": "Name",
+  "limit_param": "resultRecordCount",
+  "max_limit": 2000,
+  "min_zoom": 13
  },
  {
   "key": "cambridge-cucap-pois",
@@ -239,12 +347,18 @@
   "publisher": "University of Cambridge",
   "coverage": "uk",
   "endpoint": "https://www.cambridgeairphotos.com/api/v2/pois",
-  "query_pattern": "https://www.cambridgeairphotos.com/api/v2/pois?limit=250&size=200&bbox={west},{south},{east},{north}",
+  "query_pattern": "https://www.cambridgeairphotos.com/api/v2/pois?size=200&bbox={west},{south},{east},{north}",
   "response_fields": "GeoJSON points; properties id (e.g. RC8knBB223), photoDate, type (Vertical/Oblique), filmType, eastings, northings, copyright, name, hasPhoto",
   "licence": "No open licence. Per-record copyright field reads 'Subject to confirmation'.",
   "attribution": "Cambridge University Collection of Aerial Photography",
   "link_template": "https://www.cambridgeairphotos.com/location/{id lower-case}/",
-  "limits": "limit=250 used by the site's own map"
+  "limits": "limit=250 used by the site's own map",
+  "answer_format": "geojson",
+  "id_field": "id",
+  "name_field": "name",
+  "limit_param": "limit",
+  "max_limit": 250,
+  "min_zoom": 14
  },
  {
   "key": "wikimedia-commons-geosearch",
@@ -252,12 +366,18 @@
   "publisher": "Wikimedia Foundation",
   "coverage": "wider",
   "endpoint": "https://commons.wikimedia.org/w/api.php",
-  "query_pattern": "https://commons.wikimedia.org/w/api.php?action=query&generator=geosearch&ggscoord={lat}|{lon}&ggsradius=1000&ggslimit=5&ggsnamespace=6&prop=coordinates|imageinfo&iiprop=url|extmetadata&iiurlwidth=320&iiextmetadatafilter=LicenseShortName|Artist|AttributionRequired|LicenseUrl&format=json&origin=*",
+  "query_pattern": "https://commons.wikimedia.org/w/api.php?action=query&generator=geosearch&ggscoord={lat}|{lon}&ggsradius=1000&ggsnamespace=6&prop=coordinates|imageinfo&iiprop=url|extmetadata&iiurlwidth=320&iiextmetadatafilter=LicenseShortName|Artist|AttributionRequired|LicenseUrl&format=json&origin=*",
   "response_fields": "query.pages{}.title, coordinates[0].lat/lon, imageinfo[0].thumburl, imageinfo[0].extmetadata.Artist / LicenseShortName / AttributionRequired",
   "licence": "Per file (sampled files were CC BY-SA 2.0)",
   "attribution": "Per file, from extmetadata Artist, Attribution and LicenseShortName",
   "link_template": "https://commons.wikimedia.org/wiki/{title}",
-  "limits": "ggsradius 10-10,000 m; 429 with retry-after: 8 on rapid anonymous bursts"
+  "limits": "ggsradius 10-10,000 m; 429 with retry-after: 8 on rapid anonymous bursts",
+  "answer_format": "mediawiki_query",
+  "id_field": "title",
+  "name_field": "title",
+  "limit_param": "ggslimit",
+  "max_limit": 500,
+  "min_zoom": 14
  },
  {
   "key": "wikimedia-wikipedia-geosearch",
@@ -265,12 +385,18 @@
   "publisher": "Wikimedia Foundation",
   "coverage": "wider",
   "endpoint": "https://en.wikipedia.org/w/api.php",
-  "query_pattern": "https://en.wikipedia.org/w/api.php?action=query&generator=geosearch&ggsbbox={north}|{west}|{south}|{east}&ggslimit=5&prop=coordinates|pageprops|description|pageimages&ppprop=wikibase_item&piprop=thumbnail&pithumbsize=200&format=json&origin=*",
+  "query_pattern": "https://en.wikipedia.org/w/api.php?action=query&generator=geosearch&ggsbbox={north}|{west}|{south}|{east}&prop=coordinates|pageprops|description|pageimages&ppprop=wikibase_item&piprop=thumbnail&pithumbsize=200&format=json&origin=*",
   "response_fields": "query.pages{}.title, coordinates, pageprops.wikibase_item, description, thumbnail",
   "licence": "Article text CC BY-SA 4.0 (standard Wikipedia licence, not re-read today); images per file",
   "attribution": "Link to the article and state the licence",
   "link_template": null,
-  "limits": "gslimit max 500; a 0.5 x 1.0 degree bbox returns 'toobig'; 429 on rapid anonymous use"
+  "limits": "gslimit max 500; a 0.5 x 1.0 degree bbox returns 'toobig'; 429 on rapid anonymous use",
+  "answer_format": "mediawiki_query",
+  "id_field": "title",
+  "name_field": "title",
+  "limit_param": "ggslimit",
+  "max_limit": 500,
+  "min_zoom": 12
  },
  {
   "key": "aberdeenshire-her",
@@ -283,6 +409,12 @@
   "licence": "'Copyright is reserved... intended to be used for personal research only'",
   "attribution": "Aberdeenshire Council",
   "link_template": "{Monument_U}",
-  "limits": "maxRecordCount 1000-2000"
+  "limits": "maxRecordCount 1000-2000",
+  "answer_format": "geojson",
+  "id_field": "HER_Refere",
+  "name_field": "Name",
+  "limit_param": "resultRecordCount",
+  "max_limit": 1000,
+  "min_zoom": 13
  }
 ]

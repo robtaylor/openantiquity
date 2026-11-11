@@ -11,7 +11,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Response
 
 from fieldclub.api.deps import Db
-from fieldclub.schemas.records import ContextLink, ContextLinks, LiveSourceOut, LiveSources
+from fieldclub.schemas.records import ContextLink, ContextLinks, LiveSource, LiveSources
 from fieldclub.services import context
 
 router = APIRouter(prefix="/context", tags=["context"])
@@ -27,7 +27,7 @@ LINKS_CACHE = "public, max-age=3600"
 def live_sources(response: Response) -> LiveSources:
     """The sources the browser queries for an area, with how to ask and how to credit each."""
     response.headers["Cache-Control"] = CATALOGUE_CACHE
-    return LiveSources(items=[LiveSourceOut.model_validate(item) for item in context.live_sources()])
+    return LiveSources(items=[LiveSource.model_validate(item) for item in context.live_sources()])
 
 
 @router.get("/links", response_model=ContextLinks)

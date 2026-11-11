@@ -27,7 +27,7 @@ def index(db: Session) -> dict[str, int]:
     made = {
         "silbury": add_record(db, designations, "Silbury Hill", geom=SILBURY_MOUND),
         "bowl": add_record(db, designations, "Bowl barrow", *OVERTON),
-        "coin": add_record(db, finds, "Roman coin", -1.8570, 51.4150),
+        "coin": add_record(db, finds, "Roman coin", -1.8570, 51.4150, precision_m=1000.0),
         "dyke": add_record(db, designations, "Wansdyke", geom=LineString([(-1.95, 51.37), (-1.80, 51.38)])),
         "secret": add_record(db, hidden, "Hidden record", -1.8560, 51.4160),
     }
@@ -61,6 +61,17 @@ def test_a_high_zoom_tile_holds_the_records(client: TestClient, index: dict[str,
     }
     assert "Hidden record" not in by_name
     assert by_name["Roman coin"].properties["reuse"] == "non_commercial"
+    # A find published to a 1 km square says so, so the map can draw the square.
+    assert by_name["Roman coin"].properties["precision_m"] == 1000.0
+
+
+def test_the_token_changes_when_what_a_tile_holds_changes(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A tile is immutable under its token, so a new property needs a new token too."""
+    before = record_tiles.tile_token(db)
+    monkeypatch.setattr(record_tiles, "TILE_FORMAT", record_tiles.TILE_FORMAT + 1)
+    assert record_tiles.tile_token(db) != before
 
 
 def test_a_low_zoom_tile_holds_counts_by_category(client: TestClient, index: dict[str, int]) -> None:

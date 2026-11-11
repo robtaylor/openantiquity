@@ -28,7 +28,7 @@ from fieldclub.models import Activity, Finding, Notification, User
 from fieldclub.models.common import db_point
 from fieldclub.services import findings, sensitivity
 from fieldclub.services.findings import EvidenceFields
-from fieldclub.vocab import EvidenceKind, FeatureClass, Outcome, Sensitivity, Visible
+from fieldclub.vocab import EvidenceKind, FeatureClass, Outcome, Relation, Sensitivity, Visible
 from tests.findings.support import API, answer, create
 from tests.helpers import MakeUser, add_record, add_source, lon_lat
 
@@ -414,3 +414,30 @@ def test_the_search_box_flies_to_what_the_viewer_may_see(
     assert hit["obscured"] is (level not in SEES[viewer])
     assert (hit["bbox"] is None) is (level in SEES[viewer])
     assert response.headers["cache-control"] == "private, no-cache"
+
+
+@pytest.mark.parametrize("viewer", VIEWERS)
+def test_a_records_linked_findings(world: World, db: Session, viewer: str) -> None:
+    """A record lists only the findings linked to it that the viewer sees exactly.
+
+    The record is near each finding's exact point, so naming a generalised
+    finding here would place it as closely as the record, which is why its
+    own page leaves the link out (`redacted`).
+    """
+    source = add_source(db)
+    record = add_record(db, source, "Enclosure on the down", *POINTS[Sensitivity.PROTECTED])
+    db.commit()
+    for finding in world.findings.values():
+        findings.add_evidence(
+            db,
+            findings.lock(db, finding),
+            world.people["trusted"],
+            EvidenceFields(kind=EvidenceKind.RECORD_LINK, record_id=record.id, relation=Relation.RELATED),
+        )
+    db.commit()
+    response = world.client(viewer).get(f"{API}/records/{record.id}/findings")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "private, no-cache"
+    check(response.text, SEES[viewer], where="GET /records/{id}/findings")
+    listed = {item["public_id"] for item in response.json()["items"]}
+    assert listed == {world.findings[level].public_id for level in SEES[viewer]}
