@@ -12,7 +12,7 @@ import type { components } from "../../api/schema.js";
 
 type Schemas = components["schemas"];
 
-export type Profile = Schemas["fieldclub__schemas__people__ProfileOut"];
+export type Profile = Schemas["ProfileOut"];
 export type ProfileCounts = Schemas["ProfileCounts"];
 export type Contribution = Schemas["ContributionOut"];
 export type ContributionKind = Schemas["ContributionKind"];

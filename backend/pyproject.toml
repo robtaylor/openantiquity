@@ -1,7 +1,7 @@
 [project]
 name = "fieldclub"
 version = "0.1.0"
-description = "Field Club: a collaborative map for finding and checking archaeological earthworks in UK LIDAR data"
+description = "Open Antiquity: a collaborative map for finding and checking archaeological earthworks in UK LIDAR data"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "email-validator>=2.3.0",

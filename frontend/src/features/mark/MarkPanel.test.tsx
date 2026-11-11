@@ -237,7 +237,7 @@ describe("saving, signed in", () => {
     await user.type(panel().getByLabelText("Title"), "Square moat");
     await user.click(panel().getByRole("button", { name: "Save finding" }));
 
-    const toast = await screen.findByText(/Your finding couldn't be saved\. Field Club covers the land/);
+    const toast = await screen.findByText(/Your finding couldn't be saved\. Open Antiquity covers the land/);
     expect(usePendingFindings.getState().pending).toEqual([]);
     expect(screen.queryByRole("img", { name: /saving$/ })).toBeNull();
     expect(address()).toBe("/mark");

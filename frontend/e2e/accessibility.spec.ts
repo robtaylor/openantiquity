@@ -113,7 +113,7 @@ test.describe("desktop", () => {
   test("has a main landmark and a top-level heading", async ({ page }) => {
     await openMap(page);
     await expect(page.getByRole("main")).toHaveCount(1);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Field Club");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Open Antiquity");
     await expect(page.getByRole("main").locator(".fc-map")).toHaveCount(1);
   });
 

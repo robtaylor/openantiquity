@@ -106,7 +106,7 @@ describe("a blind card", () => {
 
     // Nothing of the claim is in the page, its title or the address, nor was anything asked that could carry it.
     for (const words of CLAIM_WORDS) expect(pageText()).not.toContain(words);
-    expect(document.title).toBe("Second look · Field Club");
+    expect(document.title).toBe("Second look · Open Antiquity");
     expect(routes.calls.map((call) => call.path)).not.toContain("/findings/f-ring");
     expect(routes.calls.filter((call) => call.path === "/findings")).toEqual([]);
     expect(document.querySelector(".fc-highlight-ring")).toBeNull();

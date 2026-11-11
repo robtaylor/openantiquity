@@ -35,7 +35,7 @@ describe("the guide", () => {
     }
     expect(panel.getAllByRole("img", { name: /Fyfield Down from above/ }).length).toBeGreaterThan(0);
     expect(panel.getByRole("img", { name: /Silbury Hill lit by a low sun/ })).toBeInTheDocument();
-    expect(document.title).toBe("Guide · Field Club");
+    expect(document.title).toBe("Guide · Open Antiquity");
   });
 
   it("puts each real earthwork beside its look-alike, named from /meta, and says which are judgement", async () => {

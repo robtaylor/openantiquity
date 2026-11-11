@@ -221,9 +221,9 @@ def test_the_secret_is_not_shown_when_settings_are_printed(clean_env: pytest.Mon
 
 
 def test_user_agent_names_the_project(clean_env: pytest.MonkeyPatch) -> None:
-    assert settings().outbound_user_agent == f"FieldClub/{__version__}"
+    assert settings().outbound_user_agent == f"OpenAntiquity/{__version__}"
     clean_env.setenv("FIELDCLUB_CONTACT", "https://example.org/about")
-    assert settings().outbound_user_agent == f"FieldClub/{__version__} (+https://example.org/about)"
+    assert settings().outbound_user_agent == f"OpenAntiquity/{__version__} (+https://example.org/about)"
     clean_env.setenv("FIELDCLUB_USER_AGENT", "Custom/1.0")
     assert settings().outbound_user_agent == "Custom/1.0"
 

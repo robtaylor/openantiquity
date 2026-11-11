@@ -4,7 +4,7 @@
 
 ## Goal
 
-A deployed Field Club covering England. People explore 1 m LIDAR in archaeological visualisations, mark findings, check each other's findings up the confidence ladder, and link them to England's open heritage records. This plan implements Decisions 0001 to 0009.
+A deployed Open Antiquity covering England. People explore 1 m LIDAR in archaeological visualisations, mark findings, check each other's findings up the confidence ladder, and link them to England's open heritage records. This plan implements Decisions 0001 to 0009.
 
 ## Prerequisites
 

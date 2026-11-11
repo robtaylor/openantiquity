@@ -1,4 +1,4 @@
-"""The `fieldclub_session` cookie (HttpOnly, SameSite=Lax, Secure outside dev), the sign-in flow
+"""The `openantiquity_session` cookie (HttpOnly, SameSite=Lax, Secure outside dev), the sign-in flow
 cookie, and the emailed link's browser cookie."""
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ def _flow_cookie_attributes(provider: OAuthProvider) -> dict[str, Any]:
 
 
 def set_flow_cookie(response: Response, value: str, provider: OAuthProvider) -> None:
-    """The signed `fieldclub_oauth` cookie for one sign-in flow, sent only to its callback."""
+    """The signed `openantiquity_oauth` cookie for one sign-in flow, sent only to its callback."""
     response.set_cookie(FLOW_COOKIE, value, max_age=FLOW_LIFETIME_S, **_flow_cookie_attributes(provider))
 
 
@@ -67,7 +67,7 @@ def _link_cookie_attributes() -> dict[str, Any]:
 
 
 def set_link_cookie(response: Response, value: str) -> None:
-    """The `fieldclub_email_link` cookie that binds an emailed link to this browser."""
+    """The `openantiquity_email_link` cookie that binds an emailed link to this browser."""
     response.set_cookie(
         LINK_COOKIE, value, max_age=int(LINK_LIFETIME.total_seconds()), **_link_cookie_attributes()
     )

@@ -75,10 +75,10 @@ test("sign-in sheet after a failed provider sign-in", async ({ page }) => {
 test("welcome sheet", async ({ page }) => {
   await fakeSession(page, newcomerFixture());
   await openMap(page, "/");
-  const sheet = page.getByRole("dialog", { name: "Welcome to Field Club" });
+  const sheet = page.getByRole("dialog", { name: "Welcome to Open Antiquity" });
   await sheet.waitFor();
   await shoot(page, "welcome");
-  await sheet.getByRole("button", { name: "Join Field Club" }).click();
+  await sheet.getByRole("button", { name: "Join Open Antiquity" }).click();
   await shoot(page, "welcome-errors");
   await sheet.getByRole("radio", { name: "16 or 17" }).click();
   await shoot(page, "welcome-16-17");
@@ -128,7 +128,7 @@ test("account page while loading, failed, and owing the welcome step", async ({ 
   await shoot(page, "page-failed");
   mode = "newcomer";
   await page.reload();
-  const welcome = page.getByRole("dialog", { name: "Welcome to Field Club" });
+  const welcome = page.getByRole("dialog", { name: "Welcome to Open Antiquity" });
   await welcome.getByRole("button", { name: "Close" }).click();
   await shoot(page, "page-newcomer");
 });

@@ -25,7 +25,7 @@ def test_client_is_shared() -> None:
 
 def test_client_sends_the_project_user_agent_and_has_a_timeout() -> None:
     client = http.get_client()
-    assert client.headers["User-Agent"] == f"FieldClub/{__version__}"
+    assert client.headers["User-Agent"] == f"OpenAntiquity/{__version__}"
     assert client.timeout.read == get_settings().http_timeout_s
     assert client.timeout.connect is not None
     assert client.timeout.connect <= 10
@@ -39,7 +39,7 @@ def test_requests_carry_the_user_agent() -> None:
     )
     response = http.get_client().get("https://upstream.example/records")
     assert response.json() == {"ok": True}
-    assert route.calls.last.request.headers["user-agent"] == f"FieldClub/{__version__}"
+    assert route.calls.last.request.headers["user-agent"] == f"OpenAntiquity/{__version__}"
 
 
 def test_close_client_makes_way_for_a_new_one() -> None:

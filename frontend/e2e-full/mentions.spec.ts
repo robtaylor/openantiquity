@@ -20,7 +20,7 @@ test("a member adds a mention to a finding and sees it on the page and in the re
   await join(page, `Teller${tag}`);
   const title = `Barrow ${tag}`;
   const created = await page.request.post("/api/v1/findings", {
-    headers: { "X-FieldClub-Client": "web" },
+    headers: { "X-OpenAntiquity-Client": "web" },
     data: {
       location: { type: "Point", coordinates: [AVEBURY.lon, AVEBURY.lat] },
       feature_class: "enclosure",

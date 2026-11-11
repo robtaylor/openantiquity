@@ -15,7 +15,7 @@ A banned user is treated as signed out by `OptionalUser` and gets a 403 with
 code `banned` from `CurrentUser`. Someone who deleted their account is signed
 out everywhere.
 
-Requests that change data must also carry `X-FieldClub-Client: web`. That is
+Requests that change data must also carry `X-OpenAntiquity-Client: web`. That is
 checked for every path by `fieldclub.auth.csrf.ClientHeaderMiddleware`, so routes
 don't ask for it.
 """

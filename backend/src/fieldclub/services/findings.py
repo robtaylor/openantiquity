@@ -116,7 +116,7 @@ logger = logging.getLogger(__name__)
 
 class OutsideBritishIslesError(ValidationFailedError):
     code = "outside_british_isles"
-    message = "Field Club covers Great Britain, Ireland and their islands. That position is outside them."
+    message = "Open Antiquity covers Great Britain, Ireland and their islands. That position is outside them."
 
 
 class PositionInTextError(ValidationFailedError):

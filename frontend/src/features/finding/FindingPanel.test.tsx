@@ -620,7 +620,7 @@ describe("evidence", () => {
     const [upload] = uploads.calls;
     expect(upload).toMatchObject({ method: "POST", url: "/api/v1/media", body: photo });
     expect(upload?.headers["Content-Type"]).toBe("image/jpeg");
-    expect(upload?.headers["X-FieldClub-Client"]).toBe("web");
+    expect(upload?.headers["X-OpenAntiquity-Client"]).toBe("web");
 
     await user.type(form.getByLabelText("Note (optional)"), "From the east bank.");
     await user.click(form.getByRole("button", { name: "Add it" }));

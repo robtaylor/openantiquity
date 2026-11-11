@@ -1,7 +1,7 @@
 # Changelog
 
-All notable changes to Field Club are recorded here. The format follows
-[Keep a Changelog](https://keepachangelog.com/). Field Club is a deployed
+All notable changes to Open Antiquity are recorded here. The format follows
+[Keep a Changelog](https://keepachangelog.com/). Open Antiquity is a deployed
 service, so entries are dated, not versioned.
 
 ## [Unreleased]
@@ -10,6 +10,7 @@ service, so entries are dated, not versioned.
 
 Nothing is live yet. When the first version opens, this is what it does for you.
 
+- It is called Open Antiquity, at openantiquity.org. While it was being built it was called Field Club, and two early letters to record holders carry that name.
 - You can look at England's LIDAR as slope, sky-view, relief and other views made for spotting earthworks, and light it from any direction you like. You don't need an account to look at anything.
 - Designated sites and other heritage records sit on the same map, each with who published it and under what licence. Where a record office doesn't let us keep its records, the map asks it directly or links to its own site.
 - You can mark something you think is there. Other people then take a second look without seeing what you said, and the finding climbs from "Spotted" to "Seen by others" and on as people agree and add evidence.
@@ -18,11 +19,17 @@ Nothing is live yet. When the first version opens, this is what it does for you.
 - Signing in is with Google, Apple, Microsoft, Facebook or OpenStreetMap, or an emailed link. You must be 16 or over to add anything.
 - Possible burial mounds and other sites at risk from looting are shown as a one-kilometre square to anyone who isn't signed in.
 - There are no private messages. Everything people say about a finding is public and attached to it.
-- If you find an object, Field Club records nothing about it and tells you who to report it to in your part of the UK.
+- If you find an object, Open Antiquity records nothing about it and tells you who to report it to in your part of the UK.
 - A second look counts the moment you press your answer. You can then say what you think it is, or not, before you see what the finder and everyone else said. If you leave in between, you're offered the same choice when you come back.
 - If a protected finding's title or note says where it is more closely than its one-kilometre square, the form says which one and what to take out.
 - When a video, article, podcast or paper talks about a finding, you can add it to the finding's page. You see what the link is before you save it, and a video opens at the moment the finding comes up.
 - A finding's page has a timeline of what has happened on the ground and on record, such as visits, surveys, digs and new heritage records, and says which of them moved it up.
+- You can keep a notebook for a piece of work, an investigation, gathering findings, records, map views and notes, and publish it when you're ready.
+- "Scan a square" sends you to a square few people have looked at, so the whole country gets looked over and not only the famous places.
+- Each person has a page showing what they have found and checked. Someone aged 16 or 17 shows only a handle.
+- Anything that looks wrong has a Report button. Moderators see reports in one place, and everything a moderator does is logged.
+- A ground photo is shown to everyone only after a moderator, archaeologist or trusted member has approved it.
+- A guide shows how to read LIDAR, with real earthworks beside the modern things that look like them, and the about page gives the terms, the privacy notice and how to ask for something to be taken down. Those four notices are drafts until they have been checked.
 
 ### Added
 
@@ -42,3 +49,6 @@ Nothing is live yet. When the first version opens, this is what it does for you.
 - Activity: what people have been doing, newest first, in plain sentences, everywhere or in the map's view and by kind. A second look's part in it names nobody. It keeps up by itself while the page is open.
 - Notifications: a quiet count on Account when a finding you follow changes, and the list on your account page, marked read as you see it.
 - A finding's page shows a move up the ladder as it happens, without a reload.
+- Profiles, a Report button on findings, evidence, comments, photos, mentions, investigations and profiles, the moderators' queue and log, and photo approval.
+- The guide to reading LIDAR, the about page with its credits, and four draft notices: contributor terms, privacy, reporting and takedown.
+- Downloads are named `openantiquity-…`, an export's id column is `openantiquity_id`, the cookies are `openantiquity_session`, `openantiquity_oauth` and `openantiquity_email_link`, and requests that change data carry `X-OpenAntiquity-Client`.

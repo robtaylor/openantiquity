@@ -7,7 +7,7 @@ import { emailedLink } from "./support/inbox.js";
 /**
  * The emailed sign-in link, against the real backend and its log mailer.
  * Opened in the browser that asked for it, the link signs in at once,
- * because the backend's `fieldclub_email_link` cookie binds it to that
+ * because the backend's `openantiquity_email_link` cookie binds it to that
  * browser. Opened anywhere else, it asks "is this you?" first and signs in
  * only after the click. A link works once.
  */
@@ -37,7 +37,7 @@ test("signs straight in from a link opened in the browser that asked, and the li
 
   await page.goto(link);
   // A new account: the welcome step is owed, and the token has left the address.
-  await expect(page.getByRole("dialog", { name: "Welcome to Field Club" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Welcome to Open Antiquity" })).toBeVisible();
   expect(page.url()).not.toContain("token=");
   expect(new URL(page.url()).pathname).toBe("/account");
   const me = await page.request.get("/api/v1/auth/me");
@@ -71,7 +71,7 @@ test("asks before signing in from a link opened in another browser, and signs in
   expect((await other.request.get("/api/v1/auth/me")).status()).toBe(401);
 
   await panel.getByRole("button", { name: "Yes, sign me in" }).click();
-  await expect(other.getByRole("dialog", { name: "Welcome to Field Club" })).toBeVisible();
+  await expect(other.getByRole("dialog", { name: "Welcome to Open Antiquity" })).toBeVisible();
   const me = await other.request.get("/api/v1/auth/me");
   expect(me.status()).toBe(200);
   expect(await me.json()).toMatchObject({ email });

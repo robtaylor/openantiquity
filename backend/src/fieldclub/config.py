@@ -21,8 +21,8 @@ from fieldclub.errors import ConfigError
 
 # A placeholder for local development. Settings refuse to load it in production.
 DEV_SECRET_KEY = "dev-only-secret-change-me"
-SESSION_COOKIE = "fieldclub_session"
-CLIENT_HEADER = "X-FieldClub-Client"
+SESSION_COOKIE = "openantiquity_session"
+CLIENT_HEADER = "X-OpenAntiquity-Client"
 CLIENT_HEADER_VALUE = "web"
 
 # backend/src/fieldclub/config.py -> the repository root, when run from a checkout.
@@ -289,7 +289,7 @@ class Settings(BaseSettings):
         if self.user_agent:
             return self.user_agent
         contact = f" (+{self.contact})" if self.contact else ""
-        return f"FieldClub/{__version__}{contact}"
+        return f"OpenAntiquity/{__version__}{contact}"
 
 
 @lru_cache(maxsize=1)

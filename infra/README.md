@@ -1,11 +1,11 @@
-# Running Field Club on Google Cloud
+# Running Open Antiquity on Google Cloud
 
 This is the runbook for the deployment in this folder: what the owner does once, what a deploy is afterwards, how to roll back, and what to watch. It also records the sizing and cost reasoning behind the defaults.
 
-Nothing here has been applied to a real project. Every command that touches Google Cloud names its project with `--project`, so the gcloud configuration's own default project is never used. Set `P` to the Field Club project id first, in every shell:
+What has been applied so far, and to which project, is recorded in `docs/plans/v1-england.md`, WS8. Every command that touches Google Cloud names its project with `--project`, so the gcloud configuration's own default project is never used. Set `P` to the Open Antiquity project id first, in every shell:
 
 ```
-export P=<field-club-project-id>
+export P=<project-id>
 ```
 
 ## What is in this folder
@@ -79,7 +79,7 @@ With `run_workloads = false` this makes the registry, buckets, database, empty s
 
 Leave `github_repository` empty for now: the federation is set up in step 12. `budget.currency` must be the billing account's own currency, shown on its overview page, or the budget is refused.
 
-When the APIs are first turned on, Google creates the project's default Compute Engine service account and gives it the Editor role on the whole project. No Field Club workload uses that account: each has its own, with narrow roles. Take the grant away once the apply has finished:
+When the APIs are first turned on, Google creates the project's default Compute Engine service account and gives it the Editor role on the whole project. No Open Antiquity workload uses that account: each has its own, with narrow roles. Take the grant away once the apply has finished:
 
 ```
 number=$(gcloud projects describe "$P" --format="value(projectNumber)")
@@ -167,7 +167,7 @@ To try the deployment out before anyone can reach it, add `service_public = fals
 gcloud run services proxy fieldclub --region=europe-west2 --project="$P" --port=8090
 ```
 
-Steps 7 to 10 work the same while it is held back. Remove the line and apply to open the site.
+Steps 7 to 10 work the same while it is held back. Signing in doesn't: every sign-in redirect and emailed link is built from the site's public address, which a browser can't reach without Google's check. Remove the line and apply to open the site.
 
 ### 7. Create the schema
 
@@ -229,7 +229,7 @@ Once the first ingests are in, remove the `schedules` line from `terraform.tfvar
 Cloud Run's own domain mapping isn't offered in europe-west2. On 2026-11-10 Google listed it for ten regions, none of them London. There are two ways to use a custom domain:
 
 - **The load balancer module.** Set `cdn = { enabled = true, domain = "openantiquity.org" }` and apply. Put the address `terraform output site_address` prints into an `A` record for `@` in `infra/dns.toml`, then run `uv run infra/dns.py plan` and `uv run infra/dns.py apply`. The managed certificate is issued once the record resolves, which can take an hour. This also closes the run.app address and tells the app it is behind two proxies. It costs about $18 a month before traffic.
-- **Firebase Hosting** in front of Cloud Run is free at this size, but it strips every cookie except one named `__session`, so the `fieldclub_session` cookie would never arrive. It doesn't work without renaming the cookie.
+- **Firebase Hosting** in front of Cloud Run is free at this size, but it strips every cookie except one named `__session`, so the `openantiquity_session` cookie would never arrive. It doesn't work without renaming the cookie.
 
 The domains `openantiquity.org`, `openantiquity.com` and `openantiquity.co.uk` are registered at Gandi, which also serves their DNS. `infra/dns.toml` lists the record sets this project manages there and `infra/dns.py` makes the zones match it. It touches nothing the file doesn't list, so Gandi's own mail records stay as they are. Its token is `GANDI_DNS_SSL` in the untracked `.env`, a Gandi personal access token limited to these three domains; the tool never prints it. Today the file holds the `CAA` records that let only Google Trust Services and Let's Encrypt issue certificates for the names, the two authorities a Google-managed certificate can come from.
 

@@ -1,6 +1,6 @@
 /**
  * The one place the frontend talks to the backend. Every request sends the
- * session cookie. Every mutation carries `X-FieldClub-Client: web`, which the API
+ * session cookie. Every mutation carries `X-OpenAntiquity-Client: web`, which the API
  * requires and a cross-site form cannot send. Failures become an `ApiError`
  * built from the `{"error": {"code", "message", "details"}}` envelope. A 401
  * from any path is announced to `onUnauthorised` listeners, which is how the
@@ -157,7 +157,7 @@ export function isTransient(error: unknown): boolean {
 export async function apiFetch<T>(path: string, request: ApiRequest = {}): Promise<T> {
   const method = request.method ?? "GET";
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (!SAFE_METHODS.has(method)) headers["X-FieldClub-Client"] = "web";
+  if (!SAFE_METHODS.has(method)) headers["X-OpenAntiquity-Client"] = "web";
   const init: RequestInit = { method, headers, credentials: "include", signal: request.signal };
   if (request.file !== undefined) {
     headers["Content-Type"] = request.file.type || "application/octet-stream";
@@ -222,7 +222,7 @@ export function apiUpload<T>(path: string, file: Blob, request: UploadRequest = 
     xhr.open("POST", url);
     xhr.withCredentials = true;
     xhr.setRequestHeader("Accept", "application/json");
-    xhr.setRequestHeader("X-FieldClub-Client", "web");
+    xhr.setRequestHeader("X-OpenAntiquity-Client", "web");
     xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && event.total > 0) request.onProgress?.(Math.min(1, event.loaded / event.total));

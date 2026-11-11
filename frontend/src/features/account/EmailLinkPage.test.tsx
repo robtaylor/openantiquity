@@ -106,7 +106,7 @@ describe("the emailed link page", () => {
     await waitFor(() => expect(screen.getByTestId("address")).toHaveTextContent(/^\/f\/abc$/));
     expect(verifyCalls(routes)).toHaveLength(1);
     expect(verifyCalls(routes)[0]?.body).toEqual({ token: TOKEN, confirm: false });
-    expect(verifyCalls(routes)[0]?.headers.get("X-FieldClub-Client")).toBe("web");
+    expect(verifyCalls(routes)[0]?.headers.get("X-OpenAntiquity-Client")).toBe("web");
     // Signed in everywhere at once.
     expect(await screen.findByTestId("account-avatar")).toBeInTheDocument();
     expectTokenOnlyInExchange(routes);

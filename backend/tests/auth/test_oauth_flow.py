@@ -593,7 +593,7 @@ def test_a_verified_email_does_not_link_to_an_account_holding_it_unverified(
 def test_apples_callback_is_a_post_without_the_client_header(
     app: FastAPI, client_for: ClientFor, idps: Idps, db: Session
 ) -> None:
-    # A browser following Apple's form post sends no X-FieldClub-Client header.
+    # A browser following Apple's form post sends no X-OpenAntiquity-Client header.
     browser = client_for(app, with_header=False)
     response = complete(browser, idps, "apple")
     assert signin_error(response) is None

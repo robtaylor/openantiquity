@@ -12,7 +12,7 @@ import { helper, join } from "./support/people.js";
  */
 
 const PLACES = { desktop: { lon: -1.62, lat: 52.71 }, phone: { lon: -0.62, lat: 52.71 } } as const;
-const HEADERS = { "X-FieldClub-Client": "web" };
+const HEADERS = { "X-OpenAntiquity-Client": "web" };
 
 async function answerYes(page: Page, publicId: string): Promise<void> {
   const answered = await page.request.put(`/api/v1/findings/${publicId}/observation`, {

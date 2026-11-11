@@ -49,7 +49,7 @@ test("three people take a finding from spotted to seen by others to corroborated
   await join(page, `Finder${tag}`);
   const title = `Enclosure ${tag}`;
   const created = await page.request.post("/api/v1/findings", {
-    headers: { "X-FieldClub-Client": "web" },
+    headers: { "X-OpenAntiquity-Client": "web" },
     data: {
       location: { type: "Point", coordinates: [AVEBURY.lon, AVEBURY.lat] },
       feature_class: "enclosure",

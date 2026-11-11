@@ -33,15 +33,15 @@ async function openPanel(path: string, title: string) {
 }
 
 describe("the about page", () => {
-  it("says what Field Club is, that it is free, how sites are protected, and who can join", async () => {
+  it("says what Open Antiquity is, that it is free, how sites are protected, and who can join", async () => {
     serve();
-    const panel = await openPanel("/about", "About Field Club");
+    const panel = await openPanel("/about", "About Open Antiquity");
     expect(panel.getByText(/a shared map for finding and checking/)).toBeInTheDocument();
     expect(panel.getByText(/free and non-commercial/)).toBeInTheDocument();
     expect(panel.getByText(metaFixture.notices.sensitivity)).toBeInTheDocument();
     expect(panel.getByText(/Contributors are 16 or over\./)).toBeInTheDocument();
     expect(panel.getByText(/There are no private messages, because/)).toBeInTheDocument();
-    expect(panel.getByText(/the address that will be given here before Field Club opens/)).toBeInTheDocument();
+    expect(panel.getByText(/the address that will be given here before Open Antiquity opens/)).toBeInTheDocument();
     for (const title of ["Contributor terms", "Privacy notice", "Reporting something"]) {
       expect(panel.getByRole("link", { name: new RegExp(title) })).toBeInTheDocument();
     }
@@ -49,7 +49,7 @@ describe("the about page", () => {
 
   it("gives the contact address from /meta as a link", async () => {
     serve({ ...metaFixture, app: { ...metaFixture.app, contact: "hello@fieldclub.example" } });
-    const panel = await openPanel("/about", "About Field Club");
+    const panel = await openPanel("/about", "About Open Antiquity");
     expect(panel.getByRole("link", { name: "hello@fieldclub.example" })).toHaveAttribute(
       "href",
       "mailto:hello@fieldclub.example",
@@ -59,7 +59,7 @@ describe("the about page", () => {
   it("credits every source the API lists, grouped, and finds them by search", async () => {
     const routes = serve();
     const user = userEvent.setup();
-    const panel = await openPanel("/about", "About Field Club");
+    const panel = await openPanel("/about", "About Open Antiquity");
     expect(await panel.findByText("Looked up from your browser", { exact: false })).toBeInTheDocument();
     expect(routes.callsTo("GET /context/live-sources")).toHaveLength(1);
     expect(panel.getByText("Map layers", { exact: false })).toBeInTheDocument();
@@ -81,7 +81,7 @@ describe("the about page", () => {
     let fail = true;
     serve(metaFixture, () => (fail ? apiError(500, "server_error") : json({ items: [liveSourceFixture()] })));
     const user = userEvent.setup();
-    const panel = await openPanel("/about", "About Field Club");
+    const panel = await openPanel("/about", "About Open Antiquity");
     expect(await panel.findByText(/didn't load/, {}, { timeout: 4000 })).toBeInTheDocument();
     expect(panel.getByText("Map layers", { exact: false })).toBeInTheDocument();
     fail = false;
@@ -173,7 +173,7 @@ describe("the notices", () => {
     ).toBeInTheDocument();
     const others = within(panel.getByRole("navigation", { name: "The other notices" }));
     expect(others.getByRole("link", { name: "Privacy notice" })).toHaveAttribute("href", "/about/privacy");
-    expect(others.getByRole("link", { name: "About Field Club" })).toHaveAttribute("href", "/about");
+    expect(others.getByRole("link", { name: "About Open Antiquity" })).toHaveAttribute("href", "/about");
   });
 
   it("says there is nothing at a notice that doesn't exist", async () => {

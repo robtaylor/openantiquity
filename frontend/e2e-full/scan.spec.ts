@@ -40,10 +40,10 @@ test("a signed-out scan is saved after sign-in and counted in coverage", async (
   const sheet = page.getByRole("dialog", { name: "Sign in" });
   await sheet.getByLabel("Development sign-in").fill(`Scanner${tag}`);
   await sheet.getByRole("button", { name: "Sign in", exact: true }).click();
-  const welcome = page.getByRole("dialog", { name: "Welcome to Field Club" });
+  const welcome = page.getByRole("dialog", { name: "Welcome to Open Antiquity" });
   await welcome.getByRole("radio", { name: "18 or over" }).click();
   await welcome.getByRole("checkbox", { name: "I accept the contributor terms" }).check();
-  await welcome.getByRole("button", { name: "Join Field Club" }).click();
+  await welcome.getByRole("button", { name: "Join Open Antiquity" }).click();
   await expect(scan.locator(".fc-scan__thanks .fc-draft-badge")).toHaveCount(0);
   await expect(scan.getByText(/1 square\s*looked over this visit/)).toBeVisible();
 

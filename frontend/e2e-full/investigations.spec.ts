@@ -33,7 +33,7 @@ test("starts an investigation, adds a finding and a note, reorders them, publish
   const title = `Barrows ${tag}`;
   await join(page, `Inv${tag}`);
   const created = await page.request.post("/api/v1/findings", {
-    headers: { "X-FieldClub-Client": "web" },
+    headers: { "X-OpenAntiquity-Client": "web" },
     data: {
       location: { type: "Point", coordinates: [AVEBURY.lon, AVEBURY.lat] },
       feature_class: "enclosure",
@@ -97,7 +97,7 @@ test("starts an investigation, adds a finding and a note, reorders them, publish
   await expect(notebook.getByText("Public.", { exact: true })).toBeVisible();
 
   // Signed out, it is in the public list.
-  const out = await page.request.post("/api/v1/auth/logout", { headers: { "X-FieldClub-Client": "web" } });
+  const out = await page.request.post("/api/v1/auth/logout", { headers: { "X-OpenAntiquity-Client": "web" } });
   expect(out.ok()).toBe(true);
   await openMap(page, `/investigations?list=public${VIEW}`);
   await expect(panel(page, "Investigations").getByRole("link", { name: new RegExp(title) })).toBeVisible();

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# Field Club: one image for the Cloud Run service and every Cloud Run job.
+# Open Antiquity: one image for the Cloud Run service and every Cloud Run job.
 #
 #   docker buildx build -f infra/Dockerfile --platform linux/amd64 -t fieldclub .
 #

@@ -28,7 +28,7 @@ test("a second account answers a finding through the queue, signing in on the wa
   let publicId = "";
   try {
     const created = await finder.page.request.post("/api/v1/findings", {
-      headers: { "X-FieldClub-Client": "web" },
+      headers: { "X-OpenAntiquity-Client": "web" },
       data: {
         location: { type: "Point", coordinates: [at.lon, at.lat] },
         feature_class: "enclosure",
@@ -55,10 +55,10 @@ test("a second account answers a finding through the queue, signing in on the wa
     const sheet = page.getByRole("dialog", { name: "Sign in" });
     await sheet.getByLabel("Development sign-in").fill(`Reviewer${tag}`);
     await sheet.getByRole("button", { name: "Sign in", exact: true }).click();
-    const welcome = page.getByRole("dialog", { name: "Welcome to Field Club" });
+    const welcome = page.getByRole("dialog", { name: "Welcome to Open Antiquity" });
     await welcome.getByRole("radio", { name: "18 or over" }).click();
     await welcome.getByRole("checkbox", { name: "I accept the contributor terms" }).check();
-    await welcome.getByRole("button", { name: "Join Field Club" }).click();
+    await welcome.getByRole("button", { name: "Join Open Antiquity" }).click();
 
     await expect(look.getByRole("heading", { name: title })).toBeVisible();
     await expect(look.getByText(/The finder marked it as: Enclosure\. So did you\./)).toBeVisible();

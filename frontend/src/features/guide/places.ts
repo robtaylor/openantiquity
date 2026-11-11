@@ -4,7 +4,7 @@
  * only: their names come from `/meta`, and a picture whose view `/meta`
  * doesn't list is left out (`viewNotesFor`).
  *
- * Every picture was made from Field Club's own terrain tiles of the 2022
+ * Every picture was made from Open Antiquity's own terrain tiles of the 2022
  * Environment Agency composite: the raking-light one as the map draws it in
  * the browser, the others straight from the rendered tiles. `pictures/README.md` says where each one is
  * and which view it uses. What each real example is comes from the heritage

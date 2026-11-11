@@ -1,4 +1,4 @@
-# Local development services for Field Club.
+# Local development services for Open Antiquity.
 #
 #   docker compose -f infra/docker-compose.yml up -d db
 #

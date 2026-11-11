@@ -87,7 +87,7 @@ def export_findings(
 ) -> Response:
     """A filtered set of findings as GeoJSON or HER-ready CSV. The next cursor is in `X-Next-Cursor`."""
     page = findings.list_findings(db, viewer, filters, limit=limit, cursor=cursor)
-    response = _download(db, page.findings, viewer, format, "fieldclub-findings")
+    response = _download(db, page.findings, viewer, format, "openantiquity-findings")
     if page.next_cursor is not None:
         response.headers["X-Next-Cursor"] = page.next_cursor
     return response
@@ -263,4 +263,4 @@ def export_finding(
 ) -> Response:
     """One finding as GeoJSON or HER-ready CSV."""
     finding = findings.get_finding(db, public_id, viewer)
-    return _download(db, [finding], viewer, format, f"fieldclub-{finding.public_id}")
+    return _download(db, [finding], viewer, format, f"openantiquity-finding-{finding.public_id}")

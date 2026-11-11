@@ -170,11 +170,11 @@ describe("the drafts bar", () => {
     });
     putDraft(PROBE, { note: "a" });
     renderApp();
-    const welcome = within(await screen.findByRole("dialog", { name: "Welcome to Field Club" }));
+    const welcome = within(await screen.findByRole("dialog", { name: "Welcome to Open Antiquity" }));
     expect(saved).toEqual([]);
     await userEvent.click(welcome.getByRole("radio", { name: "18 or over" }));
     await userEvent.click(welcome.getByRole("checkbox", { name: "I accept the contributor terms" }));
-    await userEvent.click(welcome.getByRole("button", { name: "Join Field Club" }));
+    await userEvent.click(welcome.getByRole("button", { name: "Join Open Antiquity" }));
     await waitFor(() => expect(saved).toEqual(["a"]));
     expect(routes.callsTo("POST /auth/welcome")).toHaveLength(1);
   });

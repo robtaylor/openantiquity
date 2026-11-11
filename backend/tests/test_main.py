@@ -287,7 +287,7 @@ def test_the_server_stops_within_seconds_even_with_a_request_open() -> None:
 def dist(tmp_path: Path) -> Path:
     built = tmp_path / "dist"
     (built / "assets").mkdir(parents=True)
-    (built / "index.html").write_text("<!doctype html><title>Field Club</title><div id=root></div>")
+    (built / "index.html").write_text("<!doctype html><title>Open Antiquity</title><div id=root></div>")
     (built / "assets" / "index-abc123.js").write_text("console.log('app')")
     (built / "favicon.svg").write_text("<svg/>")
     (tmp_path / "secret.txt").write_text("outside the build")
@@ -310,7 +310,7 @@ def test_index_is_served_at_the_root_and_must_be_revalidated(spa: TestClient) ->
     response = spa.get("/")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert "Field Club" in response.text
+    assert "Open Antiquity" in response.text
     assert response.headers["cache-control"] == "no-cache"
 
 
@@ -353,7 +353,7 @@ def test_the_fallback_never_swallows_api_or_tile_paths(spa: TestClient, path: st
 
 def test_api_and_health_still_work_with_the_frontend_mounted(spa: TestClient) -> None:
     assert spa.get("/healthz").json()["status"] == "ok"
-    assert spa.get("/api/v1/meta").json()["app"]["name"] == "Field Club"
+    assert spa.get("/api/v1/meta").json()["app"]["name"] == "Open Antiquity"
     assert spa.post("/api/v1/auth/dev-login", json={"handle": "TestRob"}).status_code == 200
     assert spa.get("/api/v1/auth/me").json()["handle"] == "TestRob"
     assert spa.get("/api/openapi.json").status_code == 200
@@ -496,7 +496,7 @@ def test_startup_builds_the_schema_only_when_asked(db: Session, monkeypatch: pyt
 def test_print_openapi_writes_the_schema_as_json(db: Session, capsys: pytest.CaptureFixture[str]) -> None:
     main.print_openapi()
     schema = json.loads(capsys.readouterr().out)
-    assert schema["info"]["title"] == "Field Club"
+    assert schema["info"]["title"] == "Open Antiquity"
     assert schema["info"]["version"] == __version__
     assert "/api/v1/meta" in schema["paths"]
     assert "Meta" in schema["components"]["schemas"]

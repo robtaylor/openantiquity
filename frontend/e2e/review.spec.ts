@@ -73,7 +73,7 @@ test("before an answer the page, its title, the address, the network and the map
     expect(decodeURIComponent(page.url())).not.toContain(words);
     for (const body of bodies) expect(body, `a response holds "${words}"`).not.toContain(words);
   }
-  await expect(page).toHaveTitle("Second look · Field Club");
+  await expect(page).toHaveTitle("Second look · Open Antiquity");
   await expect(page).toHaveURL(/\/review#/);
   expect(findingsLog.boxes, "the map asked for the findings in view").toEqual([]);
   expect(bodies.some((body) => body.includes("/api/v1/findings/f-ring "))).toBe(false);

@@ -162,6 +162,8 @@ def test_display_names_refuse_invisible_and_control_characters(name: str) -> Non
         "\uff21\uff44\uff4d\uff49\uff4e",
         "Former member",
         "former-member",
+        "Open Antiquity",
+        "open-antiquity",
         "Field Club",
     ],
 )

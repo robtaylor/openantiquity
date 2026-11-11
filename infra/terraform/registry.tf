@@ -2,7 +2,7 @@ resource "google_artifact_registry_repository" "images" {
   repository_id = var.name
   location      = var.region
   format        = "DOCKER"
-  description   = "Field Club container images."
+  description   = "Open Antiquity container images."
 
   # Storage is billed per GB beyond 0.5 GB, and each image is about 280 MB
   # compressed, so keep the recent ones for rollback and drop the rest.

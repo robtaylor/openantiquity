@@ -16,7 +16,7 @@ export async function stub(page: Page): Promise<void> {
 
 /** Sign `page`'s browser in as someone new who has been through the welcome step, a member unless `role` says. */
 export async function join(page: Page, handle: string, role?: string): Promise<void> {
-  const headers = { "X-FieldClub-Client": "web" };
+  const headers = { "X-OpenAntiquity-Client": "web" };
   const login = await page.request.post("/api/v1/auth/dev-login", { headers, data: { handle, role } });
   expect(login.status(), await login.text()).toBe(200);
   const welcome = await page.request.post("/api/v1/auth/welcome", {

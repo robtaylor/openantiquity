@@ -10,9 +10,9 @@ import { PanelFrame } from "./shell/PanelFrame.js";
  * until its page was built, and every one now has its page.
  */
 
-export const APP_NAME = "Field Club";
+export const APP_NAME = "Open Antiquity";
 
-/** Sets the window title to `title · Field Club` while the page is shown. */
+/** Sets the window title to `title · Open Antiquity` while the page is shown. */
 export function useDocumentTitle(title: string): void {
   useEffect(() => {
     document.title = `${title} · ${APP_NAME}`;

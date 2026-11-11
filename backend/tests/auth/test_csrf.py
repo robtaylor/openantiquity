@@ -68,13 +68,13 @@ def test_requests_that_change_data_need_the_header_on_every_kind_of_route(
     assert refused.json() == {
         "error": {
             "code": "client_header_required",
-            "message": "Requests that change data must carry the X-FieldClub-Client header.",
+            "message": "Requests that change data must carry the X-OpenAntiquity-Client header.",
         }
     }
     assert bare.request(method, path, headers={CLIENT_HEADER: "nope"}).status_code == 403
     assert bare.request(method, path, headers={CLIENT_HEADER: ""}).status_code == 403
     assert bare.request(method, path, headers=WEB).status_code == 200
-    assert bare.request(method, path, headers={"x-fieldclub-client": "web"}).status_code == 200
+    assert bare.request(method, path, headers={"x-openantiquity-client": "web"}).status_code == 200
 
 
 @pytest.mark.parametrize("path", PATHS)

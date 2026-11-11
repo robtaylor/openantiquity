@@ -46,7 +46,7 @@ All of these come from `tests/conftest.py`.
 | `database` | The session's engine. Rarely needed directly |
 | `db` | A SQLAlchemy `Session` on freshly emptied tables |
 | `app` | The FastAPI app from `create_app()`, using the test database |
-| `client` | A `TestClient` with no session. It sends `X-FieldClub-Client: web`, as the web app does |
+| `client` | A `TestClient` with no session. It sends `X-OpenAntiquity-Client: web`, as the web app does |
 | `make_user(role=Role.MEMBER, *, handle=None, **columns)` | A committed `User` who has finished the welcome step as an adult. Any `User` column can be passed. Pass `age_band=None, terms_accepted_at=None` for an account that hasn't |
 | `client_as(user)` | A `TestClient` signed in as that user, with a real session cookie and the client header |
 | `client_for(app, user=None, *, with_header=True)` | The same for an app of the test's own. Without a user it is signed out. `with_header=False` leaves out the client header |

@@ -139,7 +139,7 @@ function degrees(value: number): string {
 
 /**
  * The address to ask for an area. It must be https and must not be our own
- * server: what a live source holds is never sent to, or through, Field Club.
+ * server: what a live source holds is never sent to, or through, Open Antiquity.
  * Where the source has a cap parameter, it asks for one more record than the
  * map draws, so a fuller answer is known to be cut short, and never more
  * than the source allows.

@@ -2219,6 +2219,26 @@ export interface components {
             /** User */
             user?: string | null;
         };
+        /** CheckKindOut */
+        CheckKindOut: {
+            /** Hint */
+            hint: string;
+            /** Id */
+            id: string;
+            /** Question */
+            question: string;
+        };
+        /** CheckOut */
+        CheckOut: {
+            /** Against */
+            against: number;
+            /** Asserted */
+            asserted: number;
+            /** Check */
+            check: string;
+            /** Cleared */
+            cleared: boolean;
+        };
         /** CommentIn */
         CommentIn: {
             /** Body */
@@ -2695,7 +2715,7 @@ export interface components {
         };
         /**
          * FindReporting
-         * @description Where to report an object found in one nation. Field Club stores nothing about finds.
+         * @description Where to report an object found in one nation. Open Antiquity stores nothing about finds.
          */
         FindReporting: {
             /** Scheme */
@@ -3036,6 +3056,15 @@ export interface components {
         HandleSuggestion: {
             /** Handle */
             handle: string;
+        };
+        /** HeightProfileOut */
+        HeightProfileOut: {
+            /** Length M */
+            length_m: number;
+            /** Resolution M */
+            resolution_m: number;
+            /** Samples */
+            samples: components["schemas"]["ProfileSample"][];
         };
         /** Hidden */
         Hidden: {
@@ -4116,6 +4145,38 @@ export interface components {
              */
             type: "LineString";
         };
+        /**
+         * ProfileOut
+         * @description A person's public page.
+         *
+         *     Someone in the 16 to 17 band, or who hasn't chosen a band, shows only
+         *     their handle: `display_name` is the handle, and there is no picture or bio
+         *     (Decision 0009).
+         */
+        ProfileOut: {
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Bio */
+            bio: string | null;
+            counts: components["schemas"]["ProfileCounts"];
+            /** Display Name */
+            display_name: string;
+            /** Handle */
+            handle: string;
+            /** Is Me */
+            is_me: boolean;
+            /**
+             * Joined At
+             * Format: date-time
+             */
+            joined_at: string;
+            /** Reputation */
+            reputation: number;
+            /** Reputation Total */
+            reputation_total: number | null;
+            /** Role */
+            role: string;
+        };
         /** ProfileRequest */
         ProfileRequest: {
             line: components["schemas"]["LineString"];
@@ -4917,7 +4978,7 @@ export interface components {
          */
         Tallies: {
             /** Checks */
-            checks: components["schemas"]["fieldclub__schemas__findings__CheckOut"][];
+            checks: components["schemas"]["CheckOut"][];
             /** Class Agreement */
             class_agreement: number;
             /** Class Support */
@@ -5123,7 +5184,7 @@ export interface components {
         /** Vocab */
         Vocab: {
             /** Checks */
-            checks: components["schemas"]["fieldclub__schemas__meta__CheckOut"][];
+            checks: components["schemas"]["CheckKindOut"][];
             /** Evidence Kinds */
             evidence_kinds: components["schemas"]["EvidenceKindOut"][];
             /** Explanations */
@@ -5179,67 +5240,6 @@ export interface components {
             display_name?: string | null;
             /** Handle */
             handle?: string | null;
-        };
-        /** ProfileOut */
-        fieldclub__api__terrain__ProfileOut: {
-            /** Length M */
-            length_m: number;
-            /** Resolution M */
-            resolution_m: number;
-            /** Samples */
-            samples: components["schemas"]["ProfileSample"][];
-        };
-        /** CheckOut */
-        fieldclub__schemas__findings__CheckOut: {
-            /** Against */
-            against: number;
-            /** Asserted */
-            asserted: number;
-            /** Check */
-            check: string;
-            /** Cleared */
-            cleared: boolean;
-        };
-        /** CheckOut */
-        fieldclub__schemas__meta__CheckOut: {
-            /** Hint */
-            hint: string;
-            /** Id */
-            id: string;
-            /** Question */
-            question: string;
-        };
-        /**
-         * ProfileOut
-         * @description A person's public page.
-         *
-         *     Someone in the 16 to 17 band, or who hasn't chosen a band, shows only
-         *     their handle: `display_name` is the handle, and there is no picture or bio
-         *     (Decision 0009).
-         */
-        fieldclub__schemas__people__ProfileOut: {
-            /** Avatar Url */
-            avatar_url: string | null;
-            /** Bio */
-            bio: string | null;
-            counts: components["schemas"]["ProfileCounts"];
-            /** Display Name */
-            display_name: string;
-            /** Handle */
-            handle: string;
-            /** Is Me */
-            is_me: boolean;
-            /**
-             * Joined At
-             * Format: date-time
-             */
-            joined_at: string;
-            /** Reputation */
-            reputation: number;
-            /** Reputation Total */
-            reputation_total: number | null;
-            /** Role */
-            role: string;
         };
     };
     responses: never;
@@ -8622,7 +8622,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["fieldclub__api__terrain__ProfileOut"];
+                    "application/json": components["schemas"]["HeightProfileOut"];
                 };
             };
             /** @description Validation Error */
@@ -8653,7 +8653,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["fieldclub__schemas__people__ProfileOut"];
+                    "application/json": components["schemas"]["ProfileOut"];
                 };
             };
             /** @description Validation Error */

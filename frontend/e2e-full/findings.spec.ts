@@ -31,10 +31,10 @@ test("saves a finding marked signed out as a real finding at the same place, onc
 
   await sheet.getByLabel("Development sign-in").fill(handle);
   await sheet.getByRole("button", { name: "Sign in", exact: true }).click();
-  const welcome = page.getByRole("dialog", { name: "Welcome to Field Club" });
+  const welcome = page.getByRole("dialog", { name: "Welcome to Open Antiquity" });
   await welcome.getByRole("radio", { name: "18 or over" }).click();
   await welcome.getByRole("checkbox", { name: "I accept the contributor terms" }).check();
-  await welcome.getByRole("button", { name: "Join Field Club" }).click();
+  await welcome.getByRole("button", { name: "Join Open Antiquity" }).click();
 
   // Saved without anything typed again, and its page opens.
   await expect(page).toHaveURL(/\/f\/[^/#]+#/);

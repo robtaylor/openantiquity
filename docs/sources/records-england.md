@@ -1,6 +1,6 @@
 # England records sources
 
-This page records what a research pass found on 2026-11-10 about services that publish England's heritage records: Historic England's open data, the research records that are not open, the Archaeology Data Service route to them, Heritage Gateway, the openly licensed local records and the public map services with unstated licences. Nothing here describes what Field Club's code does, because none of it is built.
+This page records what a research pass found on 2026-11-10 about services that publish England's heritage records: Historic England's open data, the research records that are not open, the Archaeology Data Service route to them, Heritage Gateway, the openly licensed local records and the public map services with unstated licences. Nothing here describes what Open Antiquity's code does, because none of it is built.
 
 The headline: England published its designations and half a million features mapped from aerial photographs under the Open Government Licence v3.0. It did not publish its 354,740 research records or most of its 83 local Historic Environment Records (HERs). Only Cornwall and City of York carried an explicit OGL on the dataset, and Cornwall's still needed confirmation. The per-HER detail is in [England HER coverage](england-her-coverage.md).
 

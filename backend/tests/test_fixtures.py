@@ -77,7 +77,7 @@ def test_make_user_defaults_and_overrides(db: Session, make_user: MakeUser) -> N
 
 
 def test_client_sends_the_client_header_but_no_session(client: TestClient) -> None:
-    assert client.headers["X-FieldClub-Client"] == "web"
+    assert client.headers["X-OpenAntiquity-Client"] == "web"
     assert client.get("/api/v1/auth/me").status_code == 401
     assert client.post("/api/v1/auth/dev-login", json={"handle": "TestRob"}).status_code == 200
     assert client.get("/api/v1/auth/me").status_code == 200
@@ -90,7 +90,7 @@ def test_client_as_is_signed_in_as_that_user(
     as_alice, as_bob = client_as(alice), client_as(bob)
     assert as_alice.get("/api/v1/auth/me").json()["handle"] == "Alice"
     assert as_bob.get("/api/v1/auth/me").json()["role"] == "moderator"
-    assert as_alice.headers["X-FieldClub-Client"] == "web"
+    assert as_alice.headers["X-OpenAntiquity-Client"] == "web"
     assert as_alice.patch("/api/v1/auth/me", json={"bio": "Hi"}).status_code == 200
     assert db.scalar(select(func.count()).select_from(UserSession)) == 2
 

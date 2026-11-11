@@ -65,7 +65,8 @@ def test_geojson_holds_every_available_item_with_its_licence(
     response = client.get(url(investigation, "/export"), params={"format": "geojson"})
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/geo+json"
-    assert "attachment" in response.headers["content-disposition"]
+    name = f"openantiquity-investigation-{investigation.public_id}.geojson"
+    assert response.headers["content-disposition"] == f'attachment; filename="{name}"'
     body = response.json()
     assert body["investigation"]["title"] == "Parish survey"
     assert body["investigation"]["licence"] == "CC BY 4.0"
@@ -150,6 +151,8 @@ def test_the_report_is_one_page_with_every_item(
     assert "sandbox" in response.headers["content-security-policy"]
     assert "default-src 'none'" in response.headers["content-security-policy"]
     assert response.headers["x-content-type-options"] == "nosniff"
+    assert "Open Antiquity" in response.text
+    assert "Field Club" not in response.text
     page = response.text
     for text in (
         "Parish survey",

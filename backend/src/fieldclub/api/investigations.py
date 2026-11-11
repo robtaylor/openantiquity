@@ -367,7 +367,7 @@ def export_investigation(
     """
     access = investigations.load(db, public_id, viewer)
     export = investigation_exports.gather(db, access.investigation, viewer)
-    name = f"fieldclub-investigation-{access.investigation.public_id}"
+    name = f"openantiquity-investigation-{access.investigation.public_id}"
     if format == "html":
         response = Response(
             content=investigation_exports.to_html(export), media_type="text/html; charset=utf-8"

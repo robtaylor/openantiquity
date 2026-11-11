@@ -35,7 +35,7 @@ test("the guide opens from the rail, shows its pictures and sends each example t
   await openMap(page);
   await goTo(page, "Guide");
   await expect(page).toHaveURL(/\/guide#/);
-  await expect(page).toHaveTitle("Guide · Field Club");
+  await expect(page).toHaveTitle("Guide · Open Antiquity");
   const panel = page.getByRole("complementary", { name: "Guide" });
   await expect(panel.getByRole("heading", { name: "The views", level: 3 })).toBeVisible();
   await picturesLoaded(panel);
@@ -91,7 +91,7 @@ test("the about page credits every source, grouped and searchable", async ({ pag
   await openMap(page);
   await goTo(page, "About");
   await expect(page).toHaveURL(/\/about#/);
-  const panel = page.getByRole("complementary", { name: "About Field Club" });
+  const panel = page.getByRole("complementary", { name: "About Open Antiquity" });
   await expect(panel.getByText(/a shared map for finding and checking/)).toBeVisible();
   await expect(panel.getByText(/free and non-commercial/)).toBeVisible();
 
@@ -126,7 +126,7 @@ test("each notice is marked as a draft and reached by keyboard from the about pa
     "Asking for something to be taken down",
   ]) {
     await openMap(page, "/about");
-    const panel = page.getByRole("complementary", { name: "About Field Club" });
+    const panel = page.getByRole("complementary", { name: "About Open Antiquity" });
     await expect(panel).toBeVisible();
     await tabTo(page, panel.getByRole("link", { name: new RegExp(`^${title}`) }), 80);
     await page.keyboard.press("Enter");
@@ -134,14 +134,14 @@ test("each notice is marked as a draft and reached by keyboard from the about pa
     await expect(notice).toBeVisible();
     await expect(notice.getByRole("note")).toContainText("Draft");
     await expect(notice.getByRole("article", { name: title })).toBeVisible();
-    await expect(page).toHaveTitle(`${title} · Field Club`);
+    await expect(page).toHaveTitle(`${title} · Open Antiquity`);
   }
 });
 
 test("the welcome sheet links to the contributor terms, which open at their own page", async ({ page }) => {
   await fakeSession(page, newcomerFixture());
   await openMap(page, "/");
-  const sheet = page.getByRole("dialog", { name: "Welcome to Field Club" });
+  const sheet = page.getByRole("dialog", { name: "Welcome to Open Antiquity" });
   await expect(sheet).toBeVisible();
   const link = sheet.getByRole("link", { name: /Read the contributor terms/ });
   await tabTo(page, link);

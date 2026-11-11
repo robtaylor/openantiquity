@@ -11,14 +11,14 @@ The plan serves [v1-england.md](v1-england.md) and the decisions on accounts ([0
 ## Prerequisites
 
 - The research pass of 2026-11-10 is complete. Every fact below comes from it, written as it was observed that day.
-- Decisions 0002, 0004, 0006, 0007 and 0009 are Proposed. The letters describe Field Club as those decisions do.
+- Decisions 0002, 0004, 0006, 0007 and 0009 are Proposed. The letters describe Open Antiquity as those decisions do.
 - The owner has a name, role and contact address to sign with. Every draft ends with a placeholder for them.
-- Field Club facts used in every draft: free, non-commercial, citizen-science, contributors aged 16 and over, no private messaging, contributions under CC BY 4.0, deployed on Google Cloud.
+- Open Antiquity facts used in every draft: free, non-commercial, citizen-science, contributors aged 16 and over, no private messaging, contributions under CC BY 4.0, deployed on Google Cloud.
 
 ## Where things stand (2026-11-11)
 
 - WS1 England LIDAR: done on 2026-11-10. Defra supplied the 2022 composite in bulk with no time limit, ticket DSP3-11967.
-- WS2 Google Cloud project: the project `fieldclub-uk` has billing, and the owner gave standing permission for its deployment on 2026-11-11. The deployment's state is in `v1-england.md`, WS8. A public site address is still to choose.
+- WS2 Google Cloud project: the project `fieldclub-uk` has billing, and the owner gave standing permission for its deployment on 2026-11-11. The deployment's state is in `v1-england.md`, WS8. The site's address is `openantiquity.org`, registered at Gandi that day with `.com` and `.co.uk`; pointing it at the service waits on the site opening.
 - WS3 Sign-in credentials: to do. Only OpenStreetMap and Google were looked at by the research.
 - WS4 Other keys and accounts: to do. None is needed for the first build.
 - WS5 Archaeology Data Service: letter sent on 2026-11-11. Awaiting a reply.
@@ -30,6 +30,8 @@ The plan serves [v1-england.md](v1-england.md) and the decisions on accounts ([0
 - WS19 Courtesy notices: to do.
 
 ## How to use this plan
+
+The project was renamed from Field Club to Open Antiquity on 2026-11-11 (Decision 0017). The two letters sent that day, to the Archaeology Data Service (WS5) and Historic Environment Scotland (WS9), went out under the old name and are kept here as sent. No follow-up is sent: the reply to each answer gives the new name. Every other draft uses the new name.
 
 Each workstream has a status, a contact, what a reply unblocks, what happens without one, a draft where the research supplied or implied one, and an exit criterion. Send each draft from the address you want replies at. When a reply arrives, update the status line in place and put the decision it allows in the right home: a source's reuse class and access mode change in the source catalogue, and a change of approach needs a new decision record.
 
@@ -64,7 +66,7 @@ What the supply holds, and how it behaves in transfer, is recorded in `../source
 
 ### WS2 — Google Cloud project
 
-**Status:** Done, apart from the site's address. On 2026-11-11 the owner approved the project `fieldclub-uk`, a budget alert of £75 a month and the contact address `fieldclub@shape.build`, freed places on the billing account, and gave standing permission for the deployment. What has been deployed is recorded in `v1-england.md`, WS8. Still to provide: a public address for the site, if the run.app address isn't to be the one people use.
+**Status:** Done. On 2026-11-11 the owner approved the project `fieldclub-uk`, a budget alert of £75 a month and the contact address `fieldclub@shape.build`, freed places on the billing account, and gave standing permission for the deployment. The same day the owner registered `openantiquity.org`, `openantiquity.com` and `openantiquity.co.uk` at Gandi and made a token for their DNS (Decision 0017). What has been deployed is recorded in `v1-england.md`, WS8. Pointing the domain at the service is step 11 of `infra/README.md` and waits on the site opening.
 
 **Who.** The owner, in their own Google Cloud account. The research created nothing in it.
 
@@ -91,7 +93,7 @@ What the supply holds, and how it behaves in transfer, is recorded in `../source
 
 **Status:** To do. Waiting on WS2 for the production redirect address.
 
-**Who.** The owner registers Field Club with each provider named in Decision 0002: Google, Apple, Microsoft, Facebook and OpenStreetMap, plus a sender for the emailed one-time link. Decision 0002 offers a provider only when its credentials are configured, so each one can arrive separately.
+**Who.** The owner registers Open Antiquity with each provider named in Decision 0002: Google, Apple, Microsoft, Facebook and OpenStreetMap, plus a sender for the emailed one-time link. Decision 0002 offers a provider only when its credentials are configured, so each one can arrive separately.
 
 **What the research recorded:**
 
@@ -128,7 +130,7 @@ These need a person's details, so the research didn't create them.
 | Geograph API key | "You will need to request a Geograph API key yourself for live queries." The dumps need no key | Live "photos near here" |
 | YouTube Data API key | Held in the Google Cloud project for `videos.list` backfill only. Default quota 100 `search.list` calls and 10,000 units a day | Video suggestions |
 | OASIS | Register as a community-group organisation, role O1a. Level 7 "Specialist Data User" access is by request to the OASIS Management Board through the OASIS Helpdesk, address to find | Reporting surveys; research reuse |
-| ArcGIS Location Platform | A decision, not only a sign-up. Without an account, showing Esri World Imagery or Wayback in a third-party app was outside Esri's stated terms. The account's stated price was "2M free then $0.15 per 1,000 tiles". Whether Field Club's users may then trace findings from it was unclear | The best cropmark imagery the research found |
+| ArcGIS Location Platform | A decision, not only a sign-up. Without an account, showing Esri World Imagery or Wayback in a third-party app was outside Esri's stated terms. The account's stated price was "2M free then $0.15 per 1,000 tiles". Whether Open Antiquity's users may then trace findings from it was unclear | The best cropmark imagery the research found |
 | MapTiler key | Only if the coloured 1:25,000 of 1937 to 1961 or the one-inch Seventh Series are wanted. Free tier 100,000 tile requests a month, non-commercial only. Never reuse the key embedded in the NLS viewer | Two historic map series |
 
 **Meanwhile.** Every feature above has a keyless fallback or can wait.
@@ -156,7 +158,7 @@ These need a person's details, so the research didn't create them.
 | DataCite records for prefix 10.5284, 146,930 DOIs | `open` (CC0) | `bulk`, no letter needed | No change |
 | Defence of Britain and England's Rock Art, 20,173 and 2,103 point records in the catalogue API | `non_commercial` | `live` | `bulk` |
 
-**Meanwhile.** The browser queries ADS directly and Field Club stores only record identifiers and addresses, as Decision 0007 sets out. The research flagged that this exposes users' IP addresses and queries to ADS, which needs a line in the privacy notice in WS16.
+**Meanwhile.** The browser queries ADS directly and Open Antiquity stores only record identifiers and addresses, as Decision 0007 sets out. The research flagged that this exposes users' IP addresses and queries to ADS, which needs a line in the privacy notice in WS16.
 
 **Draft.** Sent on 2026-11-11:
 
@@ -258,7 +260,7 @@ footprint licence and stable service names
 
 Dear Historic England,
 
-I run Field Club, a free, non-commercial citizen-science map where
+I run Open Antiquity, a free, non-commercial citizen-science map where
 volunteers aged 16 and over look for earthworks in national LIDAR and
 check them against existing records. Members' findings will be
 published under CC BY 4.0. To tell someone in England whether a feature is
@@ -290,18 +292,18 @@ data isn't for planning use.
 
 With thanks,
 [Name]
-[Role, Field Club]
+[Role, Open Antiquity]
 [Contact address]
 ```
 
 **Draft 2, Heritage Gateway links.** Contact: heritagegateway@historicengland.org.uk.
 
 ```text
-Subject: Stable links to Heritage Gateway from Field Club
+Subject: Stable links to Heritage Gateway from Open Antiquity
 
 Dear Heritage Gateway team,
 
-I run Field Club, a free, non-commercial citizen-science map for
+I run Open Antiquity, a free, non-commercial citizen-science map for
 finding earthworks in LIDAR. It will link out to authoritative records
 and won't copy, frame or embed Gateway content. Could you confirm:
 
@@ -317,28 +319,28 @@ and won't copy, frame or embed Gateway content. Could you confirm:
 
 One more request. Your pages check each visitor before they show
 anything. A person's browser passes the check; a program is refused
-with "403 Forbidden". So a program can't confirm that Field Club's
-links to your records still work. Could requests that carry Field
-Club's name and contact address be let through for that check? It
-would ask only for a page's headers, a handful of times a month.
+with "403 Forbidden". So a program can't confirm that Open Antiquity's
+links to your records still work. Could requests that carry Open
+Antiquity's name and contact address be let through for that check?
+It would ask only for a page's headers, a handful of times a month.
 
 With thanks,
 [Name]
-[Role, Field Club]
+[Role, Open Antiquity]
 [Contact address]
 ```
 
 **Draft 3, Greater London HER.** Contact: glher@HistoricEngland.org.uk. The research found GLHER's terms forbid scraping, data mining and links to anything but the home page, and recommended no programmatic use until permission arrives. It also recorded that three automated requests were sent to GLHER before its terms were read.
 
 ```text
-Subject: Linking to GLHER records from Field Club
+Subject: Linking to GLHER records from Open Antiquity
 
 Dear GLHER team,
 
-I run Field Club, a free, non-commercial citizen-science map where
+I run Open Antiquity, a free, non-commercial citizen-science map where
 volunteers look for earthworks in LIDAR and check them against existing
 records. Your terms allow links to the GLHER Online home page only.
-London is the largest area with a published record that Field Club
+London is the largest area with a published record that Open Antiquity
 can't point to.
 
 May I link to individual record pages? Alternatively, could you supply
@@ -347,7 +349,7 @@ record address? I won't scrape the site or call it from scripts.
 
 With thanks,
 [Name]
-[Role, Field Club]
+[Role, Open Antiquity]
 [Contact address]
 ```
 
@@ -383,13 +385,13 @@ Attribution recorded by the research: "The Portable Antiquities Scheme/The Trust
 ```text
 To: info@finds.org.uk
 Cc: permissions@britishmuseum.org
-Subject: Linking to and referencing PAS records in Field Club
+Subject: Linking to and referencing PAS records in Open Antiquity
 
 Dear PAS team,
 
-I run Field Club, a free, non-commercial citizen-science map where
+I run Open Antiquity, a free, non-commercial citizen-science map where
 volunteers aged 16 and over look for earthworks in open LIDAR and
-cross-reference them with existing records. I don't intend Field Club
+cross-reference them with existing records. I don't intend Open Antiquity
 to accept findspots from its members.
 
 1. May I link to record pages at finds.org.uk/pas/recorded-find/{ID}?
@@ -402,7 +404,7 @@ to accept findspots from its members.
 3. If so, which route would you prefer: an API token, the daily export,
    or a periodic file?
 4. A May 2022 copy of PAS records on the ARIADNE portal carries a
-   CC-BY label. Would you object if Field Club used it, as 1 km
+   CC-BY label. Would you object if Open Antiquity used it, as 1 km
    squares and not as findspots?
 
 I'll never show a findspot finer than 1 km and will honour sensitive
@@ -415,7 +417,7 @@ want to know.
 
 With thanks,
 [Name]
-[Role, Field Club]
+[Role, Open Antiquity]
 [Contact address]
 ```
 
@@ -460,7 +462,7 @@ Subject: Licence of your published HER data
 
 Dear [HER name] team,
 
-I run Field Club, a free, non-commercial citizen-science map where
+I run Open Antiquity, a free, non-commercial citizen-science map where
 volunteers look for earthworks in LIDAR and check them against existing
 records. I'd like to show your published monument records, with your
 attribution and a link to each record.
@@ -470,14 +472,14 @@ under the Open Government Licence v3.0, but the ArcGIS Online item
 carries non-commercial wording. Is the service OGL v3, and is it
 current?]
 [Lincolnshire: your extract carries an OGL label and also says it should
-not be used in any commercial sense. Which applies? Field Club is
+not be used in any commercial sense. Which applies? Open Antiquity is
 non-commercial either way.]
 
 A one-line reply would be enough.
 
 With thanks,
 [Name]
-[Role, Field Club]
+[Role, Open Antiquity]
 [Contact address]
 ```
 
@@ -488,7 +490,7 @@ Subject: A minimal open extract of [HER name] monument records
 
 Dear [HER name] team,
 
-I run Field Club, a free, non-commercial citizen-science map. Volunteers
+I run Open Antiquity, a free, non-commercial citizen-science map. Volunteers
 aged 16 and over look for earthworks in LIDAR, check each other's
 findings and see whether a feature is already recorded. Members'
 findings will be published under CC BY 4.0, and I plan to offer an
@@ -500,7 +502,7 @@ Cornwall and Stirling already publish theirs openly. Where your records
 include NRHE content, that part already reached you under the Open
 Government Licence.
 
-If an extract isn't possible, may Field Club query your public map
+If an extract isn't possible, may Open Antiquity query your public map
 service from users' browsers, storing nothing, and link to each record?
 
 I'll show your name and a link on every record, and say that it isn't a
@@ -508,7 +510,7 @@ substitute for a formal HER search.
 
 With thanks,
 [Name]
-[Role, Field Club]
+[Role, Open Antiquity]
 [Contact address]
 ```
 
@@ -619,32 +621,32 @@ With thanks,
 
 ```text
 To: treasuretrove@nms.ac.uk
-Subject: Linking to the Treasure Trove database from Field Club
+Subject: Linking to the Treasure Trove database from Open Antiquity
 
 Dear Treasure Trove Unit,
 
-I run Field Club, a free, non-commercial citizen-science map for
+I run Open Antiquity, a free, non-commercial citizen-science map for
 finding earthworks in LIDAR. I'd like to link to object pages on your
 database. Is there a licence for the catalogue text and images? Is an
 export available with reference, type, period, parish and council? May
-I rely on the object-detail address staying stable? Field Club would
+I rely on the object-detail address staying stable? Open Antiquity would
 show nothing finer than parish, and I don't intend it to accept
 findspots from its members.
 
 With thanks,
 [Name]
-[Role, Field Club]
+[Role, Open Antiquity]
 [Contact address]
 ```
 
 **Draft, data-sharing request to an HER outside England.** Use for Heneb, the Improvement Service, Manx National Heritage and Jersey Heritage.
 
 ```text
-Subject: Linking Field Club findings to [HER name] records
+Subject: Linking Open Antiquity findings to [HER name] records
 
 Dear [HER name] team,
 
-I run Field Club, a free, non-commercial citizen-science map where
+I run Open Antiquity, a free, non-commercial citizen-science map where
 volunteers aged 16 and over look for earthworks in LIDAR and check them
 against existing records. Your terms don't allow reuse without written
 consent, so I'm asking first.
@@ -655,7 +657,7 @@ individual record pages? I won't scrape or harvest your site.
 
 With thanks,
 [Name]
-[Role, Field Club]
+[Role, Open Antiquity]
 [Contact address]
 ```
 
@@ -695,7 +697,7 @@ Subject: Licence and attribution for the Welsh Government LiDAR 2020-23
 
 Hello,
 
-I run Field Club, a free, non-commercial citizen-science map where
+I run Open Antiquity, a free, non-commercial citizen-science map where
 volunteers look for earthworks in LIDAR. I'd like to use the national
 1 m DTM from DataMapWales.
 
@@ -705,7 +707,7 @@ confirm it's OGL v3, and tell me the attribution wording you'd like?
 
 With thanks,
 [Name]
-[Role, Field Club]
+[Role, Open Antiquity]
 [Contact address]
 ```
 
@@ -716,7 +718,7 @@ Subject: Attribution for Scottish LiDAR phases 4 to 6 and Orkney 2023
 
 Hello,
 
-I run Field Club, a free, non-commercial citizen-science map where
+I run Open Antiquity, a free, non-commercial citizen-science map where
 volunteers look for earthworks in LIDAR, using data from the Scottish
 Remote Sensing Portal.
 
@@ -730,7 +732,7 @@ Remote Sensing Portal.
 
 With thanks,
 [Name]
-[Role, Field Club]
+[Role, Open Antiquity]
 [Contact address]
 ```
 
@@ -766,11 +768,11 @@ With thanks,
 **Draft:**
 
 ```text
-Subject: Using NLS map tiles in Field Club
+Subject: Using NLS map tiles in Open Antiquity
 
 Dear NLS Maps team,
 
-I run Field Club, a free, non-commercial citizen-science map where
+I run Open Antiquity, a free, non-commercial citizen-science map where
 volunteers look for earthworks in LIDAR and compare them with historic
 maps. I'd credit every layer "Reproduced with the permission of the
 National Library of Scotland" with a link to maps.nls.uk.
@@ -786,7 +788,7 @@ National Library of Scotland" with a link to maps.nls.uk.
 
 With thanks,
 [Name]
-[Role, Field Club]
+[Role, Open Antiquity]
 [Contact address]
 ```
 
@@ -816,7 +818,7 @@ Subject: Open release of the Soil Nutrient Health Scheme LIDAR
 
 Hello,
 
-I run Field Club, a free, non-commercial citizen-science map where
+I run Open Antiquity, a free, non-commercial citizen-science map where
 volunteers look for archaeological earthworks in LIDAR. Open LIDAR
 covers about a sixth of Northern Ireland, so most of its monuments
 can't be seen.
@@ -829,7 +831,7 @@ available as raw GeoTIFF anywhere?
 
 With thanks,
 [Name]
-[Role, Field Club]
+[Role, Open Antiquity]
 [Contact address]
 ```
 
@@ -891,7 +893,7 @@ Further checks other reports asked for:
 
 **Status:** To do. WS15 to WS17 wait on it.
 
-**Who.** The owner decides who operates Field Club: an individual, a company or a charity. The research said this "decides the Online Safety Act provider, the data controller, ICO fee liability and who carries defamation risk".
+**Who.** The owner decides who operates Open Antiquity: an individual, a company or a charity. The research said this "decides the Online Safety Act provider, the data controller, ICO fee liability and who carries defamation risk".
 
 **What it unblocks.** Ofcom's expectations for a small low-risk service include "a specific individual responsible for compliance". The terms, privacy notice and assessments all name the operator.
 
@@ -909,7 +911,7 @@ Further checks other reports asked for:
 
 **Status:** To do. Waiting on WS14.
 
-**What the research recorded.** Field Club is a regulated user-to-user service. The limited-functionality exemption covers only comments on provider content, and members' findings, photos and comments fall outside it. Ofcom gives three months after launch to complete an illegal content risk assessment, with a written record reviewed at least annually. Every in-scope service must also do a children's access assessment within three months of becoming available to UK users. An age limit in the terms doesn't count as keeping children out; only highly effective age assurance does. A child is anyone under 18.
+**What the research recorded.** Open Antiquity is a regulated user-to-user service. The limited-functionality exemption covers only comments on provider content, and members' findings, photos and comments fall outside it. Ofcom gives three months after launch to complete an illegal content risk assessment, with a written record reviewed at least annually. Every in-scope service must also do a children's access assessment within three months of becoming available to UK users. An age limit in the terms doesn't count as keeping children out; only highly effective age assurance does. A child is anyone under 18.
 
 Decision 0009 admits 16 and 17 year olds and accepts the children's risk assessment and safety duties that follow. The owner's actions:
 
@@ -942,7 +944,7 @@ Decision 0009 admits 16 and 17 year olds and accepts the children's risk assessm
 | Privacy notice | Required. Must say that the browser queries ADS directly, which shows users' IP addresses and queries to ADS |
 | Data-protection complaints | A way to complain, such as an electronic form; acknowledge within 30 days and respond without undue delay (Data Protection Act 2018 s.164A, in force 19 June 2026) |
 | Cookies | A strictly necessary session cookie needs no consent; first-party statistics are allowed without consent with clear information and a simple way to object (PECR Schedule A1, from 5 February 2026) |
-| Contributor terms | Contributions under CC BY 4.0, the `contribution_licence` in `docs/ARCHITECTURE.md`. Decision 0004 requires only an open licence that permits commercial reuse. The research suggested OSM-style terms: the member keeps ownership and grants Field Club a non-exclusive, perpetual, sublicensable licence, with an extra permission for use in OpenStreetMap. Members confirm they didn't copy from Google imagery, Ordnance Survey licensed mapping or HER data supplied under licence |
+| Contributor terms | Contributions under CC BY 4.0, the `contribution_licence` in `docs/ARCHITECTURE.md`. Decision 0004 requires only an open licence that permits commercial reuse. The research suggested OSM-style terms: the member keeps ownership and grants Open Antiquity a non-exclusive, perpetual, sublicensable licence, with an extra permission for use in OpenStreetMap. Members confirm they didn't copy from Google imagery, Ordnance Survey licensed mapping or HER data supplied under licence |
 | Conduct agreement | The research pointed to the Kent LiDAR Portal's terms: no trespass without the landowner's permission, the Countryside Code, and no metal-detecting, excavation or survey without consent |
 
 The drafts in `frontend/src/features/about/notices.tsx` make statements the owner, with legal advice, must confirm or correct before they are published:
@@ -1019,7 +1021,7 @@ Subject: Your ArcGIS service PDNPA_HBSMR_Layers
 
 Dear Peak District National Park Authority,
 
-While surveying public heritage data services for Field Club, a free,
+While surveying public heritage data services for Open Antiquity, a free,
 non-commercial citizen-science map, I noticed that your ArcGIS service
 PDNPA_HBSMR_Layers appears to advertise create, update and delete
 operations to anonymous users, and that some attributes show internal
@@ -1031,7 +1033,7 @@ on the service.
 
 Kind regards,
 [Name]
-[Role, Field Club]
+[Role, Open Antiquity]
 [Contact address]
 ```
 
@@ -1042,7 +1044,7 @@ Subject: A read-only extract of Peak District archaeology layers
 
 Dear Peak District National Park Authority,
 
-I run Field Club, a free, non-commercial citizen-science map where
+I run Open Antiquity, a free, non-commercial citizen-science map where
 volunteers look for earthworks in LIDAR and check them against existing
 records. Could you supply a read-only extract of "Digitised Peak
 Archaeology" and "Eastern Moors Monument" under a stated licence? I'd
@@ -1050,7 +1052,7 @@ show your attribution and a link on every record.
 
 With thanks,
 [Name]
-[Role, Field Club]
+[Role, Open Antiquity]
 [Contact address]
 ```
 

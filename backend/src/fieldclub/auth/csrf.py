@@ -1,4 +1,4 @@
-"""The `X-FieldClub-Client` header check that closes cross-site request forgery.
+"""The `X-OpenAntiquity-Client` header check that closes cross-site request forgery.
 
 A cross-site form can't set a custom header, and a cross-site script can only
 do so after a CORS preflight that this server never approves. Together with a
@@ -29,7 +29,7 @@ _PLAIN_PATH = re.compile(r"(/[a-z0-9_.-]+)+")
 
 
 class ClientHeaderMiddleware:
-    """Refuse any request that changes data unless it carries `X-FieldClub-Client: web`.
+    """Refuse any request that changes data unless it carries `X-OpenAntiquity-Client: web`.
 
     `exempt` holds the exact paths that must accept a POST from another
     site, and so have to defend themselves some other way. The one expected

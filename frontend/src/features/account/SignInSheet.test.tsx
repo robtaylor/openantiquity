@@ -137,7 +137,7 @@ describe("email me a link", () => {
     expect(await within(sheet).findByText("Check your inbox")).toBeInTheDocument();
     const call = routes.callsTo("POST /auth/email/start")[0];
     expect(call?.body).toMatchObject({ email: "ann@example.org", next: expect.stringMatching(/^\/f\/abc#m=/) });
-    expect(call?.headers.get("X-FieldClub-Client")).toBe("web");
+    expect(call?.headers.get("X-OpenAntiquity-Client")).toBe("web");
   });
 
   it("checks the address before sending anything", async () => {

@@ -34,7 +34,7 @@ def build_vocab() -> schema.Vocab:
         evidence_kinds=[schema.EvidenceKindOut.model_validate(item) for item in vocab.EVIDENCE_KINDS],
         tiers=[schema.TierOut.model_validate(item) for item in vocab.TIERS],
         states=[schema.State.model_validate(item) for item in vocab.STATES],
-        checks=[schema.CheckOut.model_validate(item) for item in vocab.CHECKS],
+        checks=[schema.CheckKindOut.model_validate(item) for item in vocab.CHECKS],
         explanations=[schema.ExplanationOut.model_validate(item) for item in vocab.EXPLANATIONS],
         mention_kinds=[schema.MentionKindOut.model_validate(item) for item in vocab.MENTION_KINDS],
         record_categories=[schema.RecordCategoryOut.model_validate(item) for item in vocab.RECORD_CATEGORIES],

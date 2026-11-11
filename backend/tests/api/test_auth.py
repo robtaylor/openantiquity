@@ -141,7 +141,7 @@ def test_the_session_cookie_is_httponly_lax_and_secure(client: TestClient, db: S
     cookie = response.headers["set-cookie"]
     name, _, rest = cookie.partition("=")
     token, _, attributes = rest.partition(";")
-    assert name == SESSION_COOKIE == "fieldclub_session"
+    assert name == SESSION_COOKIE == "openantiquity_session"
     flags = {part.strip().lower() for part in attributes.split(";")}
     assert {"httponly", "samesite=lax", "secure", "path=/"} <= flags
     assert f"max-age={365 * 24 * 3600}" in flags
@@ -446,7 +446,7 @@ def test_patch_me_needs_a_session_and_the_client_header(
 ) -> None:
     assert client.patch("/api/v1/auth/me", json={"bio": "x"}).status_code == 401
     signed_in = client_as(make_user())
-    del signed_in.headers["X-FieldClub-Client"]
+    del signed_in.headers["X-OpenAntiquity-Client"]
     response = signed_in.patch("/api/v1/auth/me", json={"bio": "x"})
     assert response.status_code == 403
     assert error_code(response) == "client_header_required"
@@ -470,7 +470,7 @@ def test_delete_me_removes_the_account_and_signs_out_everywhere(
     assert response.status_code == 204
     assert response.content == b""
     cleared = response.headers["set-cookie"].lower()
-    assert cleared.startswith("fieldclub_session=")
+    assert cleared.startswith("openantiquity_session=")
     assert "max-age=0" in cleared
 
     assert phone.get("/api/v1/auth/me").status_code == 401
@@ -510,7 +510,7 @@ def test_delete_me_needs_a_session_and_the_client_header(
     assert client.delete("/api/v1/auth/me").status_code == 401
     user = make_user()
     signed_in = client_as(user)
-    del signed_in.headers["X-FieldClub-Client"]
+    del signed_in.headers["X-OpenAntiquity-Client"]
     response = signed_in.delete("/api/v1/auth/me")
     assert response.status_code == 403
     assert error_code(response) == "client_header_required"
@@ -576,7 +576,7 @@ def test_logout_ends_the_session_and_clears_the_cookie(
     assert response.status_code == 204
     assert response.content == b""
     cleared = response.headers["set-cookie"].lower()
-    assert cleared.startswith("fieldclub_session=")
+    assert cleared.startswith("openantiquity_session=")
     assert "max-age=0" in cleared
     assert "httponly" in cleared
 
@@ -606,7 +606,7 @@ def test_logout_needs_the_client_header(
     app: FastAPI, client_as: ClientAs, make_user: MakeUser, db: Session
 ) -> None:
     browser = client_as(make_user())
-    del browser.headers["X-FieldClub-Client"]
+    del browser.headers["X-OpenAntiquity-Client"]
     assert browser.post("/api/v1/auth/logout").status_code == 403
     assert count(db, UserSession) == 1
 

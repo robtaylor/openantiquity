@@ -61,7 +61,7 @@ def test_years_come_from_the_recorded_index(index: IndexClient, tmp_path: Path) 
         found = years.build(england_catalogue(), index, dest)
     assert route.call_count == 2
     # Every request names the project.
-    assert all(call.request.headers["User-Agent"].startswith("FieldClub/") for call in route.calls)
+    assert all(call.request.headers["User-Agent"].startswith("OpenAntiquity/") for call in route.calls)
     # The Avebury survey covers the 5 km tiles round it.
     assert found["SU16nw"] == (2018, 2019)
     assert found["SU07se"] == (2018, 2019)

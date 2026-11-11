@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Make the bucket that holds Terraform's state for a Field Club project.
+# Make the bucket that holds Terraform's state for an Open Antiquity project.
 #
 #   bash infra/bootstrap.sh <project-id> [region]
 #

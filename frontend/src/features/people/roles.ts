@@ -10,7 +10,7 @@ import type { components } from "../../api/schema.js";
 export type Role = components["schemas"]["Role"];
 
 export const ROLE_WORDS: Record<Role, { label: string; hint: string }> = {
-  member: { label: "Member", hint: "Someone who has joined Field Club." },
+  member: { label: "Member", hint: "Someone who has joined Open Antiquity." },
   trusted: {
     label: "Trusted member",
     hint: "Trusted by a moderator after earning fifty points. Their checks count for more.",

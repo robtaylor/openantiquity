@@ -44,7 +44,7 @@ def _seconds(text: str) -> float:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="fieldclub-jobs", description="Field Club's scheduled jobs.")
+    parser = argparse.ArgumentParser(prog="fieldclub-jobs", description="Open Antiquity's scheduled jobs.")
     commands = parser.add_subparsers(dest="command", required=True)
 
     scan = commands.add_parser("scan-channels", help="add mentions for links to findings in watched channels")

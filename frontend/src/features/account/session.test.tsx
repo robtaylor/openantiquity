@@ -119,7 +119,7 @@ describe("the session", () => {
     await act(async () => {
       await apiFetch("/auth/me", { method: "PATCH", body: {} }).catch(() => undefined);
     });
-    expect(await screen.findByRole("dialog", { name: "Welcome to Field Club" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Welcome to Open Antiquity" })).toBeInTheDocument();
     await waitFor(() => expect(routes.callsTo("GET /auth/me").length).toBeGreaterThan(1));
   });
 
@@ -169,13 +169,13 @@ describe("requireAccount", () => {
     act(() => {
       window.dispatchEvent(new StorageEvent("storage", { key: "fieldclub.session-changed", newValue: "x" }));
     });
-    const welcome = await screen.findByRole("dialog", { name: "Welcome to Field Club" });
+    const welcome = await screen.findByRole("dialog", { name: "Welcome to Open Antiquity" });
     expect(probe().getByTestId("outcome")).toHaveTextContent("nothing yet");
 
     routes.on("POST /auth/welcome", () => json(meFixture()));
     await userEvent.click(within(welcome).getByRole("radio", { name: "18 or over" }));
     await userEvent.click(within(welcome).getByRole("checkbox", { name: "I accept the contributor terms" }));
-    await userEvent.click(within(welcome).getByRole("button", { name: "Join Field Club" }));
+    await userEvent.click(within(welcome).getByRole("button", { name: "Join Open Antiquity" }));
     await waitFor(() => expect(probe().getByTestId("outcome")).toHaveTextContent("ready as QuietBarrow42"));
     expect(screen.queryByRole("dialog")).toBeNull();
   });
@@ -186,11 +186,11 @@ describe("requireAccount", () => {
     // It offers itself once on arrival. Closed, it waits to be asked for.
     // jsdom has no modal dialogs, so focus never enters one and Escape can't
     // reach it. The end-to-end tests press Escape in a real browser.
-    const first = await screen.findByRole("dialog", { name: "Welcome to Field Club" });
+    const first = await screen.findByRole("dialog", { name: "Welcome to Open Antiquity" });
     await userEvent.click(within(first).getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await userEvent.click(probe().getByRole("button", { name: "Probe save" }));
-    const second = await screen.findByRole("dialog", { name: "Welcome to Field Club" });
+    const second = await screen.findByRole("dialog", { name: "Welcome to Open Antiquity" });
     await userEvent.click(within(second).getByRole("button", { name: "Close" }));
     await waitFor(() => expect(probe().getByTestId("outcome")).toHaveTextContent("closed"));
   });

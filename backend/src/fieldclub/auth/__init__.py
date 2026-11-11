@@ -16,7 +16,7 @@ How the pieces fit:
   decides who may contribute (Decision 0009).
 - `deps` holds the FastAPI dependencies: `current_user_optional`,
   `current_user`, `current_contributor` and `require_role`.
-- `csrf` is the middleware that requires `X-FieldClub-Client: web` on every
+- `csrf` is the middleware that requires `X-OpenAntiquity-Client: web` on every
   request that changes data.
 - `providers` lists the sign-in methods that are switched on, for `/meta`.
 - `flow` carries one provider sign-in's state, nonce and PKCE verifier in a

@@ -38,7 +38,7 @@ def test_a_public_page_is_fetched_from_the_address_that_was_checked(offline: res
     assert request.url.host == ip_of(ARTICLE_HOST)
     assert request.headers["host"] == ARTICLE_HOST
     assert request.extensions["sni_hostname"] == ARTICLE_HOST
-    assert request.headers["user-agent"] == f"FieldClub/{__version__}"
+    assert request.headers["user-agent"] == f"OpenAntiquity/{__version__}"
     assert request.headers["accept-encoding"] == "gzip"
 
 
@@ -427,6 +427,6 @@ def test_untrusted_fetches_have_a_client_of_their_own() -> None:
     client = safe_fetch.get_client()
     assert client is not http.get_client()
     assert client is safe_fetch.get_client()
-    assert client.headers["user-agent"] == f"FieldClub/{__version__}"
+    assert client.headers["user-agent"] == f"OpenAntiquity/{__version__}"
     safe_fetch.close_client()
     assert safe_fetch.get_client() is not client

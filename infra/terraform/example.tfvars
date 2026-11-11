@@ -16,11 +16,11 @@ image_tag     = "latest"
 
 # Where the site is reached. Leave empty for the run.app address.
 public_url = ""
-contact    = "https://example.org/fieldclub-contact"
+contact    = "https://example.org/contact"
 
 # The contributor terms the welcome step asks people to accept. Required
 # before the workloads run (step 5).
-terms_url = "https://example.org/fieldclub-terms"
+terms_url = "https://example.org/terms"
 
 # Sign-in providers: set an id once its secret has a value.
 google_client_id = ""
@@ -30,7 +30,7 @@ osm_client_id    = ""
 mail = {
   host     = ""
   username = ""
-  from     = "Field Club <signin@example.org>"
+  from     = "Open Antiquity <signin@example.org>"
 }
 
 # currency must be the billing account's own.

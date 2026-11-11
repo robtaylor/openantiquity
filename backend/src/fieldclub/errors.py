@@ -107,7 +107,7 @@ class BannedError(ForbiddenError):
 
 class ClientHeaderRequiredError(ForbiddenError):
     code = "client_header_required"
-    message = "Requests that change data must carry the X-FieldClub-Client header."
+    message = "Requests that change data must carry the X-OpenAntiquity-Client header."
 
 
 class NotFoundError(AppError):

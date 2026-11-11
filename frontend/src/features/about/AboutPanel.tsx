@@ -51,7 +51,7 @@ function NoticeLinks() {
   );
 }
 
-/** `/about`: what Field Club is, who runs it, where its data comes from, and the notices. */
+/** `/about`: what Open Antiquity is, who runs it, where its data comes from, and the notices. */
 export function AboutPanel({ meta }: { meta: Meta }) {
   useNoticeFromHash();
   const name = meta.app.name;
@@ -62,8 +62,12 @@ export function AboutPanel({ meta }: { meta: Meta }) {
         <p>
           {name} is a shared map for finding and checking archaeological earthworks in LIDAR, a laser survey of the
           height of the ground. You mark what you see. Other people check it and add evidence from old maps, aerial
-          photos and heritage records, and each finding's confidence rises as independent people and sources agree. The
-          name comes from the Victorian field clubs, groups of amateurs who went out together to look at antiquities.
+          photos and heritage records, and each finding's confidence rises as independent people and sources agree.
+        </p>
+        <p>
+          The name says what it is. An antiquity is the old word, still used on Ordnance Survey maps, for something left
+          by the past that survives in the ground. “Open” is how the work is done: anyone can look at the map, and what
+          people add is published under an open licence.
         </p>
         <p>
           New to it? The <Link to={GUIDE_PATH}>guide</Link> shows how to read the ground.

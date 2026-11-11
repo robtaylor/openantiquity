@@ -126,10 +126,13 @@ def test_csv_has_the_her_columns(db: Session, client, make_user: MakeUser) -> No
     response = client.get(f"{API}/findings/{finding.public_id}/export", params={"format": "csv"})
     assert response.headers["content-type"].startswith("text/csv")
     assert (
-        response.headers["content-disposition"] == f'attachment; filename="fieldclub-{finding.public_id}.csv"'
+        response.headers["content-disposition"]
+        == f'attachment; filename="openantiquity-finding-{finding.public_id}.csv"'
     )
     (row,) = list(csv.DictReader(io.StringIO(response.text)))
     assert tuple(row) == exports.COLUMNS
+    # The id column carries the public name (Decision 0017).
+    assert row["openantiquity_id"] == finding.public_id
     assert row["name"] == "'=HYPERLINK(1)"
     assert (row["monument_type"], row["period"], row["licence"]) == ("HILLFORT", "Iron Age", "CC BY 4.0")
     assert row["grid_reference"] == finding.grid_ref
@@ -155,6 +158,7 @@ def test_a_filtered_export_pages(db: Session, client, make_user: MakeUser) -> No
     for n in range(3):
         create(db, author, lon=LON + 0.001 * n)
     first = client.get(f"{API}/findings/export", params={"format": "csv", "limit": 2})
+    assert first.headers["content-disposition"] == 'attachment; filename="openantiquity-findings.csv"'
     assert len(list(csv.DictReader(io.StringIO(first.text)))) == 2
     rest = client.get(
         f"{API}/findings/export",

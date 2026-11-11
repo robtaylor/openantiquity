@@ -65,7 +65,7 @@ class State(ApiModel):
     description: str
 
 
-class CheckOut(ApiModel):
+class CheckKindOut(ApiModel):
     id: str
     question: str
     hint: str
@@ -145,7 +145,7 @@ class Vocab(BaseModel):
     evidence_kinds: list[EvidenceKindOut]
     tiers: list[TierOut]
     states: list[State]
-    checks: list[CheckOut]
+    checks: list[CheckKindOut]
     explanations: list[ExplanationOut]
     mention_kinds: list[MentionKindOut]
     record_categories: list[RecordCategoryOut]
@@ -315,7 +315,7 @@ class FieldVisitNotices(BaseModel):
 
 
 class FindReporting(BaseModel):
-    """Where to report an object found in one nation. Field Club stores nothing about finds."""
+    """Where to report an object found in one nation. Open Antiquity stores nothing about finds."""
 
     scheme: str
     # The scheme's own site, or null where none is known.

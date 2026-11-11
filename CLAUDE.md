@@ -1,4 +1,4 @@
-# Field Club
+# Open Antiquity
 
 A collaborative map for finding and checking archaeological earthworks in UK LIDAR data.
 

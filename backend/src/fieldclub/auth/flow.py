@@ -2,7 +2,7 @@
 
 `GET /auth/oauth/{provider}/start` makes a fresh `state`, OpenID Connect
 `nonce` and PKCE verifier, and puts them, with the provider and the `next`
-path, in the `fieldclub_oauth` cookie. The callback reads the cookie back and
+path, in the `openantiquity_oauth` cookie. The callback reads the cookie back and
 refuses to go on unless the `state` the provider returned is the one in it.
 
 Why a cookie and not a database row:
@@ -45,7 +45,7 @@ from dataclasses import asdict, dataclass
 from fieldclub.auth.tokens import hash_presented
 from fieldclub.config import get_settings
 
-FLOW_COOKIE = "fieldclub_oauth"
+FLOW_COOKIE = "openantiquity_oauth"
 FLOW_LIFETIME_S = 600
 # Large enough for every field with a long `next`, small enough for any browser.
 MAX_COOKIE_LENGTH = 3800

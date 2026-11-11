@@ -31,15 +31,15 @@ describe("apiFetch", () => {
     await apiFetch("/findings", { query: { bbox: "1,2,3,4", limit: 20, cursor: undefined, q: null } });
     const [url, init] = mock.mock.calls[0] ?? [];
     expect(url).toBe("/api/v1/findings?bbox=1%2C2%2C3%2C4&limit=20");
-    expect(new Headers(init?.headers).has("X-FieldClub-Client")).toBe(false);
+    expect(new Headers(init?.headers).has("X-OpenAntiquity-Client")).toBe(false);
   });
 
-  it.each(["POST", "PUT", "PATCH", "DELETE"] as const)("sends X-FieldClub-Client on %s", async (method) => {
+  it.each(["POST", "PUT", "PATCH", "DELETE"] as const)("sends X-OpenAntiquity-Client on %s", async (method) => {
     const mock = stubFetch(json({}, 200));
     await apiFetch("/findings/abc/observation", { method, body: { visible: "yes" } });
     const init = mock.mock.calls[0]?.[1];
     const headers = new Headers(init?.headers);
-    expect(headers.get("X-FieldClub-Client")).toBe("web");
+    expect(headers.get("X-OpenAntiquity-Client")).toBe("web");
     expect(headers.get("Content-Type")).toBe("application/json");
     expect(init?.body).toBe('{"visible":"yes"}');
     expect(init?.credentials).toBe("include");
@@ -53,7 +53,7 @@ describe("apiFetch", () => {
     const headers = new Headers(init?.headers);
     expect(init?.body).toBe(photo);
     expect(headers.get("Content-Type")).toBe("image/jpeg");
-    expect(headers.get("X-FieldClub-Client")).toBe("web");
+    expect(headers.get("X-OpenAntiquity-Client")).toBe("web");
   });
 
   it("throws a typed error from the error envelope", async () => {
@@ -189,7 +189,7 @@ describe("apiUpload", () => {
       id: 7,
     });
     expect(uploads.calls[0]).toMatchObject({ method: "POST", url: "/api/v1/media", body: file });
-    expect(uploads.calls[0]?.headers).toMatchObject({ "Content-Type": "image/png", "X-FieldClub-Client": "web" });
+    expect(uploads.calls[0]?.headers).toMatchObject({ "Content-Type": "image/png", "X-OpenAntiquity-Client": "web" });
     expect(progress).toEqual([0.5, 1, 1]);
   });
 

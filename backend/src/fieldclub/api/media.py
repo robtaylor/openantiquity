@@ -98,7 +98,7 @@ def get_media(media_id: MediaId, db: Db, viewer: OptionalUser) -> Response:
     data = media.read_bytes(photo)
     extension = media.SERVED_TYPES[photo.content_type]
     response = Response(content=data, media_type=photo.content_type, headers=SERVE_HEADERS)
-    response.headers["Content-Disposition"] = f'inline; filename="fieldclub-photo-{photo.id}.{extension}"'
+    response.headers["Content-Disposition"] = f'inline; filename="openantiquity-photo-{photo.id}.{extension}"'
     private(response)
     return response
 

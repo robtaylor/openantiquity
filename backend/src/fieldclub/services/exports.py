@@ -12,7 +12,7 @@ generalises.
 The columns follow what HER officers import: a name, a grid reference with
 easting and northing, the monument type as a FISH thesaurus term, the
 period, a description, a summary of the evidence, who compiled it, when, and
-the licence. Field Club adds its own id, address, tier and how precise the
+the licence. Open Antiquity adds its own id, address, tier and how precise the
 position is.
 """
 
@@ -79,7 +79,7 @@ class ExportRow:
     compiler: str
     date: str
     licence: str
-    fieldclub_id: str
+    openantiquity_id: str
     url: str
     tier: str
     position_precision_m: int
@@ -144,7 +144,7 @@ def export_rows(db: Session, chosen: Sequence[Finding], viewer: User | None) -> 
             compiler=PublicUser.from_user(authors[finding.author_id]).display_name,
             date=finding.created_at.date().isoformat(),
             licence=CONTRIBUTION_LICENCE,
-            fieldclub_id=finding.public_id,
+            openantiquity_id=finding.public_id,
             url=f"{base}/f/{finding.public_id}",
             tier=_TIERS[finding.tier],
             position_precision_m=1000 if where.obscured else 10,
@@ -189,7 +189,7 @@ def to_feature_collection(rows: Sequence[Exported]) -> GeoJSONFeatureCollection:
     return GeoJSONFeatureCollection(
         features=[
             GeoJSONFeature(
-                id=item.row.fieldclub_id,
+                id=item.row.openantiquity_id,
                 geometry=geojson_point(item.location.lon, item.location.lat),
                 properties={
                     **asdict(item.row),

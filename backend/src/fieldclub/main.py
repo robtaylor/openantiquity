@@ -229,7 +229,7 @@ def create_app(settings: Settings | None = None, *, include_dev_routes: bool | N
     Routers are found by `discover_routers()`. Each is mounted under `/api/v1`,
     or at the root when its module sets `MOUNT_AT_ROOT = True`. A request that
     changes data is refused on every path unless it carries the
-    `X-FieldClub-Client` header.
+    `X-OpenAntiquity-Client` header.
 
     `include_dev_routes` says whether `dev_router`s are mounted, which today
     means `POST /auth/dev-login`. Left as None it follows the settings: only

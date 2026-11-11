@@ -27,7 +27,7 @@ def test_top_level_keys(meta: dict) -> None:
 
 
 def test_app(meta: dict) -> None:
-    assert meta["app"] == {"name": "Field Club", "version": "0.1.0", "contribution_licence": "CC BY 4.0"}
+    assert meta["app"] == {"name": "Open Antiquity", "version": "0.1.0", "contribution_licence": "CC BY 4.0"}
 
 
 SIGN_IN_ORDER = [

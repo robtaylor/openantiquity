@@ -177,7 +177,7 @@ def test_the_source_is_skipped_without_a_contact(env: Callable[..., None]) -> No
     assert not WikidataHeritageItems().is_configured()
     with pytest.raises(ConnectorNotConfiguredError):
         run_connector(WikidataHeritageItems())
-    env(CONTACT="", USER_AGENT="FieldClub-test/1 (+https://example.org)")
+    env(CONTACT="", USER_AGENT="OpenAntiquity-test/1 (+https://example.org)")
     assert WikidataHeritageItems().is_configured()
 
 

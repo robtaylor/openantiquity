@@ -212,7 +212,7 @@ describe("the list of notifications", () => {
     });
     await waitFor(() => expect(routes.callsTo("POST /notifications/read")).toHaveLength(1));
     expect(routes.callsTo("POST /notifications/read")[0]?.body).toEqual({ ids: [12, 11], all: false });
-    expect(routes.callsTo("POST /notifications/read")[0]?.headers.get("X-FieldClub-Client")).toBe("web");
+    expect(routes.callsTo("POST /notifications/read")[0]?.headers.get("X-OpenAntiquity-Client")).toBe("web");
     expect(await screen.findByRole("link", { name: "Account" })).toBeInTheDocument();
     expect(screen.queryByTestId("notification-count")).toBeNull();
     // Still marked new while the page is open, so the person can tell what had arrived.

@@ -169,7 +169,7 @@ describe("the height profile", () => {
 
     const chart = await screen.findByRole("slider", { name: "Height along the line" });
     const [call] = api.callsTo("POST /terrain/profile");
-    expect(call?.headers.get("X-FieldClub-Client")).toBe("web");
+    expect(call?.headers.get("X-OpenAntiquity-Client")).toBe("web");
     expect(call?.body).toEqual({
       line: {
         type: "LineString",

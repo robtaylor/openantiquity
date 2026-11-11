@@ -1,6 +1,6 @@
 # England LIDAR bulk supply from Defra
 
-On 2026-11-10 the Defra Data Services Platform service desk gave Field Club's owner access to its LIDAR archive over SFTP, in answer to a Large Dataset request with ticket reference DSP3-11967. The reply came seven minutes after the request was acknowledged. This page records what was found on the supply that day.
+On 2026-11-10 the Defra Data Services Platform service desk gave Open Antiquity's owner access to its LIDAR archive over SFTP, in answer to a Large Dataset request with ticket reference DSP3-11967. The reply came seven minutes after the request was acknowledged. This page records what was found on the supply that day.
 
 The connection details are in the owner's email under that ticket. Scripts read them from the untracked `.env` file as `DEFRA_SFTP_HOST`, `DEFRA_SFTP_USER` and `DEFRA_SFTP_PASSWORD`. They aren't written anywhere in this repository.
 

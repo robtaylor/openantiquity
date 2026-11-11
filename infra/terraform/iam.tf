@@ -4,13 +4,13 @@
 
 locals {
   workload_titles = {
-    "service"         = "Field Club web service"
-    "schema"          = "Field Club schema creation"
-    "ingest"          = "Field Club record ingest"
-    "scan-channels"   = "Field Club channel scan"
-    "refresh-sources" = "Field Club source refresh"
-    "elevation-copy"  = "Field Club elevation copy"
-    "national-build"  = "Field Club national overview"
+    "service"         = "Open Antiquity web service"
+    "schema"          = "Open Antiquity schema creation"
+    "ingest"          = "Open Antiquity record ingest"
+    "scan-channels"   = "Open Antiquity channel scan"
+    "refresh-sources" = "Open Antiquity source refresh"
+    "elevation-copy"  = "Open Antiquity elevation copy"
+    "national-build"  = "Open Antiquity national overview"
   }
 
   # Bucket roles by workload. objectUser reads, writes, replaces, deletes and
@@ -88,7 +88,7 @@ resource "google_storage_bucket_iam_member" "workload" {
 # run those jobs (jobs.tf grants roles/run.invoker on each).
 resource "google_service_account" "scheduler" {
   account_id   = "${var.name}-scheduler"
-  display_name = "Field Club scheduler"
+  display_name = "Open Antiquity scheduler"
 
   depends_on = [google_project_service.enabled]
 }

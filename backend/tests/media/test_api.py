@@ -81,7 +81,9 @@ def test_a_photo_is_served_so_no_browser_runs_it(client_as: ClientAs, people: di
     assert served.headers["content-type"] == "image/jpeg"
     assert served.headers["x-content-type-options"] == "nosniff"
     assert served.headers["content-security-policy"] == "default-src 'none'; sandbox"
-    assert served.headers["content-disposition"] == f'inline; filename="fieldclub-photo-{created["id"]}.jpg"'
+    assert (
+        served.headers["content-disposition"] == f'inline; filename="openantiquity-photo-{created["id"]}.jpg"'
+    )
     assert served.headers["cache-control"] == "private, no-cache"
 
 

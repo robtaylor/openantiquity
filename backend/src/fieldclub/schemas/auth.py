@@ -76,7 +76,7 @@ class MeUpdate(RequestModel):
     # to null is removed.
     settings: dict[str, Any] | None = None
     # Null removes the picture a sign-in provider gave. Nothing else is
-    # accepted, because Field Club stores no picture of its own.
+    # accepted, because Open Antiquity stores no picture of its own.
     avatar_url: None = None
 
 

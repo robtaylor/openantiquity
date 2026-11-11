@@ -145,7 +145,7 @@ export function creditGroups(meta: Meta, live: readonly LiveSource[]): CreditGro
     groups.push({
       id: `category-${category}`,
       title: categoryTitle(meta, category),
-      about: "Copied into Field Club's index under the licence shown.",
+      about: "Copied into Open Antiquity's index under the licence shown.",
       credits: byCategory.get(category) ?? [],
     });
   }
@@ -155,7 +155,7 @@ export function creditGroups(meta: Meta, live: readonly LiveSource[]): CreditGro
       id: LIVE_GROUP,
       title: "Looked up from your browser",
       about:
-        "Your browser asks these services itself when you look at an area. Field Club doesn't keep a copy of what they send.",
+        "Your browser asks these services itself when you look at an area. Open Antiquity doesn't keep a copy of what they send.",
       credits: live.map(liveCredit),
     });
   }

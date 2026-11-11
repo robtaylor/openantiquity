@@ -82,7 +82,7 @@ def gather(
     """Everything an export of `investigation` for `viewer` holds, in the notebook's order."""
     views = investigations.item_views(db, investigations.all_items(db, investigation), viewer)
     shown = [view.finding for view in views if view.finding is not None]
-    rows = {item.row.fieldclub_id: item for item in exports.export_rows(db, shown, viewer)}
+    rows = {item.row.openantiquity_id: item for item in exports.export_rows(db, shown, viewer)}
     entries = [
         Entry(
             view,
@@ -215,7 +215,7 @@ def _record_row(result: RecordResult) -> dict[str, Any]:
         "compiler": source.publisher,
         "date": when.date().isoformat(),
         "licence": source.licence,
-        "fieldclub_id": f"{record.source_key}:{record.external_id}",
+        "openantiquity_id": f"{record.source_key}:{record.external_id}",
         "url": record.url or "",
         "tier": "",
         "position_precision_m": round(precision) if precision is not None else None,
@@ -228,7 +228,7 @@ def _csv_row(entry: Entry) -> list[Any] | None:
     item = entry.view.item
     if entry.finding is not None:
         row = asdict(entry.finding.row)
-        row |= {"attribution": f"{row['compiler']}, Field Club", "source": "Field Club"}
+        row |= {"attribution": f"{row['compiler']}, Open Antiquity", "source": "Open Antiquity"}
     elif entry.view.record is not None:
         row = _record_row(entry.view.record)
     else:
@@ -405,7 +405,7 @@ def _licences_html(export: InvestigationExport) -> str:
     )
     return (
         "<section><h2>Licences and attribution</h2>"
-        "<p>Findings, notes and everything else contributed to Field Club are under "
+        "<p>Findings, notes and everything else contributed to Open Antiquity are under "
         f"{_e(CONTRIBUTION_LICENCE)}. "
         "Records keep their own source's licence and attribution, listed here.</p>"
         f"{table}</section>"
@@ -438,9 +438,9 @@ def to_html(export: InvestigationExport) -> str:
         f'<meta http-equiv="Content-Security-Policy" content="{_e(REPORT_CSP)}">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         '<meta name="referrer" content="no-referrer">'
-        f"<title>{_e(investigation.title)} - Field Club</title>"
+        f"<title>{_e(investigation.title)} - Open Antiquity</title>"
         f"<style>{_STYLE}</style></head><body>"
-        '<header><p class="kicker">Field Club investigation</p>'
+        '<header><p class="kicker">Open Antiquity investigation</p>'
         f"<h1>{_e(investigation.title)}</h1>{summary}"
         f'<p class="meta">By {_e(people)}. {_e(visibility)}. '
         f"Exported {_e(export.exported_at.strftime('%d %B %Y'))} from {_link(export.url)}.</p></header>"

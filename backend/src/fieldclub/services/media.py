@@ -154,7 +154,7 @@ class UploadsBusyError(AppError):
 
 class MediaBlockedError(ValidationFailedError):
     code = "media_blocked"
-    message = "This photo has been removed from Field Club and can't be uploaded again."
+    message = "This photo has been removed from Open Antiquity and can't be uploaded again."
 
 
 # --------------------------------------------------------------------------

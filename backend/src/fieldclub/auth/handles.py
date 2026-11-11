@@ -55,7 +55,8 @@ MAX_DISPLAY_NAME = 60
 FORMER_MEMBER = "Former member"
 FORMER_HANDLE_PREFIX = "Former-"
 
-# Names that would read as official, or that clash with routes.
+# Names that would read as official, or that clash with routes. The project's
+# name is reserved in both forms it has had (Decision 0017).
 RESERVED = frozenset(
     {
         "admin",
@@ -66,6 +67,7 @@ RESERVED = frozenset(
         "me",
         "mod",
         "moderator",
+        "openantiquity",
         "root",
         "staff",
         "system",
@@ -75,10 +77,7 @@ RESERVED = frozenset(
 # Display names that would read as official, or as an account that has gone.
 # Compared with case, width, spaces and punctuation folded away, so "A d m i n"
 # and "MODERATOR." are caught too. "me" only matters as a route, so it is fine here.
-RESERVED_DISPLAY_NAMES = (RESERVED - {"me"}) | {
-    "formermember",
-    "fieldclub",
-}
+RESERVED_DISPLAY_NAMES = (RESERVED - {"me"}) | {"formermember"}
 
 # Unicode categories with no place in a name on one line: controls (line
 # breaks and tabs among them), format characters (the bidirectional overrides

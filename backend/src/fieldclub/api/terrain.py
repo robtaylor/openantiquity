@@ -42,7 +42,7 @@ class ProfileSample(BaseModel):
     lat: float
 
 
-class ProfileOut(BaseModel):
+class HeightProfileOut(BaseModel):
     length_m: float
     # The level of the mirror the heights were read from, in metres: 1 m, or a
     # coarser copy (2, 4, 8, 40, 200 or 1000) for a long line with few samples.
@@ -52,13 +52,13 @@ class ProfileOut(BaseModel):
 
 @router.post(
     "/profile",
-    response_model=ProfileOut,
+    response_model=HeightProfileOut,
     dependencies=[Depends(rate_limit("terrain_profile", 30, per_seconds=60))],
 )
-def profile(body: ProfileRequest, terrain: TerrainDep) -> ProfileOut:
+def profile(body: ProfileRequest, terrain: TerrainDep) -> HeightProfileOut:
     """Ground height along a line, at evenly spaced samples. Lines are at most 5 km long."""
     result = terrain.profile(list(body.line.coordinates), body.samples)
-    return ProfileOut(
+    return HeightProfileOut(
         length_m=result.length_m,
         resolution_m=result.resolution_m,
         samples=[

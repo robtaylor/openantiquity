@@ -20,7 +20,7 @@ Asking for a link spends every earlier unspent link for the same address, so
 only the newest one works.
 
 A link is bound to the browser that asked for it. `/auth/email/start` sets the
-`fieldclub_email_link` cookie, a random value whose hash is stored on the link,
+`openantiquity_email_link` cookie, a random value whose hash is stored on the link,
 and `/auth/email/verify` signs in straight away only when that cookie comes
 back. Anywhere else, for example on another device, verify answers
 `confirmation_required` with the address masked, spends nothing, and signs in
@@ -52,7 +52,7 @@ LINK_LIFETIME = timedelta(minutes=15)
 # The app's page that reads the token from the fragment and posts it.
 LINK_PAGE = "/signin/email"
 # The cookie that binds a link to the browser that asked for it, sent only to verify.
-LINK_COOKIE = "fieldclub_email_link"
+LINK_COOKIE = "openantiquity_email_link"
 VERIFY_PATH = "/api/v1/auth/email/verify"
 
 register_provider(SignInProvider.EMAIL, lambda settings: settings.mail_backend is not None)
@@ -101,12 +101,12 @@ def link_message(settings: Settings, email: str, token: str, next_path: str) -> 
     url = f"{settings.public_url.rstrip('/')}{LINK_PAGE}{query}#token={token}"
     minutes = int(LINK_LIFETIME.total_seconds() // 60)
     body = (
-        "Here is your link to sign in to Field Club:\n\n"
+        "Here is your link to sign in to Open Antiquity:\n\n"
         f"{url}\n\n"
         f"It works once, for the next {minutes} minutes. If you didn't ask for it, ignore this email "
         "and nothing will happen.\n"
     )
-    return Message(to=email, subject="Your Field Club sign-in link", body=body, link=url)
+    return Message(to=email, subject="Your Open Antiquity sign-in link", body=body, link=url)
 
 
 def _from_this_browser(link: MagicLink, browser: str | None) -> bool:

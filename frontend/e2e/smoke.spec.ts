@@ -169,7 +169,7 @@ test.describe("desktop", () => {
     await expect(page).toHaveURL(/\/review#/);
     await expect(page.getByRole("heading", { name: "Second look" })).toBeVisible();
     await expect(rail.getByRole("link", { name: "Second look" })).toHaveAttribute("aria-current", "page");
-    await expect(page).toHaveTitle("Second look · Field Club");
+    await expect(page).toHaveTitle("Second look · Open Antiquity");
 
     for (const [path, title] of [
       ["/scan", "Scan a square"],
@@ -178,7 +178,7 @@ test.describe("desktop", () => {
       ["/i/xyz", "Investigation xyz"],
       // The stand-in person's name is their handle.
       ["/u/QuietBarrow42", "QuietBarrow42"],
-      ["/about", "About Field Club"],
+      ["/about", "About Open Antiquity"],
       ["/guide", "Guide"],
     ] as const) {
       await page.goto(path);

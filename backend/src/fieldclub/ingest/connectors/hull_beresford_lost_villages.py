@@ -10,7 +10,7 @@ it is used only when the grid reference does not parse. `to_record` logs each si
 whose geometry lies further from its grid reference than the reference's precision.
 
 The licence is Creative Commons Attribution-NonCommercial-ShareAlike 4.0, stated in
-the website's footer and not in the ArcGIS item. Field Club is non-commercial
+the website's footer and not in the ArcGIS item. Open Antiquity is non-commercial
 (Decision 0004), so the records are stored. The `sources` row carries the licence
 and the university's attribution, and the reuse class `non_commercial`, which the
 runner keeps with every record.

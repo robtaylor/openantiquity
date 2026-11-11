@@ -12,7 +12,7 @@ import { helper, join } from "./support/people.js";
 
 const PLACES = { desktop: { lon: -1.42, lat: 52.31 }, phone: { lon: -0.42, lat: 52.31 } } as const;
 const PHOTO_PLACES = { desktop: { lon: -1.42, lat: 52.36 }, phone: { lon: -0.42, lat: 52.36 } } as const;
-const HEADERS = { "X-FieldClub-Client": "web" };
+const HEADERS = { "X-OpenAntiquity-Client": "web" };
 
 test("a reported comment, hidden by a moderator, is gone for everyone else on the next load", async ({
   page,

@@ -5,7 +5,7 @@ import { type LiveAnswer, LiveResponseError, parseLiveAnswer } from "./parse.js"
 /**
  * Asking a live source, from this browser, for one area. The request goes
  * straight to the publisher with no cookies, and its answer stays in this
- * page: nothing from it is sent to Field Club's server (Decision 0007).
+ * page: nothing from it is sent to Open Antiquity's server (Decision 0007).
  */
 
 /** How long a live source has to send its whole answer, from asking to the last byte. */
