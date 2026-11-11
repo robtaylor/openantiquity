@@ -19,7 +19,7 @@ A deployed Field Club covering England. People explore 1 m LIDAR in archaeologic
 - The interface on `main` covers joining, Explore, marking a finding, a finding's page, second looks, help wanted, heritage records, search, the layer panel and the terrain tools. The rest of WS7 is being built.
 - The development database holds about 1.45 million records from 31 sources, a gazetteer of 273,525 place names, and the nation and county boundaries.
 - Decisions 0010 to 0016 were written during the build, each from a review finding or a seam between tracks. All are Proposed until WS9 checks them against the code.
-- The Google Cloud project `fieldclub-uk` exists. Nothing is applied to it: its billing link waits on the owner (`owner-actions.md`, WS2).
+- The Google Cloud project `fieldclub-uk` has the first Terraform stage, applied on 2026-11-11: registry, buckets, database, empty secrets, service accounts and a budget alert. No service runs yet.
 - Defra supplied England's 2022 composite DTM in bulk on the day it was asked, ticket DSP3-11967. See `owner-actions.md` and `../sources/lidar-england-bulk-supply.md`. Eleven tiles around Avebury and Stonehenge are in the local mirror folder for development.
 
 ## Workstreams
@@ -167,7 +167,7 @@ Every screen over the map. See `UI.md`.
 
 ### WS8 — Deployment
 
-**Status:** In progress. The image, Terraform, CI workflows and the runbook (`infra/README.md`) shipped on 2026-11-11, checked on a workstation only. The project `fieldclub-uk` exists. Nothing is applied yet: the billing account has no free place for a sixth project, which is an owner action (`owner-actions.md`, WS2).
+**Status:** In progress. The image, Terraform, CI workflows and the runbook (`infra/README.md`) shipped on 2026-11-11. Steps 1 to 3 of the runbook were carried out that day in the project `fieldclub-uk`: billing is linked, the state bucket exists, and the first apply created 78 resources with `run_workloads = false`. A second plan reported no changes. Next, each needing the owner's go-ahead: the database login and secrets (step 4), the first image (step 5), and the second apply that starts the public service (step 6), which also needs the contributor terms' address. One thing to settle in WS9's security review: Google gave the project's automatic Compute Engine service account the Editor role. No Field Club workload uses that account.
 
 **Deliverables:**
 
@@ -176,7 +176,7 @@ Every screen over the map. See `UI.md`.
 
 **Exit criteria:**
 
-- `terraform plan` succeeds against the named project. Nothing is applied without the owner's go-ahead.
+- `terraform plan` succeeds against the named project. Nothing is applied without the owner's go-ahead. Met for the first stage on 2026-11-11.
 - CI runs both check suites and the docs lint on every push.
 
 ### WS9 — Verification
