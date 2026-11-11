@@ -5,6 +5,15 @@ const items = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
 const ids = (list: ReadonlyArray<{ id: number }>) => list.map((item) => item.id);
 
 describe("moveTo", () => {
+  it("never names an item the server doesn't know yet as the one it follows", () => {
+    const withPending = [{ id: 1 }, { id: 2 }, { id: -1 }];
+    const pending = (item: { id: number }) => item.id < 0;
+    // To the end, after the item still being added: it follows the last one the server has.
+    expect(moveTo(withPending, 1, 2, pending)).toMatchObject({ after: 2 });
+    // Only a pending item before it: it goes first.
+    expect(moveTo([{ id: -1 }, { id: 1 }, { id: 2 }], 2, 1, pending)).toMatchObject({ after: null });
+  });
+
   it("moves an item down, and names the item it now follows", () => {
     const moved = moveTo(items, 1, 2);
     expect(moved && ids(moved.items)).toEqual([2, 3, 1, 4]);

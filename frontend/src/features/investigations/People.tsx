@@ -5,6 +5,7 @@ import { useNavigate } from "react-router";
 import { ApiError } from "../../api/client.js";
 import { Avatar } from "../../ui/Avatar.js";
 import { Button } from "../../ui/Button.js";
+import { ChipGroup } from "../../ui/Chip.js";
 import { Dialog } from "../../ui/Dialog.js";
 import { Field } from "../../ui/Field.js";
 import { toast } from "../../ui/toastStore.js";
@@ -17,14 +18,17 @@ import {
   type InvestigationDetail,
   inviteMember,
   type Member,
-  type Role,
   removeMember,
 } from "./api.js";
-import { cleanHandle, mayInvite, type Powers, ROLE } from "./describe.js";
+import { cleanHandle, INVITABLE, mayInvite, type Powers, ROLE } from "./describe.js";
 import { investigationKeys } from "./keys.js";
 import { optimistic } from "./useInvestigation.js";
 
-type Invitable = Exclude<Role, "owner">;
+type Invitable = (typeof INVITABLE)[number];
+
+function isInvitable(value: string): value is Invitable {
+  return (INVITABLE as readonly string[]).includes(value);
+}
 
 /** Why an invitation was refused, in words that say what to do. */
 function inviteProblem(error: unknown): string {
@@ -87,19 +91,22 @@ function InviteForm({ publicId }: { publicId: string }) {
           />
         )}
       </Field>
-      <Field label="As" hint={ROLE[role].says}>
-        {(control) => (
-          <select
-            {...control}
-            className="fc-input"
-            value={role}
-            onChange={(event) => setRole(event.target.value as Invitable)}
-          >
-            <option value="editor">{ROLE.editor.label}</option>
-            <option value="viewer">{ROLE.viewer.label}</option>
-          </select>
-        )}
-      </Field>
+      <div className="fc-field">
+        <span className="fc-field__label" aria-hidden="true">
+          As
+        </span>
+        <ChipGroup
+          label="Invite them as"
+          value={role}
+          onChange={(value) => {
+            if (isInvitable(value)) setRole(value);
+          }}
+          options={INVITABLE.map((id) => ({ id, label: ROLE[id].label }))}
+        />
+        <p className="fc-field__hint" aria-live="polite">
+          {ROLE[role].says}
+        </p>
+      </div>
       <Button type="submit" size="sm" disabled={sending} icon={<UserPlus size={15} aria-hidden />}>
         {sending ? "Inviting…" : "Invite"}
       </Button>

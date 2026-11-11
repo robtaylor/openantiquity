@@ -110,7 +110,9 @@ export function ItemBody({ meta, item }: { meta: Meta; item: Item }) {
           {reference?.citation ? <p>{reference.citation}</p> : null}
           {href ? (
             <a href={href} target="_blank" rel="noopener noreferrer external nofollow">
-              <BookOpen size={15} aria-hidden /> {new URL(href).hostname}
+              <BookOpen size={15} aria-hidden /> {/* Two references on one site would otherwise share a name. */}
+              {item.title ? <span className="fc-visually-hidden">{item.title}, at </span> : null}
+              {new URL(href).hostname}
               <span className="fc-visually-hidden"> (opens in a new tab)</span>
             </a>
           ) : null}

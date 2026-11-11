@@ -12,8 +12,8 @@ type Ring = Array<[number, number]>;
 
 export interface AreaShape {
   type: "Polygon" | "MultiPolygon";
-  /** Every ring of every polygon, as longitude and latitude pairs. */
-  rings: Ring[];
+  /** Each polygon's rings, as longitude and latitude pairs: the outer ring first, then its holes. */
+  polygons: Ring[][];
 }
 
 function ringOf(value: unknown): Ring | null {
@@ -26,29 +26,33 @@ function ringOf(value: unknown): Ring | null {
   return ring;
 }
 
-/** The area's rings, or null for no area or a geometry the map can't draw as one. */
+/** The area's polygons, or null for no area or a geometry the map can't draw as one. */
 export function areaShape(geometry: GeoJSONGeometry | null | undefined): AreaShape | null {
   if (!geometry || !Array.isArray(geometry.coordinates)) return null;
-  const polygons: unknown[] =
+  const values: unknown[] =
     geometry.type === "Polygon" ? [geometry.coordinates] : geometry.type === "MultiPolygon" ? geometry.coordinates : [];
-  const rings: Ring[] = [];
-  for (const polygon of polygons) {
-    if (!Array.isArray(polygon)) return null;
-    for (const value of polygon) {
-      const ring = ringOf(value);
+  const polygons: Ring[][] = [];
+  for (const value of values) {
+    if (!Array.isArray(value) || value.length === 0) return null;
+    const rings: Ring[] = [];
+    for (const ringValue of value) {
+      const ring = ringOf(ringValue);
       if (!ring) return null;
       rings.push(ring);
     }
+    polygons.push(rings);
   }
-  return rings.length > 0 ? { type: geometry.type as AreaShape["type"], rings } : null;
+  return polygons.length > 0 ? { type: geometry.type as AreaShape["type"], polygons } : null;
 }
 
 /** West, south, east, north. */
 export type Bounds = [number, number, number, number];
 
 export function boundsOf(shape: AreaShape): Bounds {
-  const lngs = shape.rings.flatMap((ring) => ring.map(([lng]) => lng));
-  const lats = shape.rings.flatMap((ring) => ring.map(([, lat]) => lat));
+  // The outer rings hold the holes, so they alone bound the area.
+  const outers = shape.polygons.flatMap((rings) => rings.slice(0, 1));
+  const lngs = outers.flatMap((ring) => ring.map(([lng]) => lng));
+  const lats = outers.flatMap((ring) => ring.map(([, lat]) => lat));
   return [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)];
 }
 

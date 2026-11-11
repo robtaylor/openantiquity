@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useId, useLayoutEffect, useRef } from "react";
 import { IconButton } from "./IconButton.js";
 import { closeOnEscape } from "./Panel.js";
 import "./Dialog.css";
@@ -45,12 +45,30 @@ function wrapTab(event: KeyboardEvent<HTMLElement>): void {
 /**
  * A modal dialog on the native `<dialog>` element. Opening it puts focus on
  * its title. It keeps Tab inside, closes on Escape and puts focus back where
- * it came from.
+ * it came from, whether it is closed with `open` or taken out of the page
+ * while open.
  */
 export function Dialog({ open, onClose, title, children, actions, className }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const titleId = useId();
+  /** What had focus when it opened. */
+  const opener = useRef<HTMLElement | null>(null);
+
+  // The browser hands focus back when a dialog is closed, but not when it is
+  // taken out of the page. A layout effect's clean-up runs while the dialog
+  // is still there, so it can tell whether focus is about to be lost with it.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && !ref.current?.contains(active)) opener.current = active;
+    const dialog = ref.current;
+    return () => {
+      const now = document.activeElement;
+      const lost = now === null || now === document.body || dialog?.contains(now) === true;
+      if (lost && opener.current?.isConnected) opener.current.focus({ preventScroll: true });
+    };
+  }, [open]);
 
   useEffect(() => {
     const dialog = ref.current;

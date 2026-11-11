@@ -111,6 +111,9 @@ function EditDialog({
   );
 }
 
+/** About as many characters as the phone's sheet header shows on one line. A longer title is shown in full below it. */
+const LONG_TITLE = 28;
+
 function NotebookBody({ meta, detail }: { meta: Meta; detail: InvestigationDetail }) {
   const session = useSession();
   const powers = powersOf(detail);
@@ -184,6 +187,11 @@ function NotebookBody({ meta, detail }: { meta: Meta; detail: InvestigationDetai
   return (
     <div className="fc-inv-page">
       <div className="fc-inv-head">
+        {detail.title.length > LONG_TITLE ? (
+          <p className="fc-inv-head__title" aria-hidden="true">
+            {detail.title}
+          </p>
+        ) : null}
         <p className="fc-inv-head__meta">
           <span className="fc-inv-badge">{VISIBILITY[detail.visibility].label}</span>
           <span>
@@ -213,13 +221,16 @@ function NotebookBody({ meta, detail }: { meta: Meta; detail: InvestigationDetai
       ) : null}
 
       <section className="fc-inv-section" aria-labelledby="inv-items">
-        <h3 id="inv-items">In this notebook</h3>
+        {/* It takes focus when the last item is taken out. */}
+        <h3 id="inv-items" tabIndex={-1}>
+          In this notebook
+        </h3>
         {itemsBody}
         {powers.edit && session.me ? <AddItems meta={meta} me={session.me} notebook={notebook} /> : null}
       </section>
 
       {members.data ? <People detail={detail} members={members.data} powers={powers} myHandle={myHandle} /> : null}
-      <Settings detail={detail} members={members.data ?? []} powers={powers} notebook={notebook} />
+      <Settings detail={detail} members={members.data} powers={powers} notebook={notebook} />
       {editing ? <EditDialog detail={detail} notebook={notebook} onClose={() => setEditing(false)} /> : null}
     </div>
   );

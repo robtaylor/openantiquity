@@ -347,6 +347,21 @@ describe("Toast", () => {
   });
 });
 
+/** A button that opens a dialog, which is taken out of the page to close it. */
+function Opener() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button onClick={() => setOpen(true)}>Edit the note</Button>
+      {open ? (
+        <Dialog open onClose={() => setOpen(false)} title="Edit this note" actions={<Button>Save</Button>}>
+          <input aria-label="Note" />
+        </Dialog>
+      ) : null}
+    </>
+  );
+}
+
 describe("Dialog", () => {
   it("shows its content only while open and closes from its button", async () => {
     const user = userEvent.setup();
@@ -390,6 +405,21 @@ describe("Dialog", () => {
     expect(last).toHaveFocus();
     await user.tab({ shift: true });
     expect(within(dialog).getByRole("textbox", { name: "Reason" })).toHaveFocus();
+  });
+
+  it("gives focus back to what opened it when it is taken out of the page, not to the page", async () => {
+    const user = userEvent.setup();
+    render(<Opener />);
+    const opener = screen.getByRole("button", { name: "Edit the note" });
+    await user.click(opener);
+    await user.click(screen.getByRole("textbox", { name: "Note" }));
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(opener).toHaveFocus();
+
+    await user.click(opener);
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(opener).toHaveFocus();
   });
 });
 

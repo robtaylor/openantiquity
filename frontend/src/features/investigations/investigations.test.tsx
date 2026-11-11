@@ -27,6 +27,8 @@ const harness = setUpShellTests();
 let api: ApiRoutes;
 let fake: FakeInvestigations;
 let signedIn: typeof ADA | null;
+/** Requests whose path matches are left waiting for an answer that never comes. */
+let held: RegExp | null;
 
 const ADA_ME = meFixture();
 const MARY_ME = meFixture({ id: 7, handle: MARY.handle, display_name: MARY.display_name });
@@ -42,6 +44,7 @@ function signIn(person: typeof ADA | null): void {
 beforeEach(() => {
   useInvestigationArea.setState({ shape: null });
   signedIn = null;
+  held = null;
   fake = new FakeInvestigations({ me: () => signedIn, people: [ADA, MARY, GUS] });
   api = routeApi(harness.fetchMock());
   const viaApi = harness.fetchMock().getMockImplementation();
@@ -49,6 +52,7 @@ beforeEach(() => {
     const url = new URL(String(input), "http://localhost");
     const path = url.pathname.replace(/^\/api\/v1/, "");
     if (path.startsWith("/investigations")) {
+      if (held?.test(path)) return new Promise<Response>(() => {});
       api.calls.push({
         method: init?.method ?? "GET",
         path,
@@ -114,6 +118,8 @@ describe("the list", () => {
     renderShell("/investigations", <Address />);
     const list = await panel("Investigations");
     await within(list).findByText("You haven't started one yet");
+    await user.click(within(list).getByRole("button", { name: "Start an investigation" }));
+    expect(within(list).getByLabelText("Start an investigation")).toHaveFocus();
     await user.click(within(list).getByRole("button", { name: "Start" }));
     expect(within(list).getByRole("alert")).toHaveTextContent("Give it a title");
     await user.type(within(list).getByLabelText("Start an investigation"), "Hollow ways");
@@ -256,9 +262,101 @@ describe("a notebook", () => {
     await user.click(within(dialog).getByRole("button", { name: "Add the note" }));
     expect(await within(page).findByText("Look at the hedge line")).toBeInTheDocument();
     await waitFor(() => expect(fake.store.get(id)?.items).toHaveLength(1));
+    // Taking it out shows at once, with "Undo", and sends nothing yet. Focus goes to the list's heading.
     await user.click(within(page).getByRole("button", { name: "Take “Look at the hedge line” out" }));
     await waitFor(() => expect(within(page).queryByText("Look at the hedge line")).toBeNull());
+    expect(within(page).getByRole("heading", { name: "In this notebook" })).toHaveFocus();
+    expect(await screen.findByText("Took “Look at the hedge line” out.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(await within(page).findByText("Look at the hedge line")).toBeInTheDocument();
+    expect(fake.store.get(id)?.items).toHaveLength(1);
+    expect(api.calls.some((call) => call.method === "DELETE")).toBe(false);
+
+    // Leaving the page sends it.
+    await user.click(within(page).getByRole("button", { name: "Take “Look at the hedge line” out" }));
+    await waitFor(() => expect(within(page).queryByText("Look at the hedge line")).toBeNull());
+    act(() => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
     await waitFor(() => expect(fake.store.get(id)?.items).toHaveLength(0));
+  });
+
+  it("moves focus to the next item's handle after taking one out", async () => {
+    signIn(ADA);
+    const id = fake.seed({ title: "Two", owner: ADA }, [
+      { kind: "note", note: "Alpha" },
+      { kind: "note", note: "Bravo" },
+    ]);
+    const user = userEvent.setup();
+    renderShell(`/i/${id}`);
+    const page = await panel("Two");
+    await user.click(await within(page).findByRole("button", { name: "Take “Alpha” out" }));
+    await waitFor(() =>
+      expect(within(page).getByRole("button", { name: /^Move “Bravo”, place 1 of 1/ })).toHaveFocus(),
+    );
+  });
+
+  it("shows an item it may not show as its kind and the line saying why, and nothing the member wrote", async () => {
+    signIn(ADA);
+    const id = fake.seed({ title: "Withdrawn", owner: ADA });
+    fake.store.get(id)?.items.push({
+      id: 998,
+      kind: "finding",
+      position: 0,
+      title: "The ring ditch by the barn",
+      note: "Under **the plough** since 1950",
+      unavailable: "withdrawn",
+      added_by: MARY,
+      created_at: "2026-11-10T10:00:00Z",
+    });
+    renderShell(`/i/${id}`);
+    const page = await panel("Withdrawn");
+    expect(await within(page).findByText("Its finder has withdrawn this finding.")).toBeInTheDocument();
+    expect(within(page).queryByText(/ring ditch/)).toBeNull();
+    expect(within(page).queryByText(/plough/)).toBeNull();
+    expect(within(page).queryByText(/Added by/)).toBeNull();
+    expect(within(page).queryByRole("button", { name: /^Edit “/ })).toBeNull();
+    expect(within(page).getByRole("button", { name: "Take “Finding no longer shown” out" })).toBeInTheDocument();
+  });
+
+  it("names each reference's link by its title, so two on one site differ", async () => {
+    const id = fake.seed({ title: "Reading", owner: GUS, visibility: "public" }, [
+      { kind: "reference", title: "Barrows", reference: { url: "https://example.org/a", citation: null } },
+      { kind: "reference", title: "Ditches", reference: { url: "https://example.org/b", citation: null } },
+    ]);
+    renderShell(`/i/${id}`);
+    const page = await panel("Reading");
+    expect(await within(page).findByRole("link", { name: /^Barrows, at example\.org/ })).toHaveAttribute(
+      "href",
+      "https://example.org/a",
+    );
+    expect(within(page).getByRole("link", { name: /^Ditches, at example\.org/ })).toBeInTheDocument();
+  });
+
+  it("never names an item still being added as the one a moved item follows", async () => {
+    signIn(ADA);
+    const id = fake.seed({ title: "Busy", owner: ADA }, [
+      { kind: "note", note: "Alpha" },
+      { kind: "note", note: "Bravo" },
+    ]);
+    const user = userEvent.setup();
+    renderShell(`/i/${id}`);
+    const page = await panel("Busy");
+    await within(page).findByText("Alpha");
+    held = /\/items$/;
+    await user.click(within(page).getByRole("button", { name: "Add a note" }));
+    const dialog = screen.getByRole("dialog", { name: "Add a note" });
+    await user.type(within(dialog).getByLabelText("Note"), "Charlie");
+    await user.click(within(dialog).getByRole("button", { name: "Add the note" }));
+    await within(page).findByText("Charlie");
+    held = null;
+    // Alpha to the end, after Charlie, which the server hasn't got yet: it follows Bravo.
+    const handle = within(page).getByRole("button", { name: /^Move “Alpha”, place 1 of 3/ });
+    handle.focus();
+    await user.keyboard("{End}");
+    const bravo = fake.store.get(id)?.items.find((item) => item.note === "Bravo")?.id;
+    await waitFor(() => expect(api.calls.find((call) => call.path.endsWith("/move"))?.body).toEqual({ after: bravo }));
+    expect(screen.queryByText(/The new order couldn't be saved/)).toBeNull();
   });
 
   it("explains that inviting needs it public or unlisted, and offers nothing the server would refuse", async () => {
@@ -286,6 +384,35 @@ describe("a notebook", () => {
     await user.type(within(page).getByLabelText("Invite someone by their handle"), "Nobody99");
     await user.click(within(page).getByRole("button", { name: "Invite" }));
     expect(await within(page).findByText("Nobody has that handle. Check it on their profile.")).toBeInTheDocument();
+  });
+
+  it("offers no way to make it private until the members are known", async () => {
+    signIn(ADA);
+    const id = fake.seed({ title: "Shared out", owner: ADA, visibility: "public" });
+    fake.invite(id, MARY, "editor", true);
+    held = /\/members$/;
+    renderShell(`/i/${id}`);
+    const page = await panel("Shared out");
+    expect(await within(page).findByRole("button", { name: "Make it unlisted" })).toBeInTheDocument();
+    expect(within(page).queryByRole("button", { name: "Make it private" })).toBeNull();
+  });
+
+  it("says, before publishing one with no area, that it won't be found by place, and offers the map's view", async () => {
+    signIn(ADA);
+    const id = fake.seed({ title: "Nowhere yet", owner: ADA });
+    const user = userEvent.setup();
+    renderShell(`/i/${id}`);
+    await mapReady();
+    act(() => useViewAreaStore.getState().setArea([-1.9, 51.4, -1.8, 51.45], 14));
+    const page = await panel("Nowhere yet");
+    await user.click(await within(page).findByRole("button", { name: "Publish it" }));
+    const dialog = screen.getByRole("dialog", { name: "Publish this investigation?" });
+    expect(dialog).toHaveTextContent("It has no area yet");
+    await user.click(within(dialog).getByRole("button", { name: "Use the map's view as its area" }));
+    await waitFor(() => expect(fake.store.get(id)?.area).not.toBeNull());
+    expect(screen.getByRole("dialog", { name: "Publish this investigation?" })).not.toHaveTextContent(
+      "It has no area yet",
+    );
   });
 
   it("asks before deleting, and before a member leaves", async () => {
@@ -348,5 +475,37 @@ describe("adding from elsewhere", () => {
     const created = [...fake.store.values()].find((stored) => stored.title === "Avenues");
     expect(created?.items.map((item) => item.kind)).toEqual(["record"]);
     expect(fake.store.get(own)?.items).toHaveLength(0);
+  });
+
+  it("adds to the one it started when only adding failed, rather than start a second", async () => {
+    signIn(ADA);
+    api.on("GET /records/101", () =>
+      json({
+        ...itemRecord(),
+        external_id: "1",
+        summary: null,
+        monument_types: [],
+        periods: [],
+        geometry: null,
+        source_updated_at: null,
+        ingested_at: "2026-11-10T00:00:00Z",
+      }),
+    );
+    api.on("GET /records/101/findings", () => json({ items: [], next_cursor: null }));
+    const user = userEvent.setup();
+    renderShell("/r/101");
+    const page = await panel("West Kennet Avenue");
+    await user.click(await within(page).findByRole("button", { name: "Add to an investigation" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add to an investigation" });
+    await user.click(await within(dialog).findByRole("radio", { name: "A new investigation" }));
+    await user.type(within(dialog).getByLabelText("Its title"), "Avenues");
+    fake.failNext("POST", /\/items$/);
+    await user.click(within(dialog).getByRole("button", { name: "Start it and add" }));
+    expect(await within(dialog).findByRole("radio", { name: /^Avenues/ })).toBeChecked();
+    await user.click(within(dialog).getByRole("button", { name: "Add it" }));
+    expect(await screen.findByText("Added to “Avenues”.")).toBeInTheDocument();
+    const started = [...fake.store.values()].filter((stored) => stored.title === "Avenues");
+    expect(started).toHaveLength(1);
+    expect(started[0]?.items).toHaveLength(1);
   });
 });

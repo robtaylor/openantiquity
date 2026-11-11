@@ -8,14 +8,14 @@ import { type AreaShape, useInvestigationArea } from "./area.js";
 export const AREA_SOURCE = "investigation-area";
 export const AREA_LAYERS = { fill: "investigation-area-fill", line: "investigation-area-line" } as const;
 
-/** The area as map features: one polygon per outer ring with its holes, which the fill and the line both read. */
+/** The area as map features: one polygon per polygon of the area, with its holes, which the fill and the line both read. */
 export function areaFeatures(shape: AreaShape | null): FeatureCollection {
   if (!shape) return EMPTY_COLLECTION;
   return {
     type: "FeatureCollection",
-    features: shape.rings.map((ring) => ({
+    features: shape.polygons.map((rings) => ({
       type: "Feature",
-      geometry: { type: "Polygon", coordinates: [ring.map((point) => [...point])] },
+      geometry: { type: "Polygon", coordinates: rings.map((ring) => ring.map((point) => [...point])) },
       properties: {},
     })),
   };

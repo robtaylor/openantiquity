@@ -8,6 +8,7 @@ import { IconButton } from "../../ui/IconButton.js";
 import { addressProblem, ReferenceFields } from "./AddItems.js";
 import { type Item, type ItemUpdate, LIMITS } from "./api.js";
 import { dateText, KIND_LABEL, MARKDOWN_HINT } from "./describe.js";
+import { autoScrollStep, scrollerOf } from "./dragScroll.js";
 import { ItemBody, ItemNote } from "./ItemBody.js";
 import { dropIndex } from "./order.js";
 import { isPending, type Notebook } from "./useInvestigation.js";
@@ -22,8 +23,9 @@ function plainLine(note: string): string {
     .slice(0, 60);
 }
 
-/** What an item is called in words: its own title, or what it holds. */
+/** What an item is called in words: its own title, or what it holds. One that can't be shown is named by its kind alone. */
 export function itemName(item: Item): string {
+  if (item.unavailable) return `${KIND_LABEL[item.kind]} no longer shown`;
   if (item.title) return item.title;
   if (item.finding) return item.finding.title;
   if (item.record) return item.record.name;
@@ -153,20 +155,45 @@ export function Items({ meta, items, editable, notebook }: ItemsProps) {
   const [editing, setEditing] = useState<Item | null>(null);
   const [said, setSaid] = useState("");
   const [drag, setDrag] = useState<Drag | null>(null);
-  const focusAfterMove = useRef<number | null>(null);
+  /** The item whose handle takes focus after the next render. */
+  const focusAfter = useRef<number | null>(null);
   const hintId = useId();
+  const pointerY = useRef<number | null>(null);
 
-  // A moved card's handle keeps focus, wherever the card has gone.
+  /** The heading of the section the list is in. */
+  const heading = () => list.current?.closest("section")?.querySelector<HTMLElement>("h3");
+
+  // A moved card's handle keeps focus, wherever the card has gone. After a
+  // card is taken out, the next one's handle takes it, or the heading.
   useEffect(() => {
-    const id = focusAfterMove.current;
-    if (id === null) return;
-    focusAfterMove.current = null;
-    list.current?.querySelector<HTMLElement>(`[data-item="${id}"] .fc-inv-item__handle`)?.focus();
+    const target = focusAfter.current;
+    if (target === null) return;
+    focusAfter.current = null;
+    const handle = list.current?.querySelector<HTMLButtonElement>(`[data-item="${target}"] .fc-inv-item__handle`);
+    if (handle && !handle.disabled) handle.focus();
+    else heading()?.focus();
   });
+
+  // While dragging, the panel or the sheet scrolls when the pointer nears its top or bottom edge.
+  const dragging = drag !== null;
+  useEffect(() => {
+    if (!dragging) return;
+    const scroller = scrollerOf(list.current);
+    if (!scroller) return;
+    let frame = requestAnimationFrame(function step() {
+      const y = pointerY.current;
+      if (y !== null) scroller.scrollTop += autoScrollStep(y, scroller.getBoundingClientRect());
+      frame = requestAnimationFrame(step);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      pointerY.current = null;
+    };
+  }, [dragging]);
 
   function move(item: Item, to: number, keepFocus: boolean): void {
     if (!notebook.move(item, to)) return;
-    if (keepFocus) focusAfterMove.current = item.id;
+    if (keepFocus) focusAfter.current = item.id;
     setSaid(`Moved “${itemName(item)}” to place ${to + 1} of ${items.length}.`);
   }
 
@@ -205,9 +232,18 @@ export function Items({ meta, items, editable, notebook }: ItemsProps) {
 
   function onPointerMove(event: PointerEvent<HTMLButtonElement>): void {
     if (!drag) return;
+    pointerY.current = event.clientY;
     const over = overAt(event.clientY);
     const to = over ? dropIndex(drag.from, over.index, over.side) : null;
     setDrag({ ...drag, over, to: to === drag.from ? null : to });
+  }
+
+  function takeOut(item: Item, index: number, name: string): void {
+    const next = items[index + 1] ?? items[index - 1];
+    // The last one out takes the list with it, so the heading takes focus now.
+    if (next) focusAfter.current = next.id;
+    else heading()?.focus();
+    notebook.remove(item, name);
   }
 
   function onPointerUp(item: Item): void {
@@ -279,31 +315,43 @@ export function Items({ meta, items, editable, notebook }: ItemsProps) {
                     >
                       <ChevronDown size={16} aria-hidden />
                     </IconButton>
-                    <IconButton size="sm" label={`Edit “${name}”`} disabled={pending} onClick={() => setEditing(item)}>
-                      <Pencil size={15} aria-hidden />
-                    </IconButton>
+                    {/* One that can't be shown can't be edited either: its title and note aren't shown. */}
+                    {item.unavailable ? null : (
+                      <IconButton
+                        size="sm"
+                        label={`Edit “${name}”`}
+                        disabled={pending}
+                        onClick={() => setEditing(item)}
+                      >
+                        <Pencil size={15} aria-hidden />
+                      </IconButton>
+                    )}
                     <IconButton
                       size="sm"
                       label={`Take “${name}” out`}
                       disabled={pending}
-                      onClick={() => {
-                        void notebook.remove(item);
-                        setSaid(`Took “${name}” out.`);
-                      }}
+                      onClick={() => takeOut(item, index, name)}
                     >
                       <Trash2 size={15} aria-hidden />
                     </IconButton>
                   </span>
                 ) : null}
               </div>
-              {item.title && item.kind !== "finding" ? <h4 className="fc-inv-item__title">{item.title}</h4> : null}
-              {item.title && item.kind === "finding" ? <p className="fc-inv-item__label">{item.title}</p> : null}
-              <ItemBody meta={meta} item={item} />
-              <ItemNote item={item} />
-              <p className="fc-inv-item__by">
-                Added by {item.added_by.display_name}
-                {pending ? null : ` on ${dateText(item.created_at)}`}
-              </p>
+              {item.unavailable ? (
+                // Only the line saying why: its title, note and who added it can say what it was.
+                <ItemBody meta={meta} item={item} />
+              ) : (
+                <>
+                  {item.title && item.kind !== "finding" ? <h4 className="fc-inv-item__title">{item.title}</h4> : null}
+                  {item.title && item.kind === "finding" ? <p className="fc-inv-item__label">{item.title}</p> : null}
+                  <ItemBody meta={meta} item={item} />
+                  <ItemNote item={item} />
+                  <p className="fc-inv-item__by">
+                    Added by {item.added_by.display_name}
+                    {pending ? null : ` on ${dateText(item.created_at)}`}
+                  </p>
+                </>
+              )}
             </li>
           );
         })}

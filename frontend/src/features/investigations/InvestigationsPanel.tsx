@@ -51,7 +51,14 @@ function useInvestigationList(scope: ListId, bbox: string | null, enabled: boole
 }
 
 /** Start an investigation. It takes a title and nothing else; everything else is added on its page. */
-export function StartForm({ onStarted }: { onStarted?: (created: InvestigationSummary) => void }) {
+export function StartForm({
+  onStarted,
+  onCancel,
+}: {
+  onStarted?: (created: InvestigationSummary) => void;
+  /** Offered as "Cancel" beside "Start", and called by Escape in the title. */
+  onCancel?: () => void;
+}) {
   const [title, setTitle] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -99,10 +106,23 @@ export function StartForm({ onStarted }: { onStarted?: (created: InvestigationSu
               maxLength={LIMITS.title}
               placeholder="A title, such as “Barrows of Overton Down”"
               onChange={(event) => setTitle(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && onCancel) {
+                  event.preventDefault();
+                  onCancel();
+                }
+              }}
+              // biome-ignore lint/a11y/noAutofocus: it appears because "Start an investigation" was pressed for it
+              autoFocus={onCancel !== undefined}
             />
             <Button type="submit" variant="primary" disabled={saving} icon={<Plus size={16} aria-hidden />}>
               {saving ? "Starting…" : "Start"}
             </Button>
+            {onCancel ? (
+              <Button variant="ghost" onClick={onCancel}>
+                Cancel
+              </Button>
+            ) : null}
           </div>
         )}
       </Field>
@@ -210,7 +230,10 @@ function List({ scope, bbox }: { scope: ListId; bbox: string | null }) {
     if (scope === "mine") {
       return (
         <EmptyState icon={<NotebookText size={22} />} title="You haven't started one yet">
-          <p>Give one a title above. You can add findings, records, map views and notes to it as you go.</p>
+          <p>
+            Start one with “Start an investigation” above. You can add findings, records, map views and notes to it as
+            you go.
+          </p>
         </EmptyState>
       );
     }
@@ -272,6 +295,8 @@ export function InvestigationsPanel() {
   const inView = params.get(IN_VIEW_PARAM) === "1";
   const bounds = useViewAreaStore((state) => state.bounds);
   const settled = useDebounced(inView && bounds ? bboxParam(bounds) : null, 400);
+  // Behind a button, so the lists come first, above the fold of a phone's half-open sheet.
+  const [starting, setStarting] = useState(false);
 
   function change(next: Record<string, string | null>): void {
     setParams(
@@ -290,10 +315,15 @@ export function InvestigationsPanel() {
     <PanelFrame panelKey={INVESTIGATIONS_PATH} title="Investigations">
       <div className="fc-inv">
         <p className="fc-inv__intro">
-          An investigation is a notebook tied to the map. It gathers findings, heritage records, saved map views, height
-          profiles, references and notes for one piece of work, in the order you choose.
+          An investigation is a notebook tied to the map: findings, records, views and notes for one piece of work.
         </p>
-        <StartForm />
+        {starting ? (
+          <StartForm onCancel={() => setStarting(false)} />
+        ) : (
+          <Button size="sm" icon={<Plus size={15} aria-hidden />} onClick={() => setStarting(true)}>
+            Start an investigation
+          </Button>
+        )}
         <Tabs
           label="Which investigations"
           idPrefix={id}

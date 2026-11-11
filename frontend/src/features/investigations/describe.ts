@@ -28,13 +28,16 @@ export const VISIBILITY: Record<Visibility, { label: string; says: string }> = {
   },
 };
 
+/** The roles someone can be invited as. */
+export const INVITABLE = ["editor", "viewer"] as const satisfies readonly Role[];
+
 /** Every visibility, most closed first. */
 export const VISIBILITIES = ["private", "unlisted", "public"] as const satisfies readonly Visibility[];
 
 export const ROLE: Record<Role, { label: string; says: string }> = {
-  owner: { label: "Owner", says: "Started it, and decides who works on it and who can see it." },
-  editor: { label: "Editor", says: "Can add, change, reorder and remove what's in it." },
-  viewer: { label: "Reader", says: "Can read it and download it, and change nothing." },
+  owner: { label: "Owner", says: "The owner started it, and decides who works on it and who can see it." },
+  editor: { label: "Editor", says: "Editors can add, change, reorder and remove what's in it." },
+  viewer: { label: "Reader", says: "Readers can read it and download it, and change nothing." },
 };
 
 export const KIND_LABEL: Record<ItemKind, string> = {
@@ -76,11 +79,15 @@ export function powersOf(detail: Pick<InvestigationDetail, "my_role" | "invited_
 
 /**
  * The visibilities the owner may choose now. Private only while nobody else
- * is a member or invited, because a private investigation has one member.
+ * is a member or invited, because a private investigation has one member, so
+ * never while the members are `undefined`, not known yet or not loaded.
  */
-export function visibilityChoices(detail: Pick<InvestigationDetail, "visibility">, members: readonly Member[]) {
-  const others = members.filter((member) => member.role !== "owner").length;
-  return VISIBILITIES.filter((id) => id !== detail.visibility && (id !== "private" || others === 0));
+export function visibilityChoices(
+  detail: Pick<InvestigationDetail, "visibility">,
+  members: readonly Member[] | undefined,
+) {
+  const alone = members?.every((member) => member.role === "owner") === true;
+  return VISIBILITIES.filter((id) => id !== detail.visibility && (id !== "private" || alone));
 }
 
 /** True when the owner may invite someone: never to a private investigation. */

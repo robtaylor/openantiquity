@@ -36,6 +36,7 @@ test("starts an investigation, adds a note and a finding, reorders them, publish
   await expect(list.getByRole("tab", { name: "Yours", selected: true })).toBeVisible();
   await expect(list.getByText("You haven't started one yet")).toBeVisible();
 
+  await list.getByRole("button", { name: "Start an investigation" }).click();
   await list.getByLabel("Start an investigation").fill("Barrows of Overton Down");
   await list.getByRole("button", { name: "Start" }).click();
   await expect(page).toHaveURL(/\/i\/inv1/);
@@ -181,8 +182,9 @@ test("an invited person accepts from the list, and items they may not see say so
     id: 900,
     kind: "finding",
     position: 0,
-    title: null,
-    note: null,
+    // What the member wrote beside it could say what it was, so none of it is shown.
+    title: "The ring ditch by the barn",
+    note: "Under the plough since 1950",
     unavailable: "withdrawn",
     added_by: GUS,
     created_at: "2026-11-10T10:00:00Z",
@@ -195,6 +197,7 @@ test("an invited person accepts from the list, and items they may not see say so
   await expect(page).toHaveURL(/\/i\/inv7/);
   const notebook = panel(page, "Enclosures of the Kennet");
   await expect(notebook.getByText("Its finder has withdrawn this finding.")).toBeVisible();
+  await expect(notebook.getByText(/ring ditch|plough/)).toHaveCount(0);
   await expect(notebook.getByRole("button", { name: "Add a note" })).toBeVisible();
   await openSheet(page);
   await notebook.getByRole("button", { name: "Leave this investigation" }).click();

@@ -60,6 +60,19 @@ export function showArea(detail: InvestigationDetail): void {
   if (framing) useMapStore.getState().requestCamera({ ...framing, bearing: 0, pitch: 0 });
 }
 
+/** Set the area to the part of the map nothing covers, or null while the map hasn't said what it shows. */
+function useTakeView(notebook: Notebook): (() => void) | null {
+  const bounds = useViewAreaStore((state) => state.bounds);
+  if (!bounds) return null;
+  return () => {
+    const size = { width: window.innerWidth, height: window.innerHeight };
+    const area = polygonOf(uncoveredBounds(bounds, size, useMapCover.getState().cover));
+    void notebook.update({ area }, "The area couldn't be saved.").then((saved) => {
+      if (saved) toast("Its area is what the map shows now.", { kind: "success" });
+    });
+  };
+}
+
 function AreaSection({
   detail,
   powers,
@@ -70,16 +83,7 @@ function AreaSection({
   notebook: Notebook;
 }) {
   const hasArea = areaShape(detail.area) !== null;
-  const bounds = useViewAreaStore((state) => state.bounds);
-
-  function takeView(): void {
-    if (!bounds) return;
-    const size = { width: window.innerWidth, height: window.innerHeight };
-    const area = polygonOf(uncoveredBounds(bounds, size, useMapCover.getState().cover));
-    void notebook.update({ area }, "The area couldn't be saved.").then((saved) => {
-      if (saved) toast("Its area is what the map shows now.", { kind: "success" });
-    });
-  }
+  const takeView = useTakeView(notebook);
 
   if (!hasArea && !powers.edit) return null;
   return (
@@ -97,7 +101,7 @@ function AreaSection({
           </Button>
         ) : null}
         {powers.edit ? (
-          <Button size="sm" icon={<Crop size={15} aria-hidden />} disabled={!bounds} onClick={takeView}>
+          <Button size="sm" icon={<Crop size={15} aria-hidden />} disabled={!takeView} onClick={() => takeView?.()}>
             {hasArea ? "Use the map's view instead" : "Use the map's view as its area"}
           </Button>
         ) : null}
@@ -122,12 +126,15 @@ function VisibilitySection({
   notebook,
 }: {
   detail: InvestigationDetail;
-  members: readonly Member[];
+  /** Undefined until they have loaded. */
+  members: readonly Member[] | undefined;
   notebook: Notebook;
 }) {
   const [asking, setAsking] = useState<Visibility | null>(null);
+  const takeView = useTakeView(notebook);
   const choices = visibilityChoices(detail, members);
-  const privateBlocked = detail.visibility !== "private" && !choices.includes("private");
+  const privateBlocked = members !== undefined && detail.visibility !== "private" && !choices.includes("private");
+  const noArea = areaShape(detail.area) === null;
 
   async function change(visibility: Visibility): Promise<void> {
     setAsking(null);
@@ -174,6 +181,17 @@ function VisibilitySection({
         }
       >
         <p>{asking ? CHANGE_SAYS[asking] : null}</p>
+        {asking === "public" && noArea ? (
+          <div className="fc-inv-publish-area">
+            <p>
+              It has no area yet, so it won't be listed among those whose area is in view. You can give it the map's
+              view as its area first.
+            </p>
+            <Button size="sm" icon={<Crop size={15} aria-hidden />} disabled={!takeView} onClick={() => takeView?.()}>
+              Use the map's view as its area
+            </Button>
+          </div>
+        ) : null}
       </Dialog>
     </section>
   );
@@ -269,7 +287,8 @@ export function Settings({
   notebook,
 }: {
   detail: InvestigationDetail;
-  members: readonly Member[];
+  /** Undefined until they have loaded. */
+  members: readonly Member[] | undefined;
   powers: Powers;
   notebook: Notebook;
 }) {

@@ -67,8 +67,15 @@ function Chooser({ body, what, onClose }: { body: ItemIn; what: string; onClose:
   const [note, setNote] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /** One started here whose item couldn't be added: trying again adds to it rather than start another. */
+  const [started, setStarted] = useState<Pick<InvestigationSummary, "public_id" | "title" | "visibility"> | null>(null);
   const name = useId();
-  const choice = chosen ?? editable.list[0]?.public_id ?? NEW;
+  // Until the lists come back with it, the one started here is listed too.
+  const options =
+    started && !editable.list.some((item) => item.public_id === started.public_id)
+      ? [...editable.list, started]
+      : editable.list;
+  const choice = chosen ?? options[0]?.public_id ?? NEW;
 
   async function add(): Promise<void> {
     if (choice === NEW && !title.trim()) {
@@ -78,10 +85,15 @@ function Chooser({ body, what, onClose }: { body: ItemIn; what: string; onClose:
     setSaving(true);
     setProblem(null);
     try {
-      let target = editable.list.find((item) => item.public_id === choice) ?? null;
+      let target: { public_id: string; title: string } | null =
+        options.find((item) => item.public_id === choice) ?? null;
       if (choice === NEW) {
         const created = await createInvestigation(title.trim());
         client.setQueryData(investigationKeys.detail(created.public_id), created);
+        // It is chosen from now on, and listed once the lists come back, so a second press doesn't start a second one.
+        setStarted(created);
+        setChosen(created.public_id);
+        void client.invalidateQueries({ queryKey: investigationKeys.lists });
         target = created;
       }
       if (!target) throw new Error("That investigation isn't in your list any more.");
@@ -136,7 +148,7 @@ function Chooser({ body, what, onClose }: { body: ItemIn; what: string; onClose:
                 </Button>
               </p>
             ) : null}
-            {editable.list.map((item) => (
+            {options.map((item) => (
               <label key={item.public_id} className="fc-inv-chooser__option">
                 <input
                   type="radio"

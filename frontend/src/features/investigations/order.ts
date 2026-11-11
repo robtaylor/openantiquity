@@ -10,14 +10,29 @@ export interface Moved<T> {
   after: number | null;
 }
 
-/** `id` moved to place `to` (counted from 0, in the new order), or null when nothing would change. */
-export function moveTo<T extends { id: number }>(items: readonly T[], id: number, to: number): Moved<T> | null {
+/**
+ * `id` moved to place `to` (counted from 0, in the new order), or null when
+ * nothing would change. The item it follows is the nearest one before it that
+ * isn't `unknown` to the server, such as an item still being added, or null
+ * when there is none.
+ */
+export function moveTo<T extends { id: number }>(
+  items: readonly T[],
+  id: number,
+  to: number,
+  unknown: (item: T) => boolean = () => false,
+): Moved<T> | null {
   const from = items.findIndex((item) => item.id === id);
   if (from < 0 || to < 0 || to >= items.length || to === from) return null;
   const rest = items.filter((item) => item.id !== id);
   const moving = items[from] as T;
   rest.splice(to, 0, moving);
-  return { items: rest, after: to === 0 ? null : (rest[to - 1] as T).id };
+  let after: number | null = null;
+  for (let index = to - 1; index >= 0 && after === null; index--) {
+    const before = rest[index] as T;
+    if (!unknown(before)) after = before.id;
+  }
+  return { items: rest, after };
 }
 
 /**

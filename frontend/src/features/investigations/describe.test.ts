@@ -41,6 +41,8 @@ describe("visibilityChoices", () => {
     expect(visibilityChoices({ visibility: "public" }, [owner])).toEqual(["private", "unlisted"]);
     expect(visibilityChoices({ visibility: "public" }, [owner, invited])).toEqual(["unlisted"]);
     expect(visibilityChoices({ visibility: "private" }, [owner])).toEqual(["unlisted", "public"]);
+    // While the members aren't known, private isn't offered: the server would refuse it if there were others.
+    expect(visibilityChoices({ visibility: "public" }, undefined)).toEqual(["unlisted"]);
   });
 });
 

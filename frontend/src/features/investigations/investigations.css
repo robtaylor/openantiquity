@@ -36,6 +36,28 @@
   flex: none;
 }
 
+/* Said in the publish dialog when there is no area yet. */
+.fc-inv-publish-area {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* The full title, which the phone's sheet header cuts to one line. The panel's heading carries it for a screen reader. */
+.fc-inv-head__title {
+  display: none;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.fc-shell[data-layout="phone"] .fc-inv-head__title {
+  display: block;
+}
+
 /* The lists of investigations. */
 .fc-inv-list {
   display: flex;
@@ -296,6 +318,7 @@
 
 .fc-inv-item__head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   min-height: 32px;
@@ -306,7 +329,6 @@
   place-items: center;
   width: 28px;
   height: 32px;
-  margin-left: -6px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -342,7 +364,19 @@
   display: flex;
   gap: 2px;
   margin-left: auto;
-  margin-right: -6px;
+}
+
+/* A finger needs a bigger target than a mouse: 44 px, as touch guidelines ask. */
+@media (pointer: coarse) {
+  .fc-inv-item__head {
+    min-height: 44px;
+  }
+
+  .fc-inv-item__handle,
+  .fc-inv-item__tools .fc-icon-button {
+    width: 44px;
+    height: 44px;
+  }
 }
 
 .fc-inv-item__title {
