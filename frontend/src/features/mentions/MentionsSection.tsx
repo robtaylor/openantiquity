@@ -1,16 +1,17 @@
 import { type InfiniteData, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Radar } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { Button } from "../../ui/Button.js";
 import { Skeleton } from "../../ui/Skeleton.js";
-import { toast } from "../../ui/toastStore.js";
+import { toast, useToastStore } from "../../ui/toastStore.js";
+import { useFocusLater } from "../../ui/useFocusLater.js";
 import type { Viewer } from "../finding/describe.js";
 import { useSignedInFirst } from "../finding/feedback.js";
 import type { FindingDetail } from "../finding/types.js";
 import { AddMention } from "./AddMention.js";
-import { addMention, deleteMention, fetchMentions } from "./api.js";
+import { addMention, deleteMention, fetchMentions, retryOnceIfTransient } from "./api.js";
 import { type MentionFailure, mentionFailure } from "./describe.js";
 import { mentionKeys } from "./keys.js";
 import { MentionCard } from "./MentionCard.js";
@@ -21,12 +22,18 @@ type Pages = InfiniteData<MentionPage, string | null>;
 
 const ADD_BUTTON_ID = "fc-mention-add-button";
 
+/** The list item that holds a mention, which takes focus once it is saved, or when the one above it goes. */
+function itemId(mentionId: number): string {
+  return `fc-mention-${mentionId}`;
+}
+
 export function useFindingMentions(publicId: string) {
   return useInfiniteQuery({
     queryKey: mentionKeys.forFinding(publicId),
     queryFn: ({ pageParam, signal }) => fetchMentions(publicId, pageParam, signal),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor ?? undefined,
+    retry: retryOnceIfTransient,
   });
 }
 
@@ -99,46 +106,63 @@ export function MentionsSection({ meta, finding, viewer, displayName, mayAdd }: 
   const optimistic = useOptimisticMentions(publicId);
   const signedInFirst = useSignedInFirst();
   const [adding, setAdding] = useState(false);
-  const [saving, setSaving] = useState(false);
+  /** Said once a mention is saved or removed, for anyone who can't see the list change. */
+  const [news, setNews] = useState("");
+  const focusLater = useFocusLater();
+  /** The toast that said the last try failed, which a new try takes away. */
+  const failedToast = useRef<number | null>(null);
 
   const refreshRecent = () => void client.invalidateQueries({ queryKey: mentionKeys.recent });
+  const addButton = () => document.getElementById(ADD_BUTTON_ID);
 
   async function open(): Promise<void> {
-    if (await signedInFirst()) setAdding(true);
+    if (await signedInFirst()) {
+      setNews("");
+      setAdding(true);
+    }
   }
 
   function close(): void {
     setAdding(false);
-    requestAnimationFrame(() => document.getElementById(ADD_BUTTON_ID)?.focus());
+    focusLater(addButton);
   }
 
   async function save(body: MentionIn, preview: MentionPreview | null): Promise<MentionFailure | null> {
+    if (failedToast.current !== null) useToastStore.getState().dismiss(failedToast.current);
+    failedToast.current = null;
     const placeholder = pendingMention(body, preview, viewer, displayName);
     const undo = optimistic({ first: (items) => [placeholder, ...items] });
-    setSaving(true);
     try {
       const saved = await addMention(publicId, body);
       optimistic({ each: (items) => items.map((mention) => (mention.id === placeholder.id ? saved : mention)) });
       refreshRecent();
-      setSaving(false);
-      close();
+      setAdding(false);
+      setNews("Your mention is added, at the top of the list.");
+      // The new mention is where the person's attention goes, at the top of the list, which may be out of sight.
+      focusLater(() => document.getElementById(itemId(saved.id)), { scroll: true });
       return null;
     } catch (error) {
       undo();
-      setSaving(false);
       const failure = mentionFailure(error);
-      toast(`Your mention couldn't be added. ${failure.message}`, { kind: "error" });
+      failedToast.current = toast(`Your mention couldn't be added. ${failure.message}`, { kind: "error" });
       return failure;
     }
   }
 
   async function remove(mention: Mention): Promise<void> {
+    // Focus goes to the mention that takes its place, or the one before it, or else to adding one.
+    const ids = all.map((entry) => entry.id);
+    const at = ids.indexOf(mention.id);
+    const next = ids[at + 1] ?? ids[at - 1];
+    focusLater(() => (next === undefined ? addButton() : document.getElementById(itemId(next))));
     const undo = optimistic({ each: (items) => items.filter((entry) => entry.id !== mention.id) });
+    setNews("The mention is removed.");
     try {
       await deleteMention(mention.id);
       refreshRecent();
     } catch (error) {
       undo();
+      setNews("");
       toast(`That mention couldn't be removed. ${mentionFailure(error).message}`, { kind: "error" });
     }
   }
@@ -171,7 +195,7 @@ export function MentionsSection({ meta, finding, viewer, displayName, mayAdd }: 
       ) : (
         <ul className="fc-mentions" aria-label="Mentions of this finding">
           {all.map((mention) => (
-            <li key={mention.id}>
+            <li key={mention.id} id={itemId(mention.id)} tabIndex={-1} className="fc-mentions__item">
               <MentionCard
                 meta={meta}
                 mention={mention}
@@ -188,11 +212,12 @@ export function MentionsSection({ meta, finding, viewer, displayName, mayAdd }: 
           {mentions.isFetchingNextPage ? "Loading…" : "Show older mentions"}
         </Button>
       ) : null}
+      <p className="fc-visually-hidden" role="status">
+        {news}
+      </p>
       {mayAdd ? (
         adding ? (
-          <div hidden={saving}>
-            <AddMention meta={meta} onSave={save} onCancel={close} />
-          </div>
+          <AddMention meta={meta} onSave={save} onCancel={close} />
         ) : (
           <Button id={ADD_BUTTON_ID} icon={<Plus size={16} aria-hidden />} onClick={() => void open()}>
             Add a mention

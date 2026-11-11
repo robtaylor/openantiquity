@@ -14,7 +14,7 @@ import { findingPath, useOpenFinding } from "../findings/selection.js";
 import { whereRef } from "../findings/square.js";
 import { useDocumentTitle } from "../placeholders.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
-import { fetchRecentMentions } from "./api.js";
+import { fetchRecentMentions, retryOnceIfTransient } from "./api.js";
 import { mentionKeys } from "./keys.js";
 import { MentionCard } from "./MentionCard.js";
 import { RECENT_MENTIONS_PATH } from "./paths.js";
@@ -68,6 +68,7 @@ export function RecentMentionsPanel({ meta }: { meta: Meta }) {
     queryFn: ({ pageParam, signal }) => fetchRecentMentions(pageParam, signal),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor ?? undefined,
+    retry: retryOnceIfTransient,
   });
   const all = recent.data?.pages.flatMap((page) => page.items) ?? [];
   const handle = session.me?.handle ?? null;

@@ -3,11 +3,20 @@
  * the generated schema.
  */
 
-import { apiFetch } from "../../api/client.js";
+import { apiFetch, isTransient } from "../../api/client.js";
 import type { Mention, MentionIn, MentionPage, MentionPreview, RecentMentionPage } from "./types.js";
 
 /** How many mentions a page holds, on a finding and in the recent feed. */
 export const MENTIONS_PAGE_SIZE = 20;
+
+/**
+ * Lists of mentions are asked for once more after a failure that may pass,
+ * and not at all after a refusal, so a failed list says so within a moment
+ * rather than after the library's three tries.
+ */
+export function retryOnceIfTransient(failureCount: number, error: Error): boolean {
+  return failureCount < 1 && isTransient(error);
+}
 
 export function fetchMentions(publicId: string, cursor: string | null, signal?: AbortSignal): Promise<MentionPage> {
   return apiFetch<MentionPage>(`/findings/${encodeURIComponent(publicId)}/mentions`, {

@@ -8,6 +8,12 @@
   list-style: none;
 }
 
+/* A card takes focus once it is saved, or when the one above it is removed: its ring follows the card's corners. */
+.fc-mentions__item {
+  border-radius: var(--radius);
+  scroll-margin: 16px 0;
+}
+
 .fc-mention {
   display: grid;
   grid-template-columns: 96px minmax(0, 1fr);

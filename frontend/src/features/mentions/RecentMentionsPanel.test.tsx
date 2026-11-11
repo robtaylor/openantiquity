@@ -93,7 +93,9 @@ describe("the recent mentions across the map", () => {
         : json({ items: [recentMentionFixture()], next_cursor: null }),
     );
     const panel = await open();
-    expect(await panel.findByText("The mentions couldn't be loaded")).toBeVisible();
+    // Asked once more, a moment later, before it says so.
+    expect(await panel.findByText("The mentions couldn't be loaded", {}, { timeout: 3000 })).toBeVisible();
+    expect(routes.callsTo("GET /mentions/recent")).toHaveLength(2);
     fail = false;
     await userEvent.setup().click(panel.getByRole("button", { name: "Try again" }));
     expect(await panel.findByRole("link", { name: /Barrows of the Marlborough Downs/ })).toBeVisible();

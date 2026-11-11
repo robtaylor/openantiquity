@@ -204,8 +204,13 @@ test("adding a mention", async ({ page }) => {
   await shoot(page, "13-add-fetch-failed");
   await section.getByRole("button", { name: "Save the mention" }).click();
   await section.getByRole("link", { name: /news\.example\.org\/barrows/ }).waitFor();
-  await scrollTo(panel.getByRole("heading", { name: "Mentions" }));
+  // Where the page itself puts the saved mention, in sight with focus on it.
   await shoot(page, "14-added-address-alone");
+  await section
+    .getByRole("button", { name: /^Remove/ })
+    .first()
+    .click();
+  await shoot(page, "15-removed");
 });
 
 test("the recent mentions", async ({ page }) => {
@@ -269,7 +274,7 @@ test("the timeline", async ({ page }) => {
   await scrollTo(panel.getByRole("heading", { name: "Timeline" }));
   await shoot(page, "30-timeline");
   await panel.getByRole("button", { name: "Add to the timeline" }).click();
-  await scrollTo(panel.getByRole("heading", { name: "What happened?" }));
+  // The chooser brings itself into view.
   await shoot(page, "31-timeline-choose");
   await panel.getByRole("button", { name: "Site visit" }).last().click();
   await panel.getByRole("form", { name: "Add site visit" }).waitFor();

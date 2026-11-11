@@ -149,11 +149,15 @@ describe("adding a mention", () => {
       start_seconds: 754,
       note: "The ring ditch is at the start.",
     });
-    // Shown at once, newest first, while it is saved.
+    // Shown at once, newest first, while it is saved. The form stays where it was, busy, with focus kept on it.
     const list = within(section.getByRole("list", { name: "Mentions of this finding" }));
     const [first] = list.getAllByRole("article");
     expect(first).toHaveAttribute("aria-busy", "true");
     expect(within(first as HTMLElement).getByText("Saving…")).toBeVisible();
+    const busy = form.getByRole("button", { name: "Saving…" });
+    expect(busy).toBeVisible();
+    expect(busy).toHaveFocus();
+    expect(busy).toHaveAttribute("aria-disabled", "true");
 
     act(() =>
       answer(
@@ -165,8 +169,49 @@ describe("adding a mention", () => {
     );
     await waitFor(() => expect(list.getAllByRole("article")[0]).not.toHaveAttribute("aria-busy"));
     expect(section.getByText("The ring ditch is at the start.")).toBeVisible();
-    expect(section.getByRole("button", { name: "Remove" })).toBeVisible();
+    expect(section.getByRole("button", { name: "Remove Barrows of the Marlborough Downs" })).toBeVisible();
     expect(section.getByRole("button", { name: "Add a mention" })).toBeVisible();
+    // The saved mention takes focus where it is, and the change is said.
+    await waitFor(() => expect(list.getAllByRole("listitem")[0]).toHaveFocus());
+    expect(section.getByRole("status")).toHaveTextContent("Your mention is added, at the top of the list.");
+  });
+
+  it("takes away the last failure's toast when the person tries again", async () => {
+    const routes = serve(pageFixture(), []);
+    routes.on("POST /mentions/preview", () => json(previewFixture()));
+    let fail = true;
+    routes.on("POST /findings/f-ring/mentions", () =>
+      fail ? apiError(503, "unavailable", "The server is busy.") : json(mentionFixture({ id: 9 }), 201),
+    );
+    const { section } = await open(routes);
+    const user = await lookUp(section, "https://youtu.be/dQw4w9WgXcQ");
+    await user.click(await section.findByRole("button", { name: "Save the mention" }));
+    expect(await screen.findByText(/Your mention couldn't be added\./)).toBeInTheDocument();
+    fail = false;
+    await user.click(section.getByRole("button", { name: "Save the mention" }));
+    expect(await section.findByRole("link", { name: /Barrows of the Marlborough Downs/ })).toBeVisible();
+    expect(screen.queryByText(/Your mention couldn't be added\./)).toBeNull();
+  });
+
+  it("forgets what the last address found once a different one is typed", async () => {
+    const routes = serve(pageFixture(), []);
+    routes.on("POST /mentions/preview", (call) =>
+      (call.body as { url: string }).url.includes("youtu")
+        ? json(previewFixture())
+        : apiError(503, "unavailable", "The server is busy."),
+    );
+    const { section } = await open(routes);
+    const user = await lookUp(section, "https://youtu.be/dQw4w9WgXcQ?t=754");
+    const form = within(await section.findByRole("form", { name: "Add a mention" }));
+    expect(form.getByRole("radio", { name: "Video" })).toHaveAttribute("aria-checked", "true");
+    const address = section.getByLabelText("Address");
+    await user.clear(address);
+    await user.type(address, "https://example.org/a");
+    await user.click(section.getByRole("button", { name: "Look it up" }));
+    expect(await section.findByText(/Its details couldn't be looked up\./)).toBeVisible();
+    const again = within(section.getByRole("form", { name: "Add a mention" }));
+    expect(again.queryByRole("radio", { checked: true })).toBeNull();
+    expect(again.getByLabelText("Where it comes up (optional)")).toHaveValue("");
   });
 
   it("says plainly when nothing could be fetched, and saves the address alone", async () => {
@@ -297,17 +342,21 @@ describe("removing a mention", () => {
     routes.on("DELETE /mentions/3", () => new Response(null, { status: 204 }));
     const { section } = await open(routes);
     const list = within(await section.findByRole("list", { name: "Mentions of this finding" }));
-    expect(list.getAllByRole("button", { name: "Remove" })).toHaveLength(1);
-    await userEvent.setup().click(list.getByRole("button", { name: "Remove" }));
+    // Each button is named for its mention, so a list of the page's buttons tells them apart.
+    expect(list.getAllByRole("button", { name: /^Remove/ })).toHaveLength(1);
+    await userEvent.setup().click(list.getByRole("button", { name: "Remove Barrows of the Marlborough Downs" }));
     expect(list.getAllByRole("article")).toHaveLength(1);
     expect(routes.callsTo("DELETE /mentions/3")).toHaveLength(1);
+    // Focus goes to the mention that took its place, not to the top of the page.
+    expect(list.getByRole("listitem")).toHaveFocus();
+    expect(section.getByRole("status")).toHaveTextContent("The mention is removed.");
   });
 
   it("puts it back with a toast when the server refuses", async () => {
     const routes = serve(pageFixture(), [mentionFixture({ id: 3, added_by: mine })]);
     routes.on("DELETE /mentions/3", () => apiError(403, "mention_forbidden", "No."));
     const { section } = await open(routes);
-    await userEvent.setup().click(await section.findByRole("button", { name: "Remove" }));
+    await userEvent.setup().click(await section.findByRole("button", { name: /^Remove/ }));
     expect(
       await screen.findByText("That mention couldn't be removed. Only the person who added a mention can remove it."),
     ).toBeInTheDocument();

@@ -4,6 +4,7 @@ import type { Meta } from "../../api/meta.js";
 import { Button } from "../../ui/Button.js";
 import { ChipGroup } from "../../ui/Chip.js";
 import { Field } from "../../ui/Field.js";
+import { useFocusLater } from "../../ui/useFocusLater.js";
 import { previewMention } from "./api.js";
 import {
   type MentionFailure,
@@ -51,6 +52,7 @@ export function AddMention({ meta, onSave, onCancel }: AddMentionProps) {
   const [saving, setSaving] = useState(false);
   const details = useRef<HTMLDivElement>(null);
   const addressInput = useRef<HTMLInputElement>(null);
+  const focusLater = useFocusLater();
 
   // Opened from its button, the form starts at the address.
   useEffect(() => addressInput.current?.focus(), []);
@@ -82,13 +84,13 @@ export function AddMention({ meta, onSave, onCancel }: AddMentionProps) {
       }
       setLookup({ state: "unknown", url, reason: failure.message });
     }
-    // What was found is read next.
-    requestAnimationFrame(() => details.current?.focus({ preventScroll: false }));
+    // What was found is read next, from the render that shows it, so nothing typed after it goes astray.
+    focusLater(() => details.current, { scroll: true });
   }
 
   async function save(event: FormEvent): Promise<void> {
     event.preventDefault();
-    if (!looked) return;
+    if (!looked || saving) return;
     const seconds = parseStart(start);
     if (Number.isNaN(seconds)) {
       setProblem({ field: "start", message: "Write the time as minutes and seconds, such as 12:34." });
@@ -131,8 +133,12 @@ export function AddMention({ meta, onSave, onCancel }: AddMentionProps) {
               value={address}
               onChange={(event) => {
                 setAddress(event.target.value);
-                // A different address needs looking up again.
-                if (lookup.state !== "idle") setLookup({ state: "idle" });
+                // A different address needs looking up again, and what the last one found no longer applies.
+                if (lookup.state !== "idle") {
+                  setLookup({ state: "idle" });
+                  setKind(null);
+                  setStart("");
+                }
                 if (problem?.field === "url") setProblem(null);
               }}
             />
@@ -217,7 +223,8 @@ export function AddMention({ meta, onSave, onCancel }: AddMentionProps) {
             <Button variant="ghost" onClick={onCancel}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" disabled={saving}>
+            {/* Kept focusable while saving, so focus stays here until the saved mention takes it. */}
+            <Button type="submit" variant="primary" aria-disabled={saving || undefined}>
               {saving ? "Saving…" : "Save the mention"}
             </Button>
           </div>

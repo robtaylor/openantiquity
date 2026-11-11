@@ -136,6 +136,8 @@ export function MentionCard({ meta, mention, own = false, pending = false, onRem
               onClick={onRemove}
             >
               Remove
+              {/* Told apart from the other cards' buttons in a list of them. */}
+              <span className="fc-visually-hidden"> {mentionTitle(mention)}</span>
             </Button>
           </div>
         ) : null}
