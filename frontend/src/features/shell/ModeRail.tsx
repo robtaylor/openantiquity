@@ -1,20 +1,40 @@
 import { NavLink, useLocation } from "react-router";
 import { AccountModeIcon } from "../account/AccountModeIcon.js";
+import { NotificationCount } from "../notifications/NotificationCount.js";
+import { unreadWords, useUnreadCount } from "../notifications/useNotifications.js";
 import { isModeActive, MODES, type Mode, REFERENCE } from "./navigation.js";
 
-function RailLink({ mode, pathname, compact }: { mode: Mode; pathname: string; compact: boolean }) {
+function RailLink({
+  mode,
+  pathname,
+  compact,
+  unread = null,
+}: {
+  mode: Mode;
+  pathname: string;
+  compact: boolean;
+  /** Unread notifications, shown on the Account item only. */
+  unread?: number | null;
+}) {
   const Icon = mode.icon;
   const active = isModeActive(mode, pathname);
+  const label = unread ? `${mode.label}, ${unreadWords(unread)}` : mode.label;
   return (
     <NavLink
       to={mode.to}
       className={active ? "fc-rail__link fc-rail__link--active" : "fc-rail__link"}
-      aria-label={mode.label}
+      aria-label={label}
       aria-current={active ? "page" : undefined}
       // The compact rail scrolls, which clips the pop-out label, so the browser's tooltip stands in.
-      title={compact ? mode.label : undefined}
+      title={compact ? label : undefined}
     >
-      {mode.id === "account" ? <AccountModeIcon icon={Icon} size={22} /> : <Icon size={22} aria-hidden />}
+      {mode.id === "account" ? (
+        <NotificationCount count={unread}>
+          <AccountModeIcon icon={Icon} size={22} />
+        </NotificationCount>
+      ) : (
+        <Icon size={22} aria-hidden />
+      )}
       <span className="fc-rail__tip" aria-hidden="true">
         {mode.label}
       </span>
@@ -44,6 +64,7 @@ export function BrandMark({ size = 28 }: { size?: number }) {
  */
 export function ModeRail({ compact = false }: { compact?: boolean }) {
   const { pathname } = useLocation();
+  const unread = useUnreadCount();
   const account = MODES.filter((mode) => mode.id === "account");
   const main = MODES.filter((mode) => mode.id !== "account");
   return (
@@ -61,7 +82,7 @@ export function ModeRail({ compact = false }: { compact?: boolean }) {
           <RailLink key={mode.id} mode={mode} pathname={pathname} compact={compact} />
         ))}
         {account.map((mode) => (
-          <RailLink key={mode.id} mode={mode} pathname={pathname} compact={compact} />
+          <RailLink key={mode.id} mode={mode} pathname={pathname} compact={compact} unread={unread} />
         ))}
       </div>
     </nav>

@@ -1,0 +1,53 @@
+/* The unread count on the Account item, and the notifications on the account page. */
+.fc-notification-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.fc-notification-count {
+  position: absolute;
+  top: -6px;
+  right: -9px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border: 1.5px solid var(--surface);
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.fc-notification-count--inline {
+  position: static;
+  margin-left: auto;
+  border-color: transparent;
+}
+
+.fc-notifications__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fc-notification-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.fc-notification-new__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}

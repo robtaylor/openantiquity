@@ -12,6 +12,7 @@ import { Field } from "../../ui/Field.js";
 import { Skeleton } from "../../ui/Skeleton.js";
 import { toast } from "../../ui/toastStore.js";
 import { discardAllDrafts, useDrafts } from "../drafts/store.js";
+import { NotificationsSection } from "../notifications/NotificationsSection.js";
 import { useDocumentTitle } from "../placeholders.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { accountKeys, deleteMe, logout, type Me, type MeUpdate, updateMe } from "./api.js";
@@ -309,6 +310,8 @@ function SignedIn({ me }: { me: Me }) {
           </p>
         </Notice>
       ) : null}
+
+      <NotificationsSection />
 
       <section className="fc-account-section" aria-labelledby="account-details">
         <h3 id="account-details">Your details</h3>
