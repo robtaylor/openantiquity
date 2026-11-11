@@ -985,6 +985,19 @@ def get_user(db: Session, handle: str, *, lock: bool = False) -> User:
     return user
 
 
+def get_person(db: Session, handle: str) -> User:
+    """Anyone with this handle, banned and deleted accounts included, for a moderator's view of them.
+
+    The public profile answers `user_not_found` for a banned or deleted
+    account. A moderator still needs to see one, to lift a ban or to read the
+    log about it.
+    """
+    user = db.scalar(select(User).where(User.handle == handle))
+    if user is None:
+        raise UserNotFoundError()
+    return user
+
+
 def contributed_findings(db: Session, user: User) -> list[int]:
     """Every finding the person marked, answered, added evidence to, voted on or verified, by id."""
     touched = union(

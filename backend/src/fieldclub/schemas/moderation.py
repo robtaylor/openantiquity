@@ -12,8 +12,10 @@ from pydantic import Field
 
 from fieldclub.models import Finding, User
 from fieldclub.schemas.common import ApiModel, PublicUser, RequestModel
+from fieldclub.schemas.findings import ActionOut
 from fieldclub.schemas.media import REASON_MAX, media_url
 from fieldclub.services import moderation
+from fieldclub.services.actions import PersonActions
 from fieldclub.vocab import ModerationActionKind, ReportReason, ReportStatus, ReportTarget, Role, Sensitivity
 
 NOTE_MAX = 2000
@@ -196,6 +198,59 @@ class ModUser(ApiModel):
             created_at=user.created_at,
             banned=user.is_banned,
             banned_at=user.banned_at,
+        )
+
+
+class RoleActionsOut(ApiModel):
+    """Whether the moderator may give the person each role, through `PUT /mod/users/{handle}/role`."""
+
+    member: ActionOut
+    trusted: ActionOut
+    expert: ActionOut
+    moderator: ActionOut
+    admin: ActionOut
+
+
+class PersonActionsOut(ApiModel):
+    """What this moderator may do to the person, in the shape a finding page's actions take.
+
+    Each is `{allowed, reason}`, and `reason` is the code the route would
+    refuse with, or `current_role` for the role the person has now.
+    """
+
+    ban: ActionOut
+    unban: ActionOut
+    roles: RoleActionsOut
+
+    @classmethod
+    def build(cls, actions: PersonActions) -> PersonActionsOut:
+        assert set(actions.roles) == set(Role), "every role is answered"
+        return cls(
+            ban=ActionOut.build(actions.ban),
+            unban=ActionOut.build(actions.unban),
+            roles=RoleActionsOut(
+                **{role.value: ActionOut.build(action) for role, action in actions.roles.items()}
+            ),
+        )
+
+
+class ModPerson(ModUser):
+    """One person as a moderator sees them, banned and deleted accounts included.
+
+    No email address and no sign-in identities: a moderator acts on the
+    account, and never needs to reach the person outside Open Antiquity.
+    """
+
+    # True for an account its owner deleted. Its name has gone, and nothing can be done to it.
+    deleted: bool
+    actions: PersonActionsOut
+
+    @classmethod
+    def build_for(cls, user: User, actions: PersonActions) -> ModPerson:
+        return cls(
+            **ModUser.build(user).model_dump(),
+            deleted=user.is_deleted,
+            actions=PersonActionsOut.build(actions),
         )
 
 

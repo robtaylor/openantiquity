@@ -34,6 +34,14 @@ page says whether it waits for its detail), `answer_withdrawn`,
 
 Nothing here says anything about other people's answers: whether someone may
 answer turns on their own answer only.
+
+`person_actions` does the same for what a moderator may do to one person on
+`GET /mod/users/{handle}`, from the checks of `POST /mod/users/{handle}/ban`,
+`.../unban` and `PUT .../role`: `moderation.check_may_ban`, then whether the
+person is banned already (`already_banned`, `not_banned`), and
+`moderation.check_role_change` for each role. A deleted account is
+`user_not_found` for all of them, as those routes answer, and the role the
+person has now is `current_role`, which no route raises.
 """
 
 from __future__ import annotations
@@ -43,16 +51,17 @@ from dataclasses import dataclass, fields
 
 from fieldclub.auth import onboarding
 from fieldclub.config import get_settings
-from fieldclub.errors import AppError, UnauthorisedError
+from fieldclub.errors import AppError, UnauthorisedError, UserNotFoundError
 from fieldclub.models import Evidence, Finding, Observation, User
 from fieldclub.services import findings, moderation, review, sensitivity
-from fieldclub.vocab import SENSITIVITY_ORDER, Sensitivity, sensitivity_rank
+from fieldclub.vocab import SENSITIVITY_ORDER, Role, Sensitivity, sensitivity_rank
 
 ALREADY_ANSWERED = "already_answered"
 ANSWER_WITHDRAWN = "answer_withdrawn"
 HIGHEST_LEVEL = "highest_level"
 LOWEST_LEVEL = "lowest_level"
 NOTHING_TO_VERIFY = "nothing_to_verify"
+CURRENT_ROLE = "current_role"
 
 
 @dataclass(frozen=True)
@@ -78,6 +87,14 @@ class FindingActions:
 class EvidenceActions:
     vote: Action
     verify: Action
+
+
+@dataclass(frozen=True)
+class PersonActions:
+    ban: Action
+    unban: Action
+    # Giving the person each role, every role included.
+    roles: dict[Role, Action]
 
 
 class _NothingToDoError(AppError):
@@ -175,4 +192,37 @@ def evidence_actions(finding: Finding, evidence: Evidence, viewer: User | None) 
     return EvidenceActions(
         vote=_action(lambda: findings.check_may_vote(finding, evidence, user)),
         verify=_action(lambda: findings.check_may_verify(finding, user, evidence)),
+    )
+
+
+def person_actions(target: User, moderator: User) -> PersonActions:
+    """What `moderator`, already let through as one, may do to `target`."""
+    assert moderation.is_moderator(moderator), "only a moderator is told what they may do to someone"
+
+    def present() -> None:
+        if target.is_deleted:
+            raise UserNotFoundError()
+
+    def not_banned() -> None:
+        if target.is_banned:
+            raise moderation.AlreadyBannedError()
+
+    def banned() -> None:
+        if not target.is_banned:
+            raise moderation.NotBannedError()
+
+    def may_ban() -> None:
+        moderation.check_may_ban(moderator, target)
+
+    def give(role: Role) -> Action:
+        return _action(
+            present,
+            lambda: moderation.check_role_change(moderator, target, role),
+            _nothing(CURRENT_ROLE) if Role(target.role) is role else lambda: None,
+        )
+
+    return PersonActions(
+        ban=_action(present, may_ban, not_banned),
+        unban=_action(present, may_ban, banned),
+        roles={role: give(role) for role in Role},
     )

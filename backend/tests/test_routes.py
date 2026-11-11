@@ -329,6 +329,11 @@ ROUTES: dict[tuple[str, str], Expect] = {
     ("GET", "/api/v1/mod/users/eligible"): Expect(
         sample="/api/v1/mod/users/eligible", hidden_test=HIDDEN, welcome=True
     ),
+    ("GET", "/api/v1/mod/users/{handle}"): Expect(
+        sample="/api/v1/mod/users/{person}",
+        nothing_hidden="one account as moderators see it, with no content anyone contributed",
+        welcome=True,
+    ),
     ("PUT", "/api/v1/mod/users/{handle}/role"): Expect(writer=CONTRIBUTOR),
     ("POST", "/api/v1/mod/users/{handle}/ban"): Expect(writer=CONTRIBUTOR),
     ("POST", "/api/v1/mod/users/{handle}/unban"): Expect(writer=CONTRIBUTOR),

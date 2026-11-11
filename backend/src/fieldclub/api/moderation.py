@@ -24,6 +24,7 @@ from fieldclub.schemas.moderation import (
     Ban,
     Eligible,
     Hidden,
+    ModPerson,
     ModSensitivityIn,
     ModUser,
     ReasonIn,
@@ -32,7 +33,7 @@ from fieldclub.schemas.moderation import (
     ResolveIn,
     RoleIn,
 )
-from fieldclub.services import moderation
+from fieldclub.services import actions, moderation
 from fieldclub.vocab import ReportReason, ReportStatus, ReportTarget
 
 
@@ -172,6 +173,14 @@ def eligible_members(
 
 
 Handle = Annotated[str, Path(min_length=1, max_length=TARGET_REF_MAX)]
+
+
+@router.get("/users/{handle}", response_model=ModPerson)
+def person(handle: Handle, moderator: Moderator, db: Db) -> ModPerson:
+    """One person as a moderator sees them, a banned or deleted account included, and what this
+    moderator may do to them: ban, unban, and give each role."""
+    user = moderation.get_person(db, handle)
+    return ModPerson.build_for(user, actions.person_actions(user, moderator))
 
 
 @router.put("/users/{handle}/role", response_model=ModUser, dependencies=_writes)
