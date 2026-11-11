@@ -49,20 +49,28 @@ fi
 # The same prefix as var.name in infra/terraform/variables.tf.
 prefix=fieldclub
 
-# Write one variable's value from the .env to standard output, with nothing
-# added. With --check it writes nothing and only says whether the value is set.
+# Check that a variable is set in the .env, or send its value to a secret. The
+# value is read in full before gcloud is started and is handed to it on
+# standard input, so a failure to read it can never leave an empty version
+# behind, and the value is never an argument or a shell variable.
+#   env_value <key> --check
+#   env_value <key> --send <secret>
 env_value() {
-  uv run --quiet --project "$root/backend" python - "$env_file" "$@" <<'PYTHON'
+  uv run --quiet --project "$root/backend" python - "$env_file" "$project" "$@" <<'PYTHON'
+import subprocess
 import sys
 
 from dotenv import dotenv_values
 
-path, key, *flags = sys.argv[1:]
+path, project, key, mode, *rest = sys.argv[1:]
 value = dotenv_values(path).get(key)
 if not value:
     sys.exit(f"{key} is not set in {path}")
-if "--check" not in flags:
-    sys.stdout.write(value)
+if mode == "--send":
+    command = ["gcloud", "secrets", "versions", "add", rest[0], f"--project={project}", "--data-file=-"]
+    done = subprocess.run(command, input=value.encode(), stdout=subprocess.DEVNULL, check=False)
+    if done.returncode != 0:
+        sys.exit(f"gcloud could not add a version to {rest[0]}")
 PYTHON
 }
 
@@ -98,8 +106,7 @@ for pair in host:DEFRA_SFTP_HOST user:DEFRA_SFTP_USER password:DEFRA_SFTP_PASSWO
   secret="$prefix-defra-sftp-${pair%%:*}"
   key=${pair#*:}
   if wanted "$secret"; then
-    env_value "$key" |
-      gcloud secrets versions add "$secret" --project="$project" --data-file=- >/dev/null
+    env_value "$key" --send "$secret"
     echo "$secret set from $key"
   fi
 done

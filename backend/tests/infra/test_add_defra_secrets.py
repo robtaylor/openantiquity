@@ -156,3 +156,18 @@ def test_a_missing_host_key_file_stops_it_before_anything_is_added(stage: dict[s
     assert result.returncode != 0
     assert "known" in result.stderr.lower()
     assert added(stage) == {}
+
+
+def test_a_value_that_cannot_be_read_never_leaves_an_empty_version(stage: dict[str, Path]) -> None:
+    # The check passes, then the file loses its password before the value is sent.
+    first = run(stage, filled="fieldclub-defra-sftp-password fieldclub-defra-sftp-known-hosts")
+    assert first.returncode == 0, first.stderr
+    stage["log"].unlink()
+    stage["env"].write_text(f"DEFRA_SFTP_HOST={HOST}\nDEFRA_SFTP_USER=\nDEFRA_SFTP_PASSWORD=x\n")
+
+    result = run(stage, "--replace")
+
+    assert result.returncode != 0
+    assert "DEFRA_SFTP_USER" in result.stderr
+    assert all(sent for sent in added(stage).values())
+    assert "fieldclub-defra-sftp-user" not in added(stage)
