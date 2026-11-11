@@ -76,6 +76,14 @@ class Finding(Base):
         Index("ix_findings_open_steps", "open_steps", postgresql_using="gin"),
         # Lists sort newest first by default.
         Index("ix_findings_created_at_id", "created_at", "id"),
+        # One finding per person and client reference, so a draft sent twice is saved once.
+        Index(
+            "uq_findings_author_client_ref",
+            "author_id",
+            "client_ref",
+            unique=True,
+            postgresql_where=text("client_ref IS NOT NULL"),
+        ),
     )
 
     id: Mapped[IdPk]
@@ -125,6 +133,9 @@ class Finding(Base):
     # up a tier. None when answers alone can't. The second-look queue offers
     # the smallest first. Written with the assessment.
     answers_to_next: Mapped[int | None] = mapped_column(SmallInteger)
+    # The reference the finder's browser sent with the draft this was saved
+    # from, if any. Never shown to anyone. See `services.findings.create_finding_once`.
+    client_ref: Mapped[str | None] = mapped_column(Text)
 
     def __repr__(self) -> str:
         return f"<Finding {self.public_id} {self.feature_class} {self.tier}/{self.state}>"

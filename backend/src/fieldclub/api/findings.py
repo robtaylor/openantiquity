@@ -155,21 +155,29 @@ def list_findings(
     dependencies=[Depends(rate_limit("findings_create", 60, per_seconds=3600))],
 )
 def create_finding(body: FindingCreate, user: Contributor, db: Db, response: Response) -> FindingDetail:
-    """Mark a finding. A point and a feature class are all it needs."""
+    """Mark a finding. A point and a feature class are all it needs.
+
+    With a `client_ref` the same person has sent before, this answers 200
+    with the finding that request made, and stores nothing.
+    """
     location = from_geojson(body.location, allowed=["Point"])
     outline = from_geojson(body.outline, allowed=OUTLINE_TYPES) if body.outline is not None else None
-    finding = findings.create_finding(
-        db,
-        user,
-        location=location,  # pyright: ignore[reportArgumentType]
-        feature_class=body.feature_class,
-        title=body.title,
-        description=body.description,
-        period=body.period,
-        outline=outline,
-        view_state=body.view_state.to_stored() if body.view_state is not None else None,
-        requested_sensitivity=body.sensitivity,
-    )
+    fields = {
+        "location": location,
+        "feature_class": body.feature_class,
+        "title": body.title,
+        "description": body.description,
+        "period": body.period,
+        "outline": outline,
+        "view_state": body.view_state.to_stored() if body.view_state is not None else None,
+        "requested_sensitivity": body.sensitivity,
+    }
+    if body.client_ref is None:
+        finding = findings.create_finding(db, user, **fields)
+    else:
+        finding, created = findings.create_finding_once(db, user, body.client_ref, **fields)
+        if not created:
+            response.status_code = status.HTTP_200_OK
     db.commit()
     private(response)
     return detail(db, finding, user)

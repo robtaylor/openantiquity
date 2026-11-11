@@ -43,6 +43,7 @@ from sqlalchemy import (
     func,
     or_,
     select,
+    text,
     true,
     tuple_,
     update,
@@ -58,6 +59,7 @@ from fieldclub.errors import (
     NotFoundError,
     ValidationFailedError,
 )
+from fieldclub.errors import FindingNotFoundError as FindingNotFoundError
 from fieldclub.models import (
     Comment,
     Evidence,
@@ -108,11 +110,6 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------------------------------
 # Errors
 # --------------------------------------------------------------------------
-
-
-class FindingNotFoundError(NotFoundError):
-    code = "finding_not_found"
-    message = "There's no finding with that id."
 
 
 class OutsideBritishIslesError(ValidationFailedError):
@@ -576,11 +573,13 @@ def create_finding(
     outline: BaseGeometry | None = None,
     view_state: dict[str, Any] | None = None,
     requested_sensitivity: Sensitivity | str | None = None,
+    client_ref: str | None = None,
 ) -> Finding:
     """Save a new finding, follow it for its finder, assess it, and record `finding_created`.
 
     The public id is safe under concurrency (`ids.insert_with_public_id`). The
-    starting level is `sensitivity.starting_sensitivity`.
+    starting level is `sensitivity.starting_sensitivity`. A `client_ref` is
+    stored for `create_finding_once`, which is the way to pass one.
     """
     feature_class = FeatureClass(feature_class)
     check_in_british_isles(location)
@@ -604,6 +603,7 @@ def create_finding(
             sensitivity=level.value,
             view_state=view_state or {},
             nation=nation,
+            client_ref=client_ref,
         ),
         PUBLIC_ID_CONSTRAINT,
     )
@@ -612,6 +612,35 @@ def create_finding(
     activity.record(db, ActivityKind.FINDING_CREATED, author, finding)
     reassess(db, lock(db, finding), author)
     return finding
+
+
+# First key of the two-part advisory lock that serialises one person's
+# requests with one client reference. The second is a hash of both.
+_CLIENT_REF_LOCK = 5_867_003
+CLIENT_REF_MAX = 64
+
+
+def create_finding_once(db: Session, author: User, client_ref: str, **fields: Any) -> tuple[Finding, bool]:
+    """The finding `author` made with `client_ref`, or a new one made with `fields`, and whether it is new.
+
+    A draft can be sent twice, or twice at once from two tabs. Both requests
+    take a transaction-level advisory lock on the person and the reference
+    before looking, so the second waits until the first commits and then
+    finds its finding. The unique index on the two columns backs this up.
+    What the second request says is ignored: the reference names the draft,
+    and the draft was saved.
+    """
+    assert 1 <= len(client_ref) <= CLIENT_REF_MAX, "a client reference is 1 to 64 characters"
+    db.execute(
+        text("SELECT pg_advisory_xact_lock(:namespace, hashtext(:key))"),
+        {"namespace": _CLIENT_REF_LOCK, "key": f"{author.id}:{client_ref}"},
+    )
+    existing = db.scalar(
+        select(Finding).where(Finding.author_id == author.id, Finding.client_ref == client_ref)
+    )
+    if existing is not None:
+        return existing, False
+    return create_finding(db, author, client_ref=client_ref, **fields), True
 
 
 _EDITABLE = frozenset(

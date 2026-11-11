@@ -114,6 +114,27 @@ class TileNotFoundError(NotFoundError):
     message = "There is no tile with that address."
 
 
+class FindingNotFoundError(NotFoundError):
+    """A finding that doesn't exist or that this viewer may not see: the two answer alike."""
+
+    code = "finding_not_found"
+    message = "There's no finding with that id."
+
+
+class InvestigationNotFoundError(NotFoundError):
+    """An investigation that doesn't exist or that this viewer may not find."""
+
+    code = "investigation_not_found"
+    message = "There's no investigation with that id."
+
+
+class UserNotFoundError(NotFoundError):
+    """A handle nobody has, or the profile of a deleted or banned account."""
+
+    code = "user_not_found"
+    message = "There's nobody with that handle."
+
+
 class MediaNotFoundError(NotFoundError):
     """A photo that doesn't exist or that this viewer may not see: the two answer alike."""
 

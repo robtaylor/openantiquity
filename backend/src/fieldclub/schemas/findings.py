@@ -109,7 +109,7 @@ class ViewState(BaseModel):
         return self.model_dump(exclude_none=True)
 
 
-class LocationOut(ApiModel):
+class Location(ApiModel):
     """A finding's position as this viewer may see it (Decision 0005)."""
 
     lon: float
@@ -124,10 +124,10 @@ class LocationOut(ApiModel):
     outline: GeoJSONGeometry | None
 
 
-def location_out(finding: Finding, viewer: User | None) -> LocationOut:
+def location_out(finding: Finding, viewer: User | None) -> Location:
     """The one way a response gets a finding's position."""
     seen = sensitivity.visible_location(finding, viewer)
-    return LocationOut(
+    return Location(
         lon=round(seen.lon, 6),
         lat=round(seen.lat, 6),
         obscured=seen.obscured,
@@ -178,6 +178,10 @@ class FindingCreate(RequestModel):
     view_state: ViewState | None = None
     # A request below the class default is honoured only from a moderator.
     sensitivity: Sensitivity | None = None
+    # The browser's own name for the draft this saves, up to 64 printable
+    # ASCII characters without spaces, such as a UUID. Sent again by the same
+    # person, it answers 200 with the finding already made and stores nothing.
+    client_ref: str | None = Field(default=None, pattern=r"^[\x21-\x7e]{1,64}$")
 
 
 class FindingUpdate(RequestModel):
@@ -213,7 +217,7 @@ class FindingSummary(ApiModel):
     state_reason: str | None
     confidence: int
     sensitivity: Sensitivity
-    location: LocationOut
+    location: Location
     author: PublicUser
     created_at: datetime
     updated_at: datetime
@@ -622,7 +626,7 @@ class TaskItem(ApiModel):
 
     public_id: str
     code: NextStepCode
-    place: LocationOut
+    place: Location
     view_state: ViewState
     step: NextStepOut | None
     finding: TaskFinding | None
@@ -669,7 +673,7 @@ class VoteIn(RequestModel):
     value: Literal[-1, 0, 1]
 
 
-class VoteOut(ApiModel):
+class Vote(ApiModel):
     evidence_id: int
     value: int
 
