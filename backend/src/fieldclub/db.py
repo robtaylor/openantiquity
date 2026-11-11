@@ -15,7 +15,7 @@ import logging
 from collections.abc import Generator, Sequence
 from importlib import resources
 
-from sqlalchemy import Engine, MetaData, create_engine, text
+from sqlalchemy import URL, Engine, MetaData, create_engine, event, make_url, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -53,15 +53,42 @@ def is_unique_violation(exc: IntegrityError, constraint: str) -> bool:
     return constraint_name(exc) == constraint
 
 
+# libpq's TCP settings for every connection. A machine that Fly suspended and
+# resumed may hold connections the database has long dropped. Keepalives find
+# a silent one within about a minute however idle it is, and the user timeout
+# ends one whose sent data goes unanswered for 30 s, instead of the quarter of
+# an hour the kernel would otherwise wait. Linux honours all of them.
+KEEPALIVES: dict[str, int] = {
+    "keepalives": 1,
+    "keepalives_idle": 30,
+    "keepalives_interval": 10,
+    "keepalives_count": 3,
+    "tcp_user_timeout": 30_000,
+}
+
+
+def describe(url: str | URL) -> str:
+    """The address with its password masked, safe to log."""
+    return make_url(url).render_as_string(hide_password=True)
+
+
 def _make_engine(url: str) -> Engine:
     settings = get_settings()
-    return create_engine(
+    engine = create_engine(
         url,
         pool_size=settings.db_pool_size,
         max_overflow=settings.db_max_overflow,
         pool_pre_ping=True,
         pool_recycle=1800,
+        connect_args=KEEPALIVES,
     )
+
+    def first_connect(*_: object) -> None:
+        # Once per engine, when logging is set up, in the API and every command alike.
+        logger.info("Connected to the database at %s", describe(url))
+
+    event.listen(engine, "first_connect", first_connect)
+    return engine
 
 
 # create_engine() opens no connection, so building it at import time is cheap
@@ -163,7 +190,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.parse_args(argv)
     logging.basicConfig(level=get_settings().log_level)
     create_schema()
-    print(f"Schema created in {get_engine().url.render_as_string(hide_password=True)}")
+    print(f"Schema created in {describe(get_engine().url)}")
 
 
 if __name__ == "__main__":

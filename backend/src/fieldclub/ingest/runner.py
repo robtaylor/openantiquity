@@ -55,6 +55,7 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from fieldclub.config import get_settings
@@ -108,6 +109,11 @@ _UPDATED_COLUMNS = (
 class IngestBusyError(ConflictError):
     code = "ingest_busy"
     message = "Another ingest run for this source is in progress."
+
+
+class IngestLockLostError(ConflictError):
+    code = "ingest_lock_lost"
+    message = "The ingest run lost its lock on the source, so another run may have started."
 
 
 @dataclass
@@ -337,20 +343,37 @@ def upsert_source(db: Session, info: SourceInfo, obtained: datetime | None = Non
 
 
 @contextmanager
-def _source_lock(engine: Engine, source_key: str) -> Iterator[None]:
+def _source_lock(engine: Engine, source_key: str) -> Iterator[Callable[[], None]]:
     """Hold an advisory lock for the source on a connection of its own.
 
     A session gives its connection back to the pool at every commit, so the
     lock can't live on the session's connection.
+
+    The lock lasts as long as that connection, which can die unseen while the
+    run works on others. Yields a check that raises `IngestLockLostError` once
+    it has: call it before a step that must not overlap another run.
     """
     params = {"namespace": _LOCK_NAMESPACE, "key": source_key}
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         if not conn.scalar(text("SELECT pg_try_advisory_lock(:namespace, hashtext(:key))"), params):
             raise IngestBusyError(f"Another ingest run for {source_key} is in progress.")
+
+        def still_held() -> None:
+            # A connection never reconnects by itself, so while it answers it
+            # is the session that took the lock, and the lock is still held.
+            try:
+                conn.execute(text("SELECT 1"))
+            except DBAPIError as exc:
+                raise IngestLockLostError(f"The lock on {source_key} went with its connection.") from exc
+
         try:
-            yield
+            yield still_held
         finally:
-            conn.execute(text("SELECT pg_advisory_unlock(:namespace, hashtext(:key))"), params)
+            try:
+                conn.execute(text("SELECT pg_advisory_unlock(:namespace, hashtext(:key))"), params)
+            except SQLAlchemyError:
+                # A lock whose connection has gone has gone with it.
+                logger.warning("Couldn't release the lock on %s: its connection had gone", source_key)
 
 
 # The reference loaders in `ingest/reference/` take the same lock.
@@ -478,7 +501,7 @@ def run_connector(
     with factory() as db:
         bind = db.get_bind()
         engine = bind if isinstance(bind, Engine) else bind.engine
-        with _source_lock(engine, info.key):
+        with _source_lock(engine, info.key) as still_held:
             upsert_source(db, info)
             # We hold the lock, so a run still marked as running was killed.
             db.execute(
@@ -502,6 +525,8 @@ def run_connector(
                         )
                     if not allow_shrink:
                         _check_shrink(db, info.key, started_at, stats)
+                    # Deleting can't be undone, and another run would have its own start time.
+                    still_held()
                     deleted = db.execute(
                         delete(Record).where(Record.source_key == info.key, Record.ingested_at != started_at)
                     )

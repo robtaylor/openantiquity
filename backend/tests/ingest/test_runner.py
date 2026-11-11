@@ -498,6 +498,41 @@ def test_two_runs_of_one_source_cannot_overlap(db: Session, database: Engine) ->
     assert held_source_locks(database) == 0
 
 
+def test_a_run_whose_lock_went_with_its_connection_deletes_nothing(db: Session, database: Engine) -> None:
+    run_connector(FakeConnector([record("A"), record("B"), record("C")]))
+
+    def lock_holder() -> int:
+        query = text(
+            "SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND classid = :namespace "
+            "AND database = (SELECT oid FROM pg_database WHERE datname = current_database())"
+        )
+        with database.connect() as conn:
+            pids = conn.scalars(query, {"namespace": runner._LOCK_NAMESPACE}).all()
+        assert len(pids) == 1, pids
+        return pids[0]
+
+    class LosesItsLock(FakeConnector):
+        def fetch(self, *, bbox=None, limit=None):
+            yield record("A")
+            # As a machine suspended for a while, or a database that restarted, might find it.
+            with database.connect() as conn:
+                assert conn.scalar(text("SELECT pg_terminate_backend(:pid)"), {"pid": lock_holder()})
+            yield record("B")
+
+    with pytest.raises(IngestFailedError) as caught:
+        run_connector(LosesItsLock())
+    assert isinstance(caught.value.__cause__, runner.IngestLockLostError)
+    # C wasn't seen, but a run that may overlap another never deletes.
+    assert set(names(db)) == {"A", "B", "C"}
+    last = runs(db)[-1]
+    assert last.status == "failed"
+    assert last.error is not None
+    assert "IngestLockLostError" in last.error
+    assert held_source_locks(database) == 0
+    run_connector(FakeConnector([record("A"), record("B")]))
+    assert set(names(db)) == {"A", "B"}
+
+
 def held_source_locks(engine: Engine) -> int:
     """Source locks held in this session's own database.
 

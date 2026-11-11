@@ -28,7 +28,7 @@ from fieldclub.api.deps import PRIVATE_CACHE
 from fieldclub.auth.csrf import ClientHeaderMiddleware
 from fieldclub.auth.oauth import FORM_POST_CALLBACK_PATHS
 from fieldclub.config import Settings, get_settings
-from fieldclub.db import create_schema
+from fieldclub.db import create_schema, describe
 from fieldclub.errors import install_error_handlers
 from fieldclub.services import events
 
@@ -288,6 +288,7 @@ def run() -> None:
 
     settings = get_settings()
     logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logger.info("The database is %s", describe(settings.database_url))
     config = uvicorn.Config(
         "fieldclub.main:create_app",
         factory=True,

@@ -295,3 +295,37 @@ def test_the_schema_command_builds_the_schema_with_no_arguments(monkeypatch: pyt
     monkeypatch.setattr(fieldclub_db, "create_schema", lambda: built.append(True))
     fieldclub_db.main([])
     assert built == [True]
+
+
+def test_the_address_used_is_logged_once_with_the_password_masked(
+    database: Engine, caplog: pytest.LogCaptureFixture
+) -> None:
+    password = database.url.password
+    assert password
+    engine = fieldclub_db._make_engine(database.url.render_as_string(hide_password=False))
+    try:
+        with caplog.at_level("INFO", logger="fieldclub.db"):
+            for _ in range(2):
+                with engine.connect() as conn:
+                    conn.execute(text("SELECT 1"))
+    finally:
+        engine.dispose()
+    logged = [record.getMessage() for record in caplog.records if record.name == "fieldclub.db"]
+    assert logged == [f"Connected to the database at {fieldclub_db.describe(database.url)}"]
+    assert f":{password}@" not in logged[0]
+    assert "***" in logged[0]
+    assert f"@{database.url.host}:" in logged[0]
+
+
+def test_every_connection_asks_for_tcp_keepalives(database: Engine) -> None:
+    engine = fieldclub_db._make_engine(database.url.render_as_string(hide_password=False))
+    try:
+        with engine.connect() as conn:
+            raw = conn.connection.dbapi_connection
+            assert raw is not None
+            params = raw.info.get_parameters()
+    finally:
+        engine.dispose()
+    assert {name: params.get(name) for name in fieldclub_db.KEEPALIVES} == {
+        name: str(value) for name, value in fieldclub_db.KEEPALIVES.items()
+    }

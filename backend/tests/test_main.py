@@ -20,7 +20,7 @@ from fieldclub import __version__, main
 from fieldclub.config import get_settings
 from fieldclub.errors import ConflictError, NotFoundError, RateLimitedError
 from fieldclub.main import create_app, discover_routers, mount_frontend
-from tests.helpers import BASE_URL, WEB
+from tests.helpers import BASE_URL, WEB, settings
 
 # --------------------------------------------------------------------------
 # Router discovery
@@ -594,3 +594,23 @@ def test_run_starts_uvicorn_with_the_configured_host_and_port(monkeypatch: pytes
     with pytest.raises(RuntimeError, match="the hub went wrong"):
         asyncio.run(started["server"].shutdown())
     assert started["shut_down"] is True
+
+
+def test_run_logs_the_database_it_will_use_without_the_password(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    fake = types.ModuleType("uvicorn")
+    fake.Config = lambda app, **options: None  # type: ignore[attr-defined]
+    fake.Server = type("Server", (), {"__init__": lambda self, config: None, "run": lambda self: None})  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "uvicorn", fake)
+    monkeypatch.setattr(main.logging, "basicConfig", lambda **options: None)
+    # What Fly attaches, which the settings turn into the direct address.
+    monkeypatch.setenv(
+        "DATABASE_URL", "postgres://fly-user:never-log-this@pgbouncer.abc123.flympg.net/fly-db"
+    )
+    monkeypatch.delenv("FIELDCLUB_DATABASE_URL")
+    monkeypatch.setattr(main, "get_settings", lambda: settings())
+    with caplog.at_level("INFO", logger="fieldclub.main"):
+        main.run()
+    assert "postgresql+psycopg://fly-user:***@direct.abc123.flympg.net/fly-db" in caplog.text
+    assert "never-log-this" not in caplog.text

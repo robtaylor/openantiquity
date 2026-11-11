@@ -9,7 +9,9 @@ waits for a response to finish and a stream never does.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
+import socket
 import threading
 from collections.abc import Coroutine, Iterator
 from dataclasses import asdict
@@ -17,9 +19,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 import httpx
+import psycopg
 import pytest
 import uvicorn
 from fastapi import FastAPI
+from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -32,6 +36,8 @@ from tests.findings.support import create
 from tests.helpers import MakeUser
 
 TIMEOUT_S = 10.0
+# Long enough for a check to time out and psycopg to give up cancelling it.
+SILENT_S = 20.0
 
 
 def run[T](coroutine: Coroutine[Any, Any, T]) -> T:
@@ -360,6 +366,156 @@ def test_the_listener_reconnects_after_its_connection_is_killed(database: Any, s
         await hub.stop()
 
     run(scenario())
+
+
+class SilencingProxy:
+    """A TCP relay to the database that can go silent on the connections it already carries.
+
+    `silence()` stands for a machine Fly suspended and resumed, or a network
+    that dropped its state: those connections stay open, bytes sent on them
+    are taken and never delivered, and nothing ever comes back. Connections
+    made afterwards are relayed as usual.
+    """
+
+    def __init__(self, host: str, port: int) -> None:
+        self.target = (host, port)
+        self.listener = socket.create_server(("127.0.0.1", 0))
+        self.port = self.listener.getsockname()[1]
+        self.silenced: set[socket.socket] = set()
+        self.sockets: list[socket.socket] = []
+        self.guard = threading.Lock()
+        threading.Thread(target=self._accept, daemon=True).start()
+
+    def _accept(self) -> None:
+        while True:
+            try:
+                client, _ = self.listener.accept()
+            except OSError:
+                return
+            upstream = socket.create_connection(self.target)
+            with self.guard:
+                self.sockets += [client, upstream]
+            for source, sink in ((client, upstream), (upstream, client)):
+                threading.Thread(target=self._pump, args=(source, sink), daemon=True).start()
+
+    def _pump(self, source: socket.socket, sink: socket.socket) -> None:
+        while True:
+            try:
+                data = source.recv(65536)
+            except OSError:
+                return
+            if not data:
+                return
+            with self.guard:
+                silent = source in self.silenced
+            if not silent:
+                with contextlib.suppress(OSError):
+                    sink.sendall(data)
+
+    def silence(self) -> None:
+        with self.guard:
+            self.silenced.update(self.sockets)
+
+    def close(self) -> None:
+        self.listener.close()
+        with self.guard:
+            for sock in self.sockets:
+                sock.close()
+
+
+@pytest.fixture
+def silencing_proxy() -> Iterator[SilencingProxy]:
+    url = fieldclub_db.get_engine().url
+    assert url.host is not None
+    proxy = SilencingProxy(url.host, url.port or 5432)
+    yield proxy
+    proxy.close()
+
+
+def through(proxy: SilencingProxy) -> str:
+    return make_conninfo(events.conninfo(), host="127.0.0.1", port=str(proxy.port))
+
+
+def test_the_listener_replaces_a_connection_that_went_silent(
+    silencing_proxy: SilencingProxy, scene: dict[str, Any]
+) -> None:
+    async def scenario() -> None:
+        hub = EventHub(
+            through(silencing_proxy),
+            events.lookup_public,
+            queue_size=16,
+            max_per_address=4,
+            max_streams=20,
+            retry_delays_s=(0.05,),
+            idle_check_s=0.2,
+            check_timeout_s=0.5,
+        )
+        hub.start()
+        await asyncio.wait_for(hub.connected.wait(), TIMEOUT_S)
+        everything = hub.subscribe(StreamFilter(), "a")
+        before = hub.backend_pid
+        silencing_proxy.silence()
+        # No error ever arrives on the old connection: only the hub's own check can tell.
+        assert await received(everything, timeout=SILENT_S) is Signal.RESYNC
+        assert hub.backend_pid not in (None, before)
+        await comment_elsewhere(scene["near"], scene["talker"])
+        got = await received(everything)
+        assert isinstance(got, Announcement)
+        assert got.finding == scene["near"].public_id
+        await hub.stop()
+
+    asyncio.run(asyncio.wait_for(scenario(), SILENT_S * 2))
+
+
+def test_a_new_client_has_the_connection_checked_at_once(
+    silencing_proxy: SilencingProxy, scene: dict[str, Any]
+) -> None:
+    async def scenario() -> None:
+        # The timed check is an hour away, as the first visitor to a resumed machine might find it.
+        hub = EventHub(
+            through(silencing_proxy),
+            events.lookup_public,
+            queue_size=16,
+            max_per_address=4,
+            max_streams=20,
+            retry_delays_s=(0.05,),
+            idle_check_s=3600,
+            check_timeout_s=0.5,
+        )
+        hub.start()
+        await asyncio.wait_for(hub.connected.wait(), TIMEOUT_S)
+        await asyncio.sleep(0.1)
+        silencing_proxy.silence()
+        arriving = hub.subscribe(StreamFilter(), "a")
+        assert await received(arriving, timeout=SILENT_S) is Signal.RESYNC
+        await comment_elsewhere(scene["far"], scene["talker"])
+        got = await received(arriving)
+        assert isinstance(got, Announcement)
+        await hub.stop()
+
+    asyncio.run(asyncio.wait_for(scenario(), SILENT_S * 2))
+
+
+def test_the_listener_asks_for_tcp_keepalives(db: Session) -> None:
+    async def scenario() -> None:
+        hub = await started_hub()
+        pid = hub.backend_pid
+        await hub.stop()
+        assert pid is not None
+
+    seen: list[dict[str, Any]] = []
+    real = psycopg.AsyncConnection.connect
+
+    async def connect(conninfo: str, **kwargs: Any) -> Any:
+        seen.append(conninfo_to_dict(conninfo))
+        return await real(conninfo, **kwargs)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(psycopg.AsyncConnection, "connect", connect)
+        run(scenario())
+    assert seen
+    wanted = {name: str(value) for name, value in fieldclub_db.KEEPALIVES.items()}
+    assert all(params.items() >= wanted.items() for params in seen)
 
 
 def test_caps_per_address_and_per_process(db: Session) -> None:

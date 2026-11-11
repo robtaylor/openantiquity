@@ -27,10 +27,13 @@ How it is served (Decision 0001 makes every other endpoint synchronous):
 - The listener reconnects after any failure, waiting a little longer after
   each one in a row. Events sent while it was away are lost, so after a
   reconnect every client gets a `resync` signal and should refetch what it
-  shows. With no event for `idle_check_s` the hub runs `SELECT 1`, so a
-  connection that died silently is noticed. An event that can't be checked
-  is skipped, never announced unchecked. Should the listener stop all the
-  same, the next client to subscribe starts it again.
+  shows. Every `idle_check_s`, whatever arrives, and as soon as a client
+  subscribes, the hub runs `SELECT 1` and gives up on the connection if no
+  answer comes within `check_timeout_s`. TCP keepalives (`db.KEEPALIVES`)
+  watch it in between. So a connection that died silently, as one may while
+  Fly has the machine suspended, is noticed promptly and replaced. An event
+  that can't be checked is skipped, never announced unchecked. Should the
+  listener stop all the same, the next client to subscribe starts it again.
 - `stop()` ends every client with a `closed` signal, so their responses
   finish and the server can shut down without waiting for them.
 
@@ -53,8 +56,9 @@ from enum import StrEnum
 from typing import Any
 
 import psycopg
+from psycopg.conninfo import make_conninfo
 
-from fieldclub.db import SessionLocal, get_engine
+from fieldclub.db import KEEPALIVES, SessionLocal, get_engine
 from fieldclub.errors import AppError
 from fieldclub.models.common import point_lon_lat
 from fieldclub.schemas.common import BBox, is_bbox
@@ -65,7 +69,12 @@ logger = logging.getLogger(__name__)
 
 # How long to wait before reconnecting after each failure in a row.
 RETRY_DELAYS_S: tuple[float, ...] = (0.25, 1.0, 2.0, 5.0, 10.0)
-IDLE_CHECK_S = 30.0
+IDLE_CHECK_S = 15.0
+# How long `SELECT 1` may take before the connection is given up for dead.
+CHECK_TIMEOUT_S = 10.0
+# The longest the listener waits for notifications before it looks whether a
+# check is due, so a client's request for one is answered within this.
+_SLICE_S = 1.0
 
 _PAYLOAD_KEYS = frozenset({"id", "kind", "finding", "investigation", "actor"})
 
@@ -204,17 +213,21 @@ class EventHub:
         max_per_address: int,
         max_streams: int,
         idle_check_s: float = IDLE_CHECK_S,
+        check_timeout_s: float = CHECK_TIMEOUT_S,
         retry_delays_s: Sequence[float] = RETRY_DELAYS_S,
     ) -> None:
         assert max_per_address >= 1, "the cap per address must allow one stream"
         assert max_streams >= 1, "the cap per process must allow one stream"
         assert retry_delays_s, "give at least one retry delay"
+        assert idle_check_s > 0, "checks need a positive interval"
+        assert check_timeout_s > 0, "a check needs a positive timeout"
         self.conninfo = conninfo
         self.lookup = lookup
         self.queue_size = queue_size
         self.max_per_address = max_per_address
         self.max_streams = max_streams
         self.idle_check_s = idle_check_s
+        self.check_timeout_s = check_timeout_s
         self.retry_delays_s = tuple(retry_delays_s)
         self.loop = asyncio.get_running_loop()
         self.connected = asyncio.Event()
@@ -230,6 +243,10 @@ class EventHub:
         self._stopped = False
         # Set when the listener stopped unexpectedly, so its successor sends `resync`.
         self._lost = False
+        # Set when a client arrives, so the listener checks its connection at
+        # once: the first visitor to a machine just resumed may otherwise wait
+        # for the next timed check to learn that its events can't come.
+        self._check_soon = False
 
     # Clients ---------------------------------------------------------------
 
@@ -242,6 +259,7 @@ class EventHub:
         self._subscriptions.add(subscription)
         self._held.add(subscription)
         self._per_address[address] = self._per_address.get(address, 0) + 1
+        self._check_soon = True
         self.start()
         return subscription
 
@@ -335,29 +353,54 @@ class EventHub:
         self.connected.clear()
         self.backend_pid = None
 
+    async def _check(self, conn: psycopg.AsyncConnection[Any]) -> None:
+        """Run `SELECT 1`, and raise `TimeoutError` when no answer comes within `check_timeout_s`."""
+        probe = asyncio.ensure_future(conn.execute("SELECT 1"))
+        try:
+            done, _ = await asyncio.wait([probe], timeout=self.check_timeout_s)
+        finally:
+            if not probe.done():
+                # Cancelling the query would have psycopg spend ten seconds
+                # asking the server to cancel one it never received. Close the
+                # connection under it instead, so the cancel is immediate.
+                conn.pgconn.finish()
+                probe.cancel()
+                await asyncio.wait([probe])
+                if not probe.cancelled():
+                    probe.exception()
+        if not done:
+            raise TimeoutError(f"The database didn't answer a check within {self.check_timeout_s:.1f} s")
+        probe.result()
+
     async def _listen(self) -> None:
         failures = 0
         while True:
             try:
-                async with await psycopg.AsyncConnection.connect(self.conninfo, autocommit=True) as conn:
+                address = make_conninfo(self.conninfo, **KEEPALIVES)
+                async with await psycopg.AsyncConnection.connect(address, autocommit=True) as conn:
                     await conn.execute(f"LISTEN {EVENT_CHANNEL}")
                     self.backend_pid = conn.info.backend_pid
                     if failures or self._lost:
                         logger.info("The event listener is back after %d failed attempts", failures)
                         self._broadcast(Signal.RESYNC)
-                    failures, self._lost = 0, False
+                    failures, self._lost, self._check_soon = 0, False, False
                     self.connected.set()
+                    checked = self.loop.time()
                     while True:
-                        async for notice in conn.notifies(timeout=self.idle_check_s):
+                        async for notice in conn.notifies(timeout=min(self.idle_check_s, _SLICE_S)):
                             await self.deliver(notice.payload)
-                        # Quiet for a while: make sure the connection is still there.
-                        await conn.execute("SELECT 1")
+                        if self._check_soon or self.loop.time() - checked >= self.idle_check_s:
+                            # Make sure the connection is still there, without waiting for traffic.
+                            self._check_soon = False
+                            await self._check(conn)
+                            checked = self.loop.time()
             except Exception as exc:
                 # A lost connection, or anything else: either way, start again.
                 self.connected.clear()
                 self.backend_pid = None
                 delay = self.retry_delays_s[min(failures, len(self.retry_delays_s) - 1)]
                 failures += 1
+                # A check that got no answer is a TimeoutError, which is an OSError.
                 expected = isinstance(exc, (psycopg.Error, OSError))
                 logger.warning(
                     "The event listener failed (%s). Retrying in %.2f s",
