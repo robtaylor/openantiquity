@@ -38,14 +38,7 @@ def test_views_in_order() -> None:
         "raking",
         "ea_hillshade",
         "nls_hillshade",
-        "nls_air_photos_1944",
         "eox_sentinel_2016",
-        "nls_six_inch_1888",
-        "nls_25k_1945",
-        "nls_one_inch_1920s",
-        "nls_bartholomew_1897",
-        "nls_bartholomew_1940s",
-        "nls_ten_mile",
         "osm_standard",
         "bgs_bedrock_625k",
         "bgs_superficial_50k",
@@ -71,6 +64,16 @@ def test_every_work_list_layer_is_offered_or_left_out_with_a_reason(worklist: di
     assert not offered & left_out
     assert offered | left_out == set(worklist)
     assert all(reason.strip() for reason in layers.LEFT_OUT.values())
+
+
+def test_only_layers_the_work_list_marks_clean_are_offered(worklist: dict[str, dict]) -> None:
+    assert [key for key in layers.FROM_WORKLIST if worklist[key]["clean"] is not True] == []
+    # Those held back for NLS are the work-list's own unclean NLS entries, and none is served.
+    assert set(layers.HELD_BACK) == layers.AWAITING_NLS
+    assert all(worklist[key]["clean"] is False for key in layers.AWAITING_NLS)
+    assert set(layers.AWAITING_NLS) <= set(layers.LEFT_OUT)
+    served = {view["id"] for view in dump()["views"]}
+    assert not served & set(layers.HELD_BACK.values())
 
 
 def test_a_published_layer_is_the_work_lists_word_for_word(worklist: dict[str, dict]) -> None:

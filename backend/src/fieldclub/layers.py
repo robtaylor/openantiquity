@@ -25,9 +25,14 @@ work-list (`docs/sources/worklists/map-layers.json`, written up in
 work-list id, and its tile address, zoom range, bounds and attribution are the
 work-list's word for word (`tests/test_layers.py` holds them to it).
 `LEFT_OUT` gives every other work-list entry and why it isn't offered. A
-layer is offered when the research found it usable from a browser with no
-key, its terms are met by a non-commercial project (Decision 0004), and its
-address, terms and cross-origin answer were all checked. The views come
+layer is offered when the work-list marks it `clean`: the research found it
+usable from a browser with no key, its terms are met by a non-commercial
+project (Decision 0004), and its address, terms and cross-origin answer were
+all checked. The National Library of Scotland's map and air photo tilesets
+are described here but held back (`AWAITING_NLS`) until NLS confirms in
+writing that a public app may hot-link them, as the research advised. To
+offer one, take it out of `AWAITING_NLS` and mark it `clean` in the
+work-list with the reason. The views come
 grouped as the layer panel shows them: LIDAR, aerial imagery, historic maps,
 maps, then geology.
 """
@@ -173,6 +178,21 @@ BGS_625K_TERMS = Terms(
 )
 
 
+# Work-list entries described below but not offered until NLS confirms that a public app may
+# hot-link its tilesets. The work-list marks each of them not `clean` for that reason.
+AWAITING_NLS = frozenset(
+    {
+        "nls-os-air-photo-mosaics-1944-50",
+        "nls-os-six-inch-1888-1913",
+        "nls-os-25k-outline-1945-65",
+        "nls-os-one-inch-1920s-40s",
+        "nls-bartholomew-half-inch-1897-1907",
+        "nls-bartholomew-half-inch-1940s",
+        "nls-ten-mile-general",
+    }
+)
+
+
 def published_view(
     worklist_id: str,
     view_id: str,
@@ -187,8 +207,11 @@ def published_view(
     maxzoom: int,
     bounds: tuple[float, float, float, float] | None = None,
 ) -> RasterView:
-    """A 256-pixel layer from the work-list. `FROM_WORKLIST` records which entry it is."""
-    FROM_WORKLIST[worklist_id] = view_id
+    """A 256-pixel layer from the work-list. `FROM_WORKLIST` records which entry it is.
+
+    One in `AWAITING_NLS` is recorded in `HELD_BACK` instead, and `offered` leaves it out.
+    """
+    (HELD_BACK if worklist_id in AWAITING_NLS else FROM_WORKLIST)[worklist_id] = view_id
     return RasterView(
         id=view_id,
         title=title,
@@ -207,6 +230,15 @@ def published_view(
 
 # The work-list id of each layer offered, to the view's id.
 FROM_WORKLIST: dict[str, str] = {}
+# The same for the layers described but held back.
+HELD_BACK: dict[str, str] = {}
+
+
+def offered(views: list[View]) -> list[View]:
+    """The views not held back."""
+    held = set(HELD_BACK.values())
+    return [view for view in views if view.id not in held]
+
 
 PUBLISHED_LIDAR: list[View] = [
     published_view(
@@ -384,11 +416,16 @@ PUBLISHED_GEOLOGY: list[View] = [
 _NOT_THIS_RELEASE = "Covers {} only, which isn't in the first release (England)."
 _NLS_NOT_OFFERED = "NLS doesn't list this tileset as offered for reuse: ask NLS before hot-linking it."
 _BRITISH_LIBRARY = "The British Library's permission is needed before a public app shows it."
+_AWAITING_NLS = (
+    "Awaiting NLS's written confirmation that a public app may hot-link its tilesets, "
+    "which the research advised getting before launch."
+)
 _SCOTLAND = (
     _NOT_THIS_RELEASE.format("Scotland")
     + " The reports also disagreed on its cross-origin headers, and the phase licences weren't checked."
 )
 LEFT_OUT: dict[str, str] = {
+    **dict.fromkeys(sorted(AWAITING_NLS), _AWAITING_NLS),
     "ea-dsp-hillshade-2022-wms": "The same hillshade as the WMTS layer offered, through a slower interface.",
     "ea-imageserver-2025-multidirectional": (
         "An on-demand image service at 0.5 to 2 s a tile, which the research said to keep off the hot path "
@@ -470,9 +507,9 @@ VIEWS: list[View] = [
         attribution=LIDAR_ATTRIBUTION,
         **LIDAR_TERMS,
     ),
-    *PUBLISHED_LIDAR,
-    *PUBLISHED_IMAGERY,
-    *PUBLISHED_HISTORIC,
+    *offered(PUBLISHED_LIDAR),
+    *offered(PUBLISHED_IMAGERY),
+    *offered(PUBLISHED_HISTORIC),
     RasterView(
         id="osm_standard",
         title="OpenStreetMap",
@@ -487,7 +524,7 @@ VIEWS: list[View] = [
         bounds=None,
         default=False,
     ),
-    *PUBLISHED_GEOLOGY,
+    *offered(PUBLISHED_GEOLOGY),
 ]
 
 DEM = DemSource(

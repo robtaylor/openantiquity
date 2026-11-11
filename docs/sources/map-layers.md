@@ -316,7 +316,7 @@ Three-band RGB hillshades made with the Relief Visualization Toolbox from public
 | Licence | Environment Agency data under OGL | "Contains public sector information licensed under the Open Government Licence v3.0." | Per-phase Crown copyright, phase licences not checked |
 | Attribution | "(c) Environment Agency copyright and/or database right 2022. All rights reserved." Also credit NLS and RVT | As the licence line | Phase 1: "Crown copyright Scottish Government, SEPA and Scottish Water (2012)". Hebrides: "Copyright SEPA (2019)". Other phases per the NLS guide |
 
-All three use the host and CORS terms above, with reuse class open and suggested mode live. For Scotland the class holds only if each phase's own licence is open. The addresses are relative to the NLS host.
+All three use the host and CORS terms above, with reuse class open and suggested mode live. The research reports disagreed on whether the LIDAR tiles answer a third-party origin. A recheck on 2026-11-11 of an England tile at z14, sent with `Origin: https://fieldclub.example`, got 200 with `Access-Control-Allow-Origin: *` and `Vary: Origin`. For Scotland the class holds only if each phase's own licence is open. The addresses are relative to the NLS host.
 
 ```json
 {
