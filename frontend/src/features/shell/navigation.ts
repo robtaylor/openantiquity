@@ -11,6 +11,13 @@ import {
   ScanSearch,
 } from "lucide-react";
 
+/**
+ * `/` is Explore, which lists the findings in view. The bare map, with no
+ * panel open, is `/?panel=none`, and closing a panel goes there.
+ */
+export const BARE_MAP_PARAM = "none";
+export const BARE_MAP_PATH = `/?panel=${BARE_MAP_PARAM}`;
+
 export interface Mode {
   id: string;
   /** Full name, for tooltips and screen readers. */

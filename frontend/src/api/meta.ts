@@ -102,6 +102,12 @@ export interface FeatureClass {
   label: string;
   hint: string;
   fish_term: string;
+  /**
+   * The level a new finding of this class starts at (docs/ARCHITECTURE.md,
+   * "Location sensitivity"). The backend doesn't send it yet, so the form
+   * explains a class's level only when it appears.
+   */
+  default_sensitivity?: "open" | "protected" | "restricted";
 }
 
 export interface Period {
@@ -203,7 +209,17 @@ export interface Meta {
   vocab: Vocab;
   layers: MetaLayers;
   sources: SourceSummary[];
-  notices: { field_visit: Record<string, string[]>; field_visit_16_17: string; sensitivity: string };
+  notices: {
+    field_visit: Record<string, string[]>;
+    field_visit_16_17: string;
+    sensitivity: string;
+    /**
+     * Where to report an object found in the ground, by nation (Decision
+     * 0005). The backend doesn't send it yet; until it does, the form takes
+     * the reporting line from that nation's `field_visit` notices.
+     */
+    finds?: Record<string, string>;
+  };
 }
 
 function check(condition: boolean, message: string): asserts condition {

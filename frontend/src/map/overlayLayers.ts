@@ -26,6 +26,17 @@ export const RECORDS_SOURCE_LAYER = "records";
 const OUTLINE = COLOURS.bg;
 const OUTLINE_WIDTH = 1.5;
 
+/**
+ * The circle layers that draw a finding at its exact position, which a tap
+ * or click on the map picks findings from. Obscured findings are squares,
+ * picked by the square under the tap.
+ */
+export const FINDING_POINT_LAYERS = {
+  points: "findings-points",
+  known: "findings-known",
+  ruledOut: "findings-ruled-out",
+} as const;
+
 /** States that are not drawn as ordinary filled circles. */
 const SPECIAL_STATES = ["known", "ruled_out", "withdrawn"];
 
@@ -162,10 +173,10 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
       opacity: { "line-opacity": 0.9 },
       ruledOutOnly: true,
     },
-    ...ring("findings-ruled-out", ruledOut, 3, ruledOutColour, 1.5, true),
-    ...ring("findings-known", known, ringRadius, colour, 2.5),
+    ...ring(FINDING_POINT_LAYERS.ruledOut, ruledOut, 3, ruledOutColour, 1.5, true),
+    ...ring(FINDING_POINT_LAYERS.known, known, ringRadius, colour, 2.5),
     {
-      layer: circle("findings-points", points, {
+      layer: circle(FINDING_POINT_LAYERS.points, points, {
         "circle-radius": radius,
         "circle-color": colour,
         "circle-stroke-color": OUTLINE,

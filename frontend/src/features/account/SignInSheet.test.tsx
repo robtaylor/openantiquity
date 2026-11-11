@@ -177,7 +177,8 @@ describe("a failed provider sign-in", () => {
     renderShell("/?signin_error=%3Cimg%20src%3Dx%3EYou%20won%20a%20prize", <Address />);
     const sheet = await screen.findByRole("dialog", { name: "Sign in" });
     expect(within(sheet).getByRole("alert")).toHaveTextContent("Signing in didn't work");
-    expect(document.body.textContent).not.toContain("prize");
+    // The address is printed on the page by the test itself, so the page is checked once it has changed.
     await waitFor(() => expect(screen.getByTestId("address").textContent).not.toContain("signin_error"));
+    expect(document.body.textContent).not.toContain("prize");
   });
 });

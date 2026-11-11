@@ -81,7 +81,7 @@ test.describe("when things go wrong", () => {
     await page.route(/^https:\/\/s3\.amazonaws\.com\//, (route) =>
       failing ? route.fulfill({ status: 500 }) : route.fallback(),
     );
-    await openMap(page, "/#m=15/51.4286/-1.8542/0/0&v=raking&s=300/18&x=3&t=0/1.5&o=osm:60");
+    await openMap(page, "/?panel=none#m=15/51.4286/-1.8542/0/0&v=raking&s=300/18&x=3&t=0/1.5&o=osm:60");
 
     const notice = page.getByRole("alert").filter({ hasText: "The height data isn't loading" });
     await expect(notice).toBeVisible({ timeout: REPORTED_WITHIN_MS });

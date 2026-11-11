@@ -253,12 +253,15 @@ describe("Shell", () => {
     expect(useMapStore.getState().sun).toEqual({ azimuth: 90, altitude: 20 });
   });
 
-  it("gives feedback when the primary action is pressed", async () => {
+  it("opens the marking panel when the primary action is pressed", async () => {
     const user = userEvent.setup();
     renderShell();
     await mapReady();
     await user.click(screen.getByRole("button", { name: "Mark a finding" }));
-    expect(screen.getByText(/Marking a finding isn't built yet/)).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Mark a finding" })).toBeInTheDocument();
+    // While the mark is being placed, the primary action places it.
+    expect(screen.getByRole("button", { name: "Place it here" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mark a finding" })).toBeNull();
   });
 
   it("answers a search, though search is not built yet", async () => {

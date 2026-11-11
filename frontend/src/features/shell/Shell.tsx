@@ -1,4 +1,4 @@
-import { Layers, MapPinPlus, Unplug } from "lucide-react";
+import { Layers, Unplug } from "lucide-react";
 import {
   type CSSProperties,
   lazy,
@@ -27,15 +27,20 @@ import { IconButton } from "../../ui/IconButton.js";
 import { SHEET_PEEK_HEIGHT, type SheetStop, sheetHeights } from "../../ui/Sheet.js";
 import { Skeleton } from "../../ui/Skeleton.js";
 import { ToastViewport } from "../../ui/Toast.js";
-import { toast } from "../../ui/toastStore.js";
 import { LAYOUT } from "../../ui/tokens.js";
 import { AccountLayer } from "../account/AccountLayer.js";
 import { AccountPage } from "../account/AccountPage.js";
 import { EmailLinkPage } from "../account/EmailLinkPage.js";
 import { EMAIL_LINK_PATH } from "../account/emailLink.js";
 import { DraftsBar } from "../drafts/DraftsBar.js";
+import { ExploreLayer } from "../explore/ExploreLayer.js";
+import { ExplorePanel } from "../explore/ExplorePanel.js";
+import { MarkButton } from "../mark/MarkButton.js";
+import { isMarkPath, MarkLayer } from "../mark/MarkLayer.js";
+import { MARK_PATH, MarkPanel } from "../mark/MarkPanel.js";
 import { APP_NAME, NotFoundPanel, PLACEHOLDER_ROUTES, PlaceholderPanel } from "../placeholders.js";
 import { BrandMark, ModeRail } from "./ModeRail.js";
+import { BARE_MAP_PARAM } from "./navigation.js";
 import { PanelFrame } from "./PanelFrame.js";
 import { type PanelEnvironment, PanelEnvironmentProvider } from "./panelContext.js";
 import { SearchBox } from "./SearchBox.js";
@@ -124,15 +129,20 @@ function ReadyShell({ meta }: { meta: Meta }) {
   const layersButton = useRef<HTMLButtonElement>(null);
 
   // The layer panel is a query parameter, so it can open over any mode and
-  // the URL still says what is on screen.
+  // the URL still says what is on screen. So is the bare map: `/` is Explore,
+  // and `/?panel=none` is the map with Explore put away.
   const layersOpen = searchParams.get("panel") === LAYERS_PARAM;
-  const panelOpen = layersOpen || location.pathname !== "/";
+  const bareMap = location.pathname === "/" && searchParams.get("panel") === BARE_MAP_PARAM;
+  const panelOpen = !bareMap;
 
-  // Every sheet opens half-way. The stop is kept with the panel it belongs
-  // to, so a different panel starts at half in the very render it appears.
-  const panelKey = layersOpen ? LAYERS_PARAM : location.pathname;
-  const [sheet, setSheet] = useState<{ panelKey: string; stop: SheetStop }>({ panelKey, stop: "half" });
-  const sheetStop = sheet.panelKey === panelKey ? sheet.stop : "half";
+  // A sheet opens half-way, except where the map is the point: Explore, and
+  // marking until the mark is placed, start at peek. The stop is kept with
+  // the panel it belongs to, so a different panel starts at its own stop in
+  // the very render it appears.
+  const panelKey = layersOpen ? LAYERS_PARAM : isMarkPath(location.pathname) ? MARK_PATH : location.pathname;
+  const firstStop: SheetStop = panelKey === "/" || panelKey === MARK_PATH ? "peek" : "half";
+  const [sheet, setSheet] = useState<{ panelKey: string; stop: SheetStop }>({ panelKey, stop: firstStop });
+  const sheetStop = sheet.panelKey === panelKey ? sheet.stop : firstStop;
   const setSheetStop = useCallback((stop: SheetStop) => setSheet({ panelKey, stop }), [panelKey]);
 
   const insets = useMemo<MapInsets>(
@@ -199,9 +209,13 @@ function ReadyShell({ meta }: { meta: Meta }) {
   // Closing the layer panel goes back to whatever it was opened over. Over a
   // mode such as Second look or Scan a square that is the mode's own panel,
   // because changing layer is part of doing the mode's work, not a way out of it.
+  // Opened over the bare map, it closes back to the bare map rather than to Explore.
+  const layersOverBareMap = useRef(false);
   const toggleLayers = useCallback(() => {
-    navigate({ pathname: location.pathname, search: layersOpen ? "" : `?panel=${LAYERS_PARAM}` });
-  }, [layersOpen, location.pathname, navigate]);
+    if (!layersOpen) layersOverBareMap.current = bareMap;
+    const back = layersOverBareMap.current && location.pathname === "/" ? `?panel=${BARE_MAP_PARAM}` : "";
+    navigate({ pathname: location.pathname, search: layersOpen ? back : `?panel=${LAYERS_PARAM}` });
+  }, [layersOpen, bareMap, location.pathname, navigate]);
 
   return (
     <div
@@ -218,6 +232,8 @@ function ReadyShell({ meta }: { meta: Meta }) {
 
       <main className="fc-shell__main">
         <MapView meta={meta} insets={insets} />
+        <ExploreLayer meta={meta} />
+        <MarkLayer />
 
         <div className="fc-stage">
           <div className="fc-stage__search">
@@ -247,14 +263,7 @@ function ReadyShell({ meta }: { meta: Meta }) {
             <RakingControl meta={meta} />
           </div>
           <div className="fc-stage__primary" inert={stageCovered}>
-            <Button
-              variant="primary"
-              size="lg"
-              icon={<MapPinPlus size={20} aria-hidden />}
-              onClick={() => toast("Marking a finding isn't built yet. It's the next piece of work.")}
-            >
-              Mark a finding
-            </Button>
+            <MarkButton />
           </div>
         </div>
       </main>
@@ -275,7 +284,8 @@ function ReadyShell({ meta }: { meta: Meta }) {
           </PanelFrame>
         ) : (
           <Routes>
-            <Route path="/" element={null} />
+            <Route path="/" element={bareMap ? null : <ExplorePanel meta={meta} />} />
+            <Route path="/mark/:draftId?" element={<MarkPanel meta={meta} />} />
             <Route path="/account" element={<AccountPage />} />
             <Route path={EMAIL_LINK_PATH} element={<EmailLinkPage />} />
             {PLACEHOLDER_ROUTES.map((route) => (

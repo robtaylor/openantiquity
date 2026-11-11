@@ -1,0 +1,149 @@
+/* The Explore panel, and the mark it puts on the chosen finding. */
+.fc-explore {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fc-explore__filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fc-explore__filter-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.fc-explore__filter {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fc-explore__filter-title {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.fc-explore__hint {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-explore__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0 -8px;
+  padding: 0;
+  list-style: none;
+}
+
+.fc-explore__list--yours {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.fc-explore__list[aria-busy="true"] {
+  opacity: 0.6;
+}
+
+.fc-explore__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-decoration: none;
+}
+
+a.fc-explore__row:hover {
+  background: var(--raised);
+}
+
+.fc-explore__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--raised);
+  color: var(--text);
+}
+
+.fc-explore__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.fc-explore__title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.fc-explore__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 13px;
+}
+
+.fc-explore__class,
+.fc-explore__where {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-explore__loading {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.fc-explore__more {
+  display: flex;
+  justify-content: center;
+}
+
+/* The chosen finding on the map. */
+.fc-highlight-ring {
+  position: absolute;
+  top: -15px;
+  left: -15px;
+  width: 30px;
+  height: 30px;
+  border: 3px solid var(--accent-strong);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2px var(--bg),
+    inset 0 0 0 2px var(--bg);
+}
+
+.fc-highlight-square {
+  fill: rgb(242 185 79 / 0.1);
+  stroke: var(--accent-strong);
+  stroke-width: 3;
+  stroke-dasharray: 8 6;
+  filter: drop-shadow(0 0 1.5px var(--bg));
+}
+
+.maplibregl-canvas.fc-canvas--finding {
+  cursor: pointer;
+}

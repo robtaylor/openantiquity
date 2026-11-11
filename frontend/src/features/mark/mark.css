@@ -1,0 +1,300 @@
+/* Marking a finding: what it draws over the map, and its panel. */
+
+/* Over the main map, under the floating controls (.fc-stage is 10) and the
+   swipe handle (5). It lets the map take every tap except on its own marks. */
+.fc-annotations {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.fc-annotations__shapes {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.maplibregl-canvas.fc-canvas--placing {
+  cursor: crosshair;
+}
+
+/* The outline, with a dark edge so it reads on pale terrain and on dark. */
+.fc-mark-outline polyline,
+.fc-mark-outline polygon {
+  fill: none;
+  stroke: var(--accent-strong);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 1.5px var(--bg)) drop-shadow(0 0 1px var(--bg));
+}
+
+.fc-mark-outline polygon {
+  fill: rgb(224 164 58 / 0.14);
+}
+
+.fc-mark-outline circle {
+  fill: var(--bg);
+  stroke: var(--accent-strong);
+  stroke-width: 2;
+}
+
+.fc-mark-outline .fc-mark-outline__first {
+  fill: var(--accent-strong);
+  stroke: var(--bg);
+}
+
+/* The mark: a 44 px target round an ochre ring with a dot at its centre. */
+.fc-mark-handle {
+  position: absolute;
+  top: -22px;
+  left: -22px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+  pointer-events: auto;
+}
+
+.fc-mark-handle:active {
+  cursor: grabbing;
+}
+
+.fc-mark-handle__ring {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--accent-strong);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--accent-strong) 0 2.5px, transparent 3px);
+  box-shadow:
+    0 0 0 2px var(--bg),
+    inset 0 0 0 2px var(--bg),
+    var(--shadow);
+}
+
+.fc-mark-handle:focus-visible {
+  outline: 2px solid var(--focus-colour);
+  outline-offset: 0;
+  box-shadow: var(--focus-gap);
+}
+
+/* A draft: a dashed hollow ring with a "not saved" sign, never a filled marker. */
+.fc-draft-mark {
+  position: absolute;
+  top: -18px;
+  left: -18px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.fc-draft-mark__ring {
+  position: absolute;
+  inset: 8px;
+  border: 2px dashed var(--text);
+  border-radius: 50%;
+  background: rgb(20 22 26 / 0.4);
+  box-shadow: 0 0 0 1.5px var(--bg);
+}
+
+.fc-draft-mark__sign {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 18px;
+  height: 18px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.fc-draft-mark:hover .fc-draft-mark__ring {
+  border-color: var(--accent-strong);
+}
+
+.fc-draft-mark:focus-visible {
+  outline: 2px solid var(--focus-colour);
+  outline-offset: 0;
+  box-shadow: var(--focus-gap);
+}
+
+/* A finding on its way to the server: a new spotted marker that breathes until it is saved. */
+.fc-pending-mark {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--tier-spotted);
+  box-shadow: 0 0 0 1.5px var(--bg);
+  animation: fc-pending-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes fc-pending-pulse {
+  50% {
+    box-shadow:
+      0 0 0 1.5px var(--bg),
+      0 0 0 7px rgb(154 163 173 / 0.35);
+  }
+}
+
+/* Where "Place it here" puts the mark: the middle of the uncovered map, as .fc-stage frames it. */
+.fc-reticle-frame {
+  position: absolute;
+  top: env(safe-area-inset-top, 0px);
+  left: var(--inset-left);
+  right: var(--inset-right);
+  bottom: var(--stage-bottom);
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  transition:
+    right var(--duration) var(--ease),
+    bottom var(--duration) var(--ease);
+}
+
+.fc-reticle {
+  position: relative;
+  width: 40px;
+  height: 40px;
+}
+
+.fc-reticle::before,
+.fc-reticle::after {
+  content: "";
+  position: absolute;
+  background: var(--text);
+  box-shadow: 0 0 0 1.5px var(--bg);
+}
+
+.fc-reticle::before {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  /* A gap in the middle, so the spot itself stays in view. */
+  mask: linear-gradient(to bottom, #000 0 38%, transparent 38% 62%, #000 62%);
+}
+
+.fc-reticle::after {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+  mask: linear-gradient(to right, #000 0 38%, transparent 38% 62%, #000 62%);
+}
+
+/* The panel. */
+.fc-mark {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.fc-mark__step {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fc-mark__lead {
+  color: var(--text);
+}
+
+/* Section headings read as field labels, like the fields between them. */
+.fc-mark h3.fc-field__label {
+  font-family: var(--font-ui);
+}
+
+.fc-mark__where {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.fc-mark__gridref {
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+.fc-mark__hint {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-mark__problem {
+  color: #f0827c;
+  font-size: 13px;
+}
+
+.fc-mark__notice {
+  padding: 10px 12px;
+  border-left: 3px solid var(--info);
+  border-radius: var(--radius-sm);
+  background: var(--raised);
+  font-size: 14px;
+}
+
+.fc-mark__notice--finds {
+  border-left-color: var(--border);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-mark__notice p + p {
+  margin-top: 4px;
+}
+
+.fc-mark__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fc-mark__actions {
+  position: sticky;
+  bottom: -24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 -20px -24px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.fc-mark__actions .fc-button--primary {
+  flex: 1;
+}
+
+.fc-mark__optional {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+textarea.fc-input {
+  min-height: 80px;
+  padding-top: 8px;
+  resize: vertical;
+}

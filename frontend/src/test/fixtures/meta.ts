@@ -18,6 +18,10 @@ import type { Meta, RasterView, Vocab } from "../../api/meta.js";
  *
  * Records tiles and the findings endpoint keep their contract paths, which
  * answer nothing until the backend is running.
+ *
+ * One thing here is ahead of the backend: each protected class's
+ * `default_sensitivity`, from `PROTECTED_CLASSES` in vocab.py, which the
+ * backend doesn't serve in /meta yet.
  */
 
 const EA_ATTRIBUTION = "© Environment Agency copyright and/or database right 2022. All rights reserved.";
@@ -81,12 +85,14 @@ const vocab: Vocab = {
       label: "Round barrow or mound",
       hint: "A round burial mound, often with a ditch circling it, usually Bronze Age.",
       fish_term: "ROUND BARROW",
+      default_sensitivity: "protected",
     },
     {
       id: "long_barrow",
       label: "Long barrow",
       hint: "A long, low burial mound from the Neolithic, often with a ditch down each side.",
       fish_term: "LONG BARROW",
+      default_sensitivity: "protected",
     },
     {
       id: "hut_circle",
@@ -99,6 +105,7 @@ const vocab: Vocab = {
       label: "Settlement earthworks",
       hint: "The bumps and hollows left by the houses, yards and lanes of an abandoned village or farm.",
       fish_term: "SETTLEMENT",
+      default_sensitivity: "protected",
     },
     {
       id: "field_system",
@@ -177,6 +184,7 @@ const vocab: Vocab = {
       label: "Ritual monument",
       hint: "A prehistoric ceremonial site, such as a henge, a stone circle or a cursus.",
       fish_term: "RELIGIOUS RITUAL AND FUNERARY",
+      default_sensitivity: "protected",
     },
     {
       id: "garden",

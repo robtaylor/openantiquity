@@ -23,6 +23,11 @@ export interface SquareProperties {
   state: string;
   /** How many findings share the square in this state. */
   count: number;
+  /**
+   * Their public ids, separated by spaces, so a click on the square can
+   * open them. Text, because MapLibre hands back nested values as JSON.
+   */
+  public_ids: string;
 }
 
 export type FindingsMapFeature =
@@ -57,12 +62,13 @@ function squaresFrom(features: readonly FindingFeature[]): FindingsMapFeature[] 
     const existing = squares.get(key);
     if (existing) {
       existing.properties.count += 1;
+      existing.properties.public_ids += ` ${publicId}`;
       continue;
     }
     squares.set(key, {
       type: "Feature",
       geometry: { type: "Polygon", coordinates: [square.ring] },
-      properties: { square: square.ref, tier, state, count: 1 },
+      properties: { square: square.ref, tier, state, count: 1, public_ids: publicId },
     });
   }
   return [...squares.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, feature]) => feature);

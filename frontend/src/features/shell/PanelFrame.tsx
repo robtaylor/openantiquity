@@ -2,6 +2,7 @@ import { type ReactNode, type RefObject, useLayoutEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { Panel } from "../../ui/Panel.js";
 import { Sheet } from "../../ui/Sheet.js";
+import { BARE_MAP_PATH } from "./navigation.js";
 import { usePanelEnvironment } from "./panelContext.js";
 
 export interface PanelFrameProps {
@@ -9,7 +10,7 @@ export interface PanelFrameProps {
   panelKey: string;
   title: string;
   subtitle?: string;
-  /** Defaults to going back to the bare map. */
+  /** Defaults to going back to the bare map (`BARE_MAP_PATH`). */
   onClose?: () => void;
   /**
    * Where focus goes when the panel closes and the control that opened it is
@@ -69,7 +70,7 @@ function usePanelFocus(
 export function PanelFrame({ panelKey, title, subtitle, onClose, fallbackFocus, children }: PanelFrameProps) {
   const environment = usePanelEnvironment();
   const navigate = useNavigate();
-  const close = onClose ?? (() => navigate("/"));
+  const close = onClose ?? (() => navigate(BARE_MAP_PATH));
   const host = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   usePanelFocus(host, titleRef, panelKey, environment.shouldTakeFocus, fallbackFocus ?? environment.fallbackFocus);

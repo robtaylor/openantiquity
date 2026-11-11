@@ -104,7 +104,8 @@ test.describe("desktop", () => {
     await expect(page).toHaveURL(/\/review#/);
     await expect(page.getByRole("heading", { name: "Second look" })).toBeFocused();
     await page.keyboard.press("Escape");
-    await expect(page).toHaveURL(/\/#/);
+    // Closing a panel leaves the bare map.
+    await expect(page).toHaveURL(/\/\?panel=none#/);
     await expect(link).toBeFocused();
   });
 
@@ -124,7 +125,7 @@ test.describe("desktop", () => {
   });
 
   test("zooms with the buttons and resets a turned map with the compass", async ({ page }) => {
-    await openMap(page, "/#m=14/51.4286/-1.8542/-46.2/0&v=composite");
+    await openMap(page, "/?panel=none#m=14/51.4286/-1.8542/-46.2/0&v=composite");
     await page.getByRole("button", { name: "Zoom in" }).click();
     await expect(page.getByTestId("status-zoom")).toHaveText("z15.0");
     await page.getByRole("button", { name: "Zoom out" }).click();
@@ -139,7 +140,7 @@ test.describe("desktop", () => {
   });
 
   test("keeps the 3D view when the compass turns a tilted map north-up", async ({ page }) => {
-    await openMap(page, "/#m=14/51.4286/-1.8542/-46.2/60&v=raking&s=300/25&x=2&t=1/1.5");
+    await openMap(page, "/?panel=none#m=14/51.4286/-1.8542/-46.2/60&v=raking&s=300/25&x=2&t=1/1.5");
     const threeD = page.getByRole("button", { name: "Tilt into 3D" });
     await expect(threeD).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("button", { name: "Reset to north-up" }).click();
@@ -148,7 +149,7 @@ test.describe("desktop", () => {
   });
 
   test("keeps the comparison divide, its grip and its labels inside the map", async ({ page }) => {
-    await openMap(page, "/#m=14/51.4286/-1.8542/0/0&v=composite&c=osm_standard");
+    await openMap(page, "/?panel=none#m=14/51.4286/-1.8542/0/0&v=composite&c=osm_standard");
     const divide = page.getByRole("slider", { name: "Comparison divide" });
     const grip = page.locator(".fc-swipe__grip");
     const buttons = page.locator(".fc-stage__controls");
@@ -318,10 +319,6 @@ test.describe("phone", () => {
     expect(overlaps(await boxOf(raking), await boxOf(search)), "sun dial under the search field").toBe(false);
     expect(overlaps(await boxOf(status), await boxOf(primary)), "status bar under the primary action").toBe(false);
 
-    // The primary action really can be pressed with the sheet open.
-    await primary.click();
-    await expect(page.getByRole("status").filter({ hasText: "isn't built yet" })).toBeVisible();
-
     // Fully open, the sheet covers them, and they are put out of reach.
     const handle = sheet.getByRole("button", { name: /Press to resize/ });
     await handle.focus();
@@ -331,6 +328,12 @@ test.describe("phone", () => {
     await expect(page.locator(".fc-stage__primary")).toHaveAttribute("inert", "");
     await expect(page.locator(".fc-shell__status")).toHaveAttribute("inert", "");
     await expect(search).toBeVisible();
+
+    // Back at half, the primary action really can be pressed with the sheet open.
+    await page.keyboard.press("ArrowDown");
+    await expect(sheet).toHaveAttribute("data-stop", "half");
+    await primary.click();
+    await expect(page.getByRole("complementary", { name: "Mark a finding" })).toBeVisible();
   });
 
   test("gives the credits button a target at least 24 px high", async ({ page }) => {
@@ -340,7 +343,7 @@ test.describe("phone", () => {
   });
 
   test("zooms out with one finger, and shows a compass once the map is turned", async ({ page }) => {
-    await openMap(page, "/#m=14/51.4286/-1.8542/-46.2/0&v=composite");
+    await openMap(page, "/?panel=none#m=14/51.4286/-1.8542/-46.2/0&v=composite");
     await page.getByRole("button", { name: "Zoom out" }).tap();
     await expect(page).toHaveURL(/#m=13\//);
     const compass = page.getByRole("button", { name: "Reset to north-up" });

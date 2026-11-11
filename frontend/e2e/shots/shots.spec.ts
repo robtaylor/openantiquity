@@ -56,7 +56,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("bare map", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?panel=none");
   await settle(page);
   await shoot(page, "01-map");
 });

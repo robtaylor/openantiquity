@@ -67,7 +67,7 @@ describe("the findings overlay", () => {
   });
 
   it("asks for nothing while the overlay is off, or the map is zoomed too far out", async () => {
-    renderShell("/#m=8/51.4286/-1.8542/0/0&v=composite&s=315/25&x=2&t=0/1.5&o=findings:100:h");
+    renderShell("/?panel=none#m=8/51.4286/-1.8542/0/0&v=composite&s=315/25&x=2&t=0/1.5&o=findings:100:h");
     const map = await mapReady();
     act(() => useMapStore.getState().setOverlayVisible("findings", true));
     act(() => map.userMove({ zoom: FINDINGS_MIN_ZOOM - 0.5 }));

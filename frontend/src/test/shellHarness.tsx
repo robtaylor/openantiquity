@@ -3,12 +3,13 @@ import { type RenderResult, render, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, type Mock, vi } from "vitest";
+import { BARE_MAP_PATH } from "../features/shell/navigation.js";
 import { Shell } from "../features/shell/Shell.js";
 import { useMapStore, usePointerStore, useViewAreaStore } from "../map/store.js";
 import { useToastStore } from "../ui/toastStore.js";
 import { PHONE_QUERY } from "../ui/tokens.js";
 import { FakeMap } from "./fakeMapLibre.js";
-import { findingsData } from "./fixtures/findings.js";
+import { findingPage, findingsData, findingsMatching } from "./fixtures/findings.js";
 import { metaFixture } from "./fixtures/meta.js";
 import { json, requestPath } from "./http.js";
 
@@ -32,15 +33,20 @@ export function signedOutResponse(): Response {
 
 /**
  * The fixtures' answer to a request: `/meta` and `/findings` from their
- * fixtures, nobody signed in, and 404 for anything else, as a backend that
- * has not built the endpoint yet would say.
+ * fixtures (GeoJSON for the map, a page for the list, with the filters
+ * applied as the server applies them), nobody signed in,
+ * and 404 for anything else, as a backend that has not built the endpoint
+ * yet would say.
  */
 export async function fixtureResponse(input: unknown): Promise<Response> {
   switch (requestPath(input)) {
     case "/api/v1/meta":
       return metaResponse();
-    case "/api/v1/findings":
-      return json(findingsData);
+    case "/api/v1/findings": {
+      const url = new URL(String(input), "http://localhost");
+      const found = { ...findingsData, features: findingsMatching(findingsData.features, url) };
+      return url.searchParams.get("format") === "geojson" ? json(found) : json(findingPage(found));
+    }
     case "/api/v1/auth/me":
       return signedOutResponse();
     default:
@@ -48,7 +54,9 @@ export async function fixtureResponse(input: unknown): Promise<Response> {
   }
 }
 
-export function renderShell(path = "/", extra?: ReactNode): RenderResult {
+export { BARE_MAP_PATH };
+
+export function renderShell(path = BARE_MAP_PATH, extra?: ReactNode): RenderResult {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>

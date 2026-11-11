@@ -92,7 +92,7 @@ async function openWithMarkers(page: Page, extraHash = "", obscuredLevel: Sensit
   // The street-map overlay is hidden so the backdrop is one flat colour.
   await openMap(
     page,
-    `/#m=${ZOOM}/${CENTRE.lat}/${CENTRE.lon}/0/0&v=composite&s=315/25&x=2&t=0/1.5&o=osm:80:h,records:100,findings:100${extraHash}`,
+    `/?panel=none#m=${ZOOM}/${CENTRE.lat}/${CENTRE.lon}/0/0&v=composite&s=315/25&x=2&t=0/1.5&o=osm:80:h,records:100,findings:100${extraHash}`,
   );
 }
 
@@ -219,7 +219,10 @@ test("draws an obscured square whose centre is off screen when its body covers t
   // Zoom 18 shows about 540 m by 340 m. Centre the view 400 m east and 300 m north of the square's centre:
   // inside the square, with the centre well outside the view.
   const view = offset(400, 300, { lon: centreLon, lat: centreLat });
-  await openMap(page, `/#m=18/${view.lat}/${view.lon}/0/0&v=composite&s=315/25&x=2&t=0/1.5&o=osm:80:h,findings:100`);
+  await openMap(
+    page,
+    `/?panel=none#m=18/${view.lat}/${view.lon}/0/0&v=composite&s=315/25&x=2&t=0/1.5&o=osm:80:h,findings:100`,
+  );
 
   await expect(async () => {
     const image = decodePng(await page.screenshot());
@@ -312,7 +315,7 @@ for (const terrain of ["flat", "3D"] as const) {
     const camera = terrain === "3D" ? "0/50" : "0/0";
     await openMap(
       page,
-      `/#m=${ZOOM}/${CENTRE.lat}/${CENTRE.lon}/${camera}&v=composite&c=osm_standard&s=315/25&x=2&t=${terrain === "3D" ? 1 : 0}/1.5&o=osm:80:h,records:100`,
+      `/?panel=none#m=${ZOOM}/${CENTRE.lat}/${CENTRE.lon}/${camera}&v=composite&c=osm_standard&s=315/25&x=2&t=${terrain === "3D" ? 1 : 0}/1.5&o=osm:80:h,records:100`,
     );
     await expect(page.locator(".fc-map__pane--compare canvas")).toBeVisible();
     for (const pane of await page.locator(".fc-map__pane").all()) {

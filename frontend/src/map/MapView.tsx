@@ -15,6 +15,7 @@ import { type Meta, viewTitle } from "../api/meta.js";
 import { clamp } from "../ui/math.js";
 import { MapFailure } from "./MapFailure.js";
 import { isMapLive, MapPane } from "./MapPane.js";
+import { useMainMapStore } from "./mainMap.js";
 import { SwipeHandle } from "./SwipeHandle.js";
 import { useMapStore } from "./store.js";
 import { syncMaps } from "./syncMaps.js";
@@ -78,6 +79,12 @@ function MapPanes({ meta, insets }: MapViewProps) {
   const [mainMap, setMainMap] = useState<MapLibreMap | null>(null);
   const [compareMap, setCompareMap] = useState<MapLibreMap | null>(null);
   const comparing = compareView !== null;
+
+  // Features that draw on the map or listen to it find the main one here.
+  useEffect(() => {
+    useMainMapStore.getState().setMap(mainMap);
+    return () => useMainMapStore.getState().setMap(null);
+  }, [mainMap]);
 
   useEffect(() => {
     // The comparison can be switched off in the very render that first hands

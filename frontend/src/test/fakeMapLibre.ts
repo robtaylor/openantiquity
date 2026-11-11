@@ -335,6 +335,54 @@ export class FakeMap {
     };
   }
 
+  /** Degrees of longitude per pixel at the current zoom, as `getBounds` assumes. */
+  private degreesPerPixel(): number {
+    return 360 / (512 * 2 ** this.camera.zoom);
+  }
+
+  /**
+   * Where a place is on the 1024 by 768 px canvas `getBounds` assumes, flat
+   * and north-up. Near enough for tests that place, drag and click.
+   */
+  project(lngLat: [number, number] | { lng: number; lat: number }): { x: number; y: number } {
+    const [lng, lat] = Array.isArray(lngLat) ? lngLat : [lngLat.lng, lngLat.lat];
+    const step = this.degreesPerPixel();
+    const cos = Math.cos((this.camera.lat * Math.PI) / 180);
+    return { x: 512 + (lng - this.camera.lng) / step, y: 384 - (lat - this.camera.lat) / (step * cos) };
+  }
+
+  /** The place at a point on the canvas: the inverse of `project`. */
+  unproject(point: [number, number] | { x: number; y: number }): { lng: number; lat: number } {
+    const [x, y] = Array.isArray(point) ? point : [point.x, point.y];
+    const step = this.degreesPerPixel();
+    const cos = Math.cos((this.camera.lat * Math.PI) / 180);
+    return { lng: this.camera.lng + (x - 512) * step, lat: this.camera.lat - (y - 384) * step * cos };
+  }
+
+  /** Pan by a number of pixels, as `map.panBy` does, with no easing. */
+  panBy = vi.fn((offset: [number, number]) => {
+    const target = this.unproject([512 + offset[0], 384 + offset[1]]);
+    this.moveTo({ center: [target.lng, target.lat] });
+  });
+
+  getContainer(): HTMLElement {
+    return this.options.container as HTMLElement;
+  }
+
+  /** What `queryRenderedFeatures` answers. A test sets it to stand for the markers under the pointer. */
+  renderedFeatures: Array<{ layer?: { id: string }; properties: Record<string, unknown> }> = [];
+
+  queryRenderedFeatures(): Array<{ layer?: { id: string }; properties: Record<string, unknown> }> {
+    this.requireStyle();
+    return this.renderedFeatures;
+  }
+
+  /** Click the map at a point on the canvas, as MapLibre reports a click that was not a drag. */
+  click(x: number, y: number): void {
+    const lngLat = this.unproject([x, y]);
+    this.fire("click", { point: { x, y }, lngLat, originalEvent: {} });
+  }
+
   /** What the app last put into a GeoJSON source, or undefined if it never has. */
   sourceData(id: string): unknown {
     const calls = this.sourceHandles.get(id)?.setData.mock.calls;

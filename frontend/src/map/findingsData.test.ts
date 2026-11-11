@@ -37,7 +37,13 @@ describe("findingsMapData", () => {
     expect(features).toHaveLength(1);
     const [square] = features;
     expect(square?.geometry.type).toBe("Polygon");
-    expect(square?.properties).toEqual({ square: "SU1069", tier: "seen", state: "open", count: 1 });
+    expect(square?.properties).toEqual({
+      square: "SU1069",
+      tier: "seen",
+      state: "open",
+      count: 1,
+      public_ids: "f1",
+    });
     expect(square?.geometry.type === "Polygon" && square.geometry.coordinates[0]).toHaveLength(5);
   });
 
@@ -63,7 +69,7 @@ describe("findingsMapData", () => {
       finding(...AVEBURY, { obscured: true, tier: "spotted", public_id: "f2" }),
     );
     expect(features).toHaveLength(1);
-    expect(features[0]?.properties).toMatchObject({ tier: "probable", count: 2 });
+    expect(features[0]?.properties).toMatchObject({ tier: "probable", count: 2, public_ids: "f1 f2" });
   });
 
   it("keeps ruled-out squares apart so they can be hidden", () => {

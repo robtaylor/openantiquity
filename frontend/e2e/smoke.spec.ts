@@ -54,7 +54,10 @@ test.describe("desktop", () => {
   });
 
   test("restores a permalink, including raking light", async ({ page, network }) => {
-    await openMap(page, "/#m=12.5/51.1788/-1.8263/0/0&v=raking&s=90/20&x=0.8&t=0/1.5&o=osm:40,findings:100:h");
+    await openMap(
+      page,
+      "/?panel=none#m=12.5/51.1788/-1.8263/0/0&v=raking&s=90/20&x=0.8&t=0/1.5&o=osm:40,findings:100:h",
+    );
 
     await expect(page.locator(".fc-map__pane--main")).toHaveAttribute("data-view", "raking");
     await expect(page.getByTestId("status-zoom")).toHaveText("z12.5");
@@ -92,7 +95,7 @@ test.describe("desktop", () => {
   test("keeps the URL, the readout and the map in step when a link asks for more zoom than the map has", async ({
     page,
   }) => {
-    await openMap(page, "/#m=22/51.4286/-1.8542/0/0&v=composite");
+    await openMap(page, "/?panel=none#m=22/51.4286/-1.8542/0/0&v=composite");
     await expect(page.getByTestId("status-zoom")).toHaveText("z20.0");
     await expect(page).toHaveURL(/#m=20\/51\.4286\/-1\.8542\/0\/0&/);
     // Already at the limit, so there is no further to go.
@@ -186,7 +189,7 @@ test.describe("desktop", () => {
       (element as HTMLElement).dataset.marker = "still-here";
     });
     await page.getByRole("button", { name: "Close panel" }).click();
-    await expect(page).toHaveURL(/\/#/);
+    await expect(page).toHaveURL(/\/\?panel=none#/);
     await expect(page.getByRole("heading", { name: "Second look" })).toHaveCount(0);
     await expect(page.locator(".fc-map__pane--main")).toHaveAttribute("data-marker", "still-here");
 
@@ -195,10 +198,11 @@ test.describe("desktop", () => {
     await expect(page.locator(".fc-map__pane--main")).toHaveAttribute("data-marker", "still-here");
   });
 
-  test("gives feedback from the primary action", async ({ page }) => {
+  test("opens the marking panel from the primary action", async ({ page }) => {
     await openMap(page);
     await page.getByRole("button", { name: "Mark a finding" }).click();
-    await expect(page.getByRole("status").filter({ hasText: "isn't built yet" })).toBeVisible();
+    await expect(page).toHaveURL(/\/mark#/);
+    await expect(page.getByRole("complementary", { name: "Mark a finding" })).toBeVisible();
   });
 });
 

@@ -1,0 +1,254 @@
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
+import { useLocation } from "react-router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useMapStore } from "../../map/store.js";
+import { apiError, routeApi } from "../../test/apiRoutes.js";
+import { createdFinding } from "../../test/fixtures/findings.js";
+import { meFixture } from "../../test/fixtures/me.js";
+import { json, mapReady, renderShell, setUpShellTests, signedOutResponse } from "../../test/shellHarness.js";
+import { useAccountUi } from "../account/requireAccount.js";
+import { DRAFTS_STORAGE_KEY, listDrafts, resetDraftsForTests } from "../drafts/store.js";
+import type { FindingCreate } from "../findings/types.js";
+import { NUDGE_FAST_PX, NUDGE_PX } from "./MarkLayer.js";
+import { useMarkStore } from "./markStore.js";
+import { usePendingFindings } from "./pending.js";
+
+vi.mock("maplibre-gl", async () => {
+  const fake = await import("../../test/fakeMapLibre.js");
+  return { Map: fake.FakeMap };
+});
+
+const harness = setUpShellTests();
+
+function Address() {
+  const location = useLocation();
+  return <output data-testid="address">{location.pathname}</output>;
+}
+
+function address(): string {
+  return screen.getByTestId("address").textContent ?? "";
+}
+
+beforeEach(() => {
+  window.localStorage.clear();
+  resetDraftsForTests();
+  useAccountUi.setState(useAccountUi.getInitialState(), true);
+  useMarkStore.getState().start();
+  usePendingFindings.setState({ pending: [] });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+function panel() {
+  return within(screen.getByRole("complementary", { name: "Mark a finding" }));
+}
+
+function point(): [number, number] {
+  const at = useMarkStore.getState().point;
+  if (!at) throw new Error("No mark has been placed");
+  return at;
+}
+
+async function openMarking(signedIn = true) {
+  const routes = routeApi(harness.fetchMock(), {
+    "GET /auth/me": () => (signedIn ? json(meFixture()) : signedOutResponse()),
+  });
+  renderShell("/mark", <Address />);
+  const map = await mapReady();
+  return { map, routes };
+}
+
+describe("placing the mark", () => {
+  it("puts the map in placing mode, and a click places the mark and a later one moves it", async () => {
+    const { map } = await openMarking();
+    expect(map.getCanvas()).toHaveClass("fc-canvas--placing");
+    expect(screen.getByTestId("reticle")).toBeInTheDocument();
+    expect(panel().getByText("Click the map where you see it.")).toBeInTheDocument();
+
+    act(() => map.click(300, 200));
+    const first = point();
+    expect(first[0]).toBeCloseTo(map.unproject([300, 200]).lng, 9);
+    expect(screen.queryByTestId("reticle")).toBeNull();
+    expect(screen.getByRole("button", { name: /^Your mark at SU/ })).toBeInTheDocument();
+    expect(panel().getByText(/^SU \d{4} \d{4}$/)).toBeInTheDocument();
+
+    act(() => map.click(320, 260));
+    expect(point()).not.toEqual(first);
+  });
+
+  it("places the mark under the cross with the primary action, so a keyboard can do it", async () => {
+    const user = userEvent.setup();
+    await openMarking();
+    await user.click(screen.getByRole("button", { name: "Place it here" }));
+    expect(useMarkStore.getState().point).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Place it here" })).toBeNull();
+  });
+
+  it("nudges the mark with the arrow keys, further with Shift", async () => {
+    const user = userEvent.setup();
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    const handle = screen.getByRole("button", { name: /^Your mark/ });
+    handle.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(map.project(point()).x).toBeCloseTo(400 + NUDGE_PX, 6);
+    await user.keyboard("{Shift>}{ArrowUp}{/Shift}");
+    expect(map.project(point()).y).toBeCloseTo(300 - NUDGE_FAST_PX, 6);
+    expect(handle).toHaveFocus();
+  });
+
+  it("drags the mark with a pointer, without moving the map", async () => {
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    const handle = screen.getByRole("button", { name: /^Your mark/ });
+    fireEvent.pointerDown(handle, { pointerId: 1, button: 0, pointerType: "touch", clientX: 400, clientY: 300 });
+    fireEvent.pointerMove(handle, { pointerId: 1, pointerType: "touch", clientX: 450, clientY: 330 });
+    fireEvent.pointerUp(handle, { pointerId: 1, pointerType: "touch", clientX: 450, clientY: 330 });
+    // The fake map's container sits at the top left of the page, so client and map pixels agree.
+    expect(map.project(point()).x).toBeCloseTo(450, 6);
+    expect(map.project(point()).y).toBeCloseTo(330, 6);
+    // A move after the pointer is lifted does nothing.
+    fireEvent.pointerMove(handle, { pointerId: 1, pointerType: "touch", clientX: 10, clientY: 10 });
+    expect(map.project(point()).x).toBeCloseTo(450, 6);
+  });
+
+  it("leaves with Escape, from the map as from the panel", async () => {
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    fireEvent.keyDown(screen.getByRole("button", { name: /^Your mark/ }), { key: "Escape" });
+    await waitFor(() => expect(address()).toBe("/"));
+    expect(screen.queryByRole("complementary", { name: "Mark a finding" })).toBeNull();
+    expect(map.getCanvas()).not.toHaveClass("fc-canvas--placing");
+  });
+});
+
+describe("the form", () => {
+  it("asks only for the class, explains a protected class's level, and carries the finds notice", async () => {
+    const user = userEvent.setup();
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    await user.click(panel().getByRole("button", { name: "Save finding" }));
+    expect(panel().getByRole("alert")).toHaveTextContent("Choose what it looks like.");
+
+    await user.click(panel().getByRole("radio", { name: "Round barrow or mound" }));
+    expect(panel().queryByText("Choose what it looks like.")).toBeNull();
+    expect(panel().getByText(/only signed-in members will see exactly where it is/)).toBeInTheDocument();
+    await user.click(panel().getByRole("radio", { name: "Enclosure" }));
+    expect(panel().queryByText(/only signed-in members/)).toBeNull();
+
+    expect(panel().getByText(/This map is for earthworks, not objects/)).toBeInTheDocument();
+    expect(panel().getByLabelText("Period")).toHaveValue("unknown");
+    expect(panel().getByLabelText("Title")).toHaveAttribute("placeholder", expect.stringMatching(/^Enclosure at SU/));
+  });
+
+  it("draws an outline: corners by tapping, undo, and closing on the first corner", async () => {
+    const user = userEvent.setup();
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    await user.click(panel().getByRole("button", { name: "Draw an outline" }));
+    expect(screen.getByTestId("reticle")).toBeInTheDocument();
+    act(() => map.click(380, 280));
+    act(() => map.click(420, 280));
+    act(() => map.click(440, 330));
+    act(() => map.click(500, 500));
+    expect(useMarkStore.getState().point).toEqual(point());
+    expect(useMarkStore.getState().outline?.points).toHaveLength(4);
+    await user.click(panel().getByRole("button", { name: "Undo corner" }));
+    expect(useMarkStore.getState().outline?.points).toHaveLength(3);
+    // A tap on the first corner closes the shape.
+    act(() => map.click(381, 281));
+    expect(useMarkStore.getState().outline?.shape).toBe("polygon");
+    expect(panel().getByText("A closed shape with 3 corners.")).toBeInTheDocument();
+    // Taps move the mark again once the shape is done.
+    act(() => map.click(410, 300));
+    expect(map.project(point()).x).toBeCloseTo(410, 6);
+  });
+});
+
+describe("saving, signed in", () => {
+  it("shows the mark at once, sends what the finder was looking at, and opens the finding's page", async () => {
+    const user = userEvent.setup();
+    const { map, routes } = await openMarking();
+    let answer: (response: Response) => void = () => {};
+    routes.on(
+      "POST /findings",
+      (call) =>
+        new Promise<Response>((resolve) => {
+          answer = resolve;
+          void call;
+        }),
+    );
+    act(() => useMapStore.getState().setSun({ azimuth: 120, altitude: 15 }));
+    act(() => map.click(400, 300));
+    await user.click(panel().getByRole("radio", { name: "Enclosure" }));
+    await user.type(panel().getByLabelText("Note (optional)"), "Faint ring by the barn.");
+    await user.click(panel().getByRole("button", { name: "Save finding" }));
+
+    // Optimistic: on the map before the server has answered.
+    expect(await screen.findByRole("img", { name: /^Enclosure at SU .*, saving$/ })).toBeInTheDocument();
+    const [call] = routes.callsTo("POST /findings");
+    const body = call?.body as FindingCreate;
+    expect(body).toMatchObject({
+      location: { type: "Point", coordinates: point() },
+      feature_class: "enclosure",
+      period: "unknown",
+      title: expect.stringMatching(/^Enclosure at SU \d{3} \d{3}$/),
+      description: "Faint ring by the barn.",
+      view_state: { layer: "composite", sun_azimuth: 120, sun_altitude: 15, zoom: 14, bearing: 0, pitch: 0 },
+    });
+
+    act(() => answer(json(createdFinding(body, "abc123"), 201)));
+    await waitFor(() => expect(address()).toBe("/f/abc123"));
+    await waitFor(() => expect(usePendingFindings.getState().pending).toEqual([]));
+    expect(routes.callsTo("POST /findings")).toHaveLength(1);
+  });
+
+  it("takes the mark back when the save fails, says why with a way to try again, and keeps the form", async () => {
+    const user = userEvent.setup();
+    const { map, routes } = await openMarking();
+    routes.on("POST /findings", () => apiError(422, "outside_british_isles", "That position is outside them."));
+    act(() => map.click(400, 300));
+    await user.click(panel().getByRole("radio", { name: "Moat" }));
+    await user.type(panel().getByLabelText("Title"), "Square moat");
+    await user.click(panel().getByRole("button", { name: "Save finding" }));
+
+    const toast = await screen.findByText(/Your finding couldn't be saved\. Field Club covers the land/);
+    expect(usePendingFindings.getState().pending).toEqual([]);
+    expect(screen.queryByRole("img", { name: /saving$/ })).toBeNull();
+    expect(address()).toBe("/mark");
+    expect(panel().getByRole("radio", { name: "Moat" })).toHaveAttribute("aria-checked", "true");
+    expect(panel().getByLabelText("Title")).toHaveValue("Square moat");
+    expect(panel().getByRole("alert")).toHaveTextContent(/Move the mark onto it/);
+
+    routes.on("POST /findings", (call) => json(createdFinding(call.body as FindingCreate, "moat1"), 201));
+    const toastBox = toast.closest(".fc-toast") as HTMLElement;
+    await user.click(within(toastBox).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(address()).toBe("/f/moat1"));
+    expect(routes.callsTo("POST /findings")).toHaveLength(2);
+  });
+});
+
+describe("saving, signed out", () => {
+  it("keeps it as a draft at its own address and opens the sign-in sheet, sending nothing", async () => {
+    const user = userEvent.setup();
+    const { map, routes } = await openMarking(false);
+    act(() => map.click(400, 300));
+    await user.click(panel().getByRole("radio", { name: "Hillfort" }));
+    await user.click(panel().getByRole("button", { name: "Save finding" }));
+
+    expect(await screen.findByRole("dialog", { name: "Sign in" })).toBeInTheDocument();
+    const [draft] = listDrafts();
+    expect(draft).toMatchObject({ kind: "finding", data: { feature_class: "hillfort", point: point() } });
+    expect(address()).toBe(`/mark/${draft?.id}`);
+    expect(window.localStorage.getItem(DRAFTS_STORAGE_KEY)).toContain("hillfort");
+    expect(routes.callsTo("POST /findings")).toHaveLength(0);
+
+    // Closing the sheet keeps the draft, marked as not saved yet.
+    await user.click(within(screen.getByRole("dialog", { name: "Sign in" })).getByRole("button", { name: "Close" }));
+    expect(panel().getByText("Not saved yet", { selector: ".fc-draft-badge" })).toBeInTheDocument();
+    expect(await screen.findByText(/kept in this browser as a draft/)).toBeInTheDocument();
+  });
+});

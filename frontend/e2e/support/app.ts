@@ -1,7 +1,10 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-/** Open the app and wait for the map to be on screen. */
-export async function openMap(page: Page, path = "/"): Promise<void> {
+/** The bare map, with no panel open. `/` itself opens the Explore panel. */
+export const BARE_MAP = "/?panel=none";
+
+/** Open the app, at the bare map unless told otherwise, and wait for the map to be on screen. */
+export async function openMap(page: Page, path = BARE_MAP): Promise<void> {
   await page.goto(path);
   await expect(page.locator(".fc-map")).toHaveAttribute("data-ready", "true");
   await expect(page.locator(".fc-map__pane--main canvas")).toBeVisible();
