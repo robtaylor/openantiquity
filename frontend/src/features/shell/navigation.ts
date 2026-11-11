@@ -32,14 +32,14 @@ export interface Mode {
 
 /** The modes, in rail order. The first four also fill the phone tab bar. */
 export const MODES: Mode[] = [
-  // A finding or a record opened from the map, the record search and "open elsewhere" are all still exploring.
+  // A finding or a record opened from the map, the record search, "open elsewhere" and a height profile are all still exploring.
   {
     id: "explore",
     label: "Explore",
     shortLabel: "Explore",
     to: "/",
     icon: Compass,
-    also: ["/f/", "/r/", "/records", "/elsewhere"],
+    also: ["/f/", "/r/", "/records", "/elsewhere", "/profile"],
   },
   { id: "review", label: "Second look", shortLabel: "Second look", to: "/review", icon: Eye },
   { id: "scan", label: "Scan a square", shortLabel: "Scan", to: "/scan", icon: ScanSearch },

@@ -1,0 +1,102 @@
+/* Previews in the layer panel: a small square of the view at the catalogue's opening spot. */
+.fc-view-preview {
+  position: relative;
+  flex: none;
+  width: 56px;
+  height: 56px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.fc-view-preview img {
+  position: absolute;
+  max-width: none;
+  pointer-events: none;
+  user-select: none;
+}
+
+.fc-view-preview--raking {
+  display: grid;
+  place-items: center;
+}
+
+.fc-view-preview canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.fc-view-preview__icon {
+  color: var(--text-muted);
+}
+
+/* The card keeps its radio mark at the top, and the preview beside it. */
+.fc-view-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fc-layer-credit {
+  margin: 0;
+  padding: 0 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.fc-terrain-tool {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+/* A line on the map saying a terrain view has no data in some or all of the view.
+   It sits under the row of the search field and the Layers button, clear of both. */
+.fc-stage__notice {
+  top: calc(var(--gap) * 2 + var(--control-height));
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(440px, calc(100% - var(--gap) * 4 - var(--control-height) * 2));
+  pointer-events: none;
+}
+
+.fc-map-notice {
+  margin: 0;
+  padding: 8px 14px;
+  background: var(--surface-floating);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* On a phone the floating buttons run down the right, so the notice keeps to the left of them. */
+.fc-shell[data-layout="phone"] .fc-stage__notice {
+  left: var(--gap);
+  right: calc(var(--gap) * 2 + var(--control-height));
+  width: auto;
+  max-width: none;
+  transform: none;
+}
+
+/* The middle of the map, where "Add a point at the cross" puts a profile point. */
+.fc-map-crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  color: var(--text);
+  filter: drop-shadow(0 0 1.5px var(--bg)) drop-shadow(0 0 1px var(--bg));
+  pointer-events: none;
+}

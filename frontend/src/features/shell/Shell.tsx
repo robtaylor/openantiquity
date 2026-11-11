@@ -37,6 +37,9 @@ import { ExploreLayer } from "../explore/ExploreLayer.js";
 import { ExplorePanel } from "../explore/ExplorePanel.js";
 import { FindingPanel } from "../finding/FindingPanel.js";
 import { HELP_PATH, HelpKindPanel, HelpPanel } from "../help/HelpPanel.js";
+import { CoverageNotice } from "../layers/MapNotices.js";
+import { PROFILE_PATH } from "../layers/profile/line.js";
+import { ProfilePanel } from "../layers/profile/ProfilePanel.js";
 import { MarkButton } from "../mark/MarkButton.js";
 import { isMarkPath, MarkLayer } from "../mark/MarkLayer.js";
 import { MARK_PATH, MarkPanel } from "../mark/MarkPanel.js";
@@ -218,12 +221,18 @@ function ReadyShell({ meta }: { meta: Meta }) {
   // mode such as Second look or Scan a square that is the mode's own panel,
   // because changing layer is part of doing the mode's work, not a way out of it.
   // Opened over the bare map, it closes back to the bare map rather than to Explore.
+  // The rest of the query is kept, so a panel that keeps its state there, such
+  // as a height profile's line, is as it was when the layer panel closes.
   const layersOverBareMap = useRef(false);
   const toggleLayers = useCallback(() => {
     if (!layersOpen) layersOverBareMap.current = bareMap;
-    const back = layersOverBareMap.current && location.pathname === "/" ? `?panel=${BARE_MAP_PARAM}` : "";
-    navigate({ pathname: location.pathname, search: layersOpen ? back : `?panel=${LAYERS_PARAM}` });
-  }, [layersOpen, bareMap, location.pathname, navigate]);
+    const params = new URLSearchParams(location.search);
+    if (!layersOpen) params.set("panel", LAYERS_PARAM);
+    else if (layersOverBareMap.current && location.pathname === "/") params.set("panel", BARE_MAP_PARAM);
+    else params.delete("panel");
+    const search = params.toString();
+    navigate({ pathname: location.pathname, search: search ? `?${search}` : "" });
+  }, [layersOpen, bareMap, location.pathname, location.search, navigate]);
 
   return (
     <div
@@ -265,6 +274,9 @@ function ReadyShell({ meta }: { meta: Meta }) {
             </IconButton>
             <CameraControls />
           </div>
+          <div className="fc-stage__notice" inert={sheetFull}>
+            <CoverageNotice meta={meta} />
+          </div>
           <div className="fc-stage__drafts" inert={sheetFull}>
             <DraftsBar />
           </div>
@@ -304,6 +316,7 @@ function ReadyShell({ meta }: { meta: Meta }) {
             <Route path="/r/:id" element={<RecordPage />} />
             <Route path={RECORD_SEARCH_PATH} element={<RecordSearchPanel />} />
             <Route path={ELSEWHERE_PATH} element={<OpenElsewherePanel />} />
+            <Route path={PROFILE_PATH} element={<ProfilePanel />} />
             {PLACEHOLDER_ROUTES.map((route) => (
               <Route key={route.path} path={route.path} element={<PlaceholderPanel route={route} />} />
             ))}

@@ -1,6 +1,8 @@
 import { ArrowLeftRight } from "lucide-react";
 import { memo, useId, useState } from "react";
 import { type Meta, type Overlay, VIEW_GROUPS, type View, type ViewGroup, viewTitle } from "../api/meta.js";
+import { TerrainTools } from "../features/layers/TerrainTools.js";
+import { ViewPreview } from "../features/layers/ViewPreview.js";
 import { LiveSourceControls, RecordFilterControls } from "../features/records/RecordLayerControls.js";
 import { Button } from "../ui/Button.js";
 import { Slider } from "../ui/Slider.js";
@@ -13,22 +15,48 @@ import { overlayTroubleKey } from "./trouble.js";
 
 /** Headings for the view groups. The groups themselves come from /meta. */
 const GROUP_LABELS: Record<ViewGroup, string> = {
-  lidar: "LIDAR",
+  lidar: "Terrain from LIDAR",
   imagery: "Aerial imagery",
   historic: "Historic maps",
-  map: "Maps",
+  map: "Modern maps",
   geology: "Geology",
 };
+
+/** A line under a group's heading, where it has a term to explain. */
+const GROUP_HINTS: Partial<Record<ViewGroup, string>> = {
+  lidar:
+    "LIDAR is a laser survey flown over the ground. These views are drawn from its heights to bring out banks, ditches and mounds.",
+};
+
+/**
+ * A group's views in the catalogue's order, except that the default view
+ * comes first: it is the one to try first.
+ */
+export function orderedViews(views: readonly View[]): View[] {
+  return [...views].sort((a, b) => Number(b.default === true) - Number(a.default === true));
+}
+
+/** A layer's credit and licence, shown while the layer is on. Its links open the licence and the source. */
+function LayerCredit({ attribution }: { attribution: string | undefined }) {
+  if (!attribution?.trim()) return null;
+  return (
+    <p className="fc-layer-credit">
+      <Attribution html={attribution} />
+    </p>
+  );
+}
 
 type Side = "main" | "compare";
 
 function ViewOption({
+  meta,
   view,
   name,
   checked,
   tag,
   onSelect,
 }: {
+  meta: Meta;
   view: View;
   name: string;
   checked: boolean;
@@ -41,30 +69,35 @@ function ViewOption({
   return (
     // The card is one big label for the click target. The radio is named by
     // the title alone, so the description is read once, as its description.
-    <label className="fc-view-option">
-      <input
-        className="fc-view-option__input"
-        type="radio"
-        name={name}
-        value={view.id}
-        checked={checked}
-        aria-labelledby={titleId}
-        aria-describedby={view.description ? descriptionId : undefined}
-        onChange={onSelect}
-      />
-      <span className="fc-view-option__mark" aria-hidden="true" />
-      <span className="fc-view-option__text">
-        <span className="fc-view-option__title" id={titleId}>
-          {view.title}
-          {tag ? <span className="fc-view-option__tag">{tag}</span> : null}
-        </span>
-        {view.description ? (
-          <span className="fc-view-option__description" id={descriptionId}>
-            {view.description}
+    // The credit is outside the label, so its links are links and not part of the radio.
+    <div className="fc-view-choice">
+      <label className="fc-view-option">
+        <input
+          className="fc-view-option__input"
+          type="radio"
+          name={name}
+          value={view.id}
+          checked={checked}
+          aria-labelledby={titleId}
+          aria-describedby={view.description ? descriptionId : undefined}
+          onChange={onSelect}
+        />
+        <span className="fc-view-option__mark" aria-hidden="true" />
+        <ViewPreview meta={meta} view={view} />
+        <span className="fc-view-option__text">
+          <span className="fc-view-option__title" id={titleId}>
+            {view.title}
+            {tag ? <span className="fc-view-option__tag">{tag}</span> : null}
           </span>
-        ) : null}
-      </span>
-    </label>
+          {view.description ? (
+            <span className="fc-view-option__description" id={descriptionId}>
+              {view.description}
+            </span>
+          ) : null}
+        </span>
+      </label>
+      {checked ? <LayerCredit attribution={view.attribution} /> : null}
+    </div>
   );
 }
 
@@ -103,6 +136,7 @@ function OverlayRow({ meta, overlay }: { meta: Meta; overlay: Overlay }) {
             format={(value) => `${value}%`}
             onChange={(value) => setOpacity(overlay.id, value / 100)}
           />
+          <LayerCredit attribution={overlay.attribution} />
           {overlay.type === "findings" && ruledOut ? (
             <Switch
               label={`Show ${ruledOut.label.toLowerCase()} findings`}
@@ -149,7 +183,7 @@ export const LayerPanel = memo(function LayerPanel({ meta }: { meta: Meta }) {
 
   const groups = VIEW_GROUPS.map((group) => ({
     group,
-    views: meta.layers.views.filter((view) => view.group === group),
+    views: orderedViews(meta.layers.views.filter((view) => view.group === group)),
   })).filter((entry) => entry.views.length > 0);
 
   function select(viewId: string): void {
@@ -169,9 +203,11 @@ export const LayerPanel = memo(function LayerPanel({ meta }: { meta: Meta }) {
       {groups.map(({ group, views }) => (
         <fieldset key={group} className="fc-layers__group">
           <legend className="fc-layers__heading">{GROUP_LABELS[group]}</legend>
+          {GROUP_HINTS[group] ? <p className="fc-field__hint">{GROUP_HINTS[group]}</p> : null}
           {views.map((view) => (
             <ViewOption
               key={view.id}
+              meta={meta}
               view={view}
               name={`${id}-view`}
               checked={view.id === selected}
@@ -250,6 +286,8 @@ export const LayerPanel = memo(function LayerPanel({ meta }: { meta: Meta }) {
           </div>
         ) : null}
       </section>
+
+      <TerrainTools />
 
       <section className="fc-layers__section">
         <h3 className="fc-layers__heading">Overlays</h3>

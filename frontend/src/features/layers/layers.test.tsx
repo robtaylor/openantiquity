@@ -1,0 +1,316 @@
+import { act, screen, waitFor, within } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { RasterView } from "../../api/meta.js";
+import { useMapStore } from "../../map/store.js";
+import { useMapTool } from "../../map/tool.js";
+import { type ApiRoutes, apiError, routeApi } from "../../test/apiRoutes.js";
+import { BORDER_COVERAGE } from "../../test/fixtures/coverage.js";
+import { metaFixture } from "../../test/fixtures/meta.js";
+import { json, mapReady, renderShell, setUpShellTests } from "../../test/shellHarness.js";
+import { useToastStore } from "../../ui/toastStore.js";
+import { useCoverageStore } from "./coverage/store.js";
+import { COVERAGE_LAYERS } from "./coverage/useCoverageOnMap.js";
+import type { ProfileOut } from "./profile/api.js";
+import { useProfileHover } from "./profile/store.js";
+import { PROFILE_LAYERS, PROFILE_SOURCE } from "./profile/useProfileOnMap.js";
+
+vi.mock("maplibre-gl", async () => {
+  const fake = await import("../../test/fakeMapLibre.js");
+  return { Map: fake.FakeMap };
+});
+
+const harness = setUpShellTests();
+
+/** Open the app at an address, with the map's part of it in the address bar too, where the map reads it at start. */
+function open(path: string): void {
+  window.history.replaceState(null, "", path);
+  renderShell(path);
+}
+let api: ApiRoutes;
+
+/** A section across a bank and ditch: level, down into a ditch, up over a bank, then level. */
+function profileAnswer(points: number): ProfileOut {
+  const heights = [160, 160, 159.8, 156, 154, 156, 161, 165, 162, 161, 161];
+  return {
+    length_m: 100,
+    resolution_m: 1,
+    samples: heights.map((elevation, i) => ({
+      distance_m: i * 10,
+      elevation,
+      lon: -1.853 + (i * 0.004) / (heights.length - 1),
+      lat: 51.4286 + points * 0,
+    })),
+  };
+}
+
+beforeEach(() => {
+  useCoverageStore.setState(useCoverageStore.getInitialState(), true);
+  useProfileHover.setState({ hover: null });
+  useMapTool.setState({ tool: null });
+  api = routeApi(harness.fetchMock(), {
+    "POST /terrain/profile": (call) => {
+      const body = call.body as { line: { coordinates: unknown[] } };
+      return json(profileAnswer(body.line.coordinates.length));
+    },
+    "GET /terrain/coverage": () => json(BORDER_COVERAGE),
+  });
+});
+
+describe("the layer panel", () => {
+  it("shows each terrain view with a preview and what it's good for, the default first", async () => {
+    open("/?panel=layers");
+    await mapReady();
+    const panel = screen.getByRole("complementary", { name: "Layers" });
+    const terrain = within(panel).getByRole("group", { name: "Terrain from LIDAR" });
+    const radios = within(terrain).getAllByRole("radio");
+    expect(radios[0]).toHaveAccessibleName("Composite");
+    expect(radios[0]).toHaveAccessibleDescription(/Shows most earthworks/);
+    // The term is explained where it first appears.
+    expect(within(terrain).getByText(/LIDAR is a laser survey/)).toBeInTheDocument();
+
+    // Each tiled view's preview is one of its own tiles, from the address /meta gives.
+    const composite = metaFixture.layers.views.find((view) => view.id === "composite") as RasterView;
+    const previews = terrain.querySelectorAll<HTMLImageElement>(".fc-view-preview img");
+    expect(previews.length).toBe(5);
+    const first = new URL(previews[0]?.src ?? "");
+    expect(first.origin + first.pathname).toBe(new URL(composite.tiles[0] ?? "").origin + first.pathname);
+    expect(first.searchParams.get("bbox")?.split(",")).toHaveLength(4);
+    // Raking light is drawn in the browser, so its preview is too.
+    expect(terrain.querySelector(".fc-view-preview--raking")).not.toBeNull();
+  });
+
+  it("shows the credit and licence of the view that is on, and of each overlay that is on", async () => {
+    const user = userEvent.setup();
+    open("/?panel=layers");
+    await mapReady();
+    const panel = screen.getByRole("complementary", { name: "Layers" });
+    const credits = () => panel.querySelectorAll(".fc-layer-credit");
+    // Composite is on, and so is the OpenStreetMap overlay, with its links.
+    expect(credits()[0]).toHaveTextContent(/Environment Agency/);
+    expect(within(panel).getAllByRole("link", { name: "OpenStreetMap" }).length).toBeGreaterThan(0);
+
+    await user.click(within(panel).getByRole("radio", { name: "OpenStreetMap" }));
+    const osmCredit = [...credits()].find((element) => element.textContent?.includes("contributors"));
+    expect(osmCredit).toBeDefined();
+    expect(within(osmCredit as HTMLElement).getByRole("link", { name: "OpenStreetMap" })).toHaveAttribute(
+      "href",
+      "https://www.openstreetmap.org/copyright",
+    );
+  });
+
+  it("opens the height profile from its terrain tools", async () => {
+    const user = userEvent.setup();
+    open("/?panel=layers");
+    await mapReady();
+    await user.click(screen.getByRole("link", { name: "Draw a height profile" }));
+    expect(await screen.findByRole("heading", { name: "Height profile" })).toBeInTheDocument();
+    expect(screen.queryByRole("complementary", { name: "Layers" })).toBeNull();
+  });
+});
+
+describe("the height profile", () => {
+  it("draws a line from map clicks, asks for the heights, and charts them", async () => {
+    open("/profile");
+    const map = await mapReady();
+    expect(screen.getByRole("heading", { name: "Draw a line on the map" })).toBeInTheDocument();
+    expect(screen.getByTestId("profile-crosshair")).toBeInTheDocument();
+    expect(useMapTool.getState().tool).toBe("profile");
+    expect(map.doubleClickZoom.isEnabled()).toBe(false);
+
+    act(() => map.fire("click", { point: { x: 10, y: 10 }, lngLat: { lng: -1.853, lat: 51.4286 } }));
+    expect(await screen.findByRole("heading", { name: "Add one more point" })).toBeInTheDocument();
+    act(() => map.fire("click", { point: { x: 90, y: 10 }, lngLat: { lng: -1.849, lat: 51.4286 } }));
+
+    const chart = await screen.findByRole("slider", { name: "Height along the line" });
+    const [call] = api.callsTo("POST /terrain/profile");
+    expect(call?.headers.get("X-FieldClub-Client")).toBe("web");
+    expect(call?.body).toEqual({
+      line: {
+        type: "LineString",
+        coordinates: [
+          [-1.853, 51.4286],
+          [-1.849, 51.4286],
+        ],
+      },
+      // About one a metre along the 277.6 m line, so it is read from the 1 m grid.
+      samples: 279,
+    });
+    expect(chart).toHaveAttribute("aria-valuemax", "100");
+    expect(screen.getByText("every metre")).toBeInTheDocument();
+    expect(screen.getByText("154.0 m")).toBeInTheDocument();
+    expect(screen.getByText("165.0 m")).toBeInTheDocument();
+
+    const drawn = map.sourceData(PROFILE_SOURCE) as { features: Array<{ properties: { kind: string } }> };
+    expect(drawn.features.map((feature) => feature.properties.kind)).toEqual(["line", "point", "point"]);
+    expect(map.getLayer(PROFILE_LAYERS.line)).toBeDefined();
+  });
+
+  it("is drawn by keyboard too: a point at the cross, then the chart's arrow keys", async () => {
+    const user = userEvent.setup();
+    open("/profile?line=-1.853,51.4286#m=16/51.4286/-1.85/0/0&v=composite");
+    const map = await mapReady();
+    await user.click(screen.getByRole("button", { name: "Add a point at the cross" }));
+    const chart = await screen.findByRole("slider", { name: "Height along the line" });
+    expect(api.callsTo("POST /terrain/profile")[0]?.body).toMatchObject({
+      line: {
+        coordinates: [
+          [-1.853, 51.4286],
+          [-1.85, 51.4286],
+        ],
+      },
+    });
+
+    chart.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(chart).toHaveAttribute("aria-valuetext", "0 m along, 160.0 m high");
+    await user.keyboard("{End}");
+    expect(chart).toHaveAttribute("aria-valuetext", "100 m along, 161.0 m high");
+    expect(screen.getByTestId("profile-chart-marker")).toBeInTheDocument();
+    // The marker follows on the map.
+    await waitFor(() => {
+      const drawn = map.sourceData(PROFILE_SOURCE) as { features: Array<{ properties: { kind: string } }> };
+      expect(drawn.features.at(-1)?.properties.kind).toBe("hover");
+    });
+    // Escape clears the marker and leaves the panel open.
+    await user.keyboard("{Escape}");
+    expect(screen.queryByTestId("profile-chart-marker")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Height profile" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Remove the last point" }));
+    expect(await screen.findByRole("heading", { name: "Add one more point" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Start again" }));
+    expect(screen.getByRole("heading", { name: "Draw a line on the map" })).toBeInTheDocument();
+  });
+
+  it("follows the pointer along the line on the map", async () => {
+    open("/profile?line=-1.853,51.4286,-1.849,51.4286#m=16/51.4286/-1.851/0/0&v=composite");
+    const map = await mapReady();
+    await screen.findByRole("slider", { name: "Height along the line" });
+    const sample = profileAnswer(2).samples[4];
+    if (!sample) throw new Error("no sample");
+    const at = map.project([sample.lon, sample.lat]);
+    act(() => map.fire("mousemove", { point: at, lngLat: { lng: sample.lon, lat: sample.lat }, originalEvent: {} }));
+    await waitFor(() => expect(useProfileHover.getState().hover).toBe(4));
+    expect(screen.getByTestId("profile-chart-marker")).toHaveTextContent("40 m along: 154.0 m");
+    // Far from the line, the marker goes.
+    act(() =>
+      map.fire("mousemove", { point: { x: at.x, y: at.y + 200 }, lngLat: { lng: 0, lat: 0 }, originalEvent: {} }),
+    );
+    await waitFor(() => expect(useProfileHover.getState().hover).toBeNull());
+  });
+
+  it("doesn't open a record under a point being placed", async () => {
+    open("/profile");
+    const map = await mapReady();
+    map.rendered = [{ id: 7, properties: { id: 7, category: "designation" }, layer: { id: "records-squares" } }];
+    act(() => map.fire("click", { point: { x: 10, y: 10 }, lngLat: { lng: -1.853, lat: 51.4286 } }));
+    expect(await screen.findByRole("heading", { name: "Add one more point" })).toBeInTheDocument();
+    expect(api.callsTo("GET /records/7")).toHaveLength(0);
+  });
+
+  it("says why when the server refuses a line, and offers another try when it fails", async () => {
+    const user = userEvent.setup();
+    api.on("POST /terrain/profile", () => apiError(400, "invalid_profile", "A profile line can be at most 5 km long."));
+    open("/profile?line=-1.9,51.4,-1.8,51.45");
+    await mapReady();
+    expect(await screen.findByRole("heading", { name: "That line can't be profiled" })).toBeInTheDocument();
+    expect(screen.getByText("A profile line can be at most 5 km long.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+
+    let failing = true;
+    api.on("POST /terrain/profile", () =>
+      failing ? apiError(503, "http_503", "The server isn't answering.") : json(profileAnswer(2)),
+    );
+    await user.click(screen.getByRole("button", { name: "Remove the last point" }));
+    await user.click(screen.getByRole("button", { name: "Add a point at the cross" }));
+    expect(await screen.findByRole("heading", { name: "The heights couldn't be loaded" })).toBeInTheDocument();
+    failing = false;
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("slider", { name: "Height along the line" })).toBeInTheDocument();
+  });
+
+  it("lets the map have its clicks back when the panel closes", async () => {
+    const user = userEvent.setup();
+    open("/profile");
+    const map = await mapReady();
+    await user.click(screen.getByRole("button", { name: "Close panel" }));
+    await waitFor(() => expect(useMapTool.getState().tool).toBeNull());
+    expect(map.doubleClickZoom.isEnabled()).toBe(true);
+    expect(screen.queryByTestId("profile-crosshair")).toBeNull();
+  });
+});
+
+describe("coverage", () => {
+  const BORDER = "/#m=11/51.65/-2.675/0/0&v=composite";
+
+  it("shades the squares of a terrain view that have no data, and says so", async () => {
+    open(BORDER);
+    const map = await mapReady();
+    await waitFor(() => expect(api.callsTo("GET /terrain/coverage")).toHaveLength(1));
+    expect(api.callsTo("GET /terrain/coverage")[0]?.url.searchParams.get("bbox")).toBe("-3,51.5,-2.25,51.75");
+    expect(await screen.findByTestId("coverage-notice")).toHaveTextContent("Shaded squares have no one-metre LIDAR");
+    expect(map.isVisible(COVERAGE_LAYERS.gapsFill)).toBe(true);
+    expect(map.isVisible(COVERAGE_LAYERS.coverageLine)).toBe(false);
+    // The shading sits on the terrain, under every overlay.
+    const ids = map.getStyle().layers.map((layer) => layer.id);
+    expect(ids.indexOf(COVERAGE_LAYERS.gapsFill)).toBeGreaterThan(ids.indexOf("view-slope"));
+    expect(ids.indexOf(COVERAGE_LAYERS.gapsFill)).toBeLessThan(ids.indexOf("osm-road-major"));
+
+    // A map, not a terrain view, has nothing to shade.
+    act(() => useMapStore.getState().setMainView("osm_standard"));
+    await waitFor(() => expect(map.isVisible(COVERAGE_LAYERS.gapsFill)).toBe(false));
+    expect(screen.queryByTestId("coverage-notice")).toBeNull();
+  });
+
+  it("outlines where the data is, with what it is, from the layer panel", async () => {
+    const user = userEvent.setup();
+    open(`/?panel=layers${BORDER.slice(1)}`);
+    const map = await mapReady();
+    const panel = screen.getByRole("complementary", { name: "Layers" });
+    await user.click(within(panel).getByRole("switch", { name: "Where there's one-metre LIDAR" }));
+    await waitFor(() => expect(map.isVisible(COVERAGE_LAYERS.coverageLine)).toBe(true));
+    expect(await within(panel).findByTestId("coverage-summary")).toHaveTextContent(
+      /In view: 2022 composite, with \d+ of \d+ squares empty/,
+    );
+  });
+
+  it("asks nothing when zoomed out too far to say square by square", async () => {
+    open("/#m=7/52.5/-1.5/0/0&v=composite");
+    await mapReady();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(api.callsTo("GET /terrain/coverage")).toHaveLength(0);
+  });
+
+  it("says plainly when the whole view has no data", async () => {
+    api.on("GET /terrain/coverage", () => json({ type: "FeatureCollection", features: [] }));
+    open("/#m=12/52.4/-3.9/0/0&v=composite");
+    await mapReady();
+    expect(await screen.findByTestId("coverage-notice")).toHaveTextContent("No one-metre LIDAR here.");
+  });
+});
+
+describe("the camera and the status bar", () => {
+  it("offers plan view whenever the map is tilted, and goes back to it", async () => {
+    const user = userEvent.setup();
+    open("/");
+    const map = await mapReady();
+    expect(screen.queryByRole("button", { name: "Back to plan view" })).toBeNull();
+    act(() => map.userMove({ pitch: 45, bearing: 30 }));
+    await user.click(await screen.findByRole("button", { name: "Back to plan view" }));
+    expect(map.getPitch()).toBe(0);
+    expect(map.getBearing()).toBe(0);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Back to plan view" })).toBeNull());
+  });
+
+  it("copies the grid reference of the middle of the map", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    open("/");
+    await mapReady();
+    await user.click(screen.getByRole("button", { name: "Copy the grid reference of the middle of the map" }));
+    expect(writeText).toHaveBeenCalledWith(expect.stringMatching(/^SU \d{3,4} \d{3,4}$/));
+    expect(useToastStore.getState().toasts.at(-1)?.message).toMatch(/^Copied SU /);
+  });
+});

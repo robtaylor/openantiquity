@@ -12,6 +12,9 @@ import {
 } from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { type Meta, viewTitle } from "../api/meta.js";
+import { useCoverageOnMap } from "../features/layers/coverage/useCoverageOnMap.js";
+import { ProfileCrosshair } from "../features/layers/MapNotices.js";
+import { useProfileOnMap } from "../features/layers/profile/useProfileOnMap.js";
 import { useRecordsOnMap } from "../features/records/useRecordsOnMap.js";
 import { clamp } from "../ui/math.js";
 import { MapFailure } from "./MapFailure.js";
@@ -21,6 +24,7 @@ import { SwipeHandle } from "./SwipeHandle.js";
 import { useMapStore } from "./store.js";
 import { syncMaps } from "./syncMaps.js";
 import { useTileNotices } from "./tileNotices.js";
+import { useTileRefresh } from "./tileRefresh.js";
 import { useFindingsOverlay } from "./useFindingsOverlay.js";
 import "./map.css";
 
@@ -95,7 +99,11 @@ function MapPanes({ meta, insets }: MapViewProps) {
     return syncMaps(mainMap, compareMap, { isLive: isMapLive });
   }, [comparing, mainMap, compareMap]);
 
-  useRecordsOnMap(meta, mainMap, comparing ? compareMap : null);
+  const shownCompare = comparing ? compareMap : null;
+  useRecordsOnMap(meta, mainMap, shownCompare);
+  useCoverageOnMap(meta, mainMap, shownCompare);
+  useProfileOnMap(mainMap, shownCompare);
+  useTileRefresh(meta, [mainMap, shownCompare]);
 
   // The handle moves within the part of the map that is not under the rail or the panel.
   const usable = Math.max(1, width - insets.left - insets.right);
@@ -140,6 +148,7 @@ function MapPanes({ meta, insets }: MapViewProps) {
           />
         </>
       ) : null}
+      <ProfileCrosshair />
     </div>
   );
 }

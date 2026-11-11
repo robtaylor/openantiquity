@@ -9,7 +9,8 @@ import { solidPng } from "./png.js";
  * colours for imagery, sea level for elevation, and nothing for vector data.
  * The API calls the app makes in fixture mode get stand-in answers too: no
  * findings (for the map and for the list), a fixed height for any spot,
- * nobody signed in, nothing waiting for a second look and no help wanted. A test can
+ * one-metre elevation everywhere, nobody signed in, nothing waiting for a
+ * second look and no help wanted. A test can
  * answer any of them differently with a route of its own, which Playwright
  * tries first.
  */
@@ -109,6 +110,32 @@ function counter(log: NetworkLog): (kind: string) => void {
 }
 
 /**
+ * `GET /terrain/coverage` as if one-metre elevation covered the whole box
+ * asked about, so the map has no squares to shade unless a test says so.
+ */
+export function coverageEverywhere(url: URL): unknown {
+  const [west, south, east, north] = (url.searchParams.get("bbox") ?? "-180,-85,180,85").split(",").map(Number);
+  const ring = [
+    [west, south],
+    [east, south],
+    [east, north],
+    [west, north],
+    [west, south],
+  ];
+  return {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        id: "everywhere",
+        geometry: { type: "Polygon", coordinates: [ring] },
+        properties: { tile: "everywhere", capture: "Stand-in data", resolution_m: 1 },
+      },
+    ],
+  };
+}
+
+/**
  * Stand in for the backend. Fixture mode answers /meta itself, the tile
  * endpoints answer "no data here", and the two API calls the map makes get
  * the stand-in answers described above.
@@ -151,6 +178,11 @@ export async function stubBackend(page: Page, log: NetworkLog = newLog()): Promi
       // Nothing waiting for a second look, and no help wanted.
       count("review");
       const body = path === "/api/v1/review/next" ? { items: [], next_cursor: null } : { groups: [] };
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    }
+    if (path === "/api/v1/terrain/coverage") {
+      count("coverage");
+      const body = coverageEverywhere(new URL(route.request().url()));
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
     }
     if (path === "/api/v1/geo/point") {

@@ -1,0 +1,108 @@
+.fc-profile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
+
+.fc-profile > .fc-button {
+  align-self: flex-start;
+}
+
+.fc-profile__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fc-profile__loading {
+  min-height: 180px;
+}
+
+.fc-profile-chart {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--raised);
+  touch-action: none;
+}
+
+.fc-profile-chart:focus-visible {
+  outline: 2px solid var(--focus-colour);
+  outline-offset: 2px;
+}
+
+.fc-profile-chart__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: crosshair;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.fc-profile-chart__tick line {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.fc-profile-chart__tick text {
+  fill: var(--text-muted);
+}
+
+.fc-profile-chart__area {
+  fill: rgb(224 164 58 / 0.14);
+}
+
+.fc-profile-chart__line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.75;
+  stroke-linejoin: round;
+}
+
+.fc-profile-chart__marker line {
+  stroke: var(--text);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.fc-profile-chart__marker circle {
+  fill: var(--text);
+  stroke: var(--bg);
+  stroke-width: 1.5;
+}
+
+.fc-profile-chart__label {
+  fill: var(--text);
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: var(--raised);
+  stroke-width: 4px;
+}
+
+.fc-profile__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.fc-profile__facts div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.fc-profile__facts dt {
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.fc-profile__facts dd {
+  margin: 0;
+  font-size: 14px;
+}
+
+.fc-profile .fc-empty__body p + p {
+  margin-top: 8px;
+}

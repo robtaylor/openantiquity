@@ -105,8 +105,8 @@ describe("Shell", () => {
     await user.click(screen.getByRole("button", { name: "Layers" }));
     const panel = screen.getByRole("complementary", { name: "Layers" });
     expect(screen.getByRole("button", { name: "Layers" })).toHaveAttribute("aria-pressed", "true");
-    expect(within(panel).getByRole("group", { name: "LIDAR" })).toBeInTheDocument();
-    expect(within(panel).getByRole("group", { name: "Maps" })).toBeInTheDocument();
+    expect(within(panel).getByRole("group", { name: "Terrain from LIDAR" })).toBeInTheDocument();
+    expect(within(panel).getByRole("group", { name: "Modern maps" })).toBeInTheDocument();
     expect(within(panel).getAllByRole("radio")).toHaveLength(metaFixture.layers.views.length);
     const composite = within(panel).getByRole("radio", { name: "Composite" });
     expect(composite).toBeChecked();
@@ -123,7 +123,8 @@ describe("Shell", () => {
     // Raking light brings its sun controls, and credits the elevation data.
     const raking = screen.getByRole("region", { name: "Raking light" });
     expect(within(raking).getByRole("slider", { name: "Sun direction" })).toHaveAttribute("aria-valuenow", "315");
-    expect(within(panel).getByText(/^Elevation: Mapzen terrain tiles/)).toBeInTheDocument();
+    // Once beside the chosen view, and once in the credits for everything on screen.
+    expect(within(panel).getAllByText(/^Elevation: Mapzen terrain tiles/)).toHaveLength(2);
 
     expect(liveMaps()).toHaveLength(1);
     await user.click(within(panel).getByRole("switch", { name: "Compare two layers" }));
@@ -170,10 +171,13 @@ describe("Shell", () => {
     expect(map.isVisible("findings-points")).toBe(true);
     expect(within(panel).queryByText(/OpenMapTiles/)).toBeNull();
     await user.click(within(panel).getByRole("switch", { name: "OpenStreetMap" }));
-    // The credits list keeps the links, as real anchors that open in a new tab.
-    const link = within(panel).getByRole("link", { name: "© OpenMapTiles" });
-    expect(link).toHaveAttribute("href", "https://www.openmaptiles.org/");
-    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    // The overlay's own credit and the credits list keep the links, as real anchors that open in a new tab.
+    const links = within(panel).getAllByRole("link", { name: "© OpenMapTiles" });
+    expect(links).toHaveLength(2);
+    for (const link of links) {
+      expect(link).toHaveAttribute("href", "https://www.openmaptiles.org/");
+      expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    }
     await user.click(within(panel).getByRole("switch", { name: "OpenStreetMap" }));
     expect(map.isVisible("osm-road-major")).toBe(false);
 
