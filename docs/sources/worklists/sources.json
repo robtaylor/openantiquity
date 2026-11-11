@@ -604,8 +604,8 @@
       "paging": "Hub download as for NHLE (302 or 202 ExportingData; AIM exports were regenerating when re-requested on 2026-11-10). Fallback FeatureServer https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1, 2,000 per page.",
       "id_field": "HE_UID",
       "name_field": null,
-      "type_field": "MONUMENT_TYPE",
-      "period_field": "PERIOD",
+      "type_field": null,
+      "period_field": null,
       "summary_field": null,
       "record_url_template": null,
       "other_fields": [
@@ -629,6 +629,7 @@
         "HE_URL1-5 are legacy Heritage Gateway links with resourceID=19191, which now redirect to a search, not a record.",
         "The OGC API Features wrapper (Historic_England_Aerial_Investigation_Mapping_data/OGCFeatureServer) returned 400 for items requests; do not use it.",
         "HE published symbology: Bank #A50026, Ditch #313695, Structure #F46D43, Ridge and furrow #74ADD1, Slope #4575B4, Extent #FDAE61.",
+        "The extents layer (FeatureServer 1) has no MONUMENT_TYPE or PERIOD, only layer, project, HE_UID and HER_No, so a record has no type or period of its own. HE_UID reads NONE GIVEN on about half the rows.",
         "Earlier hand-drawn projects exist only as raster and are not downloadable."
       ],
       "wave": "england_v1",
@@ -750,7 +751,7 @@
       "type_field": "HeritageCa",
       "period_field": null,
       "summary_field": null,
-      "record_url_template": "https://historicengland.org.uk/advice/heritage-at-risk/search-register/list-entry/{List_Entry}",
+      "record_url_template": null,
       "other_fields": [
         "List_Entry",
         "Risk_Metho",
@@ -758,6 +759,7 @@
       ],
       "gotchas": [
         "An asset can appear more than once, one row per assessment method.",
+        "Do not build links from List_Entry: the register's own page numbers differ from the National Heritage List number and the template gives pages that do not exist. Use the URL field.",
         "Replace wholesale each year; 2021-2025 are separate services and the service name carries the year.",
         "HE's downloads page says not to scrape its website for Heritage at Risk data."
       ],
@@ -785,12 +787,12 @@
       "geometry": "Point",
       "precision_m": null,
       "paging": "ArcGIS FeatureServer, 2,000 per page",
-      "id_field": "Report_Num",
+      "id_field": null,
       "name_field": "Report_title",
       "type_field": "Project_type",
       "period_field": null,
       "summary_field": "Brief_description",
-      "record_url_template": "https://historicengland.org.uk/research/results/reports/{Report_Num}",
+      "record_url_template": null,
       "other_fields": [
         "Author_s_",
         "Report_URL",
@@ -805,7 +807,8 @@
       "gotchas": [
         "Layer id is 475, not 0.",
         "Large-area projects are a single centre point.",
-        "Report pages return 403 to curl; link only."
+        "Report pages return 403 to curl; link only.",
+        "Report_Num is not unique and is not always a number (it holds series numbers and words such as Informed Conservation), so it is no id and no basis for a link. Every row has Report_URL, the publisher's own link, and the connector uses it; the template built from Report_Num was wrong on 31 rows and empty on 670."
       ],
       "wave": "england_v1",
       "later_reason": null,
@@ -873,8 +876,8 @@
       "geometry": "Polygon",
       "precision_m": null,
       "paging": "ArcGIS FeatureServer, 2,000 per page",
-      "id_field": null,
-      "name_field": null,
+      "id_field": "ARTICLEUID",
+      "name_field": "ARTICLEVERSIONNAME",
       "type_field": null,
       "period_field": null,
       "summary_field": null,
@@ -887,7 +890,8 @@
         "DDRType"
       ],
       "gotchas": [
-        "The sample request shown was run against the Delisted layer only."
+        "The sample request shown was run against the Delisted layer only.",
+        "The layer does have an id and a name: ARTICLEUID is unique in all 2,733 rows and ARTICLEVERSIONNAME names the site. DecisionText is the summary."
       ],
       "wave": "england_v1",
       "later_reason": null,

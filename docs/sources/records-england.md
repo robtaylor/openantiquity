@@ -167,10 +167,10 @@ Tested requests:
 **Notes.**
 
 - Conservation Areas: native EPSG:27700. Fields `UID`, `NAME`, `DATE_OF_DE`, `LPA`. The test returned Stratford sub Castle, Wiltshire, 1984. Historic England's own description said around 10,000 exist, against 8,749 here.
-- Heritage at Risk: native EPSG:3857 despite the name. Licence text "Contains public sector information licensed under the Open Government Licence v3.0". Listed Building 2,239; Scheduled Monument 2,183; Conservation Area 455; Park and Garden 105; Wreck 4; Battlefield 3. A centroid points service held 4,991. An asset can appear more than once, one row per assessment method. Historic England's downloads page said not to scrape its website for Heritage at Risk data.
+- Heritage at Risk: native EPSG:3857 despite the name. Licence text "Contains public sector information licensed under the Open Government Licence v3.0". Listed Building 2,239; Scheduled Monument 2,183; Conservation Area 455; Park and Garden 105; Wreck 4; Battlefield 3. A centroid points service held 4,991. An asset can appear more than once, one row per assessment method. The register's own page for an entry has a different number from `List_Entry`, and the `URL` field holds it, so a link built from `List_Entry` goes nowhere. Historic England's downloads page said not to scrape its website for Heritage at Risk data.
 - HER boundaries: the layer id is 2, and layer 0 returned "not found". Native EPSG:27700. The test point returned Wiltshire and Swindon HER. Fields `HER_NAME`, `GATEWAY_LINK`, `UAD`. The polygons sum to 132,940 km². All 83 `GATEWAY_LINK` values were old `heritagegateway.org.uk` `herdetail.aspx` URLs that returned 301 to the generic new home, so the per-HER link was effectively lost. Suggested use: the key for a per-HER registry. See [England HER coverage](england-her-coverage.md).
-- Research Spatial Reports: the layer id is 475. Native EPSG:27700. A large-area project is one centre point. Fields `Report_Num`, `Report_title`, `Report_URL`, `Project_type`, `Year`.
-- De-designated sites hold sites removed from the NHLE since April 2011. The count query returned `{"count":161}` for scheduled ones. Fields `OriginalListEntryNumber`, `DateRemovedFromList`, `DecisionText`. Turning the Plough 2 is a Midlands ridge-and-furrow survival survey with fields `RidgeAndFurrow`, `Survival`, `Condition`, `ConfidenceRating`, `Vulnerability`. The research judged it relevant to lidar earthwork work.
+- Research Spatial Reports: the layer id is 475. Native EPSG:27700. A large-area project is one centre point. Fields `Report_Num`, `Report_title`, `Report_URL`, `Project_type`, `Year`. `Report_Num` is not unique and is not always a number, so use `Report_URL`, which every row has, for the link.
+- De-designated sites hold sites removed from the NHLE since April 2011. The count query returned `{"count":161}` for scheduled ones. Fields `ARTICLEUID` (unique in all 2,733 rows), `ARTICLEVERSIONNAME` (the name), `OriginalListEntryNumber`, `DateRemovedFromList`, `DecisionText`. Turning the Plough 2 is a Midlands ridge-and-furrow survival survey with fields `RidgeAndFurrow`, `Survival`, `Condition`, `ConfidenceRating`, `Vulnerability`. The research judged it relevant to lidar earthwork work.
 
 ## Aerial photo footprints
 
@@ -223,6 +223,10 @@ https://tiles-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/NMP_mapPackag
 ```
 
 **Notes.** `exportTilesAllowed` was false. Item `1c11aac0cb654b5794d2550544da1ec3`. The tiles are not Web Mercator, so MapLibre cannot read them without a reprojecting proxy or re-tiling.
+
+## AIM extents layer
+
+The monument extents layer (`HE_AIM_data` layer 1) has no `MONUMENT_TYPE` or `PERIOD`: its fields are `layer`, `project`, `HE_UID` and `HER_No`. A record from it has no type or period of its own, and `HE_UID` reads `NONE GIVEN` on about half the rows.
 
 ## Dated AIM views and OGC API
 

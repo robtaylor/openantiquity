@@ -801,6 +801,13 @@ RECORD_CATEGORIES: tuple[RecordCategoryInfo, ...] = (
 )
 
 
+# Record types that say where a source has looked rather than what it found. Such a record's polygon
+# covers thousands of square kilometres, so every position inside it is 0 m from it, and it would crowd
+# real records out of "near here" and "is this already recorded?". It stays in search and on the map.
+MAPPING_PROJECT_AREA = "Mapping project area"
+COVERAGE_RECORD_TYPES: frozenset[str] = frozenset({MAPPING_PROJECT_AREA})
+
+
 class SourceAccess(StrEnum):
     """How Field Club may hold a source's data, per Decision 0007.
 

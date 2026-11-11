@@ -36,6 +36,7 @@ from sqlalchemy import (
     cast,
     func,
     literal,
+    or_,
     select,
     true,
     union,
@@ -49,7 +50,7 @@ from fieldclub.models import Finding, Record, Source, User
 from fieldclub.models.common import SRID
 from fieldclub.schemas.common import MAX_OFFSET, check_bbox, offset_from_cursor, offset_page
 from fieldclub.services import findings, geo, record_tiles, sensitivity
-from fieldclub.vocab import FeatureClass
+from fieldclub.vocab import COVERAGE_RECORD_TYPES, FeatureClass
 
 # The search box sends at most this much. The API refuses longer, and the
 # service cuts anything longer that reaches it another way.
@@ -389,7 +390,8 @@ def nearby(
     The distance is to the nearest part of the record's geometry, so a point
     inside a monument's area is 0 m from it, and so is a record inside `area`.
     The box test on `geom` uses its index. The exact test and the distance are
-    on the geography.
+    on the geography. Records of a coverage type (`vocab.COVERAGE_RECORD_TYPES`)
+    are left out, because they say where a source has looked, not what it found.
     """
     check_point(lon, lat)
     assert 0 < radius_m <= MAX_RADIUS_M, f"radius must be between 0 and {MAX_RADIUS_M} m"
@@ -408,6 +410,7 @@ def nearby(
     statement = _filters(
         _base().add_columns(distance), sources=sources, categories=categories, bbox=None
     ).where(
+        or_(Record.record_type.is_(None), Record.record_type.not_in(COVERAGE_RECORD_TYPES)),
         Record.geom.op("&&")(func.ST_Expand(here, dlon, dlat)),
         func.ST_DWithin(func.Geography(Record.geom), here_geography, radius_m),
     )

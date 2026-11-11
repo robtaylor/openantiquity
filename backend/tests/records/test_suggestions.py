@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import respx
 from fastapi.testclient import TestClient
-from shapely.geometry import Point
+from shapely.geometry import Point, box
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
@@ -203,3 +203,25 @@ def test_the_community_class_counts_only_for_those_who_may_see_the_answers(
     assert fits(reviewer) is False
     assert fits(answerer) is True
     assert fits(db.get(type(reviewer), finding.author_id)) is True
+
+
+def test_a_mapping_project_area_is_not_a_candidate_for_a_finding(
+    db: Session, make_finding: MakeFinding, scattered: list[Record]
+) -> None:
+    """A survey polygon covers whole counties, so every position inside it is 0 m from it."""
+    mapped = add_source(db, "he-aim-project-areas", category="monument")
+    area = add_record(
+        db,
+        mapped,
+        "Essex",
+        geom=box(-2.0, 51.0, -1.5, 51.6),
+        record_type="Mapping project area",
+    )
+    db.commit()
+    target = scattered[3]
+    finding = make_finding(**at(target), feature_class=FeatureClass.ENCLOSURE)
+    assert area.id not in ids(records.suggest_for_finding(db, finding, None))
+    lon, lat = at(target)["lon"], at(target)["lat"]
+    assert area.id not in [result.record.id for result in records.nearby(db, lon, lat)]
+    # It is still a record: a search for its name finds it.
+    assert area.id in [result.record.id for result in records.search(db, "Essex")[0]]
