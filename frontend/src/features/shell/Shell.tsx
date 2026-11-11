@@ -41,13 +41,17 @@ import { MarkButton } from "../mark/MarkButton.js";
 import { isMarkPath, MarkLayer } from "../mark/MarkLayer.js";
 import { MARK_PATH, MarkPanel } from "../mark/MarkPanel.js";
 import { APP_NAME, NotFoundPanel, PLACEHOLDER_ROUTES, PlaceholderPanel } from "../placeholders.js";
+import { OpenElsewherePanel } from "../records/OpenElsewherePanel.js";
+import { ELSEWHERE_PATH, RECORD_SEARCH_PATH } from "../records/paths.js";
+import { RecordPage } from "../records/RecordPage.js";
+import { RecordSearchPanel } from "../records/RecordSearchPanel.js";
 import { REVIEW_PATH, ReviewLayer } from "../review/ReviewLayer.js";
 import { ReviewPanel } from "../review/ReviewPanel.js";
+import { SearchBox } from "../search/SearchBox.js";
 import { BrandMark, ModeRail } from "./ModeRail.js";
 import { BARE_MAP_PARAM } from "./navigation.js";
 import { PanelFrame } from "./PanelFrame.js";
 import { type PanelEnvironment, PanelEnvironmentProvider } from "./panelContext.js";
-import { SearchBox } from "./SearchBox.js";
 import { TabBar } from "./TabBar.js";
 import { useIsPhone, useIsShort, useWindowHeight } from "./useIsPhone.js";
 import "./shell.css";
@@ -297,6 +301,9 @@ function ReadyShell({ meta }: { meta: Meta }) {
             <Route path={`${HELP_PATH}/:kind`} element={<HelpKindPanel meta={meta} />} />
             <Route path="/account" element={<AccountPage />} />
             <Route path={EMAIL_LINK_PATH} element={<EmailLinkPage />} />
+            <Route path="/r/:id" element={<RecordPage />} />
+            <Route path={RECORD_SEARCH_PATH} element={<RecordSearchPanel />} />
+            <Route path={ELSEWHERE_PATH} element={<OpenElsewherePanel />} />
             {PLACEHOLDER_ROUTES.map((route) => (
               <Route key={route.path} path={route.path} element={<PlaceholderPanel route={route} />} />
             ))}

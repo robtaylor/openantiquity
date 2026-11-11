@@ -188,8 +188,60 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
 }
 
 /**
+ * The layer of a records tile that holds counts instead of records: below
+ * zoom 12, and in a tile with too many records to send one by one. Each
+ * point is one category in one cell, with `category`, `count` and `sources`
+ * (the source keys counted, comma-separated).
+ */
+export const RECORD_COUNTS_SOURCE_LAYER = "record_counts";
+
+/** Ids of the records overlay's style layers, for the code that filters them and listens to clicks. */
+export const RECORD_LAYERS = {
+  outlines: "records-outlines",
+  squares: "records-squares",
+  counts: "records-counts",
+  countLabels: "records-count-labels",
+  live: "records-live",
+  liveCentres: "records-live-centres",
+  selectionLine: "records-selection-line",
+  selectionSquare: "records-selection-square",
+  selectionPoint: "records-selection-point",
+} as const;
+
+/** The GeoJSON source of records a live source sent to this browser (Decision 0007). */
+export function recordsLiveSourceId(source: string): string {
+  return `${source}-live`;
+}
+
+/** The GeoJSON source holding the record whose page is open. */
+export function recordsSelectionSourceId(source: string): string {
+  return `${source}-selection`;
+}
+
+/**
+ * The filter each records layer is built with. Filters set later, for the
+ * categories and sources a person has turned off, are combined with these
+ * and never replace them.
+ */
+export const RECORD_BASE_FILTERS: Readonly<Record<string, FilterSpecification>> = {
+  [RECORD_LAYERS.outlines]: ["!=", ["geometry-type"], "Point"],
+  // A cell holding one record needs no number on it.
+  [RECORD_LAYERS.countLabels]: [">", ["coalesce", ["get", "count"], 1], 1],
+};
+
+/** The counts' glyphs. They must exist on the glyph server named by the street-map overlay. */
+const COUNT_FONT = ["Noto Sans Bold"];
+
+/**
  * Heritage records: small squares coloured by category, so they can never be
- * mistaken for findings, which are round.
+ * mistaken for findings, which are round. A record with an outline has it
+ * drawn as a thin line in the same colour. Where a tile carries counts, each
+ * count is a larger, softer square, numbered when the map has glyphs.
+ *
+ * Records from a live source are the same squares, hollow, because they
+ * have no category and were never stored here. The record whose page is
+ * open is ringed in the accent colour, and a record whose position is only
+ * known to a square is drawn as that square, dashed, never as a point.
  */
 export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
   const colour = matchOn(
@@ -197,10 +249,75 @@ export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
     meta.vocab.record_categories.map((category) => [category.id, category.colour]),
     COLOURS.textMuted,
   );
-  return [
+  const count: ExpressionSpecification = ["coalesce", ["get", "count"], 1];
+  const hasGlyphs = meta.layers.overlays.some((overlay) => overlay.type === "openmaptiles");
+  const live = recordsLiveSourceId(source);
+  const selection = recordsSelectionSourceId(source);
+
+  const layers: OverlayLayer[] = [
     {
       layer: {
-        id: "records-squares",
+        id: RECORD_LAYERS.outlines,
+        type: "line",
+        source,
+        "source-layer": RECORDS_SOURCE_LAYER,
+        filter: RECORD_BASE_FILTERS[RECORD_LAYERS.outlines],
+        paint: { "line-color": colour, "line-width": 1.25 },
+      } as LayerSpecification,
+      opacity: { "line-opacity": 0.85 },
+    },
+    {
+      layer: {
+        id: RECORD_LAYERS.counts,
+        type: "symbol",
+        source,
+        "source-layer": RECORD_COUNTS_SOURCE_LAYER,
+        layout: {
+          "icon-image": SQUARE_IMAGE,
+          // From about 14 px across for a handful to 26 px for thousands, so the number fits inside.
+          "icon-size": ["interpolate", ["linear"], ["log10", count], 0, 1.8, 1, 2.2, 2, 2.8, 3, 3.6],
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+          // Bigger counts underneath, so a small one sharing the cell still shows.
+          "symbol-sort-key": ["-", 0, count],
+        },
+        paint: {
+          "icon-color": colour,
+          "icon-halo-color": OUTLINE,
+          "icon-halo-width": OUTLINE_WIDTH,
+        },
+      } as LayerSpecification,
+      opacity: { "icon-opacity": 0.9 },
+    },
+  ];
+  if (hasGlyphs) {
+    layers.push({
+      layer: {
+        id: RECORD_LAYERS.countLabels,
+        type: "symbol",
+        source,
+        "source-layer": RECORD_COUNTS_SOURCE_LAYER,
+        filter: RECORD_BASE_FILTERS[RECORD_LAYERS.countLabels],
+        layout: {
+          "text-field": [
+            "case",
+            [">=", count, 1000],
+            ["concat", ["to-string", ["/", ["round", ["/", count, 100]], 10]], "k"],
+            ["to-string", count],
+          ],
+          "text-font": COUNT_FONT,
+          "text-size": 11,
+          "text-allow-overlap": false,
+        },
+        paint: { "text-color": COLOURS.text, "text-halo-color": OUTLINE, "text-halo-width": 1.5 },
+      } as LayerSpecification,
+      opacity: { "text-opacity": 1 },
+    });
+  }
+  layers.push(
+    {
+      layer: {
+        id: RECORD_LAYERS.squares,
         type: "symbol",
         source,
         "source-layer": RECORDS_SOURCE_LAYER,
@@ -218,7 +335,77 @@ export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
       } as LayerSpecification,
       opacity: { "icon-opacity": 1 },
     },
-  ];
+    {
+      // A live record is a square ring: a light square with a dark one laid in its middle.
+      layer: {
+        id: RECORD_LAYERS.live,
+        type: "symbol",
+        source: live,
+        layout: {
+          "icon-image": SQUARE_IMAGE,
+          "icon-size": 1.1,
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+        },
+        paint: { "icon-color": COLOURS.info, "icon-halo-color": OUTLINE, "icon-halo-width": OUTLINE_WIDTH },
+      } as LayerSpecification,
+      opacity: { "icon-opacity": 1 },
+    },
+    {
+      layer: {
+        id: RECORD_LAYERS.liveCentres,
+        type: "symbol",
+        source: live,
+        layout: {
+          "icon-image": SQUARE_IMAGE,
+          "icon-size": 0.45,
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+        },
+        paint: { "icon-color": OUTLINE },
+      } as LayerSpecification,
+      opacity: { "icon-opacity": 1 },
+    },
+    {
+      layer: {
+        id: RECORD_LAYERS.selectionLine,
+        type: "line",
+        source: selection,
+        filter: ["all", ["!=", ["geometry-type"], "Point"], ["!=", ["get", "imprecise"], true]],
+        layout: { "line-join": "miter" },
+        paint: { "line-color": COLOURS.accentStrong, "line-width": 2.5 },
+      } as LayerSpecification,
+      opacity: { "line-opacity": 1 },
+    },
+    {
+      layer: {
+        id: RECORD_LAYERS.selectionSquare,
+        type: "line",
+        source: selection,
+        filter: ["==", ["get", "imprecise"], true],
+        layout: { "line-join": "miter" },
+        paint: { "line-color": COLOURS.accentStrong, "line-width": 2.5, "line-dasharray": [2.5, 2] },
+      } as LayerSpecification,
+      opacity: { "line-opacity": 1 },
+    },
+    {
+      layer: {
+        id: RECORD_LAYERS.selectionPoint,
+        type: "symbol",
+        source: selection,
+        filter: ["==", ["geometry-type"], "Point"],
+        layout: {
+          "icon-image": SQUARE_IMAGE,
+          "icon-size": 1.6,
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+        },
+        paint: { "icon-color": "rgba(0, 0, 0, 0)", "icon-halo-color": COLOURS.accentStrong, "icon-halo-width": 2.5 },
+      } as LayerSpecification,
+      opacity: { "icon-opacity": 1 },
+    },
+  );
+  return layers;
 }
 
 /**

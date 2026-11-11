@@ -174,7 +174,6 @@ test.describe("desktop", () => {
       ["/scan", "Scan a square"],
       ["/help", "Help wanted"],
       ["/f/abc123", "Finding abc123"],
-      ["/r/42", "Heritage record"],
       ["/i/xyz", "Investigation"],
       ["/u/QuietBarrow42", "Profile"],
       ["/about", "About Field Club"],

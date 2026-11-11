@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode, useMemo } from "react";
 import type { Meta } from "../api/meta.js";
+import { useRecordsOnScreen } from "../features/records/onScreen.js";
 import { useMapStore } from "./store.js";
 import { visibleAttributions } from "./style.js";
 
@@ -16,7 +17,12 @@ export interface AttributionPart {
   href?: string;
 }
 
-function safeHref(value: string | null): string | undefined {
+/**
+ * The address if it is an absolute http or https link, normalised, and
+ * otherwise undefined. Anything from another service that becomes an `href`
+ * goes through this, so a `javascript:` or `data:` address never does.
+ */
+export function safeHref(value: string | null | undefined): string | undefined {
   if (!value) return undefined;
   try {
     const url = new URL(value, "https://invalid.example/");
@@ -86,17 +92,24 @@ export function attributionText(html: string): string {
     .trim();
 }
 
-/** Attribution lines for everything the map currently shows. */
+/**
+ * Attribution lines for everything the map currently shows: the layers, the
+ * sources of the heritage records drawn on screen, and every live source
+ * whose records are on the map.
+ */
 export function useAttributions(meta: Meta): string[] {
   const mainView = useMapStore((state) => state.mainView);
   const compareView = useMapStore((state) => state.compareView);
   const overlays = useMapStore((state) => state.overlays);
   const terrain = useMapStore((state) => state.terrain);
   const failing = useMapStore((state) => state.failing);
-  return useMemo(
-    () => visibleAttributions(meta, { overlays, terrain, failing }, [mainView, compareView]),
-    [meta, overlays, terrain, failing, mainView, compareView],
-  );
+  const recordSources = useRecordsOnScreen((state) => state.sources);
+  const live = useRecordsOnScreen((state) => state.liveAttributions);
+  return useMemo(() => {
+    const lines = visibleAttributions(meta, { overlays, terrain, failing }, [mainView, compareView], recordSources);
+    for (const line of live) if (!lines.includes(line)) lines.push(line);
+    return lines;
+  }, [meta, overlays, terrain, failing, mainView, compareView, recordSources, live]);
 }
 
 /** The attribution with its links, safe to render. */

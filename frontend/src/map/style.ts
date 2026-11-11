@@ -17,7 +17,14 @@ import {
 import { clamp } from "../ui/math.js";
 import { COLOURS } from "../ui/tokens.js";
 import { osmLayers } from "./osmLayers.js";
-import { coverageLayers, findingsLayers, type OverlayLayer, recordsLayers } from "./overlayLayers.js";
+import {
+  coverageLayers,
+  findingsLayers,
+  type OverlayLayer,
+  recordsLayers,
+  recordsLiveSourceId,
+  recordsSelectionSourceId,
+} from "./overlayLayers.js";
 import type { OverlayState, SunState, TerrainState } from "./permalink.js";
 import { overlayTroubleKey } from "./trouble.js";
 
@@ -229,6 +236,9 @@ function overlayParts(meta: Meta, overlay: Overlay, origin: string): OverlayPart
             tiles: overlay.tiles.map((url) => absoluteUrl(url, origin)),
             maxzoom: MARKER_TILE_MAXZOOM,
           },
+          // Filled by the records feature: what live sources sent this browser, and the open record.
+          [recordsLiveSourceId(source)]: emptyGeoJson(),
+          [recordsSelectionSourceId(source)]: emptyGeoJson(),
         },
         layers: recordsLayers(meta, source),
       };
@@ -541,12 +551,15 @@ export function applyMapState(
  * main and comparison views, the elevation data when it is in use, each
  * visible overlay, and every source behind the heritage records while they
  * are showing. The records overlay has no attribution of its own in the
- * catalogue. Its credits are the `sources` list in /meta.
+ * catalogue. Its credits are the `sources` list in /meta: those named in
+ * `recordSources`, the keys of the sources drawn on screen, or all of them
+ * while that is not known.
  */
 export function visibleAttributions(
   meta: Meta,
   state: Pick<StyleState, "overlays" | "terrain" | "failing">,
   viewIds: ReadonlyArray<string | null>,
+  recordSources: readonly string[] | null = null,
 ): string[] {
   const lines: string[] = [];
   const add = (line: string | undefined): void => {
@@ -559,7 +572,9 @@ export function visibleAttributions(
     if (!overlayShown(state, overlay.id)) continue;
     add(overlay.attribution);
     if (overlay.type === "records") {
-      for (const source of meta.sources) add(source.attribution);
+      for (const source of meta.sources) {
+        if (recordSources === null || recordSources.includes(source.key)) add(source.attribution);
+      }
     }
   }
   return lines;

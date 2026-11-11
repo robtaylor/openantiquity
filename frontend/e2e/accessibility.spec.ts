@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { answerJson } from "./support/account.js";
 import { boxOf, describeFocus, openMap, overlaps, tabTo } from "./support/app.js";
 import { expect, test } from "./support/fixtures.js";
 
@@ -41,7 +42,7 @@ test.describe("desktop", () => {
     await openMap(page);
     // These all carry a drop shadow, which used to replace the ring, itself a shadow.
     for (const control of [
-      page.getByRole("searchbox", { name: /Search for a place/ }),
+      page.getByRole("combobox", { name: /Search for a place/ }),
       page.getByRole("button", { name: "Layers" }),
       page.getByRole("button", { name: "Tilt into 3D" }),
       page.getByRole("button", { name: "Zoom in" }),
@@ -116,12 +117,13 @@ test.describe("desktop", () => {
     await expect(page.getByRole("main").locator(".fc-map")).toHaveCount(1);
   });
 
-  test("answers a search with a notice", async ({ page }) => {
+  test("answers a search that finds nothing with a notice", async ({ page }) => {
+    await answerJson(page, "/geo/search", { items: [] });
     await openMap(page);
-    const search = page.getByRole("searchbox", { name: /Search for a place/ });
+    const search = page.getByRole("combobox", { name: /Search for a place/ });
     await search.fill("Avebury");
     await search.press("Enter");
-    await expect(page.getByRole("status").filter({ hasText: "Search isn't built yet" })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: "Nothing matches “Avebury”" })).toBeVisible();
   });
 
   test("zooms with the buttons and resets a turned map with the compass", async ({ page }) => {
@@ -237,7 +239,7 @@ test.describe("phone", () => {
     await expect(sheet).toHaveAttribute("data-stop", "half");
     const tabBar = page.getByRole("navigation", { name: "Modes" });
     const before = await boxOf(tabBar);
-    const search = await boxOf(page.getByRole("searchbox"));
+    const search = await boxOf(page.getByRole("combobox", { name: /Search for a place/ }));
 
     const seen = new Set<string>();
     for (let presses = 0; presses < 70; presses++) {
@@ -270,7 +272,9 @@ test.describe("phone", () => {
     expect([...seen].join(" | ")).toContain("Sun direction");
 
     expect(await boxOf(tabBar), "tab bar moved").toEqual(before);
-    expect(await boxOf(page.getByRole("searchbox")), "search field moved").toEqual(search);
+    expect(await boxOf(page.getByRole("combobox", { name: /Search for a place/ })), "search field moved").toEqual(
+      search,
+    );
   });
 
   test("scrolls a half-open sheet all the way to its end", async ({ page }) => {
@@ -302,7 +306,7 @@ test.describe("phone", () => {
     const status = page.locator(".fc-shell__status");
     const raking = page.getByRole("region", { name: "Raking light", exact: true });
     const buttons = page.locator(".fc-stage__controls");
-    const search = page.getByRole("searchbox");
+    const search = page.getByRole("combobox", { name: /Search for a place/ });
 
     for (const [name, locator] of [
       ["primary action", primary],

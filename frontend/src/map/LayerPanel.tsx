@@ -1,6 +1,7 @@
 import { ArrowLeftRight } from "lucide-react";
 import { memo, useId, useState } from "react";
 import { type Meta, type Overlay, VIEW_GROUPS, type View, type ViewGroup, viewTitle } from "../api/meta.js";
+import { LiveSourceControls, RecordFilterControls } from "../features/records/RecordLayerControls.js";
 import { Button } from "../ui/Button.js";
 import { Slider } from "../ui/Slider.js";
 import { Switch } from "../ui/Switch.js";
@@ -109,6 +110,12 @@ function OverlayRow({ meta, overlay }: { meta: Meta; overlay: Overlay }) {
               checked={showRuledOut}
               onChange={setShowRuledOut}
             />
+          ) : null}
+          {overlay.type === "records" ? (
+            <>
+              <RecordFilterControls meta={meta} />
+              <LiveSourceControls />
+            </>
           ) : null}
         </div>
       ) : null}

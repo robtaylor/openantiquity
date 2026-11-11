@@ -2,7 +2,6 @@ import {
   Activity,
   BookOpen,
   Info,
-  Landmark,
   type LucideIcon,
   MapPinned,
   NotebookText,
@@ -34,13 +33,6 @@ export interface PlaceholderRoute {
 }
 
 export const PLACEHOLDER_ROUTES: PlaceholderRoute[] = [
-  {
-    path: "/r/:id",
-    title: "Heritage record",
-    subtitle: (params) => `Record ${params.id ?? ""}`,
-    icon: Landmark,
-    body: "A record's page will show where it comes from, its licence, and a link to the original.",
-  },
   {
     path: "/scan",
     title: "Scan a square",

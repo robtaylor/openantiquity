@@ -1,0 +1,103 @@
+/* The search box's results, under the field. The field itself is styled in shell.css. */
+
+.fc-search .fc-search__input {
+  /* Room for the "open elsewhere" button at the right end. */
+  padding-right: 44px;
+}
+
+.fc-search__elsewhere {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+}
+
+.fc-search__elsewhere:hover:not(:disabled) {
+  color: var(--text);
+}
+
+/* The browser's own clear button would sit under the elsewhere button. Escape clears the field instead. */
+.fc-search .fc-search__input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.fc-search__popup {
+  margin-top: 6px;
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  scrollbar-color: var(--border) transparent;
+  scrollbar-width: thin;
+}
+
+.fc-search__popup[hidden] {
+  display: none;
+}
+
+.fc-search__message:not(:empty) {
+  padding: 12px 14px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.fc-search__group + .fc-search__group,
+.fc-search__message:not(:empty) + .fc-search__list .fc-search__group:first-child {
+  border-top: 1px solid var(--border);
+}
+
+.fc-search__group-label {
+  padding: 10px 14px 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.fc-search__option {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.fc-search__option:hover {
+  background: var(--raised);
+}
+
+/* The option the arrow keys are on. Marked by a bar as well as a colour. */
+.fc-search__option[aria-selected="true"] {
+  background: rgb(224 164 58 / 0.14);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.fc-search__label {
+  overflow-wrap: anywhere;
+}
+
+.fc-search__detail {
+  color: var(--text-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.fc-search__more {
+  border-top: 1px solid var(--border);
+  color: var(--accent-strong);
+  font-size: 14px;
+}
+
+.fc-search__more .fc-search__label {
+  padding: 2px 0;
+}
+
+/* An open list lies over the floating map buttons, which on a phone sit just under the field. */
+.fc-stage__search:has(.fc-search__popup:not([hidden])) {
+  z-index: 2;
+}

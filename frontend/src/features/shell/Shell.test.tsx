@@ -37,7 +37,7 @@ describe("Shell", () => {
       expect(within(rail).getByRole("link", { name })).toBeInTheDocument();
     }
     expect(within(rail).getByRole("link", { name: "Explore" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("searchbox", { name: /Search for a place/ })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /Search for a place/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Layers" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "Mark a finding" })).toBeInTheDocument();
     expect(screen.queryByRole("complementary")).toBeNull();
@@ -226,7 +226,8 @@ describe("Shell", () => {
 
   it.each([
     ["/f/abc123", "Finding not found", null],
-    ["/r/42", "Heritage record", "Record 42"],
+    // The record's own page: the fixtures have no record 42, so it keeps its general title.
+    ["/r/42", "Heritage record", null],
     ["/scan", "Scan a square", null],
     ["/help", "Help wanted", null],
     ["/i/xyz", "Investigation", "Investigation xyz"],
@@ -264,18 +265,6 @@ describe("Shell", () => {
     // While the mark is being placed, the primary action places it.
     expect(screen.getByRole("button", { name: "Place it here" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mark a finding" })).toBeNull();
-  });
-
-  it("answers a search, though search is not built yet", async () => {
-    const user = userEvent.setup();
-    renderShell();
-    await mapReady();
-    const search = screen.getByRole("searchbox", { name: /Search for a place/ });
-    // An empty search has nothing to answer.
-    await user.type(search, "{Enter}");
-    expect(screen.queryByRole("status")).toBeNull();
-    await user.type(search, "Avebury{Enter}");
-    expect(screen.getByRole("status")).toHaveTextContent(/Search isn't built yet/);
   });
 
   it("closes the layer panel back to the mode it was opened over", async () => {

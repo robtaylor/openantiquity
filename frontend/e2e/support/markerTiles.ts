@@ -39,8 +39,15 @@ function collection(points: MarkerPoint[]): GeoJsonInput {
   };
 }
 
-/** Serve `points` as the records vector tile layer for every records tile. */
-export async function serveRecordTiles(page: Page, points: MarkerPoint[]): Promise<void> {
+/**
+ * Serve `points` as the records vector tile layer for every records tile, or
+ * as the counts layer (`record_counts`) a busy or low-zoom tile carries.
+ */
+export async function serveRecordTiles(
+  page: Page,
+  points: MarkerPoint[],
+  layer: "records" | "record_counts" = "records",
+): Promise<void> {
   const index = new GeoJSONVT(collection(points), TILE_OPTIONS);
   const pattern = /^https?:\/\/localhost(:\d+)?\/tiles\/records\/(\d+)\/(\d+)\/(\d+)\.mvt$/;
   await page.route(pattern, (route) => {
@@ -48,7 +55,7 @@ export async function serveRecordTiles(page: Page, points: MarkerPoint[]): Promi
     if (!match) return route.fulfill({ status: 404 });
     const tile = index.getTile(Number(match[2]), Number(match[3]), Number(match[4]));
     if (!tile) return route.fulfill({ status: 204 });
-    const body = Buffer.from(fromGeojsonVt({ records: tile }, { version: 2, extent: TILE_OPTIONS.extent }));
+    const body = Buffer.from(fromGeojsonVt({ [layer]: tile }, { version: 2, extent: TILE_OPTIONS.extent }));
     return route.fulfill({ status: 200, contentType: "application/vnd.mapbox-vector-tile", body });
   });
 }

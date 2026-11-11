@@ -12,6 +12,7 @@ import {
 } from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { type Meta, viewTitle } from "../api/meta.js";
+import { useRecordsOnMap } from "../features/records/useRecordsOnMap.js";
 import { clamp } from "../ui/math.js";
 import { MapFailure } from "./MapFailure.js";
 import { isMapLive, MapPane } from "./MapPane.js";
@@ -93,6 +94,8 @@ function MapPanes({ meta, insets }: MapViewProps) {
     if (!isMapLive(mainMap) || !isMapLive(compareMap)) return;
     return syncMaps(mainMap, compareMap, { isLive: isMapLive });
   }, [comparing, mainMap, compareMap]);
+
+  useRecordsOnMap(meta, mainMap, comparing ? compareMap : null);
 
   // The handle moves within the part of the map that is not under the rail or the panel.
   const usable = Math.max(1, width - insets.left - insets.right);

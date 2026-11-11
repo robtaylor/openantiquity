@@ -285,6 +285,26 @@ export class FakeMap {
     return [];
   }
 
+  /** Filters set on layers, by layer id. */
+  readonly filters = new Map<string, unknown>();
+  setFilter = vi.fn((layer: string, filter: unknown) => {
+    this.requireStyle();
+    this.filters.set(layer, filter);
+  });
+
+  /**
+   * What the map has drawn, for `queryRenderedFeatures` to answer from. It
+   * filters by the layers asked for and ignores the point. A test sets it.
+   */
+  rendered: Array<{ id?: string | number; properties: Record<string, unknown>; layer: { id: string } }> = [];
+  queryRenderedFeatures = vi.fn((first?: unknown, second?: unknown) => {
+    this.requireStyle();
+    // Called as (options) for the whole screen, or (point, options) for one spot.
+    const isPoint = Array.isArray(first) || (typeof first === "object" && first !== null && "x" in first);
+    const options = (isPoint ? second : first) as { layers?: string[] } | undefined;
+    return this.rendered.filter((feature) => !options?.layers || options.layers.includes(feature.layer.id));
+  });
+
   getTerrain(): { source: string; exaggeration?: number } | null {
     return this.terrain;
   }
