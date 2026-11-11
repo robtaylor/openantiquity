@@ -122,6 +122,7 @@ from fieldclub.errors import (
     NotFoundError,
     ValidationFailedError,
 )
+from fieldclub.errors import UserNotFoundError as UserNotFoundError
 from fieldclub.models import (
     Comment,
     Evidence,
@@ -233,11 +234,6 @@ class AlreadyHiddenError(ConflictError):
 class NotHiddenError(ConflictError):
     code = "not_hidden"
     message = "That isn't hidden."
-
-
-class UserNotFoundError(NotFoundError):
-    code = "user_not_found"
-    message = "There's nobody with that handle."
 
 
 class RoleChangeForbiddenError(ForbiddenError):

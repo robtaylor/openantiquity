@@ -8,7 +8,7 @@ Read these before changing code:
 - `docs/ARCHITECTURE.md` is the build contract for the first version: layout, tables, API, confidence rules. It drains into the area docs as each part is built.
 - `docs/DESIGN.md` says what the product does and why.
 - `docs/UI.md` fixes the interface rules and design tokens.
-- `docs/DATA_SOURCES.md` lists every external source with its licence and attribution.
+- `docs/sources/` catalogues every external source with its licence and attribution. Start at `docs/sources/README.md`.
 
 ## Commands
 

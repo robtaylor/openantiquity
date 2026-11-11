@@ -5,12 +5,12 @@ from __future__ import annotations
 from datetime import datetime
 
 from fieldclub.models import Finding, ReputationEvent, User
-from fieldclub.schemas.activity import ActivityFindingOut
+from fieldclub.schemas.activity import ActivityFinding
 from fieldclub.schemas.common import ApiModel, PublicUser
 from fieldclub.services.people import Contribution, ContributionKind, Profile
 
 
-class ProfileCountsOut(ApiModel):
+class ProfileCounts(ApiModel):
     """What the person has done, counting only what this viewer could list."""
 
     findings: int
@@ -40,7 +40,7 @@ class ProfileOut(ApiModel):
     reputation: float
     # Every point, for the person themselves. Null for everyone else.
     reputation_total: float | None
-    counts: ProfileCountsOut
+    counts: ProfileCounts
     is_me: bool
 
     @classmethod
@@ -56,7 +56,7 @@ class ProfileOut(ApiModel):
             joined_at=person.created_at,
             reputation=found.reputation,
             reputation_total=found.reputation_total,
-            counts=ProfileCountsOut(**vars(found.counts)),
+            counts=ProfileCounts(**vars(found.counts)),
             is_me=found.is_self,
         )
 
@@ -72,7 +72,7 @@ class ContributionOut(ApiModel):
     kind: ContributionKind
     id: int | None
     created_at: datetime | None
-    finding: ActivityFindingOut
+    finding: ActivityFinding
     # The evidence kind, or the mention kind.
     subkind: str | None
 
@@ -82,7 +82,7 @@ class ContributionOut(ApiModel):
             kind=item.kind,
             id=item.id,
             created_at=item.created_at,
-            finding=ActivityFindingOut.build(item.finding, viewer),
+            finding=ActivityFinding.build(item.finding, viewer),
             subkind=item.subkind,
         )
 
@@ -95,7 +95,7 @@ class PointOut(ApiModel):
     reason: str
     created_at: datetime
     # Null when the finding has since been hidden, withdrawn or removed.
-    finding: ActivityFindingOut | None
+    finding: ActivityFinding | None
 
     @classmethod
     def build(cls, event: ReputationEvent, finding: Finding | None, viewer: User) -> PointOut:
@@ -105,5 +105,5 @@ class PointOut(ApiModel):
             delta=event.delta,
             reason=event.reason,
             created_at=event.created_at,
-            finding=ActivityFindingOut.build(finding, viewer) if finding is not None else None,
+            finding=ActivityFinding.build(finding, viewer) if finding is not None else None,
         )

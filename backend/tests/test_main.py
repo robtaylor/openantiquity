@@ -58,7 +58,10 @@ def test_dev_routers_are_mounted_only_for_the_development_login(db: Session) -> 
     assert "/api/v1/auth/dev-login" in paths(create_app(off, include_dev_routes=True))
     assert "/api/v1/auth/dev-login" not in paths(create_app(on, include_dev_routes=False))
     # Everything else is there either way.
-    assert paths(create_app(on)) - paths(create_app(off)) == {"/api/v1/auth/dev-login"}
+    assert paths(create_app(on)) - paths(create_app(off)) == {
+        "/api/v1/auth/dev-login",
+        "/api/v1/auth/dev-outbox",
+    }
 
 
 def test_a_warning_is_logged_when_the_development_login_is_on(

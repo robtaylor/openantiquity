@@ -1,6 +1,6 @@
 """Request and response shapes for reports, the moderation queue, roles, bans and the log.
 
-Everything here but `ReportIn` and `ReportCreatedOut` is for moderators only.
+Everything here but `ReportIn` and `ReportCreated` is for moderators only.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ class ModSensitivityIn(ReasonIn):
 # --------------------------------------------------------------------------
 
 
-class ReportCreatedOut(ApiModel):
+class ReportCreated(ApiModel):
     """What the reporter is told: that the report was received, and nothing about what happens next."""
 
     id: int
@@ -70,13 +70,13 @@ class ReportCreatedOut(ApiModel):
     created_at: datetime
 
 
-class TargetFindingOut(ApiModel):
+class TargetFinding(ApiModel):
     public_id: str
     title: str
     hidden: bool
 
     @classmethod
-    def build(cls, finding: Finding) -> TargetFindingOut:
+    def build(cls, finding: Finding) -> TargetFinding:
         return cls(public_id=finding.public_id, title=finding.title, hidden=finding.hidden_at is not None)
 
 
@@ -91,7 +91,7 @@ class TargetOut(ApiModel):
     hidden: bool
     # Deleted by its author, a photo refused, or a person who deleted their account.
     removed: bool
-    finding: TargetFindingOut | None
+    finding: TargetFinding | None
     # Who posted it. For a person, the person.
     owner: PublicUser | None
     title: str | None
@@ -109,7 +109,7 @@ class TargetOut(ApiModel):
             exists=summary.exists,
             hidden=summary.hidden,
             removed=summary.removed,
-            finding=TargetFindingOut.build(summary.finding) if summary.finding is not None else None,
+            finding=TargetFinding.build(summary.finding) if summary.finding is not None else None,
             owner=PublicUser.from_user(summary.owner) if summary.owner is not None else None,
             title=summary.title,
             body=summary.body,
@@ -152,20 +152,20 @@ class ReportOut(ApiModel):
         )
 
 
-class ResolvedOut(ApiModel):
+class Resolved(ApiModel):
     report: ReportOut
     # How many reports this resolved: every open one on the same target.
     resolved: int
 
 
-class HiddenOut(ApiModel):
+class Hidden(ApiModel):
     target_kind: ReportTarget
     target_id: str
     hidden: bool
     hidden_at: datetime | None
 
     @classmethod
-    def build(cls, state: moderation.HiddenState) -> HiddenOut:
+    def build(cls, state: moderation.HiddenState) -> Hidden:
         return cls(
             target_kind=state.kind,
             target_id=state.ref,
@@ -174,7 +174,7 @@ class HiddenOut(ApiModel):
         )
 
 
-class ModUserOut(ApiModel):
+class ModUser(ApiModel):
     """A person as moderators see them. The name and picture follow `PublicUser`'s rules."""
 
     handle: str
@@ -188,7 +188,7 @@ class ModUserOut(ApiModel):
     banned_at: datetime | None
 
     @classmethod
-    def build(cls, user: User) -> ModUserOut:
+    def build(cls, user: User) -> ModUser:
         return cls(
             **PublicUser.from_user(user).model_dump(),
             reputation=user.reputation,
@@ -199,8 +199,8 @@ class ModUserOut(ApiModel):
         )
 
 
-class BanOut(ApiModel):
-    user: ModUserOut
+class Ban(ApiModel):
+    user: ModUser
     sessions_ended: int
     # Findings reassessed because the person's work stopped, or started again, counting.
     findings_reassessed: int
@@ -208,7 +208,7 @@ class BanOut(ApiModel):
 
 class PointSourceOut(ApiModel):
     # Null for points not tied to a finding.
-    finding: TargetFindingOut | None
+    finding: TargetFinding | None
     points: float
     reasons: list[str]
     others: list[PublicUser]
@@ -219,22 +219,22 @@ class AssociateOut(ApiModel):
     shared_findings: int
 
 
-class EligibleOut(ApiModel):
+class Eligible(ApiModel):
     """A member with fifty points or more who isn't trusted yet, and where the points came from."""
 
-    user: ModUserOut
+    user: ModUser
     sources: list[PointSourceOut]
     # The other people on those findings, most often first. The same few names on every
     # finding is the pattern to look for.
     associates: list[AssociateOut]
 
     @classmethod
-    def build(cls, eligible: moderation.EligibleMember) -> EligibleOut:
+    def build(cls, eligible: moderation.EligibleMember) -> Eligible:
         return cls(
-            user=ModUserOut.build(eligible.user),
+            user=ModUser.build(eligible.user),
             sources=[
                 PointSourceOut(
-                    finding=TargetFindingOut.build(s.finding) if s.finding is not None else None,
+                    finding=TargetFinding.build(s.finding) if s.finding is not None else None,
                     points=s.points,
                     reasons=s.reasons,
                     others=[PublicUser.from_user(u) for u in s.others],
@@ -248,7 +248,7 @@ class EligibleOut(ApiModel):
         )
 
 
-class ActionOut(ApiModel):
+class Action(ApiModel):
     id: int
     created_at: datetime
     actor: PublicUser
@@ -258,7 +258,7 @@ class ActionOut(ApiModel):
     data: dict[str, Any] | None
 
     @classmethod
-    def build(cls, logged: moderation.LoggedAction) -> ActionOut:
+    def build(cls, logged: moderation.LoggedAction) -> Action:
         entry = logged.entry
         return cls(
             id=entry.id,

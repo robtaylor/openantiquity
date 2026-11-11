@@ -50,7 +50,7 @@ from typing import Any
 from sqlalchemy import ColumnElement, Select, and_, exists, func, not_, or_, select, update
 from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
 
-from fieldclub.errors import NotFoundError
+from fieldclub.errors import InvestigationNotFoundError as InvestigationNotFoundError
 from fieldclub.models import (
     Activity,
     Comment,
@@ -73,11 +73,6 @@ Actor = aliased(User, name="actor")
 _COMMENT_KINDS = (ActivityKind.COMMENT_ADDED.value,)
 _EVIDENCE_KINDS = (ActivityKind.EVIDENCE_ADDED.value, ActivityKind.FOLLOWUP_LOGGED.value)
 _MENTION_KINDS = (ActivityKind.MENTION_ADDED.value,)
-
-
-class InvestigationNotFoundError(NotFoundError):
-    code = "investigation_not_found"
-    message = "There's no public investigation with that id."
 
 
 # --------------------------------------------------------------------------

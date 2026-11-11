@@ -60,6 +60,7 @@ from fieldclub.config import get_settings
 from fieldclub.db import SessionLocal
 from fieldclub.errors import ConflictError, InvalidBboxError
 from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo, fill_attribution
+from fieldclub.ingest.errors import ConnectorNotConfiguredError as ConnectorNotConfiguredError
 from fieldclub.ingest.errors import (
     EmptyIngestError,
     IngestError,
@@ -101,10 +102,6 @@ _UPDATED_COLUMNS = (
     "source_updated_at",
     "ingested_at",
 )
-
-
-class ConnectorNotConfiguredError(IngestError):
-    code = "ingest_not_configured"
 
 
 class IngestBusyError(ConflictError):

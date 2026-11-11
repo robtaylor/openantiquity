@@ -11,7 +11,7 @@ from fieldclub.errors import BadRequestError
 from fieldclub.models import Finding, User
 from fieldclub.schemas.common import Page
 from fieldclub.schemas.findings import (
-    LocationOut,
+    Location,
     NextStepOut,
     ReviewCard,
     ReviewPlace,
@@ -102,7 +102,7 @@ def tasks(
 
 def _task(task: review.Task, viewer: User | None) -> TaskItem:
     finding = task.finding
-    place: LocationOut = location_out(finding, viewer)
+    place: Location = location_out(finding, viewer)
     return TaskItem(
         public_id=finding.public_id,
         code=task.code,

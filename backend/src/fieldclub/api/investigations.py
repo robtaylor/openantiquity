@@ -36,8 +36,8 @@ from fieldclub.schemas.investigations import (
     ItemIn,
     ItemMove,
     ItemUpdate,
+    Member,
     MemberIn,
-    MemberOut,
     item_data,
 )
 from fieldclub.services import findings, investigation_exports, investigations
@@ -277,28 +277,28 @@ def remove_item(public_id: str, item_id: ItemId, user: Contributor, db: Db) -> N
 Handle = Annotated[str, Path(max_length=HANDLE_MAX)]
 
 
-@router.get("/investigations/{public_id}/members", response_model=Page[MemberOut])
+@router.get("/investigations/{public_id}/members", response_model=Page[Member])
 def list_members(
     public_id: str, db: Db, viewer: OptionalUser, response: Response, page: PageQuery
-) -> Page[MemberOut]:
+) -> Page[Member]:
     """Who works on it: the owner first, then everyone else in the order they joined."""
     access = investigations.load(db, public_id, viewer)
     members, next_cursor = investigations.list_members(
         db, access.investigation, limit=page.limit, cursor=page.cursor
     )
     private(response)
-    return Page[MemberOut](items=[MemberOut.build(member) for member in members], next_cursor=next_cursor)
+    return Page[Member](items=[Member.build(member) for member in members], next_cursor=next_cursor)
 
 
 @router.put(
     "/investigations/{public_id}/members/{handle}",
-    response_model=MemberOut,
-    responses={201: {"model": MemberOut, "description": "The person was added"}},
+    response_model=Member,
+    responses={201: {"model": Member, "description": "The person was added"}},
     dependencies=[EDIT_LIMIT],
 )
 def put_member(
     public_id: str, handle: Handle, body: MemberIn, user: Contributor, db: Db, response: Response
-) -> MemberOut:
+) -> Member:
     """Invite a contributor by handle as an editor or viewer, or change their role. The owner's call.
 
     The person is a member once they accept (`POST .../invitation`); until
@@ -311,7 +311,7 @@ def put_member(
     db.commit()
     response.status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
     private(response)
-    return MemberOut.build(
+    return Member.build(
         investigations.MemberView(person, body.role, member.created_at, member.accepted_at is not None)
     )
 

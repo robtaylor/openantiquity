@@ -39,16 +39,12 @@ from typing import Any
 from sqlalchemy import ColumnElement, Select, func, literal, select, tuple_, union_all
 from sqlalchemy.orm import Session
 
-from fieldclub.errors import ForbiddenError, InvalidCursorError, NotFoundError
+from fieldclub.errors import ForbiddenError, InvalidCursorError
+from fieldclub.errors import UserNotFoundError as UserNotFoundError
 from fieldclub.models import Comment, Evidence, Finding, Mention, Observation, ReputationEvent, User
 from fieldclub.schemas.common import cursor_int, decode_cursor, int_from_cursor, paginate
 from fieldclub.services import feed, findings, mentions, reputation, sensitivity
 from fieldclub.services.findings import FindingFilters
-
-
-class UserNotFoundError(NotFoundError):
-    code = "user_not_found"
-    message = "There's nobody here with that name."
 
 
 class PointsArePrivateError(ForbiddenError):

@@ -277,7 +277,7 @@ class InvestigationDetail(InvestigationSummary):
         )
 
 
-class MemberOut(ApiModel):
+class Member(ApiModel):
     user: PublicUser
     role: InvestigationRole
     # When they were invited, or for the owner when the investigation began.
@@ -286,7 +286,7 @@ class MemberOut(ApiModel):
     pending: bool
 
     @classmethod
-    def build(cls, view: MemberView) -> MemberOut:
+    def build(cls, view: MemberView) -> Member:
         return cls(
             user=PublicUser.from_user(view.user),
             role=view.role,

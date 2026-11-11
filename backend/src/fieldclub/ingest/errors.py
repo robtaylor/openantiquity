@@ -2,8 +2,10 @@
 
 `IngestError` is shared by the runner and the adapters. It lives here, not
 in `runner`, so that the adapters, which know nothing about our tables, can
-raise it without importing the database layer. The others are raised by the
-runner and by the reference loaders in `ingest/reference/`.
+raise it without importing the database layer. The run errors are raised by
+the runner and by the reference loaders in `ingest/reference/`, the adapter
+errors by every adapter and connector, and `ConnectorNotConfiguredError` by
+the runner and the scheduled refresh.
 """
 
 from __future__ import annotations
@@ -52,3 +54,22 @@ __all__ = [
     "InvalidRecordError",
     "ShrinkTooLargeError",
 ]
+
+
+class ConnectorNotConfiguredError(IngestError):
+    """A source needs a setting that isn't set, such as the contact address Wikidata asks for."""
+
+    code = "ingest_not_configured"
+
+
+class AdapterError(IngestError):
+    """An upstream service or file could not be read."""
+
+    code = "ingest_adapter_error"
+    message = "An upstream source could not be read."
+
+
+class UpstreamFormatError(AdapterError):
+    """The upstream answered, but not in the shape the reader relies on."""
+
+    code = "ingest_upstream_format"

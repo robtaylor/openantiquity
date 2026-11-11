@@ -63,7 +63,7 @@ def profile(body: ProfileRequest, terrain: TerrainDep) -> ProfileOut:
     )
 
 
-class CoveragePolygonOut(BaseModel):
+class CoveragePolygon(BaseModel):
     type: Literal["Polygon"]
     # One ring of five WGS84 positions, longitude then latitude, closed.
     coordinates: list[list[tuple[float, float]]]
@@ -82,7 +82,7 @@ class CoveragePropertiesOut(BaseModel):
 class CoverageFeatureOut(BaseModel):
     type: Literal["Feature"]
     id: str
-    geometry: CoveragePolygonOut
+    geometry: CoveragePolygon
     properties: CoveragePropertiesOut
 
 

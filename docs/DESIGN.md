@@ -22,7 +22,7 @@ The tool has to serve all three without making the first one read a manual or th
 
 ## The map
 
-LIDAR is the base layer, drawn in visualisations made for archaeology, not the single-direction hillshade most viewers offer. See `docs/DATA_SOURCES.md` for where the elevation comes from.
+LIDAR is the base layer, drawn in visualisations made for archaeology, not the single-direction hillshade most viewers offer. See `docs/sources/lidar.md` for where the elevation comes from.
 
 | Layer | What it's good for |
 |-------|--------------------|

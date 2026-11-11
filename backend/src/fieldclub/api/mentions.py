@@ -16,12 +16,12 @@ from fieldclub.api.deps import Contributor, Db, OptionalUser, PageQuery, private
 from fieldclub.ratelimit import rate_limit
 from fieldclub.schemas.common import Page
 from fieldclub.schemas.mentions import (
-    MentionedFindingOut,
+    MentionedFinding,
     MentionIn,
     MentionOut,
+    MentionPreview,
     MentionPreviewIn,
-    MentionPreviewOut,
-    RecentMentionOut,
+    RecentMention,
 )
 from fieldclub.services import findings, mentions
 
@@ -32,14 +32,14 @@ _per_member = rate_limit("mentions", 30, per_seconds=3600, contributor=True)
 
 @router.post(
     "/mentions/preview",
-    response_model=MentionPreviewOut,
+    response_model=MentionPreview,
     dependencies=[Depends(rate_limit("mention-previews", 20, per_seconds=3600, contributor=True))],
 )
-def preview(body: MentionPreviewIn, user: Contributor, db: Db) -> MentionPreviewOut:
+def preview(body: MentionPreviewIn, user: Contributor, db: Db) -> MentionPreview:
     """What a mention of this address would show. Nothing is saved, and a failed fetch is not an error."""
     # Nothing more is read, so the connection goes back to the pool before the fetch.
     db.commit()
-    return MentionPreviewOut.build(mentions.preview(body.url))
+    return MentionPreview.build(mentions.preview(body.url))
 
 
 @router.get("/findings/{public_id}/mentions", response_model=Page[MentionOut])
@@ -91,20 +91,20 @@ def delete_mention(mention_id: int, user: Contributor, db: Db) -> None:
     db.commit()
 
 
-@router.get("/mentions/recent", response_model=Page[RecentMentionOut])
-def recent(page: PageQuery, db: Db, viewer: OptionalUser, response: Response) -> Page[RecentMentionOut]:
+@router.get("/mentions/recent", response_model=Page[RecentMention])
+def recent(page: PageQuery, db: Db, viewer: OptionalUser, response: Response) -> Page[RecentMention]:
     """The newest mentions across the map. Each finding's position is the one this viewer may see."""
     found = mentions.recent(db, viewer, limit=page.limit, cursor=page.cursor)
     private(response)
-    items: list[RecentMentionOut] = []
+    items: list[RecentMention] = []
     for mention in found.mentions:
         finding = found.finding_by_id[mention.finding_id]
         adder = found.adders[mention.user_id] if mention.user_id is not None else None
         items.append(
-            RecentMentionOut(
+            RecentMention(
                 # dict(), not model_dump(), so `added_by` stays a PublicUser.
                 **dict(MentionOut.build(mention, adder)),
-                finding=MentionedFindingOut.build(finding, found.finders[finding.author_id], viewer),
+                finding=MentionedFinding.build(finding, found.finders[finding.author_id], viewer),
             )
         )
-    return Page[RecentMentionOut](items=items, next_cursor=found.next_cursor)
+    return Page[RecentMention](items=items, next_cursor=found.next_cursor)

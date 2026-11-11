@@ -12,7 +12,7 @@ from pydantic import Field
 
 from fieldclub.models import Finding, Mention, User
 from fieldclub.schemas.common import ApiModel, PublicUser, RequestModel
-from fieldclub.schemas.findings import LocationOut, location_out
+from fieldclub.schemas.findings import Location, location_out
 from fieldclub.services.mentions import NOTE_MAX, Preview
 from fieldclub.services.unfurl import MAX_START_SECONDS, URL_MAX, FetchStatus
 from fieldclub.vocab import FeatureClass, FindingState, MentionKind, Tier
@@ -32,7 +32,7 @@ class MentionIn(RequestModel):
     note: str | None = Field(default=None, max_length=NOTE_MAX)
 
 
-class MentionPreviewOut(ApiModel):
+class MentionPreview(ApiModel):
     url: str
     canonical_url: str
     kind: MentionKind
@@ -47,7 +47,7 @@ class MentionPreviewOut(ApiModel):
     published_at: datetime | None
 
     @classmethod
-    def build(cls, found: Preview) -> MentionPreviewOut:
+    def build(cls, found: Preview) -> MentionPreview:
         address, meta = found.address, found.metadata
         return cls(
             url=address.url,
@@ -106,7 +106,7 @@ class MentionOut(ApiModel):
         )
 
 
-class MentionedFindingOut(ApiModel):
+class MentionedFinding(ApiModel):
     """The finding a mention in the recent feed is about. No answers, and the position this viewer may see."""
 
     public_id: str
@@ -114,11 +114,11 @@ class MentionedFindingOut(ApiModel):
     feature_class: FeatureClass
     tier: Tier
     state: FindingState
-    location: LocationOut
+    location: Location
     author: PublicUser
 
     @classmethod
-    def build(cls, finding: Finding, author: User, viewer: User | None) -> MentionedFindingOut:
+    def build(cls, finding: Finding, author: User, viewer: User | None) -> MentionedFinding:
         assert author.has_id(finding.author_id), "the author passed is not the finding's author"
         return cls(
             public_id=finding.public_id,
@@ -131,5 +131,5 @@ class MentionedFindingOut(ApiModel):
         )
 
 
-class RecentMentionOut(MentionOut):
-    finding: MentionedFindingOut
+class RecentMention(MentionOut):
+    finding: MentionedFinding

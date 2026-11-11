@@ -7,7 +7,7 @@ dependency's session would stay open for as long as the stream does.
 
 On the wire:
 
-- `event: activity` with `id:` the activity id and `data:` a `StreamEventOut`
+- `event: activity` with `id:` the activity id and `data:` a `StreamEvent`
   (public ids and a kind, nothing more). Refetch through the API to show it.
 - `event: resync`: events may have been missed. Refetch what is on screen.
 - `event: dropped` or `event: closed`: the stream ends. The browser's
@@ -35,7 +35,7 @@ from fieldclub.api.deps import BBoxQuery
 from fieldclub.auth.deps import client_ip
 from fieldclub.config import get_settings
 from fieldclub.ratelimit import address_key, enforce_key, get_limiter
-from fieldclub.schemas.activity import StreamEventOut
+from fieldclub.schemas.activity import StreamEvent
 from fieldclub.schemas.common import parse_bbox
 from fieldclub.services import events, findings, ids
 from fieldclub.services.events import ENDING_SIGNALS, Signal, StreamFilter, Subscription, TooManyStreamsError
@@ -92,7 +92,7 @@ async def subscription(
 )
 async def stream(
     subscribed: Annotated[Subscription, Depends(subscription)],
-) -> AsyncIterator[StreamEventOut]:
+) -> AsyncIterator[StreamEvent]:
     """Live events, optionally only those in a box or on one finding.
 
     Each carries ids and a kind and nothing else: fetch what it is about
@@ -112,7 +112,7 @@ async def stream(
             if item in ENDING_SIGNALS:
                 return
         else:
-            data = StreamEventOut(
+            data = StreamEvent(
                 id=item.id,
                 kind=ActivityKind(item.kind),
                 finding=item.finding,

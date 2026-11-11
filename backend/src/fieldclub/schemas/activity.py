@@ -15,7 +15,7 @@ from pydantic import Field, model_validator
 
 from fieldclub.models import Activity, Finding, Investigation, Notification, User
 from fieldclub.schemas.common import ApiModel, Page, PublicUser, RequestModel
-from fieldclub.schemas.findings import LocationOut, location_out
+from fieldclub.schemas.findings import Location, location_out
 from fieldclub.vocab import ActivityKind, EvidenceKind, FeatureClass, FindingState, StateReason, Tier
 
 # How many notifications one request may mark read by id.
@@ -23,7 +23,7 @@ MAX_MARK_IDS = 200
 MAX_ID = 2**63 - 1
 
 
-class ActivityFindingOut(ApiModel):
+class ActivityFinding(ApiModel):
     """The finding an event is about, as this viewer may see it."""
 
     public_id: str
@@ -31,10 +31,10 @@ class ActivityFindingOut(ApiModel):
     feature_class: FeatureClass
     tier: Tier
     state: FindingState
-    location: LocationOut
+    location: Location
 
     @classmethod
-    def build(cls, finding: Finding, viewer: User | None) -> ActivityFindingOut:
+    def build(cls, finding: Finding, viewer: User | None) -> ActivityFinding:
         return cls(
             public_id=finding.public_id,
             title=finding.title,
@@ -45,12 +45,12 @@ class ActivityFindingOut(ApiModel):
         )
 
 
-class ActivityInvestigationOut(ApiModel):
+class ActivityInvestigation(ApiModel):
     public_id: str
     title: str
 
 
-class ActivityDetailsOut(ApiModel):
+class ActivityDetails(ApiModel):
     """What changed, for the kinds that say. Every field is empty for the others.
 
     Taken from the row's `data` key by key, so nothing new reaches a client
@@ -68,7 +68,7 @@ class ActivityDetailsOut(ApiModel):
     mention_id: int | None = None
 
     @classmethod
-    def from_data(cls, kind: ActivityKind | str, data: dict[str, Any] | None) -> ActivityDetailsOut:
+    def from_data(cls, kind: ActivityKind | str, data: dict[str, Any] | None) -> ActivityDetails:
         kind = ActivityKind(kind)
         data = data or {}
         if kind is ActivityKind.OBSERVATION_ADDED:
@@ -97,9 +97,9 @@ class ActivityOut(ApiModel):
     # Null when nobody is credited: a second look (Decision 0008), something
     # the system did, or an account that has been deleted.
     actor: PublicUser | None
-    finding: ActivityFindingOut | None
-    investigation: ActivityInvestigationOut | None
-    details: ActivityDetailsOut
+    finding: ActivityFinding | None
+    investigation: ActivityInvestigation | None
+    details: ActivityDetails
 
     @classmethod
     def build(
@@ -117,13 +117,13 @@ class ActivityOut(ApiModel):
             kind=ActivityKind(activity.kind),
             created_at=activity.created_at,
             actor=PublicUser.from_user(actor) if actor is not None else None,
-            finding=ActivityFindingOut.build(finding, viewer) if finding is not None else None,
+            finding=ActivityFinding.build(finding, viewer) if finding is not None else None,
             investigation=(
-                ActivityInvestigationOut(public_id=investigation.public_id, title=investigation.title)
+                ActivityInvestigation(public_id=investigation.public_id, title=investigation.title)
                 if investigation is not None
                 else None
             ),
-            details=ActivityDetailsOut.from_data(activity.kind, activity.data),
+            details=ActivityDetails.from_data(activity.kind, activity.data),
         )
 
 
@@ -133,11 +133,11 @@ class NotificationOut(ApiModel):
     created_at: datetime
     read: bool
     actor: PublicUser | None
-    finding: ActivityFindingOut | None
+    finding: ActivityFinding | None
     # The public id of the investigation an `investigation_invitation` is to.
     # Its title isn't sent: a notification carries no free text (Decision 0009).
     investigation: str | None = None
-    details: ActivityDetailsOut
+    details: ActivityDetails
 
     @classmethod
     def build(
@@ -156,9 +156,9 @@ class NotificationOut(ApiModel):
             created_at=notification.created_at,
             read=notification.read_at is not None,
             actor=PublicUser.from_user(actor) if actor is not None else None,
-            finding=ActivityFindingOut.build(finding, viewer) if finding is not None else None,
+            finding=ActivityFinding.build(finding, viewer) if finding is not None else None,
             investigation=investigation.public_id if investigation is not None else None,
-            details=ActivityDetailsOut.from_data(notification.kind, notification.data),
+            details=ActivityDetails.from_data(notification.kind, notification.data),
         )
 
 
@@ -190,7 +190,7 @@ class MarkReadOut(ApiModel):
     unread_count: int
 
 
-class StreamEventOut(ApiModel):
+class StreamEvent(ApiModel):
     """One live event. Public ids and kinds only: fetch the details through the API.
 
     It carries no position and nothing about an answer, so the client

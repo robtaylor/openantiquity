@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Response, status
 
 from fieldclub.api.deps import Contributor, Db, private, rate_limit
 from fieldclub.api.findings import detail
-from fieldclub.schemas.findings import EvidenceIn, FindingDetail, VoteIn, VoteOut
+from fieldclub.schemas.findings import EvidenceIn, FindingDetail, Vote, VoteIn
 from fieldclub.services import findings
 
 router = APIRouter(tags=["evidence"])
@@ -52,15 +52,15 @@ def delete_evidence(evidence_id: int, user: Contributor, db: Db) -> None:
 
 @router.put(
     "/evidence/{evidence_id}/vote",
-    response_model=VoteOut,
+    response_model=Vote,
     dependencies=[Depends(rate_limit("evidence_votes", 600, per_seconds=3600))],
 )
-def vote(evidence_id: int, body: VoteIn, user: Contributor, db: Db, response: Response) -> VoteOut:
+def vote(evidence_id: int, body: VoteIn, user: Contributor, db: Db, response: Response) -> Vote:
     """Endorse (+1) or object to (-1) evidence, or take your vote back (0)."""
     private(response)
     findings.vote(db, evidence_id, user, body.value)
     db.commit()
-    return VoteOut(evidence_id=evidence_id, value=body.value)
+    return Vote(evidence_id=evidence_id, value=body.value)
 
 
 @router.post(

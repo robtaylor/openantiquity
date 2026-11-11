@@ -81,6 +81,8 @@ from fieldclub.errors import (
     UnauthorisedError,
     ValidationFailedError,
 )
+from fieldclub.errors import InvestigationNotFoundError as InvestigationNotFoundError
+from fieldclub.errors import UserNotFoundError as UserNotFoundError
 from fieldclub.models import (
     Activity,
     Finding,
@@ -121,11 +123,6 @@ class PrivateInvestigationError(ConflictError):
     message = "A private investigation can't have collaborators. Make it public or unlisted first."
 
 
-class InvestigationNotFoundError(NotFoundError):
-    code = "investigation_not_found"
-    message = "There's no investigation with that id."
-
-
 class InvestigationForbiddenError(ForbiddenError):
     code = "investigation_forbidden"
     message = "Only the investigation's owner or an editor can do that."
@@ -139,11 +136,6 @@ class OwnerOnlyError(ForbiddenError):
 class MemberNotFoundError(NotFoundError):
     code = "member_not_found"
     message = "There's no member with that handle."
-
-
-class UserNotFoundError(NotFoundError):
-    code = "user_not_found"
-    message = "There's nobody with that handle."
 
 
 class InvitationNotFoundError(NotFoundError):

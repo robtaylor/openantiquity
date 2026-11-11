@@ -20,15 +20,15 @@ from fieldclub.schemas.common import Page
 from fieldclub.schemas.findings import FindingDetail
 from fieldclub.schemas.moderation import (
     TARGET_REF_MAX,
-    ActionOut,
-    BanOut,
-    EligibleOut,
-    HiddenOut,
+    Action,
+    Ban,
+    Eligible,
+    Hidden,
     ModSensitivityIn,
-    ModUserOut,
+    ModUser,
     ReasonIn,
     ReportOut,
-    ResolvedOut,
+    Resolved,
     ResolveIn,
     RoleIn,
 )
@@ -81,10 +81,10 @@ def report_queue(
     return Page[ReportOut](items=[ReportOut.build(item) for item in queued], next_cursor=next_cursor)
 
 
-@router.post("/reports/{report_id}/resolve", response_model=ResolvedOut, dependencies=_writes)
+@router.post("/reports/{report_id}/resolve", response_model=Resolved, dependencies=_writes)
 def resolve_report(
     report_id: Annotated[int, Path(ge=1, le=2**63 - 1)], body: ResolveIn, moderator: Moderator, db: Db
-) -> ResolvedOut:
+) -> Resolved:
     """Uphold or dismiss a report, and with it every other open report on the same target.
 
     This doesn't hide anything: hide the target as well when the report is upheld.
@@ -93,7 +93,7 @@ def resolve_report(
         db, report_id, moderator, ReportStatus(body.outcome), body.note
     )
     db.commit()
-    return ResolvedOut(report=ReportOut.build(queued), resolved=resolved)
+    return Resolved(report=ReportOut.build(queued), resolved=resolved)
 
 
 # --------------------------------------------------------------------------
@@ -113,10 +113,10 @@ assert set(_HIDE_PATHS) == moderation.HIDEABLE, "every hideable kind has a route
 
 
 def _hide_route(kind: ReportTarget, hidden: bool):
-    def route(target_id: TargetRef, body: ReasonIn, moderator: Moderator, db: Db) -> HiddenOut:
+    def route(target_id: TargetRef, body: ReasonIn, moderator: Moderator, db: Db) -> Hidden:
         state = moderation.set_hidden(db, kind, target_id, moderator, hidden=hidden, reason=body.reason)
         db.commit()
-        return HiddenOut.build(state)
+        return Hidden.build(state)
 
     verb = "Hide" if hidden else "Show again"
     route.__doc__ = (
@@ -133,7 +133,7 @@ for _kind, _segment in _HIDE_PATHS.items():
             f"/{_segment}/{{target_id}}/{_verb}",
             _hide_route(_kind, _hidden),
             methods=["POST"],
-            response_model=HiddenOut,
+            response_model=Hidden,
             name=f"{_verb}_{_kind.value}",
             dependencies=_writes,
         )
@@ -160,51 +160,51 @@ def set_sensitivity(
 # --------------------------------------------------------------------------
 
 
-@router.get("/users/eligible", response_model=Page[EligibleOut])
+@router.get("/users/eligible", response_model=Page[Eligible])
 def eligible_members(
     moderator: Moderator,
     db: Db,
     limit: Annotated[int, Query(ge=1, le=ELIGIBLE_MAX_LIMIT)] = ELIGIBLE_DEFAULT_LIMIT,
     cursor: CursorQuery = None,
-) -> Page[EligibleOut]:
+) -> Page[Eligible]:
     """Members with fifty points who aren't trusted yet, where the points came from and who else was there."""
     found, next_cursor = moderation.eligible_members(db, moderator, limit=limit, cursor=cursor)
-    return Page[EligibleOut](items=[EligibleOut.build(item) for item in found], next_cursor=next_cursor)
+    return Page[Eligible](items=[Eligible.build(item) for item in found], next_cursor=next_cursor)
 
 
 Handle = Annotated[str, Path(min_length=1, max_length=TARGET_REF_MAX)]
 
 
-@router.put("/users/{handle}/role", response_model=ModUserOut, dependencies=_writes)
-def change_role(handle: Handle, body: RoleIn, moderator: Moderator, db: Db) -> ModUserOut:
+@router.put("/users/{handle}/role", response_model=ModUser, dependencies=_writes)
+def change_role(handle: Handle, body: RoleIn, moderator: Moderator, db: Db) -> ModUser:
     """Make a member trusted or put them back, or mark an archaeologist as expert.
 
     Only an admin makes or unmakes a moderator.
     """
     user = moderation.change_role(db, handle, moderator, body.role, body.reason)
     db.commit()
-    return ModUserOut.build(user)
+    return ModUser.build(user)
 
 
-@router.post("/users/{handle}/ban", response_model=BanOut, dependencies=_writes)
-def ban(handle: Handle, body: ReasonIn, moderator: Moderator, db: Db) -> BanOut:
+@router.post("/users/{handle}/ban", response_model=Ban, dependencies=_writes)
+def ban(handle: Handle, body: ReasonIn, moderator: Moderator, db: Db) -> Ban:
     """Ban someone. Their sessions end now, and their answers, evidence and votes stop counting."""
     result = moderation.ban(db, handle, moderator, body.reason)
     db.commit()
-    return BanOut(
-        user=ModUserOut.build(result.user),
+    return Ban(
+        user=ModUser.build(result.user),
         sessions_ended=result.sessions_ended,
         findings_reassessed=result.findings_reassessed,
     )
 
 
-@router.post("/users/{handle}/unban", response_model=BanOut, dependencies=_writes)
-def unban(handle: Handle, body: ReasonIn, moderator: Moderator, db: Db) -> BanOut:
+@router.post("/users/{handle}/unban", response_model=Ban, dependencies=_writes)
+def unban(handle: Handle, body: ReasonIn, moderator: Moderator, db: Db) -> Ban:
     """Lift a ban. Their work counts again at once."""
     result = moderation.unban(db, handle, moderator, body.reason)
     db.commit()
-    return BanOut(
-        user=ModUserOut.build(result.user),
+    return Ban(
+        user=ModUser.build(result.user),
         sessions_ended=result.sessions_ended,
         findings_reassessed=result.findings_reassessed,
     )
@@ -215,18 +215,18 @@ def unban(handle: Handle, body: ReasonIn, moderator: Moderator, db: Db) -> BanOu
 # --------------------------------------------------------------------------
 
 
-@router.get("/actions", response_model=Page[ActionOut])
+@router.get("/actions", response_model=Page[Action])
 def list_actions(
     moderator: Moderator,
     db: Db,
     page: PageQuery,
     target_kind: ReportTarget | None = None,
     target_id: Annotated[str | None, Query(min_length=1, max_length=TARGET_REF_MAX)] = None,
-) -> Page[ActionOut]:
+) -> Page[Action]:
     """Every moderator's actions, newest first. Give `target_kind` and `target_id` for one target."""
     if target_id is not None and target_kind is None:
         raise BadRequestError("Give target_kind with target_id.", code="target_kind_required")
     found, next_cursor = moderation.list_actions(
         db, kind=target_kind, ref=target_id, limit=page.limit, cursor=page.cursor
     )
-    return Page[ActionOut](items=[ActionOut.build(item) for item in found], next_cursor=next_cursor)
+    return Page[Action](items=[Action.build(item) for item in found], next_cursor=next_cursor)

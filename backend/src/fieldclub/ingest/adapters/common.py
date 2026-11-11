@@ -21,7 +21,8 @@ from pyproj import CRS, Transformer
 from shapely.geometry.base import BaseGeometry
 
 from fieldclub.config import Settings
-from fieldclub.ingest.errors import IngestError
+from fieldclub.ingest.errors import AdapterError as AdapterError
+from fieldclub.ingest.errors import UpstreamFormatError as UpstreamFormatError
 
 logger = logging.getLogger(__name__)
 
@@ -30,19 +31,6 @@ WGS84 = CRS.from_epsg(4326)
 # Statuses worth asking again for. Anything else in the 4xx range is our
 # mistake or a refusal, and asking again would be rude.
 RETRY_STATUSES = frozenset({408, 429, 500, 502, 503, 504})
-
-
-class AdapterError(IngestError):
-    """An upstream service or file could not be read."""
-
-    code = "ingest_adapter_error"
-    message = "An upstream source could not be read."
-
-
-class UpstreamFormatError(AdapterError):
-    """The upstream answered, but not in the shape the reader relies on."""
-
-    code = "ingest_upstream_format"
 
 
 class IncompleteReadError(AdapterError):
