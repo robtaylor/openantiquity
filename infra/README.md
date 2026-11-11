@@ -160,6 +160,14 @@ A provider's or the mail relay's secret may stay empty while its id is unset. Th
 
 The service is public from this moment, but the tables don't exist until step 7, so until then the API answers with errors. Nobody has the address yet; run step 7 straight away.
 
+To try the deployment out before anyone can reach it, add `service_public = false` to this apply. Cloud Run then answers only callers the project's IAM allows, and the owner reaches the site on their own machine with:
+
+```
+gcloud run services proxy fieldclub --region=europe-west2 --project="$P" --port=8090
+```
+
+Steps 7 to 10 work the same while it is held back. Remove the line and apply to open the site.
+
 ### 7. Create the schema
 
 ```

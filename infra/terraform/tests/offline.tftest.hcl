@@ -255,6 +255,39 @@ run "the_cdn_adds_a_proxy_and_closes_run_app" {
   }
 }
 
+run "the_service_is_open_unless_held_back" {
+  command = plan
+
+  assert {
+    condition     = google_cloud_run_v2_service.web[0].invoker_iam_disabled == true
+    error_message = "By default anyone can reach the site."
+  }
+}
+
+run "a_held_back_service_checks_every_caller" {
+  command = plan
+
+  variables {
+    service_public = false
+  }
+
+  assert {
+    condition     = google_cloud_run_v2_service.web[0].invoker_iam_disabled == false
+    error_message = "With service_public false, Cloud Run lets in only callers the project's IAM allows."
+  }
+}
+
+run "a_held_back_service_cannot_sit_behind_the_cdn" {
+  command = plan
+
+  variables {
+    service_public = false
+    cdn            = { enabled = true, domain = "fieldclub.example.org" }
+  }
+
+  expect_failures = [google_cloud_run_v2_service.web]
+}
+
 run "a_recurring_job_can_be_left_unscheduled" {
   command = plan
 

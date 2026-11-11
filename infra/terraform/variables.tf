@@ -122,6 +122,19 @@ variable "service_max_instances" {
   default     = 3
 }
 
+variable "service_public" {
+  description = <<-EOT
+    Whether anyone may reach the service. True is the site as launched. False
+    keeps Cloud Run's own check on every request, so only callers the
+    project's IAM allows get an answer: the owner, through
+    `gcloud run services proxy`. Use false to try a deployment out before it
+    is opened. It can't be combined with the load balancer, whose requests
+    carry no identity.
+  EOT
+  type        = bool
+  default     = true
+}
+
 variable "service_min_instances" {
   description = "Instances kept warm. 0 scales to zero; each warm instance is billed all month."
   type        = number

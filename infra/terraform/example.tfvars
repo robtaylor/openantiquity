@@ -10,6 +10,10 @@ billing_account = "000000-000000-000000"
 run_workloads = false
 image_tag     = "latest"
 
+# false holds the service back: only the owner reaches it, through
+# `gcloud run services proxy`. Leave it out, or true, for the open site.
+# service_public = false
+
 # Where the site is reached. Leave empty for the run.app address.
 public_url = ""
 contact    = "https://example.org/fieldclub-contact"

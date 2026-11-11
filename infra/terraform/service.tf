@@ -5,10 +5,12 @@
 resource "google_cloud_run_v2_service" "web" {
   count = var.run_workloads ? 1 : 0
 
-  name                 = var.name
-  location             = var.region
-  deletion_protection  = false
-  invoker_iam_disabled = true
+  name                = var.name
+  location            = var.region
+  deletion_protection = false
+  # Open to everyone as launched. Held back, Cloud Run answers only callers
+  # the project's IAM allows (var.service_public).
+  invoker_iam_disabled = var.service_public
   # Behind the optional load balancer, the run.app address is closed so that
   # every request comes through the proxy count the settings expect.
   ingress = var.cdn.enabled ? "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" : "INGRESS_TRAFFIC_ALL"
@@ -17,6 +19,10 @@ resource "google_cloud_run_v2_service" "web" {
     precondition {
       condition     = var.terms_url != ""
       error_message = "Set terms_url: the welcome step links to the contributor terms, and production refuses to start without it."
+    }
+    precondition {
+      condition     = var.service_public || !var.cdn.enabled
+      error_message = "A held-back service can't sit behind the load balancer: set service_public = true or turn the CDN off."
     }
   }
 
