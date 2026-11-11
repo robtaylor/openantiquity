@@ -72,6 +72,25 @@ def _swap(latlon: tuple[Any, Any]) -> Any:
     return np.column_stack((lon, lat))
 
 
+# RDF 1.1 gives a blank node that has been made into an IRI this path, so it can be told from a real one.
+_SKOLEM_PATH = "/.well-known/genid/"
+
+
+def _has_value(cell: Any) -> bool:
+    """Whether a result cell holds a value. A blank node doesn't, however it is written.
+
+    Wikidata answers "unknown value" for a statement, such as a coordinate
+    nobody has recorded, with a blank node or with the skolem IRI standing for
+    one. It says a value exists and not what it is, so it is treated like an
+    unbound variable.
+    """
+    if not isinstance(cell, dict) or "value" not in cell:
+        return False
+    if cell.get("type") == "bnode":
+        return False
+    return not (cell.get("type") == "uri" and _SKOLEM_PATH in str(cell["value"]))
+
+
 class SparqlQuery:
     def __init__(
         self,
@@ -125,7 +144,7 @@ class SparqlQuery:
             pages = self._pages(self.page_size)
         for page in pages:
             for binding in page:
-                yield {name: str(cell["value"]) for name, cell in binding.items() if "value" in cell}
+                yield {name: str(cell["value"]) for name, cell in binding.items() if _has_value(cell)}
 
     def _pages(self, size: int) -> Iterator[list[dict[str, Any]]]:
         offset = 0

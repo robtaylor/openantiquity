@@ -48,6 +48,38 @@ def test_paging_appends_limit_and_offset_until_a_short_page() -> None:
     assert queries[1].endswith("LIMIT 3\nOFFSET 3")
 
 
+@respx.mock
+def test_a_value_nobody_knows_is_left_out_like_an_unbound_one() -> None:
+    # Wikidata's "unknown value" for a coordinate comes back as a blank node, or as the
+    # skolem IRI that stands for one. Neither is a value, and neither is a place.
+    def cell(kind: str, value: str) -> dict[str, str]:
+        return {"type": kind, "value": value}
+
+    wkt = {
+        "type": "literal",
+        "datatype": "http://www.opengis.net/ont/geosparql#wktLiteral",
+        "value": "Point(-1.85 51.43)",
+    }
+    bindings = [
+        {"item": cell("uri", "http://www.wikidata.org/entity/Q1"), "coord": wkt},
+        {"item": cell("uri", "http://www.wikidata.org/entity/Q2"), "coord": cell("bnode", "b0")},
+        {
+            "item": cell("uri", "http://www.wikidata.org/entity/Q3"),
+            "coord": cell(
+                "uri", "http://www.wikidata.org/.well-known/genid/462c13290ef2540c54b2fc9606ac348a"
+            ),
+        },
+    ]
+    respx.get(ENDPOINT).mock(return_value=httpx.Response(200, json={"results": {"bindings": bindings}}))
+
+    features = list(make_query(geometry="coord").features())
+    assert [feature.properties["item"].rsplit("/", 1)[-1] for feature in features] == ["Q1", "Q2", "Q3"]
+    assert xy(features[0].geometry) == (-1.85, 51.43)
+    for unknown in features[1:]:
+        assert unknown.geometry is None
+        assert "coord" not in unknown.properties
+
+
 def test_a_paged_query_must_be_ordered() -> None:
     with pytest.raises(AssertionError, match="ORDER BY"):
         SparqlQuery(ENDPOINT, "SELECT ?s WHERE { ?s ?p ?o }", client=httpx.Client(), page_size=10)
