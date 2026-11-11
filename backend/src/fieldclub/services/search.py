@@ -308,8 +308,8 @@ def geo_search(db: Session, q: str, viewer: User | None, *, limit: int = 10) -> 
 def by_name(db: Session, text: str, hits: list[GeoHit]) -> list[GeoHit]:
     """Places and records in one order, by how well each name fits the query, then what it names.
 
-    A name that is the query, or whose first part is, comes first, then names
-    that start with it, then names that hold it (`name_rank.name_fit`), each
+    A name that is the query comes first, then one whose first part is, then
+    names that start with it, then names that hold it (`name_rank.name_fit`), each
     with places and designations of national importance first and other
     records next. Listed buildings, reports and dates that fit come after
     all of those, and loose matches last, by how alike they are
@@ -320,8 +320,8 @@ def by_name(db: Session, text: str, hits: list[GeoHit]) -> list[GeoHit]:
     phrase = " ".join(records.query_words(text))
 
     def fit(hit: GeoHit) -> int:
-        words = records.name_words(hit.label)
-        return name_rank.name_fit(phrase, words, records.name_words(name_rank.first_part(hit.label)))
+        parts = (hit.label, name_rank.first_part(hit.label), name_rank.without_qualifier(hit.label))
+        return name_rank.name_fit(phrase, *(records.name_words(part) for part in parts))
 
     scored = [(fit(hit), hit) for hit in hits]
     loose = list(dict.fromkeys(hit.label for value, hit in scored if value == name_rank.FIT_LOOSE))

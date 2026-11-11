@@ -14,9 +14,15 @@ from tests.records.test_geo_search import add_place
 NAMES = [
     ("stonehenge", "Stonehenge", name_rank.FIT_EXACT),
     ("stonehenge", "STONEHENGE", name_rank.FIT_EXACT),
-    ("stonehenge", "Stonehenge, the Avenue, and three barrows", name_rank.FIT_EXACT),
-    ("silbury hill", "Silbury Hill: a monumental Neolithic mound", name_rank.FIT_EXACT),
+    ("stonehenge", "Stonehenge, the Avenue, and three barrows", name_rank.FIT_FIRST_PART),
+    ("silbury hill", "Silbury Hill: a monumental Neolithic mound", name_rank.FIT_FIRST_PART),
     ("maiden castle", "Maiden Castle (Fort)", name_rank.FIT_EXACT),
+    ("offa s dyke", "Offa's Dyke", name_rank.FIT_EXACT),
+    ("offa s dyke", "Offa's Dyke: section in Lippets Grove", name_rank.FIT_FIRST_PART),
+    ("wansdyke", "Wansdyke (earthwork)", name_rank.FIT_EXACT),
+    ("wansdyke", "Wansdyke (Site of) ", name_rank.FIT_EXACT),
+    ("wansdyke", "Wansdyke: section E of Maes Knoll camp", name_rank.FIT_FIRST_PART),
+    ("wansdyke", "Wansdyke (east) and barrows", name_rank.FIT_FIRST_PART),
     ("hadrian s wall", "Hadrian's Wall in wall mile 7", name_rank.FIT_STARTS),
     ("sutton hoo", "Sutton Hoo Woodbridge", name_rank.FIT_STARTS),
     ("sutton hoo", "Sutton Hook Wood", name_rank.FIT_STARTS_PART_WORD),
@@ -37,7 +43,8 @@ NAMES = [
 def test_python_and_sql_agree_on_how_a_name_fits(db: Session, phrase: str, name: str, fit: int) -> None:
     words = records.name_words(name)
     first = records.name_words(name_rank.first_part(name))
-    assert name_rank.name_fit(phrase, words, first) == fit
+    whole = records.name_words(name_rank.without_qualifier(name))
+    assert name_rank.name_fit(phrase, words, first, whole) == fit
     assert db.scalar(select(name_rank.fit_sql(literal(name), phrase))) == fit
 
 
@@ -110,11 +117,12 @@ def monuments(db: Session) -> None:
 @pytest.mark.usefixtures("monuments")
 def test_a_famous_monument_opens_its_search_not_the_houses_named_after_it(db: Session) -> None:
     found = labels(db, "Stonehenge")
-    assert set(found[:2]) == {
+    # The record whose whole name is the query, then the designations whose first part is.
+    assert found[0] == "Stonehenge"
+    assert set(found[1:3]) == {
         "Stonehenge, the Avenue, and three barrows adjacent to the Avenue",
         "Stonehenge, Avebury and Associated Sites",
     }
-    assert found[2] == "Stonehenge"
     assert found.index("Stonehenge Works") < found.index("STONEHENGE")
     # One source's repeated name is shown once: the two listed buildings, and the eight dates.
     assert found.count("STONEHENGE") == 1
@@ -132,3 +140,24 @@ def test_a_record_that_starts_with_the_name_comes_before_a_loose_place(db: Sessi
 def test_a_monument_that_holds_the_name_comes_before_reports_that_start_with_it(db: Session) -> None:
     found = labels(db, "Sutton Hoo")
     assert found[0].startswith("Prehistoric settlement")
+
+
+@pytest.mark.parametrize(
+    ("query", "whole"), [("Offa's Dyke", "Offa's Dyke"), ("Wansdyke", "Wansdyke (earthwork)")]
+)
+def test_the_record_that_names_a_whole_monument_opens_before_its_scheduled_sections(
+    db: Session, query: str, whole: str
+) -> None:
+    """A long earthwork is scheduled in dozens of sections that each open with its name."""
+    scheduled = add_source(db, "he-nhle-scheduled-monuments")
+    pleiades = add_source(db, "isaw-pleiades-places", category="monument")
+    for number in range(8):
+        add_record(
+            db, scheduled, f"{query}: section {number}, 90m south of Brynorgan", -3.0, 52.5 + number / 100
+        )
+    add_record(db, pleiades, whole, -3.0, 52.6)
+    db.commit()
+    found = labels(db, query)
+    assert found[0] == whole
+    hits, _ = records.search(db, query, by_name=True, limit=3)
+    assert hits[0].record.name == whole

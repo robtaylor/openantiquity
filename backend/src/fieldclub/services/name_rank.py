@@ -3,9 +3,13 @@
 The search box ranks places and records together, by three numbers each:
 
 1. **Fit** (`name_fit`), best first:
-   - 4: the name is the query, or its first part is: "Stonehenge, the Avenue,
-     and three barrows" and "Silbury Hill: a monumental Neolithic mound" both
-     open with the thing searched for, and go on to say more;
+   - 5: the name is the query, or would be without a closing bracket
+     ("Offa's Dyke", "Wansdyke (earthwork)", "Maiden Castle (Fort)");
+   - 4: its first part is: "Stonehenge, the Avenue, and three barrows" and
+     "Silbury Hill: a monumental Neolithic mound" both open with the thing
+     searched for, and go on to say more. A whole name comes first, so the
+     record that names a monument isn't lost among the dozens of scheduled
+     sections named "Offa's Dyke: section ...";
    - 3: the name starts with the query as whole words ("Sutton Hoo Woodbridge");
    - 2: it starts with the query part-way through a word, as while typing
      ("Sutton Hook Wood", "Avebury" for "ave");
@@ -18,7 +22,7 @@ The search box ranks places and records together, by three numbers each:
    many of them houses named after a monument or a village, and the reports
    and dated samples that are about a site rather than the site.
 3. **Band** (`band`), which puts them together: first every name that fits
-   (fit 1 to 4) and isn't minor, by fit and then weight; then the minor names
+   (fit 1 to 5) and isn't minor, by fit and then weight; then the minor names
    that fit, by fit; then the loose matches, by how alike they are, then
    weight. So the 73 radiocarbon dates and the listed building called
    "Stonehenge" come after the scheduled monument and the World Heritage
@@ -42,7 +46,8 @@ from sqlalchemy import ColumnElement, SQLColumnExpression, case, func, literal, 
 
 from fieldclub.vocab import RecordCategory
 
-FIT_EXACT = 4
+FIT_EXACT = 5
+FIT_FIRST_PART = 4
 FIT_STARTS = 3
 FIT_STARTS_PART_WORD = 2
 FIT_HOLDS = 1
@@ -77,19 +82,26 @@ MINOR_CATEGORIES = frozenset({RecordCategory.DOCUMENT.value, RecordCategory.EVEN
 # Where a name's first part ends.
 _FIRST_PART = re.compile(r"[,:;(]")
 _FIRST_PART_SQL = "[,:;(]"
+# A bracket that closes a name, as in "Wansdyke (earthwork)": a qualifier, not more of the name.
+_QUALIFIER = re.compile(r"\s*\([^()]*\)\s*$")
+# PostgreSQL's regular expressions read it alike.
+_QUALIFIER_SQL = _QUALIFIER.pattern
 _NOT_A_WORD_SQL = "[^[:alnum:]]+"
 
 
-def name_fit(phrase: str, words: list[str], first_words: list[str]) -> int:
+def name_fit(phrase: str, words: list[str], first_words: list[str], whole_words: list[str]) -> int:
     """The fit of a name to the query `phrase` (its words joined by single spaces).
 
-    `words` are the name's words and `first_words` those of its first part,
-    both as `records.name_words` makes them.
+    `words` are the name's words, `first_words` those of its `first_part` and
+    `whole_words` those of the name `without_qualifier`, each as
+    `records.name_words` makes them.
     """
     assert phrase, "a query has words"
     name = " ".join(words)
-    if name == phrase or " ".join(first_words) == phrase:
+    if name == phrase or " ".join(whole_words) == phrase:
         return FIT_EXACT
+    if " ".join(first_words) == phrase:
+        return FIT_FIRST_PART
     if name.startswith(phrase + " "):
         return FIT_STARTS
     if name.startswith(phrase):
@@ -102,6 +114,11 @@ def name_fit(phrase: str, words: list[str], first_words: list[str]) -> int:
 def first_part(name: str) -> str:
     """A name up to its first comma, colon, semicolon or bracket."""
     return _FIRST_PART.split(name, maxsplit=1)[0]
+
+
+def without_qualifier(name: str) -> str:
+    """A name without a bracket that closes it."""
+    return _QUALIFIER.sub("", name)
 
 
 def record_weight(source_key: str, category: str) -> int:
@@ -129,8 +146,10 @@ def fit_sql(name: SQLColumnExpression[str], phrase: str) -> ColumnElement[int]:
     assert re.fullmatch(r"[^\W_]+( [^\W_]+)*", phrase), "the phrase must be words and spaces"
     words = _words_sql(name)
     first = _words_sql(func.split_part(func.regexp_replace(name, _FIRST_PART_SQL, ",", "g"), ",", 1))
+    whole = _words_sql(func.regexp_replace(name, _QUALIFIER_SQL, ""))
     return case(
-        (or_(words == literal(phrase), first == literal(phrase)), FIT_EXACT),
+        (or_(words == literal(phrase), whole == literal(phrase)), FIT_EXACT),
+        (first == literal(phrase), FIT_FIRST_PART),
         (words.like(literal(phrase + " %")), FIT_STARTS),
         (words.like(literal(phrase + "%")), FIT_STARTS_PART_WORD),
         ((literal(" ") + words + literal(" ")).like(literal(f"% {phrase} %")), FIT_HOLDS),
