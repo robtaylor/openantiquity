@@ -6,7 +6,9 @@ allowed exactly when the route would accept it, and when it isn't, `reason`
 is the code the route would answer with:
 
 - `answer`: `PUT /findings/{id}/observation`. `review.check_may_answer`, then
-  no answer given yet.
+  no answer given yet. A viewer who took their answer back gets
+  `answer_withdrawn`: `PUT` with the same `visible` as `my_observation`
+  restores it, and any other answer is `answer_final`.
 - `add_evidence`: `POST /findings/{id}/evidence`. `findings.check_may_add_evidence`.
 - `comment`: `POST /findings/{id}/comments`. Any contributor.
 - `edit`: `PATCH /findings/{id}`. `findings.check_finder`.
@@ -16,7 +18,8 @@ is the code the route would answer with:
 - `lower_level`: `PUT /mod/findings/{id}/sensitivity` to the next level down.
   `moderation.check_moderator`, then `moderation.check_may_set_sensitivity`.
 - `verify`: `POST /evidence/{id}/verify` on an official item someone else
-  added. `findings.check_may_verify`.
+  added. `findings.check_may_verify`, then some item on the page that its
+  own `verify` allows (`nothing_to_verify` when none is).
 
 Every route first takes `Contributor`: signed in, not banned, and through the
 welcome step. A signed-out viewer gets `unauthorised` for everything, and
@@ -26,8 +29,8 @@ client can offer sign-in or the welcome sheet where an action would follow.
 Each evidence item carries its own `vote` and `verify`, which add the checks
 about that item. A few reasons aren't errors a route raises, because there is
 nothing to send: `already_answered` (the viewer's answer is given, and its
-page says whether it waits for its detail), `highest_level` and
-`lowest_level`.
+page says whether it waits for its detail), `answer_withdrawn`,
+`highest_level`, `lowest_level` and `nothing_to_verify`.
 
 Nothing here says anything about other people's answers: whether someone may
 answer turns on their own answer only.
@@ -35,7 +38,7 @@ answer turns on their own answer only.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, fields
 
 from fieldclub.auth import onboarding
@@ -46,8 +49,10 @@ from fieldclub.services import findings, moderation, review, sensitivity
 from fieldclub.vocab import SENSITIVITY_ORDER, Sensitivity, sensitivity_rank
 
 ALREADY_ANSWERED = "already_answered"
+ANSWER_WITHDRAWN = "answer_withdrawn"
 HIGHEST_LEVEL = "highest_level"
 LOWEST_LEVEL = "lowest_level"
+NOTHING_TO_VERIFY = "nothing_to_verify"
 
 
 @dataclass(frozen=True)
@@ -115,8 +120,14 @@ def _nothing(code: str) -> Callable[[], None]:
     return check
 
 
-def finding_actions(finding: Finding, viewer: User | None, mine: Observation | None) -> FindingActions:
-    """What `viewer` may do on `finding`. `mine` is the viewer's own answer, if any."""
+def finding_actions(
+    finding: Finding, viewer: User | None, mine: Observation | None, evidence: Sequence[Evidence]
+) -> FindingActions:
+    """What `viewer` may do on `finding`.
+
+    `mine` is the viewer's own answer, if any, and `evidence` the standing
+    items the page shows, which `verify` looks through.
+    """
     user, refused = _contributor(viewer)
     if user is None:
         return FindingActions(*(refused for _ in fields(FindingActions)))
@@ -127,11 +138,18 @@ def finding_actions(finding: Finding, viewer: User | None, mine: Observation | N
         if not sensitivity.may_change_sensitivity(finding, user, level):
             raise sensitivity.SensitivityChangeForbiddenError()
 
+    def something_to_verify() -> None:
+        for item in evidence:
+            if _action(lambda item=item: findings.check_may_verify(finding, user, item)).allowed:
+                return
+        raise _NothingToDoError(NOTHING_TO_VERIFY)
+
+    def unanswered() -> None:
+        if mine is not None:
+            raise _NothingToDoError(ALREADY_ANSWERED if mine.withdrawn_at is None else ANSWER_WITHDRAWN)
+
     return FindingActions(
-        answer=_action(
-            lambda: review.check_may_answer(finding, user),
-            _nothing(ALREADY_ANSWERED) if mine is not None else _passes,
-        ),
+        answer=_action(lambda: review.check_may_answer(finding, user), unanswered),
         add_evidence=_action(lambda: findings.check_may_add_evidence(finding, user)),
         comment=Action(True),
         edit=_action(lambda: findings.check_finder(finding, user)),
@@ -145,7 +163,7 @@ def finding_actions(finding: Finding, viewer: User | None, mine: Observation | N
             if lower is None
             else lambda: moderation.check_may_set_sensitivity(finding, user, lower),
         ),
-        verify=_action(lambda: findings.check_may_verify(finding, user)),
+        verify=_action(lambda: findings.check_may_verify(finding, user), something_to_verify),
     )
 
 
@@ -158,7 +176,3 @@ def evidence_actions(finding: Finding, evidence: Evidence, viewer: User | None) 
         vote=_action(lambda: findings.check_may_vote(finding, evidence, user)),
         verify=_action(lambda: findings.check_may_verify(finding, user, evidence)),
     )
-
-
-def _passes() -> None:
-    return None

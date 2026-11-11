@@ -26,8 +26,9 @@ Blindness:
   nothing. Then the detail (class, period, explanation, checks, note) is
   added once, or skipped, and that reply is the reveal (`reveal`). Until
   then the person hasn't seen the answers, on every route: `revealed_at` is
-  empty, and `findings.answers_visible` turns on it. The detail was given
-  blind, so it counts exactly as detail sent with the answer does.
+  empty, and `findings.answers_visible` turns on it. The detail counts
+  exactly as detail sent with the answer does. The reveal reports the tier
+  move from before the first step.
 - Activity doesn't say who answered. `observation_added`, and any tier or
   state change an answer causes, are recorded with no actor, so a follower
   can't read someone's answer from the event that follows it.
@@ -44,6 +45,9 @@ Known limits, accepted:
   from other people's answers.
 - The queue and the help-wanted lists page by offset, because their order
   changes as people answer. A card can shift between pages or appear twice.
+- An answer given in two steps counts at the first, so between the steps
+  the reviewer can see the tier and score move with it, as any visitor can,
+  before choosing the detail.
 
 Services flush and never commit.
 """
@@ -76,6 +80,7 @@ from fieldclub.vocab import (
     FindingState,
     NextStepCode,
     Period,
+    Tier,
     Visible,
 )
 
@@ -251,6 +256,9 @@ def put_observation(db: Session, finding: Finding, user: User, answer: Answer) -
         user_id=user.id,
         note=answer.note,
         revealed_at=None if answer.detail_follows else datetime.now(UTC),
+        # Kept for the reveal, which is where the move this answer makes is shown.
+        tier_at_answer=finding.tier if answer.detail_follows else None,
+        state_at_answer=finding.state if answer.detail_follows else None,
         **answer.columns(),
     )
     db.add(observation)
@@ -270,11 +278,20 @@ def reveal(db: Session, finding: Finding, user: User, detail: Detail) -> AnswerR
     same as long as the detail matches what is stored (`AnswerFinalError`
     otherwise), and the note can change, as `put_observation` allows. An
     answer taken back has nothing to reveal until it is restored.
+
+    A reveal that carries any detail or a note changes the answer, so it is
+    refused wherever `put_observation` would refuse it (`check_may_answer`):
+    on a withdrawn finding, and for someone who no longer sees the exact
+    position. One that carries nothing changes nothing the person wrote, so
+    it is allowed there too: the answer was given while it could be, and its
+    reveal, which shows the answers they are owed, must not be stranded.
     """
     findings.lock(db, finding)
     observation = findings.my_observation(db, finding, user)
     if observation is None or observation.withdrawn_at is not None:
         raise ObservationNotFoundError()
+    if not detail.is_empty:
+        check_may_answer(finding, user)
     if observation.revealed_at is None:
         return _add_detail(db, finding, user, observation, detail)
     given = {name: value for name, value in detail.detail_columns().items() if value is not None}
@@ -289,10 +306,8 @@ def reveal(db: Session, finding: Finding, user: User, detail: Detail) -> AnswerR
 def _add_detail(
     db: Session, finding: Finding, user: User, observation: Observation, detail: Detail
 ) -> AnswerResult:
-    """Store an unrevealed answer's detail, which is a contribution, and reveal it."""
+    """Store an unrevealed answer's detail, which the caller has checked may be given, and reveal it."""
     assert observation.revealed_at is None, "the detail is added once, before the reveal"
-    if not detail.is_empty:
-        check_may_answer(finding, user)
     for name, value in detail.detail_columns().items():
         setattr(observation, name, value)
     observation.note = detail.note
@@ -313,8 +328,16 @@ def _held(db: Session, finding: Finding, user: User, observation: Observation) -
 
 
 def _revealed(db: Session, finding: Finding, user: User, observation: Observation) -> AnswerResult:
+    """Reassess and compare. An answer given in two steps reports the move from before its first step."""
     assert observation.revealed_at is not None, "only a revealed answer is compared"
     result = _reassessed(db, finding, user, observation)
+    if observation.tier_at_answer is not None:
+        assert observation.state_at_answer is not None, "the tier and state are kept together"
+        result = replace(
+            result,
+            tier_before=Tier(observation.tier_at_answer),
+            state_before=FindingState(observation.state_at_answer),
+        )
     return AnswerResult(observation, result, compare(result, user, observation))
 
 

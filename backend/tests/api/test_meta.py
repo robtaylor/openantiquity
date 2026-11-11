@@ -370,6 +370,12 @@ def test_each_next_step_says_what_meets_it(meta: dict) -> None:
     official = rules["need_official"]
     assert official["evidence_kinds"] == ["her_record", "designation", "publication"]
     assert official["needs_verification"] is True
+    # tests/confidence/test_step_rules.py holds these to the engine.
+    assert [rules[code]["endorsement"] for code in ("need_strand", "need_ground", "need_official")] == [
+        "if_added_by_finder",
+        "unless_added_by_trusted_other",
+        "not_needed",
+    ]
 
 
 def test_the_next_step_kinds_are_the_engine_s_strands(meta: dict) -> None:

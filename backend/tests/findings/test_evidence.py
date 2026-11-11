@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -187,6 +188,16 @@ def test_evidence_counts_endorsements_and_disputes_as_the_engine_does(
     assert (item["endorsements"], item["disputes"]) == (2, 2)
     # Two members for, a member and an archaeologist against: 2 - 1 - 3.
     assert item["vote_total"] == -2.0
+
+    # An assessment stored before the engine kept the disputers still shows them, as they are counted live.
+    db.refresh(finding)
+    stored = copy.deepcopy(finding.assessment)
+    for status in stored["evidence"]:
+        del status["disputers"]
+    finding.assessment = stored
+    db.commit()
+    (item,) = client_as(make_user()).get(f"{API}/findings/{finding.public_id}").json()["evidence"]
+    assert (item["endorsements"], item["disputes"]) == (2, 2)
 
 
 def test_evidence_endorsed_by_two_others_earns_its_contributor_a_point(

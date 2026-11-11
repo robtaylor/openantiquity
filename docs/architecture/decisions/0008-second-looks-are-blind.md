@@ -23,7 +23,7 @@ The same pass found that agreement among few volunteers is weak evidence. In the
 5. The route to "probable" without a trusted reviewer needs a summed weight of 7.0 from people who can see it, not 5.0.
 6. An answer is final once given. Only its note can change afterwards. An answer can be withdrawn, which stops it counting, but it can't be replaced by a different one.
 7. Activity and notifications caused by a second look carry no name, so nobody who hasn't answered can work out who said what.
-8. The answer and its optional detail may come in two requests, so that the detail is asked for after the answer. The answer counts as soon as it is given, and its reply reveals nothing. The detail follows once, or is skipped, and that reply is the reveal. Until then the reviewer counts as someone who hasn't answered, everywhere.
+8. The answer and its optional detail may come in two requests, so that the detail is asked for after the answer. The answer counts as soon as it is given, and its reply reveals nothing. The detail follows once, or is skipped, and that reply is the reveal. Until then the reviewer is treated as someone who hasn't seen the answers, everywhere.
 
 ## Alternatives considered
 
@@ -38,7 +38,7 @@ The same pass found that agreement among few volunteers is weak evidence. In the
 - A disagreeing interpretation is useful too. If three reviewers independently say "field boundary" where the finder said "enclosure", that shows up at once.
 - The queue can't use a finding's title to draw people in. It has to rely on the picture.
 - The reveal after answering is a small reward of its own, and the natural place to show a tier change.
-- Detail given after the answer, before the reveal, was still given blind, so it counts exactly as detail given with the answer.
+- Detail given after the answer, before the reveal, counts exactly as detail given with the answer. It isn't quite as blind: between the steps the reviewer can see the tier and score move with their own answer, as anyone watching the page can, which an answer given in one step never shows before its detail.
 - Someone who answers by mistake can't correct it. They can withdraw the answer and add a note, and their second look no longer counts on that finding.
 - A tier change set off by a second look appears in the activity feed with no name against it, which reads less warmly than "Ann's second look moved this to Seen".
 

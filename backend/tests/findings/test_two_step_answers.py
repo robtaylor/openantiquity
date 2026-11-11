@@ -10,12 +10,14 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fieldclub.models import Finding, User
-from fieldclub.services import records, review
-from fieldclub.vocab import FeatureClass, Visible
+from fieldclub.models import Finding, Observation, User
+from fieldclub.services import findings, records, review
+from fieldclub.vocab import FeatureClass, Sensitivity, Visible
 from tests.findings.support import API, answer, create
 from tests.helpers import ClientAs, MakeUser, add_record, add_source, error_code, lon_lat
 
@@ -263,3 +265,75 @@ def test_an_answer_given_in_one_step_is_revealed_at_once(
     assert given.json()["revealed"] is True
     assert given.json()["observation"]["revealed"] is True
     assert given.json()["finding"]["answers_visible"] is True
+
+
+def _withdraw(db: Session, finding: Finding) -> None:
+    findings.withdraw_finding(db, findings.lock(db, finding), db.get_one(User, finding.author_id))
+    db.commit()
+
+
+def _raise(db: Session, finding: Finding) -> None:
+    db.refresh(finding)
+    finding.sensitivity = Sensitivity.RESTRICTED.value
+    db.commit()
+
+
+@pytest.mark.parametrize(("close", "code"), [(_withdraw, "finding_withdrawn"), (_raise, "location_hidden")])
+def test_the_reveal_changes_a_note_only_where_the_answer_could_change(
+    db: Session, client_as: ClientAs, make_user: MakeUser, close: Any, code: str
+) -> None:
+    """A note sent with the reveal is a change to the answer, refused as `PUT` refuses it."""
+    _, finding = _answered(db, make_user)
+    reviewer = make_user()
+    client = client_as(reviewer)
+    assert client.put(_path(finding), json={"visible": "yes", "note": "First"}).status_code == 200
+    close(db, finding)
+    assert error_code(client.put(_path(finding), json={"visible": "yes", "note": "Via put"})) == code
+    assert error_code(client.post(f"{_path(finding)}/reveal", json={"note": "Via reveal"})) == code
+    db.expire_all()
+    observation = db.scalars(
+        select(Observation).where(Observation.finding_id == finding.id, Observation.user_id == reviewer.id)
+    ).one()
+    assert observation.note == "First"
+    # Asking for the reveal again with nothing in it changes nothing, and still answers.
+    assert client.post(f"{_path(finding)}/reveal").status_code == 200
+
+
+@pytest.mark.parametrize(("close", "code"), [(_withdraw, "finding_withdrawn"), (_raise, "location_hidden")])
+def test_a_finding_closed_between_the_steps_takes_no_detail_but_can_still_be_revealed(
+    db: Session, client_as: ClientAs, make_user: MakeUser, close: Any, code: str
+) -> None:
+    """The answer was given while it could be, so its reveal stays open, but nothing more is added."""
+    _, finding = _answered(db, make_user)
+    client = client_as(make_user())
+    client.put(_path(finding), json={"visible": "yes", "detail_follows": True})
+    close(db, finding)
+    assert error_code(client.post(f"{_path(finding)}/reveal", json={"feature_class": "moat"})) == code
+    assert error_code(client.post(f"{_path(finding)}/reveal", json={"note": "Late"})) == code
+    skipped = client.post(f"{_path(finding)}/reveal")
+    assert skipped.status_code == 200, skipped.text
+    observation = skipped.json()["observation"]
+    assert (observation["revealed"], observation["feature_class"], observation["note"]) == (True, None, None)
+
+
+def test_the_reveal_shows_the_tier_move_the_first_step_made(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    finding = create(db, make_user(), feature_class=FeatureClass.HILLFORT)
+    answer(db, finding, make_user(), Visible.YES, feature_class=FeatureClass.HILLFORT)
+    db.commit()
+    db.refresh(finding)
+    before = (finding.tier, finding.state)
+    client = client_as(make_user())
+    client.put(_path(finding), json={"visible": "yes", "detail_follows": True})
+    db.refresh(finding)
+    after = (finding.tier, finding.state)
+    assert after[0] != before[0], "the first step moved the tier, or the test proves nothing"
+
+    revealed = client.post(f"{_path(finding)}/reveal").json()
+    assert (revealed["tier_before"], revealed["state_before"]) == before
+    assert (revealed["tier_after"], revealed["state_after"]) == after
+    assert revealed["moved_up"] is True
+    # Asked again, it answers the same reveal.
+    again = client.post(f"{_path(finding)}/reveal").json()
+    assert (again["tier_before"], again["tier_after"], again["moved_up"]) == (before[0], after[0], True)

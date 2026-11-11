@@ -196,14 +196,49 @@ class MetBy(StrEnum):
     EVIDENCE = "evidence"
 
 
+class Endorsement(StrEnum):
+    """When an evidence item counts for a step only once someone else endorses it.
+
+    An item is endorsed when people other than its contributor and the finder
+    vote it up with a summed weight of at least `Thresholds.endorsement_weight`.
+    """
+
+    NOT_NEEDED = "not_needed"
+    # The finder's own item needs an endorsement. Anyone else's counts as it is.
+    IF_ADDED_BY_FINDER = "if_added_by_finder"
+    # Every item needs an endorsement, unless someone other than the finder
+    # with a trusted role (`vocab.TRUSTED_ROLES`) added it.
+    UNLESS_ADDED_BY_TRUSTED_OTHER = "unless_added_by_trusted_other"
+
+
+@dataclass(frozen=True)
+class EvidenceFacts:
+    """What `StepRule.counts` needs to know about one evidence item."""
+
+    kind: EvidenceKind
+    relation: Relation | None
+    stance: Stance
+    outcome: Outcome | None
+    by_finder: bool
+    # The contributor's role is one of `vocab.TRUSTED_ROLES`.
+    trusted: bool
+    endorsed: bool
+    # Its votes sum to zero or more. Every step needs this.
+    standing: bool
+    # Someone other than the finder and the contributor, in `VERIFIER_ROLES`, verified it.
+    verified: bool
+
+
 @dataclass(frozen=True)
 class StepRule:
     """What meets one next step, as `_next_steps` and `_evidence_status` count it.
 
     A step met by evidence names the kinds that count, the relations a
-    record link needs, and the stance or outcome the item must point. Items
-    the finder added count once someone else endorses them, and an official
-    item once an archaeologist or moderator verifies it (`pending_evidence`).
+    record link needs, the stance or outcome the item must point, whether it
+    needs an endorsement and whether it needs a verification. An item counts
+    only while its votes sum to zero or more. `counts` says whether one item
+    meets the step, and `tests/confidence/test_step_rules.py` holds it to the
+    engine for every combination.
     """
 
     code: NextStepCode
@@ -214,8 +249,30 @@ class StepRule:
     # What a field item's outcome must say, or None where the stance decides.
     outcome: Outcome | None = None
     stance: Stance | None = None
+    endorsement: Endorsement = Endorsement.NOT_NEEDED
     # True when the item counts only once an archaeologist or moderator verifies it.
     needs_verification: bool = False
+
+    def counts(self, item: EvidenceFacts) -> bool:
+        """Whether one evidence item meets this step."""
+        assert self.met_by is MetBy.EVIDENCE, "only a step met by evidence counts items"
+        if not item.standing or item.kind not in self.evidence_kinds:
+            return False
+        if item.kind is EvidenceKind.RECORD_LINK and item.relation not in self.record_relations:
+            return False
+        if self.outcome is not None and item.outcome is not self.outcome:
+            return False
+        if self.stance is not None and item.stance is not self.stance:
+            return False
+        if self.needs_verification and not item.verified:
+            return False
+        match self.endorsement:
+            case Endorsement.NOT_NEEDED:
+                return True
+            case Endorsement.IF_ADDED_BY_FINDER:
+                return item.endorsed or not item.by_finder
+            case Endorsement.UNLESS_ADDED_BY_TRUSTED_OTHER:
+                return item.endorsed or (item.trusted and not item.by_finder)
 
 
 def _kinds_in(strands: Iterable[Strand]) -> tuple[EvidenceKind, ...]:
@@ -233,6 +290,7 @@ STEP_RULES: tuple[StepRule, ...] = (
         evidence_kinds=_kinds_in(DESK_STRANDS),
         record_relations=tuple(r for r in Relation if r in RECORD_STRAND_RELATIONS),
         stance=Stance.SUPPORTS,
+        endorsement=Endorsement.IF_ADDED_BY_FINDER,
     ),
     StepRule(NextStepCode.NEED_CLASS_AGREEMENT, MetBy.SECOND_LOOK),
     StepRule(NextStepCode.NEED_CHECK, MetBy.SECOND_LOOK),
@@ -242,6 +300,7 @@ STEP_RULES: tuple[StepRule, ...] = (
         MetBy.EVIDENCE,
         evidence_kinds=_kinds_in(FIELD_STRANDS),
         outcome=Outcome.SUPPORTS,
+        endorsement=Endorsement.UNLESS_ADDED_BY_TRUSTED_OTHER,
     ),
     StepRule(
         NextStepCode.NEED_OFFICIAL,
@@ -831,10 +890,13 @@ def _check_status(
     return CheckStatus(check=check, asserted=asserted, against=against, cleared=cleared)
 
 
+def counted_votes(votes: Iterable[VoteInput], contributor: int, finder: int) -> list[VoteInput]:
+    """The votes on an item that the engine counts, by voter: not its contributor's or the finder's."""
+    return sorted((v for v in votes if v.user_id not in (contributor, finder)), key=lambda v: v.user_id)
+
+
 def _evidence_status(item: EvidenceInput, finder: int, t: Thresholds) -> EvidenceStatus:
-    votes = sorted(
-        (v for v in item.votes if v.user_id not in (item.user_id, finder)), key=lambda v: v.user_id
-    )
+    votes = counted_votes(item.votes, item.user_id, finder)
     vote_total = sum(role_weight(v.role) * v.value for v in votes)
     endorsers = tuple(v.user_id for v in votes if v.value > 0)
     disputers = tuple(v.user_id for v in votes if v.value < 0)

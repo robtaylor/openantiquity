@@ -46,6 +46,7 @@ def build_vocab() -> schema.Vocab:
                 record_relations=list(rule.record_relations),
                 outcome=rule.outcome,
                 stance=rule.stance,
+                endorsement=rule.endorsement,
                 needs_verification=rule.needs_verification,
             )
             for rule in STEP_RULES

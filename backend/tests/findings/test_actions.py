@@ -24,7 +24,7 @@ from tests.helpers import ClientAs, MakeUser, error_code
 
 VIEWERS = ("signed_out", "newcomer", "member", "finder", "trusted", "expert", "moderator")
 LEVELS = list(Sensitivity)
-NOTHING_TO_DO = {"already_answered", "highest_level", "lowest_level"}
+NOTHING_TO_DO = {"already_answered", "answer_withdrawn", "highest_level", "lowest_level", "nothing_to_verify"}
 
 
 class Case:
@@ -155,6 +155,50 @@ def test_someone_who_has_answered_has_nothing_to_answer(
     # A different answer is refused, which is what "nothing to answer" spares the client from finding out.
     response = case.client.put(f"{API}/findings/{finding.public_id}/observation", json={"visible": "no"})
     assert error_code(response) == "answer_final"
+
+
+def test_someone_who_took_their_answer_back_may_restore_it_and_nothing_else(
+    db: Session, make_user: MakeUser, client_as: ClientAs, client: TestClient
+) -> None:
+    case = Case(db, make_user, client_as, client, "member")
+    finding = case.finding(Sensitivity.OPEN, withdrawn=False)
+    path = f"{API}/findings/{finding.public_id}/observation"
+    assert case.client.put(path, json={"visible": "yes"}).status_code == 200
+    assert case.client.delete(path).status_code == 204
+    page = case.page(finding)
+    assert page["actions"]["answer"] == {"allowed": False, "reason": "answer_withdrawn"}
+    assert page["my_observation"]["withdrawn"] is True
+    # The same answer restores it, and a different one is refused.
+    assert error_code(case.client.put(path, json={"visible": "no"})) == "answer_final"
+    assert case.client.put(path, json={"visible": page["my_observation"]["visible"]}).status_code == 200
+    assert case.page(finding)["actions"]["answer"] == {"allowed": False, "reason": "already_answered"}
+
+
+def test_the_finding_offers_verify_only_when_some_item_can_be_verified(
+    db: Session, make_user: MakeUser, client_as: ClientAs
+) -> None:
+    expert = make_user("expert")
+    client = client_as(expert)
+    finding = create(db, make_user(), feature_class=FeatureClass.ENCLOSURE)
+    db.commit()
+
+    def flags() -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        page = client.get(f"{API}/findings/{finding.public_id}").json()
+        return page["actions"]["verify"], [item["actions"]["verify"] for item in page["evidence"]]
+
+    assert flags() == ({"allowed": False, "reason": "nothing_to_verify"}, [])
+    official = EvidenceFields(kind=EvidenceKind.HER_RECORD, reference="MWI1234")
+    findings.add_evidence(db, findings.lock(db, finding), expert, official)
+    add_desk_evidence(db, finding, make_user("trusted"))
+    db.commit()
+    verify, items = flags()
+    assert verify == {"allowed": False, "reason": "nothing_to_verify"}
+    assert not any(item["allowed"] for item in items)
+    findings.add_evidence(db, findings.lock(db, finding), make_user("trusted"), official)
+    db.commit()
+    verify, items = flags()
+    assert verify == {"allowed": True, "reason": None}
+    assert [item["allowed"] for item in items].count(True) == 1
 
 
 EVIDENCE_ROUTES: dict[str, Callable[[Case, Evidence], Any]] = {

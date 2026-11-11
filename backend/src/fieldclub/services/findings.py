@@ -84,6 +84,7 @@ from fieldclub.services.confidence import (
     ObservationInput,
     VoteInput,
     assess,
+    counted_votes,
     load_assessment,
 )
 from fieldclub.vocab import (
@@ -389,6 +390,20 @@ def answers_to_next(assessment: Assessment) -> int | None:
     return min(max(needed), ANSWERS_TO_NEXT_MAX)
 
 
+def _votes(db: Session, evidence_ids: Sequence[int]) -> dict[int, list[VoteInput]]:
+    """The votes on each item by people who aren't banned, as the engine takes them."""
+    votes: dict[int, list[VoteInput]] = {}
+    if not evidence_ids:
+        return votes
+    for evidence_id, user_id, value, role in db.execute(
+        select(EvidenceVote.evidence_id, EvidenceVote.user_id, EvidenceVote.value, User.role)
+        .join(User, User.id == EvidenceVote.user_id)
+        .where(EvidenceVote.evidence_id.in_(evidence_ids), User.banned_at.is_(None))
+    ).all():
+        votes.setdefault(evidence_id, []).append(VoteInput(user_id=user_id, role=Role(role), value=value))
+    return votes
+
+
 def gather_inputs(db: Session, finding: Finding, state: FindingState | None = None) -> FindingInputs:
     """Everything the engine reads about a finding, with each person's current role.
 
@@ -429,17 +444,7 @@ def gather_inputs(db: Session, finding: Finding, state: FindingState | None = No
     gone = set(
         db.scalars(select(Evidence.id).where(Evidence.finding_id == finding.id, ~standing_evidence_clause()))
     )
-    votes: dict[int, list[VoteInput]] = {}
-    if rows:
-        for evidence_id, user_id, value, role in db.execute(
-            select(EvidenceVote.evidence_id, EvidenceVote.user_id, EvidenceVote.value, User.role)
-            .join(User, User.id == EvidenceVote.user_id)
-            .where(
-                EvidenceVote.evidence_id.in_([item.id for item, _, _ in rows]),
-                User.banned_at.is_(None),
-            )
-        ).all():
-            votes.setdefault(evidence_id, []).append(VoteInput(user_id=user_id, role=Role(role), value=value))
+    votes = _votes(db, [item.id for item, _, _ in rows])
     evidence = tuple(
         EvidenceInput(
             id=item.id,
@@ -1141,6 +1146,10 @@ class EvidenceView:
     verifier: User | None
     media: Media | None
     my_vote: int | None
+    # Counted from the votes as they are now, as the engine counts them, so a
+    # stored assessment written before it kept the disputers can't be stale.
+    endorsements: int
+    disputes: int
 
 
 def evidence_for(
@@ -1162,15 +1171,17 @@ def evidence_for(
     people.update(users_by_id(db, named - people.keys()))
     media_ids = [e.media_id for e in items if e.media_id is not None]
     media = {m.id: m for m in db.scalars(select(Media).where(Media.id.in_(media_ids)))} if media_ids else {}
-    mine: dict[int, int] = {}
-    if viewer is not None and items:
-        mine = dict(
-            db.execute(
-                select(EvidenceVote.evidence_id, EvidenceVote.value).where(
-                    EvidenceVote.user_id == viewer.id, EvidenceVote.evidence_id.in_([e.id for e in items])
-                )
-            ).all()
-        )
+    votes = _votes(db, [e.id for e in items])
+    mine = {
+        evidence_id: vote.value
+        for evidence_id, cast in votes.items()
+        for vote in cast
+        if viewer is not None and vote.user_id == viewer.id
+    }
+
+    def counted(e: Evidence, sign: int) -> int:
+        return sum(v.value == sign for v in counted_votes(votes.get(e.id, ()), e.user_id, finding.author_id))
+
     return [
         EvidenceView(
             evidence=e,
@@ -1178,6 +1189,8 @@ def evidence_for(
             verifier=_standing_verifier(people, e.verified_by),
             media=media.get(e.media_id) if e.media_id is not None else None,
             my_vote=mine.get(e.id),
+            endorsements=counted(e, 1),
+            disputes=counted(e, -1),
         )
         for e in items
     ]

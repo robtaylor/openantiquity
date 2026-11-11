@@ -318,7 +318,8 @@ class ActionOut(ApiModel):
 
     allowed: bool
     # Null when allowed. Otherwise an error code, or `already_answered`,
-    # `highest_level` or `lowest_level` when there is nothing to do.
+    # `answer_withdrawn`, `highest_level`, `lowest_level` or
+    # `nothing_to_verify` when there is nothing to do (`services.actions`).
     reason: str | None
 
     @classmethod
@@ -479,7 +480,11 @@ class FindingDetail(FindingSummary):
                 else None
             ),
             following=view.following,
-            actions=_finding_actions(actions.finding_actions(finding, viewer, view.my_observation)),
+            actions=_finding_actions(
+                actions.finding_actions(
+                    finding, viewer, view.my_observation, [item.evidence for item in view.evidence]
+                )
+            ),
         )
 
 
@@ -539,8 +544,8 @@ def _evidence_out(
         created_at=evidence.created_at,
         verified_by=PublicUser.from_user(item.verifier) if item.verifier is not None else None,
         vote_total=status.vote_total if status is not None else 0.0,
-        endorsements=len(status.endorsers) if status is not None else 0,
-        disputes=len(status.disputers) if status is not None else 0,
+        endorsements=item.endorsements,
+        disputes=item.disputes,
         standing=status.standing if status is not None else True,
         independent=status.independent if status is not None else False,
         my_vote=item.my_vote,

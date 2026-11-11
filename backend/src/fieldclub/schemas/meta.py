@@ -10,7 +10,7 @@ from fieldclub.schemas.common import ApiModel
 
 # One shape for a source, in `/meta` as in `GET /sources`.
 from fieldclub.schemas.records import SourceOut
-from fieldclub.services.confidence import MetBy
+from fieldclub.services.confidence import Endorsement, MetBy
 from fieldclub.vocab import (
     AgeBand,
     EvidenceKind,
@@ -106,6 +106,12 @@ class NextStepRuleOut(ApiModel):
     # What a field item's outcome must be, or null where its stance decides.
     outcome: Outcome | None
     stance: Stance | None
+    # When the item counts only once someone other than its contributor and
+    # the finder endorses it: `not_needed`, `if_added_by_finder`, or
+    # `unless_added_by_trusted_other` (endorsed, or added by a trusted member,
+    # archaeologist or moderator who isn't the finder). Every item counts only
+    # while its votes sum to zero or more.
+    endorsement: Endorsement
     # True when the item counts only once an archaeologist or moderator verifies it.
     needs_verification: bool
 

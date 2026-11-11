@@ -178,8 +178,10 @@ def _before_update_finding(_mapper: Mapper[Finding], _conn: Connection, finding:
         sensitivity.refresh_location_public(finding)
     if state.attrs.location.history.has_changes():
         _refresh_grid_ref(finding)
-    if state.attrs.title.history.has_changes() or finding.title_public is None:
-        sensitivity.refresh_title_public(finding)
+    # On every update, not only when the title changes, so a title written
+    # before the position rules last changed catches up when the finding is next
+    # saved, as every answer, vote and edit saves it.
+    sensitivity.refresh_title_public(finding)
 
 
 def _refresh_grid_ref(finding: Finding) -> None:
@@ -201,6 +203,8 @@ class Observation(Base):
         enum_check("feature_class", FeatureClass),
         enum_check("period", Period),
         enum_check("explanation", Explanation),
+        enum_check("tier_at_answer", Tier),
+        enum_check("state_at_answer", FindingState),
     )
 
     id: Mapped[IdPk]
@@ -223,6 +227,10 @@ class Observation(Base):
     # an answer given with "detail follows" and its detail or reveal: until then
     # they are someone who hasn't seen the answers (Decision 0008).
     revealed_at: Mapped[datetime | None] = mapped_column(TimestampTz)
+    # The finding's tier and state before an answer given in two steps first
+    # counted, so its reveal can show the move the answer made.
+    tier_at_answer: Mapped[str | None] = mapped_column(Text)
+    state_at_answer: Mapped[str | None] = mapped_column(Text)
 
 
 class Evidence(Base):
