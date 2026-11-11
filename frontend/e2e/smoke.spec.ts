@@ -143,6 +143,7 @@ test.describe("desktop", () => {
   });
 
   test("turns 3D on and off", async ({ page }) => {
+    test.slow();
     await openMap(page);
     // One button, with one name. Its pressed state says whether 3D is on.
     const threeD = page.getByRole("button", { name: "Tilt into 3D" });

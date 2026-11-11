@@ -4,7 +4,7 @@ import { kmSquareAt } from "../src/map/gridref.js";
 import { findingCollection } from "../src/test/fixtures/findings.js";
 import { metaFixture } from "../src/test/fixtures/meta.js";
 import { COLOURS, STATE_COLOURS, TIER_COLOURS } from "../src/ui/tokens.js";
-import { openMap } from "./support/app.js";
+import { openMap, SLOW_MAP } from "./support/app.js";
 import { expect, test } from "./support/fixtures.js";
 import { CENTRE, type MarkerPoint, offset, serveFindings, serveRecordTiles } from "./support/markerTiles.js";
 import {
@@ -313,13 +313,17 @@ for (const terrain of ["flat", "3D"] as const) {
       { ...right, properties: { id: 2, category: "designation" } },
     ]);
     const camera = terrain === "3D" ? "0/50" : "0/0";
+    // Two panes of terrain in 3D are the slowest thing the suite draws.
+    const wait = terrain === "3D" ? SLOW_MAP : undefined;
+    if (terrain === "3D") test.slow();
     await openMap(
       page,
       `/?panel=none#m=${ZOOM}/${CENTRE.lat}/${CENTRE.lon}/${camera}&v=composite&c=osm_standard&s=315/25&x=2&t=${terrain === "3D" ? 1 : 0}/1.5&o=osm:80:h,records:100`,
+      wait,
     );
     await expect(page.locator(".fc-map__pane--compare canvas")).toBeVisible();
     for (const pane of await page.locator(".fc-map__pane").all()) {
-      await expect(pane).toHaveAttribute("data-map-idle", "true");
+      await expect(pane).toHaveAttribute("data-map-idle", "true", wait);
     }
 
     const halves = {
@@ -351,7 +355,7 @@ for (const terrain of ["flat", "3D"] as const) {
     await page.waitForTimeout(300);
     await page.mouse.up();
     for (const pane of await page.locator(".fc-map__pane").all()) {
-      await expect(pane).toHaveAttribute("data-map-idle", "true");
+      await expect(pane).toHaveAttribute("data-map-idle", "true", wait);
     }
     await page.waitForTimeout(300);
     const after = await find();

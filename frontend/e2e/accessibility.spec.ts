@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { answerJson } from "./support/account.js";
-import { boxOf, describeFocus, openMap, overlaps, tabTo } from "./support/app.js";
+import { boxOf, describeFocus, openMap, overlaps, SLOW_MAP, tabTo } from "./support/app.js";
 import { expect, test } from "./support/fixtures.js";
 
 /**
@@ -142,7 +142,8 @@ test.describe("desktop", () => {
   });
 
   test("keeps the 3D view when the compass turns a tilted map north-up", async ({ page }) => {
-    await openMap(page, "/?panel=none#m=14/51.4286/-1.8542/-46.2/60&v=raking&s=300/25&x=2&t=1/1.5");
+    test.slow();
+    await openMap(page, "/?panel=none#m=14/51.4286/-1.8542/-46.2/60&v=raking&s=300/25&x=2&t=1/1.5", SLOW_MAP);
     const threeD = page.getByRole("button", { name: "Tilt into 3D" });
     await expect(threeD).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("button", { name: "Reset to north-up" }).click();

@@ -3,11 +3,20 @@ import { expect, type Locator, type Page } from "@playwright/test";
 /** The bare map, with no panel open. `/` itself opens the Explore panel. */
 export const BARE_MAP = "/?panel=none";
 
-/** Open the app, at the bare map unless told otherwise, and wait for the map to be on screen. */
-export async function openMap(page: Page, path = BARE_MAP): Promise<void> {
+/**
+ * How long a map tilted into 3D may take to settle. The test browser draws terrain in software,
+ * which takes most of a minute alone and longer while other suites are running.
+ */
+export const SLOW_MAP = { timeout: 60_000 } as const;
+
+/**
+ * Open the app, at the bare map unless told otherwise, and wait for the map to be on screen.
+ * Pass `SLOW_MAP` for an address that opens in 3D.
+ */
+export async function openMap(page: Page, path = BARE_MAP, wait?: { timeout: number }): Promise<void> {
   await page.goto(path);
-  await expect(page.locator(".fc-map")).toHaveAttribute("data-ready", "true");
-  await expect(page.locator(".fc-map__pane--main canvas")).toBeVisible();
+  await expect(page.locator(".fc-map")).toHaveAttribute("data-ready", "true", wait);
+  await expect(page.locator(".fc-map__pane--main canvas")).toBeVisible(wait);
 }
 
 export interface Box {
