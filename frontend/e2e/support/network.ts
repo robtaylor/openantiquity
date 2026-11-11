@@ -12,10 +12,10 @@ import { solidPng } from "./png.js";
  * The API calls the app makes in fixture mode get stand-in answers too: no
  * findings (for the map and for the list), a fixed height for any spot,
  * one-metre elevation everywhere, nobody signed in, nothing waiting for a
- * second look, no help wanted, no mentions, no activity, and no investigations
- * listed, though any one asked for by its id is there, empty. The next square
- * to scan is the one under the point asked about, and nobody has scanned
- * anything. A test can
+ * second look, no help wanted, no mentions, no activity, no notifications, a
+ * live stream that sends nothing, and no investigations listed, though any one
+ * asked for by its id is there, empty. The next square to scan is the one under
+ * the point asked about, and nobody has scanned anything. A test can
  * answer any of them differently with a route of its own, which Playwright
  * tries first.
  */
@@ -198,7 +198,13 @@ export async function stubBackend(page: Page, log: NetworkLog = newLog()): Promi
       const body = path === "/api/v1/review/next" ? { items: [], next_cursor: null } : { groups: [] };
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
     }
-    if (path === "/api/v1/mentions/recent" || path === "/api/v1/activity") {
+    if (path === "/api/v1/events/stream") {
+      // A stream that says nothing and ends, with the browser told to wait an hour before
+      // asking again. A test that wants live events stands in for the stream (`support/events.ts`).
+      count("event-stream");
+      return route.fulfill({ status: 200, contentType: "text/event-stream", body: "retry: 3600000\n: connected\n\n" });
+    }
+    if (path === "/api/v1/mentions/recent" || (path === "/api/v1/activity" && route.request().method() === "GET")) {
       // Nobody has mentioned anything, and nothing has happened.
       count(path === "/api/v1/activity" ? "activity" : "mentions");
       return route.fulfill({
@@ -222,6 +228,11 @@ export async function stubBackend(page: Page, log: NetworkLog = newLog()): Promi
     if (path === "/api/v1/squares/coverage") {
       count("squares");
       const body = { type: "FeatureCollection", features: [] };
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    }
+    if (path === "/api/v1/notifications" && route.request().method() === "GET") {
+      count("notifications");
+      const body = { items: [], next_cursor: null, unread_count: 0 };
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
     }
     if (path === "/api/v1/geo/point") {

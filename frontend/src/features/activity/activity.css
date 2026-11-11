@@ -1,0 +1,126 @@
+/* The activity feed, and the rows it shares with notifications. */
+.fc-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fc-activity__filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fc-activity__filter-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.fc-activity__filter {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fc-activity__filter-title {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.fc-activity__hint,
+.fc-activity__live {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-activity__live:empty {
+  display: none;
+}
+
+.fc-activity__loading {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.fc-activity__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0 -8px;
+  padding: 0;
+  list-style: none;
+}
+
+.fc-activity__list[aria-busy="true"] {
+  opacity: 0.6;
+}
+
+.fc-activity__more {
+  display: flex;
+  justify-content: center;
+}
+
+.fc-event__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-decoration: none;
+}
+
+a.fc-event__row:hover {
+  background: var(--raised);
+}
+
+.fc-event__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--raised);
+  color: var(--text-muted);
+}
+
+.fc-event__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding-top: 5px;
+}
+
+.fc-event__sentence {
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.fc-event__sentence strong {
+  font-weight: 600;
+}
+
+.fc-event__finding {
+  font-family: var(--font-display);
+  font-size: 16px;
+}
+
+.fc-event__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+}

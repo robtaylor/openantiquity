@@ -1,4 +1,4 @@
-import { Activity, BookOpen, Info, type LucideIcon, MapPinned, UserRound } from "lucide-react";
+import { BookOpen, Info, type LucideIcon, MapPinned, UserRound } from "lucide-react";
 import { useEffect } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { EmptyState } from "../ui/EmptyState.js";
@@ -26,13 +26,6 @@ export interface PlaceholderRoute {
 }
 
 export const PLACEHOLDER_ROUTES: PlaceholderRoute[] = [
-  {
-    path: "/activity",
-    title: "Activity",
-    icon: Activity,
-    body: "New findings, findings moving up a step, and mentions in videos and articles will appear here as they happen.",
-    built: { to: "/mentions", label: "Recent mentions" },
-  },
   {
     path: "/u/:handle",
     title: "Profile",

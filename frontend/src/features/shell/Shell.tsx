@@ -33,6 +33,8 @@ import { AccountLayer } from "../account/AccountLayer.js";
 import { AccountPage } from "../account/AccountPage.js";
 import { EmailLinkPage } from "../account/EmailLinkPage.js";
 import { EMAIL_LINK_PATH } from "../account/emailLink.js";
+import { ACTIVITY_PATH, ActivityPanel } from "../activity/ActivityPanel.js";
+import { LiveEvents } from "../activity/LiveEvents.js";
 import { DraftsBar } from "../drafts/DraftsBar.js";
 import { ExploreLayer } from "../explore/ExploreLayer.js";
 import { ExplorePanel } from "../explore/ExplorePanel.js";
@@ -326,6 +328,7 @@ function ReadyShell({ meta }: { meta: Meta }) {
             <Route path={HELP_PATH} element={<HelpPanel meta={meta} />} />
             <Route path={`${HELP_PATH}/:kind`} element={<HelpKindPanel meta={meta} />} />
             <Route path={SCAN_PATH} element={<ScanPanel meta={meta} />} />
+            <Route path={ACTIVITY_PATH} element={<ActivityPanel meta={meta} />} />
             <Route path="/account" element={<AccountPage />} />
             <Route path={EMAIL_LINK_PATH} element={<EmailLinkPage />} />
             <Route path="/r/:id" element={<RecordPage />} />
@@ -358,6 +361,7 @@ function ReadyShell({ meta }: { meta: Meta }) {
       {isPhone ? <TabBar /> : null}
 
       <AccountLayer meta={meta} />
+      <LiveEvents />
 
       <ToastViewport />
     </div>
