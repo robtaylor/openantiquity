@@ -64,15 +64,37 @@ def test_the_live_sources_endpoint(client: TestClient) -> None:
     assert response.status_code == 200
     assert response.headers["cache-control"] == "public, max-age=86400"
     items = response.json()["items"]
-    ads = next(item for item in items if item["key"] == "ads-catalogue-search")
-    assert "{north},{west},{south},{east}" in ads["query_pattern"]
-    assert ads["link_template"] == "https://archaeologydataservice.ac.uk/data-catalogue/resource/{id}"
-    assert set(ads) == {
+    # A withheld source isn't served at all, so its endpoint and pattern can't be used by mistake.
+    assert {item["key"] for item in items} == {
+        item["key"] for item in context.live_sources() if item["shown"]
+    }
+    assert all(item["shown"] for item in items)
+    assert "ads-catalogue-search" not in {item["key"] for item in items}
+    wiltshire = next(item for item in items if item["key"] == "wiltshire-her-monuments")
+    assert "{west},{south},{east},{north}" in wiltshire["query_pattern"]
+    assert set(wiltshire) == {
         "key", "name", "publisher", "coverage", "endpoint", "query_pattern", "response_fields",
         "licence", "attribution", "link_template", "limits", "answer_format", "id_field",
         "name_field", "limit_param", "max_limit", "min_zoom", "shown", "credit", "licence_label",
-        "homepage", "credit_field", "licence_field",
+        "homepage", "credit_field", "licence_field", "preferred_credit_field",
     }  # fmt: skip
+    assert (wiltshire["answer_format"], wiltshire["id_field"], wiltshire["name_field"]) == (
+        "geojson",
+        "MonUID",
+        "Name",
+    )
+    assert (wiltshire["limit_param"], wiltshire["max_limit"], wiltshire["min_zoom"]) == (
+        "resultRecordCount",
+        1000,
+        13,
+    )
+
+
+def test_the_catalogue_keeps_how_to_read_a_withheld_source() -> None:
+    ads = next(item for item in context.live_sources() if item["key"] == "ads-catalogue-search")
+    assert ads["shown"] is False
+    assert "{north},{west},{south},{east}" in ads["query_pattern"]
+    assert ads["link_template"] == "https://archaeologydataservice.ac.uk/data-catalogue/resource/{id}"
     assert (ads["answer_format"], ads["id_field"], ads["name_field"]) == (
         "ads_search",
         "id",
@@ -115,13 +137,14 @@ def test_each_live_source_says_how_to_credit_it_or_is_not_shown() -> None:
     for key, item in items.items():
         if not item["shown"]:
             assert (item["credit"], item["licence_label"], item["credit_field"]) == (None, None, None), key
+            assert item["preferred_credit_field"] is None, key
             continue
         assert item["credit"], key
         assert item["licence_label"], key
         # Not the research notes, which the browser used to show.
         assert item["licence_label"] != item["licence"], key
         assert item["homepage"] is None or item["homepage"].startswith("https://"), key
-        for field in (item["credit_field"], item["licence_field"]):
+        for field in (item["credit_field"], item["licence_field"], item["preferred_credit_field"]):
             if field is not None:
                 named = [part for part in field.split(".") if not part.isdigit() and part != "value"]
                 assert named[-1] in shapes[key], (key, field)
@@ -135,14 +158,22 @@ def test_each_live_source_says_how_to_credit_it_or_is_not_shown() -> None:
         "cambridge-cucap-pois",
         "wikimedia-commons-geosearch",
         "wikimedia-wikipedia-geosearch",
-        "aberdeenshire-her",
     }
     # The publisher's words where it prescribes them, and the per-record credit where it asks for one.
     assert (
         "© Crown copyright and database rights 2026 OS AC0000823576" in items["dnpa-dartmoor-her"]["credit"]
     )
     assert items["he-aerial-photos-obliques"]["credit_field"] == "Copyright"
-    assert items["wikimedia-commons-geosearch"]["credit_field"].endswith("extmetadata.Artist.value")
+    commons = items["wikimedia-commons-geosearch"]
+    assert commons["credit_field"].endswith("extmetadata.Artist.value")
+    # The work-list's credit names the file's own Attribution, so the request asks for it.
+    assert commons["preferred_credit_field"].endswith("extmetadata.Attribution.value")
+    filters = parse_qs(urlsplit(commons["query_pattern"]).query)["iiextmetadatafilter"]
+    assert "Attribution" in filters[0].split("|")
+    # "Link to the article and state the licence".
+    assert items["wikimedia-wikipedia-geosearch"]["link_template"] == "https://en.wikipedia.org/wiki/{title}"
+    # Scotland isn't in the first release, and its terms are for personal research only.
+    assert items["aberdeenshire-her"]["shown"] is False
 
 
 def test_each_deep_link_says_what_its_viewer_shows(client: TestClient) -> None:

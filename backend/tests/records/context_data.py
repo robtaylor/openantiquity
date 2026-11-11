@@ -17,7 +17,9 @@ Left out on purpose:
 
 Added here, because the work-lists hold research notes rather than words for
 visitors: how each live source is credited (`LIVE_CREDITS`), and the name each
-link opened at a point shows (`LINK_TITLES`).
+link opened at a point shows (`LINK_TITLES`). `LIVE_CHANGES` changes a
+work-list's query pattern or link template where its own attribution note
+asks for more than the pattern gives.
 """
 
 from __future__ import annotations
@@ -166,6 +168,7 @@ def _credit(
     homepage: str | None,
     credit_field: str | None = None,
     licence_field: str | None = None,
+    preferred_credit_field: str | None = None,
 ) -> dict[str, Any]:
     """How a source the browser may show is credited to a visitor."""
     return {
@@ -175,6 +178,7 @@ def _credit(
         "homepage": homepage,
         "credit_field": credit_field,
         "licence_field": licence_field,
+        "preferred_credit_field": preferred_credit_field,
     }
 
 
@@ -187,6 +191,7 @@ def _withheld(homepage: str | None) -> dict[str, Any]:
         "homepage": homepage,
         "credit_field": None,
         "licence_field": None,
+        "preferred_credit_field": None,
     }
 
 
@@ -197,6 +202,7 @@ HE_HOME = "https://historicengland.org.uk/"
 # The parts of a credit a MediaWiki answer gives per file. Each `extmetadata`
 # entry is an object whose `value` holds the text, which may carry HTML.
 COMMONS_ARTIST = "imageinfo.0.extmetadata.Artist.value"
+COMMONS_ATTRIBUTION = "imageinfo.0.extmetadata.Attribution.value"
 COMMONS_LICENCE = "imageinfo.0.extmetadata.LicenseShortName.value"
 
 # How each live source is credited to a visitor, from the work-list's
@@ -217,6 +223,14 @@ COMMONS_LICENCE = "imageinfo.0.extmetadata.LicenseShortName.value"
 # - Exmoor asks for a statement on each record that holds National Record of
 #   the Historic Environment data, with the date it was provided. Nothing in
 #   the answer says which records those are, nor the date.
+# - Aberdeenshire's terms reserve copyright and say the records are for
+#   personal research only, and its work-list entry says Scotland isn't in the
+#   first release.
+#
+# The Historic England aerial photo footprints state no licence. The spike
+# `open-site-records` chose to query them live with each record's `Copyright`
+# shown, and asking Historic England for a licence is an open owner action
+# (`docs/plans/owner-actions.md`), so they are shown meanwhile.
 LIVE_CREDITS: dict[str, dict[str, Any]] = {
     "ads-catalogue-search": _withheld(ADS_HOME),
     "ads-catalogue-map": _withheld(ADS_HOME),
@@ -264,16 +278,39 @@ LIVE_CREDITS: dict[str, dict[str, Any]] = {
         "https://commons.wikimedia.org/",
         credit_field=COMMONS_ARTIST,
         licence_field=COMMONS_LICENCE,
+        # "Per file, from extmetadata Artist, Attribution and LicenseShortName":
+        # a file that sets its own credit line asks for that one.
+        preferred_credit_field=COMMONS_ATTRIBUTION,
     ),
     # "Link to the article and state the licence". The thumbnails are licensed
     # file by file, and the answer doesn't say how.
     "wikimedia-wikipedia-geosearch": _credit("Wikipedia", "CC BY-SA 4.0", "https://en.wikipedia.org/"),
-    "aberdeenshire-her": _credit(
-        "Aberdeenshire Council",
-        "Copyright reserved, for personal research only",
-        "https://her.aberdeenshire.gov.uk/",
-    ),
+    "aberdeenshire-her": _withheld("https://her.aberdeenshire.gov.uk/"),
 }
+
+COMMONS_FILTER = "iiextmetadatafilter=LicenseShortName|Artist|AttributionRequired|LicenseUrl"
+# Changes to a work-list entry's fields, each with the work-list value it replaces.
+LIVE_CHANGES: dict[str, dict[str, tuple[str | None, str]]] = {
+    # "Link to the article and state the licence". The work-list gives no template.
+    "wikimedia-wikipedia-geosearch": {
+        "link_template": (None, "https://en.wikipedia.org/wiki/{title}"),
+    },
+    # The credit names extmetadata `Attribution`, which the pattern didn't ask for.
+    "wikimedia-commons-geosearch": {
+        "query_pattern": (COMMONS_FILTER, f"{COMMONS_FILTER}|Attribution"),
+    },
+}
+
+
+def _changed(entry: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    for field, (old, new) in LIVE_CHANGES.get(entry["key"], {}).items():
+        if old is None:
+            assert item[field] is None, f"{entry['key']} now has a {field} of its own"
+            item[field] = new
+        else:
+            assert old in item[field], f"{entry['key']}'s {field} no longer holds {old!r}"
+            item[field] = item[field].replace(old, new)
+    return item
 
 
 def _degrees(bounds: tuple[int, int, int, int] | None) -> list[float] | None:
@@ -294,23 +331,22 @@ def live_sources(worklist: dict[str, Any]) -> list[dict[str, Any]]:
         assert entry["key"] not in unconfirmed, f"{entry['key']} is both live and unconfirmed"
         if not str(entry["cors"]).lower().startswith("yes"):
             continue
-        items.append(
-            {
-                "key": entry["key"],
-                "name": entry["name"],
-                "publisher": entry["publisher"],
-                "coverage": entry["coverage"],
-                "endpoint": entry["endpoint"],
-                "query_pattern": entry["query_pattern"],
-                "response_fields": entry["response_shape"],
-                "licence": entry["licence"],
-                "attribution": entry["attribution"],
-                "link_template": entry["record_link_template"],
-                "limits": entry["limits"],
-                **LIVE_READING[entry["key"]],
-                **LIVE_CREDITS[entry["key"]],
-            }
-        )
+        item = {
+            "key": entry["key"],
+            "name": entry["name"],
+            "publisher": entry["publisher"],
+            "coverage": entry["coverage"],
+            "endpoint": entry["endpoint"],
+            "query_pattern": entry["query_pattern"],
+            "response_fields": entry["response_shape"],
+            "licence": entry["licence"],
+            "attribution": entry["attribution"],
+            "link_template": entry["record_link_template"],
+            "limits": entry["limits"],
+            **LIVE_READING[entry["key"]],
+            **LIVE_CREDITS[entry["key"]],
+        }
+        items.append(_changed(entry, item))
     return items
 
 

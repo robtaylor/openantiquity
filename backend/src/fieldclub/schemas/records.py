@@ -182,8 +182,8 @@ class LiveSource(BaseModel):
     # The lowest map zoom at which to ask, so one viewport's answer stays
     # under the cap. Null for a request by record id.
     min_zoom: int | None
-    # False while the research hasn't settled how the source must be credited.
-    # The browser doesn't query or show a source that isn't shown.
+    # Always true in `GET /context/live-sources`, which leaves out every source
+    # the research hasn't settled how to credit, or that isn't in this release.
     shown: bool
     # The credit and licence to show a visitor beside what the source gives.
     # Null when the source isn't shown.
@@ -196,6 +196,9 @@ class LiveSource(BaseModel):
     # Show it with that record. A part that is a number indexes a list.
     credit_field: str | None
     licence_field: str | None
+    # A field to show in place of `credit_field` when a record has it: the
+    # credit line a record asks for, where it sets one of its own.
+    preferred_credit_field: str | None
 
 
 class LiveSources(BaseModel):

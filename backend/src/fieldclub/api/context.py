@@ -25,9 +25,12 @@ LINKS_CACHE = "public, max-age=3600"
 
 @router.get("/live-sources", response_model=LiveSources)
 def live_sources(response: Response) -> LiveSources:
-    """The sources the browser queries for an area, with how to ask and how to credit each."""
+    """The sources the browser queries for an area, with how to ask and how to credit each.
+
+    Sources withheld from this release, or whose credit isn't settled, are left out.
+    """
     response.headers["Cache-Control"] = CATALOGUE_CACHE
-    return LiveSources(items=[LiveSource.model_validate(item) for item in context.live_sources()])
+    return LiveSources(items=[LiveSource.model_validate(item) for item in context.shown_live_sources()])
 
 
 @router.get("/links", response_model=ContextLinks)

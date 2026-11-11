@@ -22,7 +22,8 @@
   "licence_label": null,
   "homepage": "https://archaeologydataservice.ac.uk/",
   "credit_field": null,
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "ads-catalogue-map",
@@ -47,7 +48,8 @@
   "licence_label": null,
   "homepage": "https://archaeologydataservice.ac.uk/",
   "credit_field": null,
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "ads-catalogue-record",
@@ -72,7 +74,8 @@
   "licence_label": null,
   "homepage": "https://archaeologydataservice.ac.uk/",
   "credit_field": null,
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "he-aerial-photos-obliques",
@@ -97,7 +100,8 @@
   "licence_label": "No licence stated",
   "homepage": "https://historicengland.org.uk/",
   "credit_field": "Copyright",
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "he-aerial-photos-verticals",
@@ -122,7 +126,8 @@
   "licence_label": "No licence stated",
   "homepage": "https://historicengland.org.uk/",
   "credit_field": "Copyright",
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "bristol-kyp-devon-hist-2021-v2",
@@ -147,7 +152,8 @@
   "licence_label": null,
   "homepage": "https://maps.bristol.gov.uk/kyp/",
   "credit_field": null,
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "bristol-kyp-som-hist-2022",
@@ -172,7 +178,8 @@
   "licence_label": null,
   "homepage": "https://maps.bristol.gov.uk/kyp/",
   "credit_field": null,
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "bristol-kyp-glo-hist-2021",
@@ -197,7 +204,8 @@
   "licence_label": null,
   "homepage": "https://maps.bristol.gov.uk/kyp/",
   "credit_field": null,
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "bristol-kyp-wilts-her-2022-v2",
@@ -222,7 +230,8 @@
   "licence_label": null,
   "homepage": "https://maps.bristol.gov.uk/kyp/",
   "credit_field": null,
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "bristol-kyp-banes-hist-2024",
@@ -247,7 +256,8 @@
   "licence_label": null,
   "homepage": "https://maps.bristol.gov.uk/kyp/",
   "credit_field": null,
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "bristol-kyp-nsom-hist-2022-v2",
@@ -272,7 +282,8 @@
   "licence_label": null,
   "homepage": "https://maps.bristol.gov.uk/kyp/",
   "credit_field": null,
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "bristol-kyp-sgc-hist-2020-v2",
@@ -297,7 +308,8 @@
   "licence_label": null,
   "homepage": "https://maps.bristol.gov.uk/kyp/",
   "credit_field": null,
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "bristol-kyp-her-2026",
@@ -322,7 +334,8 @@
   "licence_label": null,
   "homepage": "https://maps.bristol.gov.uk/kyp/",
   "credit_field": null,
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "bristol-kyp-worcester-city",
@@ -347,7 +360,8 @@
   "licence_label": null,
   "homepage": "https://maps.bristol.gov.uk/kyp/",
   "credit_field": null,
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "enpa-exmoor-her",
@@ -372,7 +386,8 @@
   "licence_label": null,
   "homepage": "https://www.exmoorher.co.uk/",
   "credit_field": null,
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "dnpa-dartmoor-her",
@@ -397,7 +412,8 @@
   "licence_label": "No licence stated",
   "homepage": null,
   "credit_field": null,
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "wiltshire-her-monuments",
@@ -422,7 +438,8 @@
   "licence_label": "No licence stated",
   "homepage": "https://services.wiltshire.gov.uk/HistoryEnvRecord/Home/Index",
   "credit_field": null,
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "wolverhampton-walsall-her",
@@ -447,7 +464,8 @@
   "licence_label": "No licence stated",
   "homepage": null,
   "credit_field": null,
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "cambridge-cucap-pois",
@@ -472,7 +490,8 @@
   "licence_label": "No open licence",
   "homepage": "https://www.cambridgeairphotos.com/",
   "credit_field": null,
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "wikimedia-commons-geosearch",
@@ -480,7 +499,7 @@
   "publisher": "Wikimedia Foundation",
   "coverage": "wider",
   "endpoint": "https://commons.wikimedia.org/w/api.php",
-  "query_pattern": "https://commons.wikimedia.org/w/api.php?action=query&generator=geosearch&ggscoord={lat}|{lon}&ggsradius=1000&ggsnamespace=6&prop=coordinates|imageinfo&iiprop=url|extmetadata&iiurlwidth=320&iiextmetadatafilter=LicenseShortName|Artist|AttributionRequired|LicenseUrl&format=json&origin=*",
+  "query_pattern": "https://commons.wikimedia.org/w/api.php?action=query&generator=geosearch&ggscoord={lat}|{lon}&ggsradius=1000&ggsnamespace=6&prop=coordinates|imageinfo&iiprop=url|extmetadata&iiurlwidth=320&iiextmetadatafilter=LicenseShortName|Artist|AttributionRequired|LicenseUrl|Attribution&format=json&origin=*",
   "response_fields": "query.pages{}.title, coordinates[0].lat/lon, imageinfo[0].thumburl, imageinfo[0].extmetadata.Artist / LicenseShortName / AttributionRequired",
   "licence": "Per file (sampled files were CC BY-SA 2.0)",
   "attribution": "Per file, from extmetadata Artist, Attribution and LicenseShortName",
@@ -497,7 +516,8 @@
   "licence_label": "Licensed file by file",
   "homepage": "https://commons.wikimedia.org/",
   "credit_field": "imageinfo.0.extmetadata.Artist.value",
-  "licence_field": "imageinfo.0.extmetadata.LicenseShortName.value"
+  "licence_field": "imageinfo.0.extmetadata.LicenseShortName.value",
+  "preferred_credit_field": "imageinfo.0.extmetadata.Attribution.value"
  },
  {
   "key": "wikimedia-wikipedia-geosearch",
@@ -509,7 +529,7 @@
   "response_fields": "query.pages{}.title, coordinates, pageprops.wikibase_item, description, thumbnail",
   "licence": "Article text CC BY-SA 4.0 (standard Wikipedia licence, not re-read today); images per file",
   "attribution": "Link to the article and state the licence",
-  "link_template": null,
+  "link_template": "https://en.wikipedia.org/wiki/{title}",
   "limits": "gslimit max 500; a 0.5 x 1.0 degree bbox returns 'toobig'; 429 on rapid anonymous use",
   "answer_format": "mediawiki_query",
   "id_field": "title",
@@ -522,7 +542,8 @@
   "licence_label": "CC BY-SA 4.0",
   "homepage": "https://en.wikipedia.org/",
   "credit_field": null,
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  },
  {
   "key": "aberdeenshire-her",
@@ -542,11 +563,12 @@
   "limit_param": "resultRecordCount",
   "max_limit": 1000,
   "min_zoom": 13,
-  "shown": true,
-  "credit": "Aberdeenshire Council",
-  "licence_label": "Copyright reserved, for personal research only",
+  "shown": false,
+  "credit": null,
+  "licence_label": null,
   "homepage": "https://her.aberdeenshire.gov.uk/",
   "credit_field": null,
-  "licence_field": null
+  "licence_field": null,
+  "preferred_credit_field": null
  }
 ]

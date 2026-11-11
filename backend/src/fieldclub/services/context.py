@@ -50,7 +50,13 @@ def _load(name: str) -> tuple[dict[str, Any], ...]:
 
 
 def live_sources() -> tuple[dict[str, Any], ...]:
+    """The whole catalogue, withheld sources included."""
     return _load("live_sources.json")
+
+
+def shown_live_sources() -> tuple[dict[str, Any], ...]:
+    """The sources the browser may query and show. A withheld one isn't served at all."""
+    return tuple(item for item in live_sources() if item["shown"])
 
 
 def deep_links() -> tuple[dict[str, Any], ...]:
