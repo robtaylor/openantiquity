@@ -798,6 +798,34 @@ def test_the_attribution_year_and_date_are_filled_in_when_stored(db: Session) ->
     assert source(db).attribution == "\u00a9 Someone 2026, obtained 31 December 2026"
 
 
+@pytest.mark.parametrize(
+    ("given", "stored"),
+    [
+        ("Legal &amp; General House", "Legal & General House"),
+        # Encoded twice over, as some sources send it.
+        ("Wilkin &amp;amp; Sons", "Wilkin & Sons"),
+        ("St Monica&#39;s Road", "St Monica's Road"),
+        ("Swartland Road&lt; Dounby", "Swartland Road< Dounby"),
+        ("Caf&eacute; &#x26; bar", "Café & bar"),
+        ("Fish & chips; no entity here", "Fish & chips; no entity here"),
+    ],
+)
+def test_html_entities_in_text_are_decoded_once_where_records_are_stored(given: str, stored: str) -> None:
+    started = datetime(2026, 11, 10, 12, 0, tzinfo=UTC)
+    row, _ = runner.prepare_row(
+        record("A", given, summary=given, record_type=given, monument_types=[given]),
+        SOURCE,
+        (-11.5, 49.0, 2.5, 61.5),
+        started,
+    )
+    assert (row["name"], row["summary"], row["record_type"], row["monument_types"]) == (
+        stored,
+        stored,
+        stored,
+        [stored],
+    )
+
+
 def test_prepare_row_is_pure_and_shapes_the_upsert() -> None:
     started = datetime(2026, 11, 10, 12, 0, tzinfo=UTC)
     row, repaired = runner.prepare_row(

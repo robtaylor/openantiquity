@@ -28,6 +28,7 @@ with `allow_shrink` (`--allow-shrink` on the command line).
 
 from __future__ import annotations
 
+import html
 import json
 import logging
 import math
@@ -196,6 +197,30 @@ def _clean_geometry(record_id: str, geom: Any, bounds: BBox) -> tuple[BaseGeomet
     return geom, repaired
 
 
+# Some sources send names HTML-escaped, a few twice over ("&amp;amp;"). More rounds than this means
+# the text really holds an entity's spelling, and it is left as it then stands.
+_ENTITY_ROUNDS = 3
+
+
+def plain_text(text: str) -> str:
+    """Text with its HTML character references decoded, however many times over it was escaped.
+
+    Every record's text passes through here as it is stored, so no
+    connector has to remember to. DataCite's report titles arrived as
+    "Legal &amp; General House".
+    """
+    for _ in range(_ENTITY_ROUNDS):
+        decoded = html.unescape(text)
+        if decoded == text:
+            break
+        text = decoded
+    return text
+
+
+def _plain(text: str | None) -> str | None:
+    return plain_text(text) if text else None
+
+
 def prepare_row(
     record: RecordIn, info: SourceInfo, bounds: BBox, ingested_at: datetime
 ) -> tuple[dict[str, Any], bool]:
@@ -205,7 +230,7 @@ def prepare_row(
         raise InvalidRecordError(
             f"A record from {info.key} has an unusable external_id: {record.external_id!r}."
         )
-    name = record.name.strip() if isinstance(record.name, str) else ""
+    name = plain_text(record.name).strip() if isinstance(record.name, str) else ""
     if not name:
         raise InvalidRecordError(f"Record {external_id}: a record needs a name.")
     try:
@@ -240,10 +265,10 @@ def prepare_row(
         "source_key": info.key,
         "external_id": external_id,
         "name": name,
-        "summary": record.summary or None,
+        "summary": _plain(record.summary),
         "category": category.value,
-        "record_type": record.record_type or None,
-        "monument_types": [term.strip() for term in monument_types] or None,
+        "record_type": _plain(record.record_type),
+        "monument_types": [plain_text(term).strip() for term in monument_types] or None,
         "periods": [Period(period).value for period in periods] or None,
         "geom_wkb": shapely.to_wkb(shapely.set_srid(geom, SRID), include_srid=True),
         "precision_m": record.precision_m,
