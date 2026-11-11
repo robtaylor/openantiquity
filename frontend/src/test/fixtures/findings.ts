@@ -151,6 +151,17 @@ export function findingDetail(summary: FindingSummary, overrides: Partial<Findin
     answers_visible: true,
     my_observation: null,
     following: true,
+    // What a signed-in member who isn't the finder may do.
+    actions: {
+      answer: { allowed: true, reason: null },
+      add_evidence: { allowed: true, reason: null },
+      comment: { allowed: true, reason: null },
+      edit: { allowed: false, reason: "not_finder" },
+      withdraw: { allowed: false, reason: "not_finder" },
+      raise_level: { allowed: false, reason: "sensitivity_change_forbidden" },
+      lower_level: { allowed: false, reason: "sensitivity_change_forbidden" },
+      verify: { allowed: false, reason: "nothing_to_verify" },
+    },
     ...overrides,
   };
 }

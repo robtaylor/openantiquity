@@ -21,7 +21,12 @@ export type Credit = Schemas["CreditOut"];
 export type CreditKind = Credit["kind"];
 export type PublicUser = Schemas["PublicUser"];
 export type Observation = Schemas["ObservationOut"];
-export type ObservationIn = Schemas["ObservationIn"];
+/**
+ * An answer as it is sent. The server takes `detail_follows` as optional and reads its absence as
+ * false: the answer and its detail in one request. The generated type marks every field that has
+ * a default as required, so it is loosened here.
+ */
+export type ObservationIn = Omit<Schemas["ObservationIn"], "detail_follows"> & { detail_follows?: boolean };
 export type ObservationPage = Schemas["Page_ObservationOut_"];
 export type Visible = Schemas["Visible"];
 export type ExplanationId = Schemas["Explanation"];

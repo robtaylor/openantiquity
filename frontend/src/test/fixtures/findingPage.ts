@@ -153,6 +153,9 @@ export function evidenceFixture(overrides: Partial<Evidence> = {}): Evidence {
     independent: true,
     my_vote: null,
     redacted: false,
+    endorsements: 1,
+    disputes: 0,
+    actions: { vote: { allowed: true, reason: null }, verify: { allowed: false, reason: "not_an_expert" } },
     ...overrides,
   };
 }
@@ -171,6 +174,7 @@ export function observationFixture(overrides: Partial<Observation> = {}): Observ
     created_at: "2026-11-03T12:00:00Z",
     updated_at: "2026-11-03T12:00:00Z",
     withdrawn: false,
+    revealed: true,
     ...overrides,
   };
 }
@@ -189,6 +193,7 @@ export function revealFixture(
     assessment: { ...finding.assessment, next_steps: finding.assessment.next_steps },
   };
   return {
+    revealed: true,
     observation: answer,
     finding: after,
     comparison: {

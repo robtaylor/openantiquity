@@ -179,6 +179,13 @@ export async function fakeFindingPage(
         independent: true,
         my_vote: null,
         redacted: false,
+        endorsements: 0,
+        disputes: 0,
+        // The contributor can't vote on or verify their own item.
+        actions: {
+          vote: { allowed: false, reason: "vote_not_allowed" },
+          verify: { allowed: false, reason: "own_evidence" },
+        },
       };
       finding = { ...finding, evidence: [...finding.evidence, item] };
       return json(route, finding, 201);

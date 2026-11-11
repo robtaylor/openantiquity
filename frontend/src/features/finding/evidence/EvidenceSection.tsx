@@ -56,6 +56,10 @@ function pendingItem(body: EvidenceIn, viewer: Viewer, displayName: string): Evi
     independent: true,
     my_vote: null,
     redacted: false,
+    endorsements: 0,
+    disputes: 0,
+    // Nothing can be done to a stand-in. The server's answer replaces it within a moment.
+    actions: { vote: { allowed: false, reason: null }, verify: { allowed: false, reason: null } },
   };
 }
 
