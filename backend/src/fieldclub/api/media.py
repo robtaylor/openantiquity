@@ -148,4 +148,6 @@ def reject(media_id: MediaId, body: MediaRejection, approver: PhotoApprover, db:
     """Refuse a photo waiting for approval. Its file is deleted, and the same file can't be uploaded again."""
     photo = moderation.reject_photo(db, media_id, approver, body.reason)
     db.commit()
+    # Only once the refusal has committed, so a failed commit leaves the photo with its file.
+    media.delete_files([photo.storage_key])
     return MediaOut.build(photo)

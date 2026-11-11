@@ -233,6 +233,28 @@ def test_refusing_a_photo_deletes_it_and_blocks_the_same_file(
     assert (entry.action, entry.reason) == ("reject_photo", "A person's face.")
 
 
+def test_a_refusal_that_fails_to_commit_leaves_the_file(
+    db: Session, client_as: ClientAs, people: dict[str, User], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    photo_id = upload(client_as(people["uploader"]), phone_photo()).json()["id"]
+    row = db.get(Media, photo_id)
+    assert row is not None
+    stored = Path(get_settings().var_dir) / "media" / row.storage_key
+    trusted = client_as(people["trusted"])
+
+    def fail(self: Session) -> None:
+        raise RuntimeError("the database went away")
+
+    monkeypatch.setattr(Session, "commit", fail)
+    with pytest.raises(RuntimeError, match="went away"):
+        trusted.post(f"{API}/mod/media/{photo_id}/reject", json={"reason": "A person's face."})
+    monkeypatch.undo()
+    db.expire_all()
+    # The refusal didn't happen, so the photo still has its file and can still be judged.
+    assert stored.is_file()
+    assert db.get(Media, photo_id).rejected_at is None  # pyright: ignore[reportOptionalMemberAccess]
+
+
 def test_an_approved_photo_is_hidden_not_refused(
     db: Session, client_as: ClientAs, people: dict[str, User]
 ) -> None:

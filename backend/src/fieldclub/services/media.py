@@ -233,13 +233,14 @@ def approve_media(db: Session, media: Media, approver: User, *, now: datetime | 
     return media
 
 
-def reject_media(
-    db: Session, media: Media, approver: User, *, storage: Storage | None = None, now: datetime | None = None
-) -> Media:
-    """Refuse a photo waiting for approval and delete its bytes. The caller commits.
+def reject_media(db: Session, media: Media, approver: User, *, now: datetime | None = None) -> Media:
+    """Refuse a photo waiting for approval. The caller commits, then deletes its bytes.
 
-    An approved photo is hidden by a moderator instead, so that the decision
-    can be undone.
+    The caller deletes the file with `delete_files([media.storage_key])` once
+    the refusal has committed, as account deletion does, so that a failed
+    commit leaves a photo with its file rather than a row with none. An
+    approved photo is hidden by a moderator instead, so that the decision can
+    be undone.
     """
     if not may_approve_media(media, approver):
         raise MediaRejectionForbiddenError()
@@ -248,7 +249,6 @@ def reject_media(
     media.rejected_at = now or datetime.now(UTC)
     media.rejected_by = approver.id
     db.flush()
-    (storage or media_storage()).delete(media.storage_key)
     return media
 
 

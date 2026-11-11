@@ -962,7 +962,10 @@ def approve_photo(db: Session, media_id: int, approver: User) -> Media:
 
 
 def reject_photo(db: Session, media_id: int, approver: User, reason: str) -> Media:
-    """A moderator or trusted member refuses a photo waiting for approval, and its bytes are deleted."""
+    """A moderator or trusted member refuses a photo waiting for approval.
+
+    The caller commits, then deletes its bytes with `media.delete_files`.
+    """
     photo = _queued_photo(db, media_id, approver)
     media.reject_media(db, photo, approver)
     log_action(db, approver, ModerationActionKind.REJECT_PHOTO, ReportTarget.PHOTO, photo.id, reason)
