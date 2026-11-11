@@ -55,6 +55,7 @@ infra/
   docker-compose.yml        local PostGIS on port 54329
   Dockerfile                multi-stage build: frontend, then backend serving it; one image for the service and every job
   bootstrap.sh              makes a project's Terraform state bucket
+  add-defra-secrets.sh      puts the Defra supply login into Secret Manager from .env
   jobs/                     deployment glue run inside the image, such as the sharded elevation copy
   terraform/                Cloud Run, Cloud SQL, buckets, secrets, scheduler
 .github/workflows/          ci.yml on pushes to main and pull requests; deploy.yml by hand builds, pushes and plans

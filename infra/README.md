@@ -15,6 +15,7 @@ export P=<field-club-project-id>
 | `Dockerfile` | One image for the service and every job, built from the repository root |
 | `docker-compose.yml` | The local PostGIS for development and tests |
 | `bootstrap.sh` | Makes the bucket that holds Terraform's state |
+| `add-defra-secrets.sh` | Puts the Defra supply login into Secret Manager from the untracked `.env`, without showing it |
 | `jobs/mirror_shard.py` | One task's share of the whole-country elevation copy |
 | `terraform/` | The project's resources. `example.tfvars` lists the inputs |
 | `terraform/modules/cdn/` | The optional load balancer and CDN, off by default |
@@ -77,6 +78,14 @@ With `run_workloads = false` this makes the registry, buckets, database, empty s
 
 Leave `github_repository` empty for now: the federation is set up in step 12. `budget.currency` must be the billing account's own currency, shown on its overview page, or the budget is refused.
 
+When the APIs are first turned on, Google creates the project's default Compute Engine service account and gives it the Editor role on the whole project. No Field Club workload uses that account: each has its own, with narrow roles. Take the grant away once the apply has finished:
+
+```
+number=$(gcloud projects describe "$P" --format="value(projectNumber)")
+gcloud projects remove-iam-policy-binding "$P" --condition=None \
+  --member="serviceAccount:$number-compute@developer.gserviceaccount.com" --role=roles/editor
+```
+
 This apply turns on the APIs it then uses at once, and Google takes a minute or two to make a newly enabled API usable. If it stops with an error saying an API is not enabled or has not been used in the project, wait a few minutes and run `terraform apply` again. It carries on from where it stopped.
 
 ### 4. Make the database login and add each secret
@@ -109,8 +118,8 @@ printf '%s' "$VALUE" | gcloud secrets versions add fieldclub-<id> --project="$P"
 |---|---|---|
 | `database-url` | Built above | Always |
 | `secret-key` | Generated above | Always |
-| `defra-sftp-host`, `defra-sftp-user`, `defra-sftp-password` | Defra's email under ticket DSP3-11967, also in the untracked `.env` as `DEFRA_SFTP_*` | Always, before step 6: the elevation copy job is always given them |
-| `defra-sftp-known-hosts` | The pinned host key, `var/defra_known_hosts` in the main checkout: `--data-file="$MAIN/var/defra_known_hosts"` | Always, with the three above |
+| `defra-sftp-host`, `defra-sftp-user`, `defra-sftp-password` | Defra's email under ticket DSP3-11967, also in the untracked `.env` as `DEFRA_SFTP_*`. `bash "$MAIN/infra/add-defra-secrets.sh" "$P"` adds all four Defra secrets from there | Always, before step 6: the elevation copy job is always given them |
+| `defra-sftp-known-hosts` | The pinned host key, `var/defra_known_hosts` in the main checkout. The same script adds it | Always, with the three above |
 | `google-client-secret` | Google Cloud console, APIs & Services, Credentials, the OAuth client of type Web application | When `google_client_id` is set |
 | `microsoft-client-secret` | Microsoft Entra admin centre, App registrations, Certificates & secrets | When `microsoft_client_id` is set |
 | `apple-private-key` | Apple Developer, Keys, the Sign in with Apple key's `.p8` file: `--data-file=AuthKey_XXXX.p8` | When the three Apple ids are set |
