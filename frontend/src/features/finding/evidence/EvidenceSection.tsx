@@ -6,7 +6,7 @@ import { useMapStore } from "../../../map/store.js";
 import { Button } from "../../../ui/Button.js";
 import { viewStateFrom } from "../../mark/describe.js";
 import { addEvidence, deleteEvidence, uploadPhoto, verifyEvidence, voteEvidence } from "../api.js";
-import { groupEvidence, lowerFirst, type Viewer, type ViewerPosition } from "../describe.js";
+import { groupEvidence, lowerFirst, offered, type Viewer, type ViewerPosition } from "../describe.js";
 import { composeEvidence, type FieldId, type FormValues, isRecordKind, photoProblem } from "../evidenceForms.js";
 import { reasonOf, toastFailure, useSignedInFirst } from "../feedback.js";
 import { findingPageKeys } from "../keys.js";
@@ -96,7 +96,7 @@ export function EvidenceSection({
   const optimistic = useOptimisticFinding(finding.public_id);
   const [pending, setPending] = useState<Evidence[]>([]);
   const [choosing, setChoosing] = useState(false);
-  const mayAdd = position.seesExact && position.takesWork;
+  const mayAdd = position.mayAddEvidence;
   const groups = groupEvidence(meta, [...finding.evidence, ...pending]);
   const refresh = () => void client.invalidateQueries({ queryKey: findingPageKeys.detail(finding.public_id) });
 
@@ -178,7 +178,7 @@ export function EvidenceSection({
         Old maps, aerial photos, records and visits that bear on it. Evidence counts when someone other than the finder
         adds it or endorses it.
         {groups.length > 0
-          ? " Its support is endorsements minus disputes, with more weight for experienced members."
+          ? " A piece stops counting while more people dispute it than endorse it, and experienced members' votes weigh more."
           : null}
       </p>
 
@@ -197,7 +197,7 @@ export function EvidenceSection({
                   meta={meta}
                   item={item}
                   pending={item.id < 0}
-                  mayVote={mayAdd && !own && !position.isFinder}
+                  mayVote={offered(item.actions.vote) && (item.actions.vote.allowed || mayAdd)}
                   whyNoVote={
                     own
                       ? "Others endorse or dispute what you add."
@@ -205,7 +205,7 @@ export function EvidenceSection({
                         ? "Others endorse or dispute the evidence on your finding."
                         : null
                   }
-                  mayVerify={position.mayVerify && !own && !position.isFinder}
+                  mayVerify={item.actions.verify.allowed}
                   mayDelete={own}
                   onVote={(value) => vote(item, value)}
                   onVerify={() => void verify(item)}

@@ -8,6 +8,7 @@
  */
 
 import { create } from "zustand";
+import type { PositionField } from "../finding/positionInText.js";
 import type { MarkProblemField } from "./compose.js";
 import type { FindingDraft } from "./findingDrafts.js";
 import {
@@ -39,6 +40,8 @@ export interface MarkFields {
   drawing: boolean;
   /** What stops it being saved, in plain words, and which part of the form it is about, until that part changes. */
   problem: { field: MarkProblemField; message: string } | null;
+  /** The title or note the server refused for saying where it is more closely than its square, until each changes. */
+  placed: readonly PositionField[];
   /** True while the save is on its way. */
   saving: boolean;
   /**
@@ -72,6 +75,7 @@ export interface MarkState extends MarkFields {
   stopDrawing: () => void;
   removeOutline: () => void;
   setProblem: (problem: { field: MarkProblemField; message: string } | null) => void;
+  setPlaced: (placed: readonly PositionField[]) => void;
   setSaving: (saving: boolean) => void;
 }
 
@@ -85,6 +89,7 @@ export const EMPTY_MARK: MarkFields = {
   outline: null,
   drawing: false,
   problem: null,
+  placed: [],
   saving: false,
   focusForm: false,
 };
@@ -143,8 +148,8 @@ export const useMarkStore = create<MarkState>()((set, get) => {
     formFocused: () => set({ focusForm: false }),
     setFeatureClass: (featureClass) => set({ featureClass, problem: problemAfter("featureClass") }),
     setPeriod: (period) => set({ period }),
-    setTitle: (title) => set({ title }),
-    setNote: (note) => set({ note }),
+    setTitle: (title) => set((state) => ({ title, placed: state.placed.filter((field) => field !== "title") })),
+    setNote: (note) => set((state) => ({ note, placed: state.placed.filter((field) => field !== "description") })),
 
     startOutline: () => set((state) => ({ drawing: true, outline: state.outline ?? NEW_OUTLINE })),
     addOutlinePoint: (point) => changeOutline((outline) => addPoint(outline, point)),
@@ -168,6 +173,7 @@ export const useMarkStore = create<MarkState>()((set, get) => {
     removeOutline: () => set({ outline: null, drawing: false, problem: problemAfter("outline") }),
 
     setProblem: (problem) => set({ problem }),
+    setPlaced: (placed) => set({ placed }),
     setSaving: (saving) => set({ saving }),
   };
 });

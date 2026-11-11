@@ -9,7 +9,7 @@ import { putObservation, withdrawObservation } from "../api.js";
 import { labelOf } from "../describe.js";
 import { toastFailure } from "../feedback.js";
 import type { FindingDetail, Observation, Reveal } from "../types.js";
-import { ANSWER_WORDS, sameAnswer } from "./answer.js";
+import { ANSWER_WORDS, isReveal, sameAnswer } from "./answer.js";
 
 export interface GivenAnswerProps {
   meta: Meta;
@@ -17,6 +17,8 @@ export interface GivenAnswerProps {
   observation: Observation;
   /** The server's reply after a note is saved or an answer counted again. */
   onRevealed: (reveal: Reveal) => void;
+  /** An answer never revealed, counted again: it waits for its detail once more. */
+  onHeld: (observation: Observation) => void;
   /** After the answer is taken back: ask for the finding again. */
   onWithdrawn: () => void;
   /** The reveal above already says what the answer was, so it isn't said twice. */
@@ -34,6 +36,7 @@ export function GivenAnswer({
   finding,
   observation,
   onRevealed,
+  onHeld,
   onWithdrawn,
   revealed = false,
 }: GivenAnswerProps) {
@@ -45,7 +48,9 @@ export function GivenAnswer({
   async function send(body = sameAnswer(observation, note)): Promise<void> {
     setBusy(true);
     try {
-      onRevealed(await putObservation(finding.public_id, body));
+      const reply = await putObservation(finding.public_id, body);
+      if (isReveal(reply)) onRevealed(reply);
+      else onHeld(reply.observation);
     } catch (error) {
       toastFailure("Your note couldn't be saved.", error);
     } finally {

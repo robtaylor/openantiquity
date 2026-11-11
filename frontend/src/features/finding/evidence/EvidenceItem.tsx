@@ -67,12 +67,20 @@ export interface EvidenceItemProps {
   onDelete: () => void;
 }
 
-/** The weighted vote total as shown, such as "+2.5", "0" or "−1". */
-function supportOf(total: number): string {
-  const rounded = Math.round(total * 10) / 10;
-  if (rounded > 0) return `+${rounded}`;
-  if (rounded < 0) return `−${Math.abs(rounded)}`;
-  return "0";
+function people(count: number): string {
+  return count === 1 ? "1 person" : `${count} people`;
+}
+
+/**
+ * Who has endorsed and disputed it, in words: "Endorsed by 2 people and
+ * disputed by 1." The server counts them as it weighs them, leaving out the
+ * contributor's and the finder's own votes.
+ */
+export function votesInWords({ endorsements, disputes }: Pick<Evidence, "endorsements" | "disputes">): string {
+  if (endorsements === 0 && disputes === 0) return "Nobody has endorsed or disputed it yet.";
+  if (disputes === 0) return `Endorsed by ${people(endorsements)}.`;
+  if (endorsements === 0) return `Disputed by ${people(disputes)}.`;
+  return `Endorsed by ${people(endorsements)} and disputed by ${disputes}.`;
 }
 
 /**
@@ -154,6 +162,7 @@ export function EvidenceItem({
         Added by {item.contributor.display_name} on {formatDate(item.created_at)}
         {pending ? " · Saving…" : null}
       </p>
+      {pending ? null : <p className="fc-evidence__votes">{votesInWords(item)}</p>}
       {!item.standing ? (
         <p className="fc-evidence__status">More people dispute this than endorse it, so it doesn't count for now.</p>
       ) : !item.independent && !pending ? (
@@ -195,14 +204,10 @@ export function EvidenceItem({
             >
               Dispute
             </Button>
-            <span className="fc-vote__total">Support {supportOf(item.vote_total)}</span>
           </div>
-        ) : (
-          <p className="fc-vote">
-            <span className="fc-vote__total">Support {supportOf(item.vote_total)}</span>
-            {whyNoVote ? <span className="fc-finding__hint">{whyNoVote}</span> : null}
-          </p>
-        )}
+        ) : whyNoVote ? (
+          <p className="fc-finding__hint">{whyNoVote}</p>
+        ) : null}
         {official && !item.verified_by && mayVerify ? (
           <Button size="sm" icon={<BadgeCheck size={15} aria-hidden />} disabled={pending} onClick={onVerify}>
             Verify

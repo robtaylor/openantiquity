@@ -6,18 +6,21 @@
 import { API_BASE, apiFetch } from "../../api/client.js";
 import type { Sensitivity } from "../findings/types.js";
 import type {
+  AnswerHeld,
   Comment,
   CommentPage,
   EvidenceIn,
   FindingDetail,
   FindingUpdate,
   Media,
+  ObservationDetailIn,
   ObservationIn,
   ObservationPage,
   RecordOut,
   RecordPage,
   Reveal,
   Suggestions,
+  Visible,
 } from "./types.js";
 
 function findingUrl(publicId: string, rest = ""): string {
@@ -40,9 +43,36 @@ export function changeSensitivity(publicId: string, level: Sensitivity): Promise
   return apiFetch<FindingDetail>(findingUrl(publicId, "/sensitivity"), { method: "PUT", body: { level } });
 }
 
-/** Give a second look, or change its note. The reply reveals the finding and everyone's answers. */
-export function putObservation(publicId: string, body: ObservationIn): Promise<Reveal> {
-  return apiFetch<Reveal>(findingUrl(publicId, "/observation"), { method: "PUT", body });
+/** A moderator lowers a finding's level, with the reason the moderation log keeps. */
+export function lowerSensitivity(publicId: string, level: Sensitivity, reason: string): Promise<FindingDetail> {
+  return apiFetch<FindingDetail>(`/mod${findingUrl(publicId, "/sensitivity")}`, {
+    method: "PUT",
+    body: { level, reason },
+  });
+}
+
+/**
+ * Send a second look's answer alone, saying its detail follows (Decision
+ * 0008). It counts at once and the reply reveals nothing, unless the answer
+ * was already revealed, as when another tab finished it: then the reply is
+ * the reveal.
+ */
+export function giveAnswer(publicId: string, visible: Visible): Promise<Reveal | AnswerHeld> {
+  return putObservation(publicId, { visible, detail_follows: true });
+}
+
+/** Add the detail to an answer given alone, or nothing to skip it. The reply is the reveal. */
+export function revealAnswer(publicId: string, detail: ObservationDetailIn): Promise<Reveal> {
+  return apiFetch<Reveal>(findingUrl(publicId, "/observation/reveal"), { method: "POST", body: detail });
+}
+
+/**
+ * Change a revealed answer's note, or count a taken-back answer again. The
+ * answer itself is final. The reply reveals, unless the body says the detail
+ * follows and the answer hasn't been revealed yet.
+ */
+export function putObservation(publicId: string, body: ObservationIn): Promise<Reveal | AnswerHeld> {
+  return apiFetch<Reveal | AnswerHeld>(findingUrl(publicId, "/observation"), { method: "PUT", body });
 }
 
 export function withdrawObservation(publicId: string): Promise<void> {

@@ -102,6 +102,8 @@ export interface DiscussionProps {
   finding: FindingDetail;
   viewer: Viewer;
   displayName: string;
+  /** The server lets this person comment, or will once they sign in. */
+  mayComment: boolean;
 }
 
 /**
@@ -111,7 +113,7 @@ export interface DiscussionProps {
  * removing and following show at once and are put back, with a toast, if
  * the server refuses.
  */
-export function Discussion({ finding, viewer, displayName }: DiscussionProps) {
+export function Discussion({ finding, viewer, displayName, mayComment }: DiscussionProps) {
   const { public_id: publicId } = finding;
   const comments = useComments(publicId);
   const ready = useSignedInFirst();
@@ -200,7 +202,7 @@ export function Discussion({ finding, viewer, displayName }: DiscussionProps) {
                   : "A moderator hid this comment. Only its author and moderators can see it."}
               </p>
             ) : null}
-            {comment.id > 0 ? (
+            {comment.id > 0 && mayComment ? (
               <div className="fc-comment__actions">
                 <Button
                   size="sm"
@@ -279,7 +281,9 @@ export function Discussion({ finding, viewer, displayName }: DiscussionProps) {
           {comments.isFetchingNextPage ? "Loading…" : "Show later comments"}
         </Button>
       ) : null}
-      <CommentForm label="Add a comment" submitLabel="Post" onSubmit={(body) => post(body, null)} />
+      {mayComment ? (
+        <CommentForm label="Add a comment" submitLabel="Post" onSubmit={(body) => post(body, null)} />
+      ) : null}
     </section>
   );
 }

@@ -8,6 +8,7 @@ import { toast } from "../../ui/toastStore.js";
 import { AccountRequiredError, useRequireAccount } from "../account/requireAccount.js";
 import { useSession } from "../account/session.js";
 import { DraftBusyError, DraftTooLargeError, newId } from "../drafts/store.js";
+import { positionFields } from "../finding/positionInText.js";
 import { createFinding } from "../findings/api.js";
 import { findingKeys } from "../findings/keys.js";
 import { findingPath, useSelectedFinding } from "../findings/selection.js";
@@ -106,13 +107,16 @@ export function useSaveMark(meta: Meta): () => Promise<void> {
         const current = useMarkStore.getState();
         current.setSaving(false);
         if (problem.field) current.setProblem({ field: problem.field, message: problem.message });
+        // A title or note that says where it is: said beside each, which the toast needn't repeat for long.
+        const placed = [...positionFields(error)];
+        current.setPlaced(placed);
         // A refusal of what was sent would be refused again, and the form says what to change.
         // Only a failure that may pass, of the network or the server, is worth sending again as it is.
         const retry = !(error instanceof ApiError) || isTransient(error);
         toast(`Your finding couldn't be saved. ${problem.message}`, {
           kind: "error",
           // It stays until dismissed, unless the form beside it says the same.
-          ...(retry || !problem.field ? { duration: 0 } : {}),
+          ...(retry || (!problem.field && placed.length === 0) ? { duration: 0 } : {}),
           ...(retry ? { action: { label: "Try again", onClick: () => void again.current() } } : {}),
         });
       }

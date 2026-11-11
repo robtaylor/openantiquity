@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { isTransient } from "../../api/client.js";
 import { toast } from "../../ui/toastStore.js";
 import { AccountRequiredError, useRequireAccount } from "../account/requireAccount.js";
 
@@ -10,6 +11,18 @@ export function reasonOf(error: unknown): string {
 /** Say that something didn't happen, and why, in an error toast. */
 export function toastFailure(what: string, error: unknown): void {
   toast(`${what} ${reasonOf(error)}`, { kind: "error" });
+}
+
+/**
+ * The same, kept until dismissed, with "Try again" only for a failure that
+ * may pass: a refusal of what was sent would be refused again.
+ */
+export function toastFailureWithRetry(what: string, error: unknown, retry: () => void): void {
+  toast(`${what} ${reasonOf(error)}`, {
+    kind: "error",
+    duration: 0,
+    ...(isTransient(error) ? { action: { label: "Try again", onClick: retry } } : {}),
+  });
 }
 
 /**

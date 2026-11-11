@@ -11,9 +11,11 @@ import { fakeQueue, queuedFinding } from "./support/review.js";
 /**
  * Second look, the blind queue, in fixture mode at desktop and phone width:
  * nothing of the finder's claim before the answer, in the page, its title,
- * the address, the network or the map; the answer keys; the reveal and the
- * next card; a signed-out answer kept as a draft through a provider's round
- * trip and saved once; and the empty and failed queue.
+ * the address, the network or the map, and none between the answer and its
+ * detail; the answer keys, each sending its answer; the reveal and the next
+ * card; an answer left between the steps coming back after a reload; a
+ * signed-out answer and its detail kept as a draft through a provider's
+ * round trip and sent in order; and the empty and failed queue.
  */
 
 const MEMBER = meWith({ handle: "KeenLynchet7", display_name: "Mary Anning" });
@@ -23,6 +25,8 @@ const CLAIMED = queuedFinding("f-ring", "Ring ditch by the long barrow");
 const NEXT = queuedFinding("f-bank", "Bank along the parish edge", 0.01, "SU 1094 6996");
 /** Everything that would give the finder's claim away: its title, class, period, finder and description. */
 const CLAIM = [CLAIMED.title, "Round barrow or mound", "round_barrow", "bronze_age", "Ada Lovelace", "faint ring"];
+/** The claim's words that the detail's choices can't hold: they offer every class, by name and id. */
+const CLAIM_BEYOND_THE_CHOICES = CLAIM.filter((words) => words !== "Round barrow or mound" && words !== "round_barrow");
 
 function isPhone(page: Page): boolean {
   return (page.viewportSize()?.width ?? 0) < 720;
@@ -80,35 +84,41 @@ test("before an answer the page, its title, the address, the network and the map
   expect(queue.asked).toHaveLength(1);
   expect(queue.asked[0]?.searchParams.get("lon")).toBe("-1.854");
 
-  // Answering reveals it.
+  // The answer is in with one press, and still nothing of the claim has arrived: only the detail is offered.
   await look.getByRole("button", { name: "I can see it", exact: true }).click();
-  await look.getByRole("button", { name: "Send “I can see it”" }).click();
+  await expect(look.getByText(/Your answer is in, and it counts\./)).toBeVisible();
+  expect(queue.answers["f-ring"]).toEqual([{ visible: "yes", detail_follows: true }]);
+  for (const words of CLAIM) {
+    for (const body of bodies) expect(body, `a response holds "${words}"`).not.toContain(words);
+  }
+  for (const words of CLAIM_BEYOND_THE_CHOICES) {
+    expect(await page.content(), `between the steps the page holds "${words}"`).not.toContain(words);
+  }
+  // Seeing how it compares reveals it.
+  await look.getByRole("button", { name: "See how it compares" }).click();
   await expect(look.getByRole("heading", { name: CLAIMED.title })).toBeVisible();
   await expect(look.getByText(/Your answer helped\. It has moved up to Seen by others\./)).toBeVisible();
 });
 
-test("the keys 1, 2 and 3 answer, and do nothing while a text field has focus", async ({ page }) => {
+test("the keys 1, 2 and 3 answer with one press, and do nothing while a text field has focus", async ({ page }) => {
   await fakeSession(page, MEMBER);
-  await fakeQueue(page, [CLAIMED]);
+  const queue = await fakeQueue(page, [CLAIMED]);
   await openMap(page, `/review${VIEW}`);
   const look = panel(page);
   await expect(look.getByRole("group", { name: "Can you see it?" })).toBeVisible();
+  // The search box is a text field: a number typed there answers nothing.
+  await page.getByRole("combobox", { name: /Search for a place/ }).click();
+  await page.keyboard.press("3");
+  await expect(look.getByRole("group", { name: "Can you see it?" })).toBeVisible();
+  await look.getByText(/Can you see a feature there\?/).click();
   await page.keyboard.press("2");
-  await expect(look.getByRole("button", { name: "Not sure", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await page.keyboard.press("1");
-  await expect(look.getByRole("button", { name: "I can see it", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(look.getByText(/Your answer is in/)).toContainText("You weren't sure.");
+  await expect(look.getByRole("button", { name: "See how it compares" })).toBeFocused();
   const note = look.getByLabel("Note (optional)");
   await note.click();
   await page.keyboard.type("3 banks");
   await expect(note).toHaveValue("3 banks");
-  await expect(look.getByRole("button", { name: "I can see it", exact: true })).toHaveAttribute("aria-pressed", "true");
-  // The search box is a text field too.
-  await page.getByRole("combobox", { name: /Search for a place/ }).click();
-  await page.keyboard.press("3");
-  await expect(look.getByRole("button", { name: "I can't see it", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "false",
-  );
+  expect(queue.answers["f-ring"]).toEqual([{ visible: "unsure", detail_follows: true }]);
 });
 
 test("answers, sees how it compares and that it moved up, and goes on with one press", async ({ page }) => {
@@ -132,14 +142,24 @@ test("answers, sees how it compares and that it moved up, and goes on with one p
   const history = await page.evaluate(() => window.history.length);
 
   await look.getByRole("button", { name: "I can see it", exact: true }).click();
+  await expect(look.getByText(/Your answer is in/)).toBeVisible();
+  // While the detail is asked the place is still in sight beside the panel, or above the sheet.
+  if (isPhone(page)) await expect(page.locator(".fc-shell")).toHaveAttribute("data-sheet", "half");
+  await expect(async () => {
+    const frame = await boxOf(page.locator(".fc-look-here"));
+    const sheet = await boxOf(look);
+    if (isPhone(page)) expect(frame.y + frame.height).toBeLessThanOrEqual(sheet.y);
+    else expect(frame.x + frame.width).toBeLessThanOrEqual(sheet.x);
+  }).toPass();
   await look.getByRole("radio", { name: "Round barrow or mound" }).click();
-  await expect(look.getByRole("button", { name: "Send “I can see it”" })).toBeInViewport();
-  await look.getByRole("button", { name: "Send “I can see it”" }).click();
+  await expect(look.getByRole("button", { name: "Add this and see how it compares" })).toBeInViewport();
+  await look.getByRole("button", { name: "Add this and see how it compares" }).click();
 
   await expect(look.getByRole("heading", { name: CLAIMED.title })).toBeVisible();
   await expect(look.getByText(/2 other people can see it and 1 isn't sure\./)).toBeVisible();
   await expect(look.getByText(/So did you\./)).toBeVisible();
-  expect(queue.answers["f-ring"]).toEqual([{ visible: "yes", feature_class: "round_barrow" }]);
+  expect(queue.answers["f-ring"]).toEqual([{ visible: "yes", detail_follows: true }]);
+  expect(queue.details["f-ring"]).toEqual([{ feature_class: "round_barrow" }]);
   await expect(look.getByRole("button", { name: "Next finding" })).toBeFocused();
   await page.keyboard.press("Enter");
 
@@ -176,44 +196,57 @@ test("opened from Explore, the frame is in the middle of the map left uncovered,
   }).toPass();
 });
 
-test("a signed-out answer is a draft through a provider's round trip, saved once, then revealed", async ({ page }) => {
+test("a signed-out answer and its detail are a draft through a provider's round trip, sent in order, then revealed", async ({
+  page,
+}) => {
   const session = await fakeSession(page);
   const queue = await fakeQueue(page, [CLAIMED]);
   await openMap(page, `/review${VIEW}`);
   const look = panel(page);
   await look.getByRole("button", { name: "Not sure", exact: true }).click();
-  await look.getByRole("button", { name: "Send “Not sure”" }).click();
-  const sheet = page.getByRole("dialog", { name: "Sign in" });
-  await expect(sheet).toBeVisible();
-  await sheet.getByRole("button", { name: "Close" }).click();
 
-  // Kept, changeable, and nothing revealed.
+  // Kept, changeable, and nothing revealed. The detail is offered straight away.
   await expect(look.locator(".fc-draft-badge")).toHaveText("Not saved yet");
-  await expect(look.getByText(/Until then you can change it\. Once it's saved it's final/)).toBeVisible();
+  await expect(look.getByText(/It's kept in this browser until you sign in\./)).toContainText("You weren't sure.");
   await expect(page.getByRole("region", { name: "Drafts" }).getByRole("status")).toHaveText("1 draft not saved yet");
-  for (const words of CLAIM) expect(await page.content()).not.toContain(words);
+  for (const words of CLAIM_BEYOND_THE_CHOICES) expect(await page.content()).not.toContain(words);
   await look.getByRole("button", { name: "Change my answer" }).click();
   await look.getByRole("button", { name: "I can see it", exact: true }).click();
-  await look.getByRole("button", { name: "Send “I can see it”" }).click();
-  await sheet.getByRole("button", { name: "Close" }).click();
-  await expect(look.getByText("You can see it.")).toBeVisible();
+  await look.getByRole("radiogroup", { name: "Could it be modern?" }).getByRole("radio", { name: "No" }).click();
   expect(queue.answers).toEqual({});
 
-  // Away to the provider and back, signed in: the draft is saved once and the card shows what it revealed.
+  // Away to the provider and back, signed in: the answer, then its detail, are sent once each, and the card reveals.
   let next = "";
   await page.route(apiRoute("/auth/oauth/google/start"), (route) => {
     next = new URL(route.request().url()).searchParams.get("next") ?? "/";
     session.set(MEMBER);
     return route.fulfill({ status: 302, headers: { Location: next } });
   });
-  await look.getByRole("button", { name: "Sign in to save it" }).click();
-  await sheet.getByRole("link", { name: "Continue with Google" }).click();
+  await look.getByRole("button", { name: "Sign in to see how it compares" }).click();
+  await page.getByRole("dialog", { name: "Sign in" }).getByRole("link", { name: "Continue with Google" }).click();
   await expect(look.getByRole("heading", { name: CLAIMED.title })).toBeVisible();
   expect(next.startsWith("/review")).toBe(true);
   await page.waitForTimeout(500);
-  expect(queue.answers["f-ring"]).toEqual([{ visible: "yes" }]);
+  expect(queue.answers["f-ring"]).toEqual([{ visible: "yes", detail_follows: true }]);
+  expect(queue.details["f-ring"]).toEqual([{ not_modern: true }]);
   const left = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "{}"), DRAFTS_STORAGE_KEY);
   expect(left.drafts).toEqual([]);
+});
+
+test("an answer left between the steps offers its detail again after a reload, and then reveals", async ({ page }) => {
+  await fakeSession(page, MEMBER);
+  const queue = await fakeQueue(page, [CLAIMED, NEXT]);
+  await openMap(page, `/review${VIEW}`);
+  const look = panel(page);
+  await look.getByRole("button", { name: "I can't see it", exact: true }).click();
+  await expect(look.getByText(/Your answer is in/)).toBeVisible();
+  await page.reload();
+  await expect(look.getByText(/Your answer is in/)).toContainText("You can't see it.");
+  await expect(look.getByRole("group", { name: "Can you see it?" })).toHaveCount(0);
+  await look.getByRole("button", { name: "See how it compares" }).click();
+  await expect(look.getByRole("heading", { name: CLAIMED.title })).toBeVisible();
+  expect(queue.answers["f-ring"]).toEqual([{ visible: "no", detail_follows: true }]);
+  expect(queue.details["f-ring"]).toEqual([{}]);
 });
 
 test.describe("failures", () => {
@@ -236,20 +269,20 @@ test.describe("failures", () => {
     await openMap(page, `/review${VIEW}`);
     const look = panel(page);
     await look.getByRole("button", { name: "Not sure", exact: true }).click();
-    await look.getByRole("button", { name: "Send “Not sure”" }).click();
     await page.route(apiRoute("/auth/oauth/google/start"), (route) => {
       const next = new URL(route.request().url()).searchParams.get("next") ?? "/";
       session.set(MEMBER);
       return route.fulfill({ status: 302, headers: { Location: next } });
     });
+    await look.getByRole("button", { name: "Sign in to see how it compares" }).click();
     await page.getByRole("dialog", { name: "Sign in" }).getByRole("link", { name: "Continue with Google" }).click();
-    await expect(look.getByText(/It couldn't be saved/)).toBeVisible();
+    // The card says the kept answer failed, and offers the answers again.
+    await expect(look.getByText(/The answer kept in this browser couldn't be saved\. Broke\./)).toBeVisible();
 
-    await look.getByRole("button", { name: "Change my answer" }).click();
     await look.getByRole("button", { name: "I can see it", exact: true }).click();
-    await look.getByRole("button", { name: "Send “I can see it”" }).click();
+    await look.getByRole("button", { name: "See how it compares" }).click();
     await expect(look.getByRole("heading", { name: CLAIMED.title })).toBeVisible();
-    expect(queue.answers["f-ring"]).toEqual([{ visible: "yes" }]);
+    expect(queue.answers["f-ring"]).toEqual([{ visible: "yes", detail_follows: true }]);
     await expect(page.getByRole("region", { name: "Drafts" })).toHaveCount(0);
     const left = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "{}"), DRAFTS_STORAGE_KEY);
     expect(left.drafts).toEqual([]);

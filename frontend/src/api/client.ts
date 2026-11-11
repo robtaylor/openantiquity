@@ -19,19 +19,40 @@ export class ApiError extends Error {
   readonly code: string;
   /** The envelope's `details`, such as the masked address of `confirmation_required`. Empty when it had none. */
   readonly details: Readonly<Record<string, unknown>>;
+  /**
+   * The fields a refusal names, when `details` is a list of them, as
+   * `validation_error` and `position_in_text` send it: `field` is the
+   * request's path to it, such as `body.title`. Empty otherwise.
+   */
+  readonly fields: readonly FieldProblem[];
 
   constructor(
     status: number,
     code: string,
     message: string,
-    options?: ErrorOptions & { details?: Record<string, unknown> },
+    options?: ErrorOptions & { details?: Record<string, unknown>; fields?: readonly FieldProblem[] },
   ) {
     super(message, options);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.details = options?.details ?? {};
+    this.fields = options?.fields ?? [];
   }
+}
+
+/** One field a refusal names, and what is wrong with it, in the server's words. */
+export interface FieldProblem {
+  field: string;
+  message: string;
+}
+
+function fieldProblems(details: unknown): FieldProblem[] | undefined {
+  if (!Array.isArray(details)) return undefined;
+  return details.filter(
+    (item): item is FieldProblem =>
+      isRecord(item) && typeof item.field === "string" && typeof item.message === "string",
+  );
 }
 
 type UnauthorisedListener = (path: string) => void;
@@ -104,7 +125,8 @@ async function errorFrom(response: Response): Promise<ApiError> {
   const envelope = isRecord(payload) && isRecord(payload.error) ? payload.error : undefined;
   if (envelope && typeof envelope.code === "string" && typeof envelope.message === "string") {
     const details = isRecord(envelope.details) ? envelope.details : undefined;
-    return new ApiError(response.status, envelope.code, envelope.message, { details });
+    const fields = fieldProblems(envelope.details);
+    return new ApiError(response.status, envelope.code, envelope.message, { details, fields });
   }
   const reason = response.statusText ? `${response.status} ${response.statusText}` : String(response.status);
   const message = GATEWAY_STATUSES.has(response.status)

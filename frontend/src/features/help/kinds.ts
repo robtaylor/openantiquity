@@ -4,12 +4,13 @@
  * each strand of desk evidence (old maps, aerial photos, heritage records
  * and so on), going to look on the ground, and finding it on record.
  *
- * The strands and their evidence kinds come from `/meta`. The server sends
- * the steps grouped by code (`GET /review/tasks`), and the evidence step is
+ * The strands, their evidence kinds and which steps a second look meets
+ * come from `/meta` (`vocab.next_steps`, read through `finding/describe.ts`,
+ * whose `isAnswerStep` decides which steps are blind). The server sends the
+ * steps grouped by code (`GET /review/tasks`), and the evidence step is
  * split here by the strands each finding is missing. `/meta` has no words
  * for the step codes, or for the kinds of people who do each kind of work,
- * so those are written here: a known gap, like the step rules in
- * `finding/describe.ts`, whose `isAnswerStep` decides which steps are blind.
+ * so those are written here: a known gap.
  */
 
 import {
@@ -25,7 +26,7 @@ import {
   ScrollText,
 } from "lucide-react";
 import type { Meta } from "../../api/meta.js";
-import { isAnswerStep } from "../finding/describe.js";
+import { isAnswerStep, stepRule } from "../finding/describe.js";
 import { findingStepPath } from "../finding/stepLink.js";
 import type { TaskGroup, TaskItem } from "./api.js";
 
@@ -107,9 +108,11 @@ function codeName(code: string): string {
 /** Every kind of help, in the order offered, including kinds that have nothing waiting just now. */
 export function helpKinds(meta: Meta, groups: readonly TaskGroup[]): HelpKind[] {
   const kinds: HelpKind[] = [SECOND_LOOK];
+  // The strands of the evidence step, in the vocabulary's order.
+  const wanted = stepRule(meta, EVIDENCE_STEP)?.evidence_kinds ?? [];
   const strands: string[] = [];
   for (const kind of meta.vocab.evidence_kinds) {
-    if (kind.group === "desk" && !strands.includes(kind.strand)) strands.push(kind.strand);
+    if (wanted.includes(kind.id) && !strands.includes(kind.strand)) strands.push(kind.strand);
   }
   for (const strand of strands) {
     const first = meta.vocab.evidence_kinds.find((kind) => kind.strand === strand);
@@ -124,7 +127,7 @@ export function helpKinds(meta: Meta, groups: readonly TaskGroup[]): HelpKind[] 
     kinds.push({ id: code, ...words, code, strand: null, blind: false });
   // A step this build has no words for still gets listed, under the server's own prompt.
   for (const group of groups) {
-    if (isAnswerStep(group.code) || kinds.some((kind) => kind.code === group.code)) continue;
+    if (isAnswerStep(meta, group.code) || kinds.some((kind) => kind.code === group.code)) continue;
     kinds.push(codeKind(group.code, group.items.find((item) => item.step)?.step?.prompt));
   }
   return kinds;
@@ -141,7 +144,7 @@ export function codeKind(code: string, prompt?: string): HelpKind {
 
 /** The kind an address names: one of ours, or a step code this build has no words for. */
 export function kindFromAddress(meta: Meta, id: string): HelpKind | null {
-  return findKind(helpKinds(meta, []), id) ?? (STEP_CODE.test(id) && !isAnswerStep(id) ? codeKind(id) : null);
+  return findKind(helpKinds(meta, []), id) ?? (STEP_CODE.test(id) && !isAnswerStep(meta, id) ? codeKind(id) : null);
 }
 
 export function findKind(kinds: readonly HelpKind[], id: string): HelpKind | undefined {
@@ -169,9 +172,9 @@ export interface KindCount {
  * and may be more. Second looks count the busiest of their groups, because
  * one finding can want several of them at once.
  */
-export function kindCount(kind: HelpKind, groups: readonly TaskGroup[]): KindCount {
+export function kindCount(meta: Meta, kind: HelpKind, groups: readonly TaskGroup[]): KindCount {
   if (kind.blind) {
-    const totals = groups.filter((group) => isAnswerStep(group.code)).map((group) => group.total);
+    const totals = groups.filter((group) => isAnswerStep(meta, group.code)).map((group) => group.total);
     return { count: Math.max(0, ...totals), more: false };
   }
   const group = groups.find((each) => each.code === kind.code);

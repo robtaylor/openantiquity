@@ -5,6 +5,7 @@ import type {
   EvidenceIn,
   FindingDetail,
   Observation,
+  ObservationDetailIn,
   ObservationIn,
   Reveal,
 } from "../../src/features/finding/types.js";
@@ -21,7 +22,7 @@ export interface FakeFindingPage {
   /** The finding as the page is served it now. Change it with `set`. */
   current: () => FindingDetail;
   set: (finding: FindingDetail) => void;
-  /** The body of every write, by route, such as "PUT observation" or "POST comments". */
+  /** The body of every write, by route, such as "PUT observation", "POST reveal" or "POST comments". */
   sent: Record<string, unknown[]>;
   /** Every part of the page asked for, such as "observations", in order. */
   asked: string[];
@@ -49,13 +50,16 @@ export async function fakeFindingPage(
   let nextId = 1000;
   const failures = new Map<string, { status: number; message: string }>();
   const holds = new Map<string, Promise<void>>();
+  const me = {
+    user: {
+      handle: options.me?.handle ?? "KeenLynchet7",
+      display_name: options.me?.display_name ?? "Mary Anning",
+      role: "member",
+    },
+  };
   let reveal = (answer: ObservationIn, before: FindingDetail): Reveal => {
     const given: Observation = observationFixture({
-      user: {
-        handle: options.me?.handle ?? "KeenLynchet7",
-        display_name: options.me?.display_name ?? "Mary Anning",
-        role: "member",
-      },
+      ...me,
       visible: answer.visible,
       feature_class: answer.feature_class ?? null,
       explanation: answer.explanation ?? null,
@@ -144,7 +148,21 @@ export async function fakeFindingPage(
     }
     if (method === "PUT" && part === "observation") {
       if (!(await write(route, "PUT observation"))) return;
-      const answered = reveal(request.postDataJSON() as ObservationIn, finding);
+      const body = request.postDataJSON() as ObservationIn;
+      // The answer alone is held for its detail, as the server does: the page holds it as the person's own.
+      if (body.detail_follows && !finding.my_observation?.revealed) {
+        const held = observationFixture({ ...me, visible: body.visible, feature_class: null, revealed: false });
+        finding = { ...finding, my_observation: held };
+        return json(route, { revealed: false, observation: held });
+      }
+      const answered = reveal(body, finding);
+      finding = answered.finding;
+      return json(route, answered);
+    }
+    if (method === "POST" && part === "observation/reveal") {
+      if (!(await write(route, "POST reveal"))) return;
+      const detail = (request.postData() ? request.postDataJSON() : {}) as ObservationDetailIn;
+      const answered = reveal({ visible: finding.my_observation?.visible ?? "yes", ...detail }, finding);
       finding = answered.finding;
       return json(route, answered);
     }

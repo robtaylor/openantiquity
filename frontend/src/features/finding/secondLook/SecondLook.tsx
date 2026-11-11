@@ -1,21 +1,25 @@
-import { LogIn, Send } from "lucide-react";
 import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
 import type { Meta } from "../../../api/meta.js";
-import { Button } from "../../../ui/Button.js";
 import { toast } from "../../../ui/toastStore.js";
-import { DraftBadge } from "../../drafts/DraftBadge.js";
 import { useKindDrafts } from "../../drafts/savers.js";
-import { DraftBusyError, DraftTooLargeError } from "../../drafts/store.js";
-import { putObservation } from "../api.js";
+import { discardDraft } from "../../drafts/store.js";
+import { giveAnswer, revealAnswer } from "../api.js";
 import type { ViewerPosition } from "../describe.js";
-import { reasonOf, useSignedInFirst } from "../feedback.js";
-import type { FindingDetail, Reveal, Visible } from "../types.js";
+import { toastFailureWithRetry, useSignedInFirst } from "../feedback.js";
+import type { FindingDetail, Observation, Reveal, Visible } from "../types.js";
 import { AnswerButtons } from "./AnswerButtons.js";
-import { AnswerDetail } from "./AnswerDetail.js";
-import { ANSWER_WORDS, type AnswerDraft, answerBody, newAnswer } from "./answer.js";
-import { answerDrafts, savedAnswerCount, useSavedAnswers } from "./answerDrafts.js";
+import { type AnswerDraft, answerBody, answerFromBody, detailBody, isReveal, newAnswer } from "./answer.js";
+import {
+  answerDrafts,
+  discardAnswerDrafts,
+  keepAnswerDraft,
+  savedAnswerCount,
+  useSavedAnswers,
+} from "./answerDrafts.js";
+import { DetailStep, FailedDraftNotice } from "./DetailStep.js";
 import { GivenAnswer } from "./GivenAnswer.js";
 import { RevealSummary } from "./RevealSummary.js";
+import { useAnswerInSight } from "./useAnswerInSight.js";
 
 export interface SecondLookProps {
   meta: Meta;
@@ -25,168 +29,164 @@ export interface SecondLookProps {
   ready: boolean;
   /** The finding as the answer revealed it. */
   onRevealed: (reveal: Reveal) => void;
+  /** The answer is in and waits for its detail: the page holds it as the server's own answer. */
+  onHeld: (observation: Observation) => void;
   /** Ask for the finding again, after an answer is taken back. */
   onRefresh: () => void;
   ref?: Ref<HTMLElement>;
 }
 
 /**
- * What someone who hasn't answered sees: the three answers, then, once one
- * is chosen, the optional detail and the button that sends it all. The
- * server takes the detail only with the answer, and the class has to be
- * said before the reveal to count as unprompted (Decision 0008), so the
- * detail can't wait until after sending. The send button stays in sight
- * from the moment an answer is chosen.
+ * A second look on the page, in two steps (Decision 0008, docs/UI.md
+ * "Behaviour"). The answer is one press, sent at once and shown at once. The
+ * optional detail is offered after it, with one button that adds it, or
+ * nothing, and shows how the answer compares. Someone who leaves between
+ * the two finds the detail offered again, because the server says their
+ * answer waits for it (`my_observation.revealed` false). Signed out, the
+ * answer and its detail are a draft, sent in that order after sign-in.
  */
-function Ask({ meta, finding, ready, onRevealed }: Pick<SecondLookProps, "meta" | "finding" | "ready" | "onRevealed">) {
-  const signedIn = useSignedInFirst();
-  const [answer, setAnswer] = useState<AnswerDraft | null>(null);
-  const [sending, setSending] = useState(false);
-
-  function choose(visible: Visible): void {
-    setAnswer((current) => (current ? { ...current, visible } : newAnswer(visible)));
-  }
-
-  async function keepAsDraft(chosen: AnswerDraft): Promise<void> {
-    try {
-      answerDrafts.put({ public_id: finding.public_id, answer: answerBody(meta, chosen) });
-    } catch (error) {
-      if (error instanceof DraftTooLargeError || error instanceof DraftBusyError) {
-        toast(error.message, { kind: "error" });
-        return;
-      }
-      throw error;
-    }
-    if (!(await signedIn())) {
-      toast("Your answer is kept in this browser until you sign in.");
-    }
-  }
-
-  async function send(chosen: AnswerDraft): Promise<void> {
-    if (!ready) {
-      await keepAsDraft(chosen);
-      return;
-    }
-    setSending(true);
-    try {
-      onRevealed(await putObservation(finding.public_id, answerBody(meta, chosen)));
-    } catch (error) {
-      setSending(false);
-      toast(`Your answer couldn't be sent. ${reasonOf(error)}`, {
-        kind: "error",
-        duration: 0,
-        action: { label: "Try again", onClick: () => void send(chosen) },
-      });
-    }
-  }
-
-  return (
-    <>
-      <p className="fc-finding__hint">
-        Look at the map in the finder's view, then say whether you can see a feature there. Other people's answers stay
-        hidden until you've sent yours, and your answer is final once sent.
-      </p>
-      <AnswerButtons value={answer?.visible ?? null} onChoose={choose} disabled={sending} />
-      {answer ? (
-        <>
-          <AnswerDetail meta={meta} answer={answer} onChange={setAnswer} />
-          <div className="fc-second-look__send">
-            <Button
-              variant="primary"
-              block
-              icon={<Send size={16} aria-hidden />}
-              disabled={sending}
-              onClick={() => void send(answer)}
-            >
-              {sending ? "Sending…" : `Send “${ANSWER_WORDS[answer.visible].button}”`}
-            </Button>
-          </div>
-        </>
-      ) : null}
-    </>
-  );
-}
-
-/**
- * The second look on a finding's page, for anyone who isn't its finder and
- * can see its exact place (Decision 0008). Before an answer: the three
- * answers, then the optional detail, then one button to send. After: how it
- * compares, and the person's own answer, whose note can still change and
- * which can be taken back. A signed-out person's answer is a draft until
- * they sign in. Built to be reused by the blind queue.
- */
-export function SecondLook({ meta, finding, position, ready, onRevealed, onRefresh, ref }: SecondLookProps) {
+export function SecondLook({ meta, finding, position, ready, onRevealed, onHeld, onRefresh, ref }: SecondLookProps) {
+  const { public_id: publicId } = finding;
   const [reveal, setReveal] = useState<Reveal | null>(null);
+  /** An answer pressed and on its way, shown at once, until the server has it. */
+  const [sending, setSending] = useState<Visible | null>(null);
+  const [detail, setDetail] = useState<AnswerDraft | null>(null);
+  const [revealing, setRevealing] = useState(false);
   const drafts = useKindDrafts(answerDrafts);
-  const draft = drafts.find((entry) => entry.data.public_id === finding.public_id) ?? null;
+  const draft = drafts.find((entry) => entry.data.public_id === publicId) ?? null;
   const signedIn = useSignedInFirst();
   const [openedAfter] = useState(savedAnswerCount);
-  const saved = useSavedAnswers((state) => state.revealed[finding.public_id]);
+  const saved = useSavedAnswers((state) => state.saved[publicId]);
 
-  // A draft saved after sign-in reveals the finding, once, if it was saved
-  // while this page was open. The page asks for the finding again rather than
-  // taking the reveal's copy, which may be older than what it already has.
+  // A draft saved after sign-in, while this page is open: its reveal is shown once, or its detail is offered.
+  // The page asks for the finding again rather than taking the reply's copy, which may be older than its own.
   useEffect(() => {
     if (!saved) return;
-    useSavedAnswers.getState().forget(finding.public_id);
-    if (saved.seq > openedAfter) setReveal(saved.reveal);
+    useSavedAnswers.getState().forget(publicId);
+    if (saved.kind === "revealed" && saved.seq > openedAfter) setReveal(saved.reveal);
     onRefresh();
-  }, [saved, openedAfter, finding.public_id, onRefresh]);
+  }, [saved, openedAfter, publicId, onRefresh]);
 
-  const shown = reveal?.finding.public_id === finding.public_id ? reveal : null;
+  const shown = reveal?.finding.public_id === publicId ? reveal : null;
   const observation = finding.my_observation;
+  const heldVisible = sending ?? (position.answerHeld ? (observation?.visible ?? null) : null);
+  // A draft is shown until it is saved: signed out, or ready and on its way. One that failed is answered afresh.
+  const draftVisible = draft && (!ready || draft.state !== "failed") ? draft.data.answer.visible : null;
+  const answering = heldVisible ?? draftVisible;
   const news = useRef<HTMLDivElement>(null);
-  const revealing = shown !== null;
-  // The reveal starts at its top, on a half-open sheet too, whatever the form before it was scrolled to.
+  const revealed = shown !== null;
+  // The reveal starts at its top, on a half-open sheet too, whatever the detail before it was scrolled to.
   useEffect(() => {
-    if (revealing) news.current?.scrollIntoView?.({ block: "start" });
-  }, [revealing]);
-  if (!observation && !shown && !position.mayAnswer && !draft) return null;
+    if (revealed) news.current?.scrollIntoView?.({ block: "start" });
+  }, [revealed]);
+  // While the detail is asked, the place stays in sight above the sheet.
+  useAnswerInSight(
+    finding.location.obscured ? null : [finding.location.lon, finding.location.lat],
+    answering === null || revealed ? null : `${publicId}:detail`,
+  );
+
+  function done(next: Reveal): void {
+    setReveal(next);
+    setDetail(null);
+    onRevealed(next);
+  }
+
+  /** True once an answer was pressed here, so the detail that follows takes focus. */
+  const pressed = useRef(false);
+
+  async function answer(visible: Visible): Promise<void> {
+    pressed.current = true;
+    if (!ready) {
+      const kept = keepAnswerDraft({ public_id: publicId, answer: { visible }, reveal: false }, draft?.id);
+      if (kept) setDetail(newAnswer(visible));
+      return;
+    }
+    setSending(visible);
+    setDetail(newAnswer(visible));
+    try {
+      const reply = await giveAnswer(publicId, visible);
+      // A draft of an earlier answer that failed to save is done with: this answer is the one that counts.
+      discardAnswerDrafts(publicId);
+      if (isReveal(reply)) done(reply);
+      else onHeld(reply.observation);
+    } catch (error) {
+      setDetail(null);
+      toastFailureWithRetry("Your answer couldn't be sent.", error, () => void answer(visible));
+    } finally {
+      setSending(null);
+    }
+  }
+
+  async function showComparison(visible: Visible, given: AnswerDraft): Promise<void> {
+    if (!ready) {
+      const data = { public_id: publicId, answer: answerBody(meta, { ...given, visible }), reveal: true };
+      if (keepAnswerDraft(data, draft?.id) && !(await signedIn())) {
+        toast("Your answer is kept in this browser until you sign in.");
+      }
+      return;
+    }
+    setRevealing(true);
+    try {
+      done(await revealAnswer(publicId, detailBody(meta, { ...given, visible })));
+    } catch (error) {
+      toastFailureWithRetry("It couldn't be shown.", error, () => void showComparison(visible, given));
+    } finally {
+      setRevealing(false);
+    }
+  }
+
+  if (!observation && !shown && !position.mayAnswer && !draft && sending === null) return null;
 
   let body: ReactNode;
-  if (observation) {
+  if (shown && !observation) {
+    // Saved from a draft: the page is asking for the finding again. The reveal above is all there is to show.
+    body = null;
+  } else if (answering !== null) {
+    const given = detail ?? (draft && draftVisible !== null ? answerFromBody(meta, draft.data.answer) : null);
+    body = (
+      <DetailStep
+        meta={meta}
+        visible={answering}
+        // A draft of someone now ready is on its way through the drafts machinery.
+        status={sending !== null ? "sending" : heldVisible !== null ? "held" : ready ? "sending" : "draft"}
+        detail={given ?? newAnswer(answering)}
+        onDetail={setDetail}
+        focusOnMount={pressed.current ? "given" : null}
+        revealing={revealing || draft?.state === "saving"}
+        onReveal={() => void showComparison(answering, given ?? newAnswer(answering))}
+        onChangeAnswer={
+          draft && heldVisible === null && !ready
+            ? () => {
+                discardDraft(draft.id);
+                setDetail(null);
+              }
+            : undefined
+        }
+      />
+    );
+  } else if (observation) {
     body = (
       <GivenAnswer
         key={`${observation.updated_at}-${observation.withdrawn}`}
         meta={meta}
         finding={finding}
         observation={observation}
-        revealed={revealing}
-        onRevealed={(next) => {
-          setReveal(next);
-          onRevealed(next);
-        }}
+        revealed={revealed}
+        onRevealed={done}
+        onHeld={onHeld}
         onWithdrawn={onRefresh}
       />
     );
-  } else if (shown) {
-    // Saved from a draft: the page is asking for the finding again. The reveal above is all there is to show.
-    body = null;
-  } else if (draft) {
-    body = (
-      <div className="fc-given">
-        <p>
-          <strong>{ANSWER_WORDS[draft.data.answer.visible].given}.</strong> <DraftBadge />
-        </p>
-        <p className="fc-finding__hint">
-          It's kept in this browser until you sign in. Then it's saved, and you'll see what others said.
-        </p>
-        <Button size="sm" variant="primary" icon={<LogIn size={15} aria-hidden />} onClick={() => void signedIn()}>
-          Sign in to save it
-        </Button>
-      </div>
-    );
   } else {
     body = (
-      <Ask
-        meta={meta}
-        finding={finding}
-        ready={ready}
-        onRevealed={(next) => {
-          setReveal(next);
-          onRevealed(next);
-        }}
-      />
+      <>
+        <p className="fc-finding__hint">
+          Look at the map in the finder's view, then say whether you can see a feature there. Your answer counts as soon
+          as you give it. Other people's answers stay hidden until you've had a chance to say more.
+        </p>
+        {draft?.state === "failed" ? <FailedDraftNotice message={draft.failure?.message} /> : null}
+        <AnswerButtons value={null} onChoose={(visible) => void answer(visible)} />
+      </>
     );
   }
 

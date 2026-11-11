@@ -9,11 +9,15 @@ import {
   EXPERT,
   evidenceFixture,
   FINDER,
+  FINDER_ACTIONS,
   finderView,
+  heldFixture,
+  MODERATOR_ACTIONS,
   OTHER,
   observationFixture,
   pageFixture,
   revealFixture,
+  SQUARE_ACTIONS,
   seenFixture,
   squareFixture,
   suggestionFixture,
@@ -35,7 +39,7 @@ import { DRAFTS_STORAGE_KEY, resetDraftsForTests } from "../drafts/store.js";
 import { useSelectedFinding } from "../findings/selection.js";
 import { useSavedDrafts } from "../mark/findingDrafts.js";
 import { useSavedAnswers } from "./secondLook/answerDrafts.js";
-import type { FindingDetail } from "./types.js";
+import type { FindingDetail, Observation } from "./types.js";
 
 vi.mock("maplibre-gl", async () => {
   const fake = await import("../../test/fakeMapLibre.js");
@@ -153,7 +157,7 @@ describe("a finding's head", () => {
   });
 
   it("tells a member shown a restricted finding's square who can see it, without offering sign-in", async () => {
-    const { panel } = await open(squareFixture({ sensitivity: "restricted" }));
+    const { panel } = await open(squareFixture({ sensitivity: "restricted", actions: SQUARE_ACTIONS }));
     expect(panel.getByText(/not the place itself/)).toHaveTextContent(/trusted members, archaeologists and moderators/);
     expect(panel.queryByRole("button", { name: "Sign in" })).toBeNull();
     expect(panel.getByText("Only people who can see the exact place can help with these.")).toBeInTheDocument();
@@ -204,6 +208,28 @@ describe("what would move it up", () => {
 });
 
 describe("a second look on the page", () => {
+  /** The server holds an answer given alone for its detail, and reveals with the detail, as it does. */
+  function twoSteps(routes: ApiRoutes, finding: FindingDetail, after: FindingDetail = finding) {
+    routes.on("PUT /findings/f-ring/observation", (call) => {
+      const body = call.body as { visible: Observation["visible"] };
+      return json({
+        revealed: false,
+        observation: observationFixture({ user: OTHER, visible: body.visible, feature_class: null, revealed: false }),
+      });
+    });
+    routes.on("POST /findings/f-ring/observation/reveal", (call) => {
+      const detail = call.body as Partial<Observation>;
+      const answered = observationFixture({ user: OTHER, feature_class: null, ...detail });
+      return json(
+        revealFixture(answered, finding, {
+          finding: { ...after, answers_visible: true, my_observation: answered },
+          tier_after: after.tier,
+          moved_up: after.tier !== finding.tier,
+        }),
+      );
+    });
+  }
+
   it("shows nothing of other people's answers before this person answers, and asks for none", async () => {
     const { panel, routes } = await open(pageFixture({ answers_visible: false }));
     expect(panel.getByRole("group", { name: "Can you see it?" })).toBeInTheDocument();
@@ -212,61 +238,109 @@ describe("a second look on the page", () => {
     expect(routes.callsTo("GET /findings/f-ring/observations")).toHaveLength(0);
     // Detail is offered after the answer, never before.
     expect(panel.queryByText("What do you think it is?")).toBeNull();
-    expect(panel.getByText(/final once sent/)).toBeInTheDocument();
+    expect(panel.getByText(/counts as soon as you give it/)).toBeInTheDocument();
   });
 
-  it("offers the detail once an answer is chosen, sends it all at once, and reveals how it compares and that it moved", async () => {
+  it("sends the answer alone with one press, then offers the detail, which goes with the reveal", async () => {
     const user = userEvent.setup();
     const finding = pageFixture();
     const { panel, routes } = await open(finding);
-    const answered = observationFixture({
-      user: { ...MEMBER, avatar_url: null },
-      feature_class: "round_barrow",
-      not_modern: true,
-    });
-    const moved = seenFixture({ answers_visible: true, my_observation: answered });
-    routes.on("PUT /findings/f-ring/observation", () =>
-      json(revealFixture(answered, finding, { finding: moved, tier_after: "seen", moved_up: true })),
-    );
+    twoSteps(routes, finding, seenFixture());
 
     await user.click(panel.getByRole("button", { name: "I can see it" }));
-    expect(panel.getByRole("button", { name: "I can see it" })).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(routes.callsTo("PUT /findings/f-ring/observation")).toHaveLength(1));
+    expect(routes.callsTo("PUT /findings/f-ring/observation")[0]?.body).toEqual({
+      visible: "yes",
+      detail_follows: true,
+    });
+    // The answer is in. Nothing is revealed, and the detail is offered now, not before.
+    expect(await panel.findByText(/Your answer is in, and it counts\./)).toHaveTextContent("You can see it.");
+    expect(panel.queryByRole("group", { name: "Can you see it?" })).toBeNull();
+    expect(panel.queryByText(/other people can see it/)).toBeNull();
+    expect(panel.queryByText(/The finder marked it as/)).toBeNull();
+    expect(routes.callsTo("GET /findings/f-ring/observations")).toHaveLength(0);
+    expect(document.activeElement).toHaveTextContent(/Your answer is in/);
+
     // The class question starts with nothing chosen, so nothing in it reads like the answer "Not sure".
     const kind = panel.getByRole("radiogroup", { name: "What do you think it is?" });
     expect(within(kind).queryByRole("radio", { checked: true })).toBeNull();
     expect(within(kind).getByRole("radio", { name: "Don't know" })).toBeInTheDocument();
+    expect(panel.getByRole("button", { name: "See how it compares" })).toBeEnabled();
     await user.click(panel.getByRole("radio", { name: "Round barrow or mound" }));
     const modern = panel.getByRole("radiogroup", { name: "Could it be modern?" });
     await user.click(within(modern).getByRole("radio", { name: "No" }));
-    await user.click(panel.getByRole("button", { name: "Send “I can see it”" }));
+    await user.click(panel.getByRole("button", { name: "Add this and see how it compares" }));
 
-    await waitFor(() => expect(routes.callsTo("PUT /findings/f-ring/observation")).toHaveLength(1));
-    expect(routes.callsTo("PUT /findings/f-ring/observation")[0]?.body).toEqual({
-      visible: "yes",
+    await waitFor(() => expect(routes.callsTo("POST /findings/f-ring/observation/reveal")).toHaveLength(1));
+    expect(routes.callsTo("POST /findings/f-ring/observation/reveal")[0]?.body).toEqual({
       feature_class: "round_barrow",
       not_modern: true,
     });
+    expect(routes.callsTo("PUT /findings/f-ring/observation")).toHaveLength(1);
     expect(await panel.findByText(/2 other people can see it and 1 isn't sure\./)).toBeInTheDocument();
     expect(panel.getByText(/The finder marked it as: Round barrow or mound\. So did you\./)).toBeInTheDocument();
     expect(panel.getByText(/Your answer helped\. It has moved up to Seen by others\./)).toBeInTheDocument();
-    expect(panel.getAllByText("Seen by others").length).toBeGreaterThan(0);
     // The answer is final: only its note can change now.
     expect(panel.queryByRole("group", { name: "Can you see it?" })).toBeNull();
     expect(panel.getByLabelText("Your note")).toBeInTheDocument();
     expect(await panel.findByRole("heading", { name: "Second looks" })).toBeInTheDocument();
   });
 
-  it("keeps a signed-out person's answer as a draft and asks them to sign in", async () => {
+  it("reveals with no detail when none is given", async () => {
+    const user = userEvent.setup();
+    const finding = pageFixture();
+    const { panel, routes } = await open(finding);
+    twoSteps(routes, finding);
+    await user.click(panel.getByRole("button", { name: "I can't see it" }));
+    await user.click(await panel.findByRole("button", { name: "See how it compares" }));
+    await waitFor(() => expect(routes.callsTo("POST /findings/f-ring/observation/reveal")).toHaveLength(1));
+    expect(routes.callsTo("POST /findings/f-ring/observation/reveal")[0]?.body).toEqual({});
+    expect(await panel.findByText(/2 other people can see it/)).toBeInTheDocument();
+  });
+
+  it("offers the detail again to someone who left between the steps, and nothing revealed meanwhile", async () => {
+    const user = userEvent.setup();
+    const finding = heldFixture("unsure", { answers_visible: false });
+    const { panel, routes } = await open(finding);
+    twoSteps(routes, finding);
+    expect(panel.getByText(/Your answer is in/)).toHaveTextContent("You weren't sure.");
+    expect(panel.queryByRole("group", { name: "Can you see it?" })).toBeNull();
+    expect(panel.getByRole("radiogroup", { name: "What do you think it is?" })).toBeInTheDocument();
+    expect(routes.callsTo("GET /findings/f-ring/observations")).toHaveLength(0);
+    await user.click(panel.getByRole("button", { name: "See how it compares" }));
+    expect(await panel.findByText(/2 other people can see it/)).toBeInTheDocument();
+    expect(routes.callsTo("PUT /findings/f-ring/observation")).toHaveLength(0);
+  });
+
+  it("takes the answer back, with a toast, when it can't be sent", async () => {
+    const user = userEvent.setup();
+    const { panel, routes } = await open(pageFixture());
+    routes.on("PUT /findings/f-ring/observation", () => apiError(503, "busy", "The server is busy."));
+    await user.click(panel.getByRole("button", { name: "Not sure" }));
+    expect(await screen.findByText(/Your answer couldn't be sent\. The server is busy\./)).toBeInTheDocument();
+    expect(await panel.findByRole("group", { name: "Can you see it?" })).toBeInTheDocument();
+    expect(panel.queryByText(/Your answer is in/)).toBeNull();
+  });
+
+  it("keeps a signed-out person's answer, and then its detail, as a draft, and asks them to sign in", async () => {
     const user = userEvent.setup();
     const { panel, routes } = await open(pageFixture(), null);
     await user.click(panel.getByRole("button", { name: "Not sure" }));
-    await user.click(panel.getByRole("button", { name: "Send “Not sure”" }));
+    const draftOf = () => JSON.parse(localStorage.getItem(DRAFTS_STORAGE_KEY) ?? "{}").drafts?.[0];
+    expect(draftOf()).toMatchObject({
+      kind: "observation",
+      data: { public_id: "f-ring", answer: { visible: "unsure" }, reveal: false },
+    });
+    // The detail is offered at once, signed out too, and nothing asks for sign-in until they want the comparison.
+    expect(useAccountUi.getState().sheet).toBeNull();
+    expect(await panel.findByText("Not saved yet")).toBeInTheDocument();
+    const natural = panel.getByRole("radiogroup", { name: "Could it be natural?" });
+    await user.click(within(natural).getByRole("radio", { name: "No" }));
+    await user.click(panel.getByRole("button", { name: "Sign in to see how it compares" }));
     await waitFor(() => expect(useAccountUi.getState().sheet).toBe("signin"));
     expect(routes.callsTo("PUT /findings/f-ring/observation")).toHaveLength(0);
-    const stored = JSON.parse(localStorage.getItem(DRAFTS_STORAGE_KEY) ?? "{}");
-    expect(stored.drafts[0]).toMatchObject({
-      kind: "observation",
-      data: { public_id: "f-ring", answer: { visible: "unsure" } },
+    expect(draftOf()).toMatchObject({
+      data: { public_id: "f-ring", answer: { visible: "unsure", not_natural: true }, reveal: true },
     });
     act(() => useAccountUi.getState().close());
     expect(await panel.findByText("Not saved yet")).toBeInTheDocument();
@@ -274,12 +348,12 @@ describe("a second look on the page", () => {
 
   it("never shows an answer saved before the page opened, which may be someone else's, over what the server sends", async () => {
     const theirs = observationFixture({ user: { ...MEMBER, avatar_url: null } });
-    act(() => useSavedAnswers.getState().record(revealFixture(theirs, pageFixture(), {})));
+    act(() => useSavedAnswers.getState().record("f-ring", { kind: "revealed", reveal: revealFixture(theirs) }));
     const { panel, routes } = await open(squareFixture(), null);
     expect(panel.queryByRole("region", { name: "Your second look" })).toBeNull();
     expect(panel.getByText("SU 10 69")).toBeInTheDocument();
     expect(panel.queryByText("SU 1025 6996")).toBeNull();
-    expect(useSavedAnswers.getState().revealed).toEqual({});
+    expect(useSavedAnswers.getState().saved).toEqual({});
     expect(routes.callsTo("GET /findings/f-ring").length).toBeGreaterThan(0);
   });
 
@@ -289,7 +363,7 @@ describe("a second look on the page", () => {
     routes.on("GET /findings/f-ring", () => new Promise<Response>(() => undefined));
     expect(useSelectedFinding.getState().selected).toMatchObject({ publicId: "f-ring", square: null });
     act(() => {
-      useSavedAnswers.getState().record(revealFixture(observationFixture(), pageFixture(), {}));
+      useSavedAnswers.getState().record("f-ring", { kind: "revealed", reveal: revealFixture(observationFixture()) });
       useSavedDrafts.getState().record("draft-1", pageFixture());
     });
     harness.fetchMock().mockImplementationOnce(async () => signedOutResponse());
@@ -297,7 +371,7 @@ describe("a second look on the page", () => {
       await apiFetch("/findings", { method: "POST", body: {} }).catch(() => undefined);
     });
     expect(useSelectedFinding.getState().selected).toBeNull();
-    expect(useSavedAnswers.getState().revealed).toEqual({});
+    expect(useSavedAnswers.getState().saved).toEqual({});
     expect(useSavedDrafts.getState().saved).toEqual({});
     expect(await screen.findByText("Loading the finding")).toBeInTheDocument();
   });
@@ -308,11 +382,23 @@ describe("a second look on the page", () => {
     const answered = observationFixture({ user: { ...MEMBER, avatar_url: null } });
     const before = routes.callsTo("GET /findings/f-ring").length;
     routes.on("GET /findings/f-ring", () => json(pageFixture({ answers_visible: true, my_observation: answered })));
-    act(() => useSavedAnswers.getState().record(revealFixture(answered, finding, {})));
+    act(() =>
+      useSavedAnswers.getState().record("f-ring", { kind: "revealed", reveal: revealFixture(answered, finding) }),
+    );
     expect(await panel.findByText(/2 other people can see it and 1 isn't sure\./)).toBeInTheDocument();
     await waitFor(() => expect(routes.callsTo("GET /findings/f-ring").length).toBeGreaterThan(before));
     expect(await panel.findByLabelText("Your note")).toBeInTheDocument();
-    expect(useSavedAnswers.getState().revealed).toEqual({});
+    expect(useSavedAnswers.getState().saved).toEqual({});
+  });
+
+  it("offers the detail for an answer saved from a draft before its reveal was asked for", async () => {
+    const finding = pageFixture();
+    const { panel, routes } = await open(finding);
+    routes.on("GET /findings/f-ring", () => json(heldFixture("no")));
+    const held = observationFixture({ user: OTHER, visible: "no", revealed: false });
+    act(() => useSavedAnswers.getState().record("f-ring", { kind: "held", observation: held }));
+    expect(await panel.findByText(/Your answer is in/)).toHaveTextContent("You can't see it.");
+    expect(panel.queryByText(/other people/)).toBeNull();
   });
 
   it("lets an answer's note change, and offers taking it back", async () => {
@@ -358,20 +444,28 @@ describe("evidence", () => {
     expect(within(map).getByText("OS 6-inch, Wiltshire sheet XXVIII, 1888")).toBeInTheDocument();
     expect(within(map).getByText("Supports it")).toBeInTheDocument();
     expect(within(map).getByText(/Added by Mary Anning/)).toBeInTheDocument();
-    expect(within(map).getByText("Support +1")).toBeInTheDocument();
-    expect(
-      panel.getByText(/Its support is endorsements minus disputes, with more weight for experienced members\./),
-    ).toBeInTheDocument();
+    expect(within(map).getByText("Endorsed by 1 person.")).toBeInTheDocument();
+    expect(panel.getByText(/A piece stops counting while more people dispute it than endorse it/)).toBeInTheDocument();
     const official = panel.getByRole("heading", { name: /Designation/ }).parentElement as HTMLElement;
     expect(within(official).getByText(/Not verified yet/)).toBeInTheDocument();
   });
 
   it("says why there are no votes on your own evidence, and on evidence about your own finding", async () => {
     // Mary Anning added this one.
-    const { panel } = await open(seenFixture({ evidence: [evidenceFixture({ id: 1, contributor: OTHER })] }));
+    const own = evidenceFixture({
+      id: 1,
+      contributor: OTHER,
+      endorsements: 2,
+      disputes: 1,
+      actions: {
+        vote: { allowed: false, reason: "vote_not_allowed" },
+        verify: { allowed: false, reason: "verify_not_allowed" },
+      },
+    });
+    const { panel } = await open(seenFixture({ evidence: [own] }));
     expect(panel.queryByRole("button", { name: "Endorse" })).toBeNull();
     expect(panel.getByText("Others endorse or dispute what you add.")).toBeInTheDocument();
-    expect(panel.getByText("Support +1")).toBeInTheDocument();
+    expect(panel.getByText("Endorsed by 2 people and disputed by 1.")).toBeInTheDocument();
   });
 
   it("puts an endorsement back, with a toast, when the server refuses it", async () => {
@@ -389,12 +483,12 @@ describe("evidence", () => {
     await user.click(endorse);
     // The vote shows at once. The total is weighted by who voted, so it stays as the server said until it says again.
     await waitFor(() => expect(panel.getByRole("button", { name: "Endorse" })).toHaveAttribute("aria-pressed", "true"));
-    expect(panel.getByText("Support +1")).toBeInTheDocument();
+    expect(panel.getByText("Endorsed by 1 person.")).toBeInTheDocument();
     act(() => answer(apiError(409, "finding_withdrawn", "This finding was withdrawn.")));
     await waitFor(() =>
       expect(panel.getByRole("button", { name: "Endorse" })).toHaveAttribute("aria-pressed", "false"),
     );
-    expect(panel.getByText("Support +1")).toBeInTheDocument();
+    expect(panel.getByText("Endorsed by 1 person.")).toBeInTheDocument();
     expect(await screen.findByText(/Your vote couldn't be saved\. This finding was withdrawn\./)).toBeInTheDocument();
   });
 
@@ -660,6 +754,81 @@ describe("states of the page", () => {
     const dialog = within(screen.getByRole("dialog", { name: "Protect this finding" }));
     expect(dialog.getByText(/Only people who have signed in see its exact place/)).toBeInTheDocument();
     expect(dialog.getByText("Only a moderator can lower it again.")).toBeInTheDocument();
+  });
+
+  it("offers each control the server allows, and none it doesn't, whoever is looking", async () => {
+    // A finder of a withdrawn finding may still edit it, and nothing else: the server says so, not their role.
+    const withdrawnActions = {
+      ...FINDER_ACTIONS,
+      withdraw: { allowed: false, reason: "finding_withdrawn" },
+      raise_level: { allowed: false, reason: "finding_withdrawn" },
+    };
+    const { panel } = await open(finderView({ actions: withdrawnActions }), THE_FINDER);
+    expect(panel.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(panel.queryByRole("button", { name: "Withdraw" })).toBeNull();
+    expect(panel.queryByRole("button", { name: "Protect it more" })).toBeNull();
+  });
+
+  it("lets a moderator lower the level through the moderation route, with a reason for the log", async () => {
+    const user = userEvent.setup();
+    const finding = pageFixture({ sensitivity: "restricted", actions: MODERATOR_ACTIONS });
+    const moderator = meFixture({ handle: "Keeper", role: "moderator" });
+    const routes = serve(finding, moderator);
+    routes.on("PUT /mod/findings/f-ring/sensitivity", () => json({ ...finding, sensitivity: "protected" }));
+    const { panel } = await open(finding, moderator, routes);
+    expect(panel.getByRole("heading", { name: "Protecting it" })).toBeInTheDocument();
+    await user.click(panel.getByRole("button", { name: "Lower its protection" }));
+    const dialog = within(screen.getByRole("dialog", { name: "Lower its protection" }));
+    await user.click(dialog.getByRole("button", { name: "Lower it" }));
+    expect(dialog.getByText("Say why, for the moderation log.")).toBeInTheDocument();
+    await user.type(dialog.getByLabelText("Why"), "Ordinary field bank, no risk");
+    await user.click(dialog.getByRole("button", { name: "Lower it" }));
+    await waitFor(() => expect(routes.callsTo("PUT /mod/findings/f-ring/sensitivity")).toHaveLength(1));
+    expect(routes.callsTo("PUT /mod/findings/f-ring/sensitivity")[0]?.body).toEqual({
+      level: "protected",
+      reason: "Ordinary field bank, no risk",
+    });
+  });
+
+  it("says beside the field when the server refuses a title or note that says where the finding is", async () => {
+    const user = userEvent.setup();
+    const finding = finderView({ sensitivity: "protected" });
+    const routes = serve(finding, THE_FINDER);
+    routes.on("PATCH /findings/f-ring", () =>
+      json(
+        {
+          error: {
+            code: "position_in_text",
+            message: "A protected or restricted finding's title and description can't say where it is.",
+            details: [
+              { field: "body.description", message: "The description gives a position finer than the 1 km square." },
+            ],
+          },
+        },
+        422,
+      ),
+    );
+    const { panel } = await open(finding, THE_FINDER, routes);
+    await user.click(panel.getByRole("button", { name: "Edit" }));
+    const dialog = within(screen.getByRole("dialog", { name: "Edit your finding" }));
+    const note = dialog.getByLabelText("Note (optional)");
+    await user.clear(note);
+    await user.type(note, "Clearest at SU 1025 6996");
+    await user.click(dialog.getByRole("button", { name: "Save changes" }));
+    expect(
+      await dialog.findByText(/Take the grid reference, coordinates or three-word address out of the note\./),
+    ).toBeInTheDocument();
+    expect(note).toHaveAttribute("aria-invalid", "true");
+    expect(dialog.getByLabelText("Title")).not.toHaveAttribute("aria-invalid");
+    await user.type(note, "!");
+    expect(note).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("shows a position the server hid in free text just as it sends it", async () => {
+    const hidden = "[position hidden]";
+    const finding = squareFixture({ description: `Bank and ditch at ${hidden}, clearest in slope.` });
+    const { panel } = await open(finding, null);
+    expect(panel.getByText(`Bank and ditch at ${hidden}, clearest in slope.`)).toBeInTheDocument();
   });
 
   it("offers everyone a link and the downloads", async () => {

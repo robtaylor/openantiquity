@@ -1,16 +1,16 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { isTransient } from "../../api/client.js";
 import type { Meta } from "../../api/meta.js";
 import { useMapStore } from "../../map/store.js";
 import { toast } from "../../ui/toastStore.js";
-import { useSession } from "../account/session.js";
+import { accountIdentity, useSession } from "../account/session.js";
 import { useKindDrafts } from "../drafts/savers.js";
-import { DraftBusyError, DraftTooLargeError } from "../drafts/store.js";
-import { putObservation } from "../finding/api.js";
-import { reasonOf, useSignedInFirst } from "../finding/feedback.js";
-import { type AnswerDraft, answerBody } from "../finding/secondLook/answer.js";
-import { answerDrafts, discardAnswerDrafts } from "../finding/secondLook/answerDrafts.js";
+import { giveAnswer, revealAnswer } from "../finding/api.js";
+import { toastFailureWithRetry, useSignedInFirst } from "../finding/feedback.js";
+import { type AnswerDraft, answerBody, detailBody, isReveal, newAnswer } from "../finding/secondLook/answer.js";
+import { answerDrafts, discardAnswerDrafts, keepAnswerDraft } from "../finding/secondLook/answerDrafts.js";
+import type { Reveal, Visible } from "../finding/types.js";
 import { useApplyFinding } from "../finding/useFinding.js";
 import { fetchReviewCards } from "./api.js";
 import { reviewKeys } from "./keys.js";
@@ -43,6 +43,16 @@ export function useReviewQueue(): QueueStatus {
   const answered = useReviewStore((state) => state.answered);
   const skipped = useReviewStore((state) => state.skipped);
   const drafts = useKindDrafts(answerDrafts);
+  const session = useSession();
+  const heldBy = useReviewStore((state) => state.held?.by ?? null);
+  const identity = session.me ? accountIdentity(session.me) : null;
+  // A card kept from before a reload for an answer that waits for its detail is shown only to the person who gave it.
+  const checking = heldBy !== null && session.status === "loading";
+  const notTheirs = heldBy !== null && session.status !== "loading" && heldBy !== identity;
+
+  useEffect(() => {
+    if (notTheirs) useReviewStore.getState().drop();
+  }, [notTheirs]);
 
   useEffect(() => {
     if (near === undefined) useReviewStore.getState().start(nearFrom(useMapStore.getState().camera));
@@ -75,6 +85,7 @@ export function useReviewQueue(): QueueStatus {
     }
   }, [next, client, near]);
 
+  if (checking || notTheirs) return { kind: "loading" };
   if (current) return { kind: "card", card: current };
   if (query.isError && !query.isFetching) {
     return { kind: "error", error: query.error, retry: () => void query.refetch() };
@@ -83,57 +94,78 @@ export function useReviewQueue(): QueueStatus {
   return { kind: "loading" };
 }
 
-/**
- * Send the answer to the current card. Signed in and through the welcome
- * step, it goes at once and the reply reveals the finding. Otherwise it is
- * kept as a draft (replacing an earlier draft for the same finding, which
- * can still be changed until it is saved) and the sign-in sheet opens; the
- * reveal waits until the drafts machinery has saved it. An answer sent at
- * once replaces any draft answer to the same finding that failed to save.
- */
-export function useSendAnswer(meta: Meta): (card: ReviewCard, answer: AnswerDraft) => Promise<void> {
-  const { ready } = useSession();
+export interface CardAnswers {
+  /**
+   * Give the answer, one press. Signed in and through the welcome step, it
+   * goes at once, alone, and the server holds it for its detail (Decision
+   * 0008). Otherwise it is kept as a draft, replacing an earlier draft for
+   * the same finding, which can still change until it is saved. Either way
+   * the detail is offered next.
+   */
+  answer: (card: ReviewCard, visible: Visible) => Promise<void>;
+  /**
+   * Send the detail, or none, and see how the answer compares. Signed out,
+   * the detail joins the draft, which is saved, answer first, once the
+   * person has signed in; the reveal waits until then.
+   */
+  showComparison: (card: ReviewCard, visible: Visible, detail: AnswerDraft) => Promise<void>;
+}
+
+/** Answering the current card, in its two steps. An answer sent at once replaces a draft of it that failed. */
+export function useCardAnswers(meta: Meta): CardAnswers {
+  const { ready, me } = useSession();
   const signedIn = useSignedInFirst();
   const apply = useApplyFinding();
   const drafts = useKindDrafts(answerDrafts);
+  const identity = me ? accountIdentity(me) : null;
 
-  return useCallback(
-    async function send(card: ReviewCard, answer: AnswerDraft): Promise<void> {
-      const body = answerBody(meta, answer);
+  return useMemo(() => {
+    const draftFor = (card: ReviewCard) => drafts.find((draft) => draft.data.public_id === card.public_id);
+
+    function revealed(reveal: Reveal): void {
+      apply(reveal.finding);
+      useReviewStore.getState().revealed(reveal);
+    }
+
+    async function answer(card: ReviewCard, visible: Visible): Promise<void> {
       const store = useReviewStore.getState();
+      if (!ready || identity === null) {
+        const data = { public_id: card.public_id, answer: { visible }, reveal: false };
+        if (keepAnswerDraft(data, draftFor(card)?.id)) store.setAnswer(newAnswer(visible));
+        return;
+      }
+      store.setSending(visible);
+      store.setAnswer(newAnswer(visible));
+      try {
+        const reply = await giveAnswer(card.public_id, visible);
+        // A draft of an earlier answer that failed to save is done with: this answer is the one that counts.
+        discardAnswerDrafts(card.public_id);
+        if (isReveal(reply)) revealed(reply);
+        else useReviewStore.getState().hold({ visible, by: identity });
+      } catch (error) {
+        useReviewStore.setState({ sending: null, answer: null });
+        toastFailureWithRetry("Your answer couldn't be sent.", error, () => void answer(card, visible));
+      }
+    }
+
+    async function showComparison(card: ReviewCard, visible: Visible, detail: AnswerDraft): Promise<void> {
+      const given = { ...detail, visible };
       if (!ready) {
-        const existing = drafts.find((draft) => draft.data.public_id === card.public_id);
-        try {
-          answerDrafts.put({ public_id: card.public_id, answer: body }, existing?.id);
-        } catch (error) {
-          if (error instanceof DraftTooLargeError || error instanceof DraftBusyError) {
-            toast(error.message, { kind: "error" });
-            return;
-          }
-          throw error;
-        }
-        store.setAnswer(null);
-        if (!(await signedIn())) {
+        const data = { public_id: card.public_id, answer: answerBody(meta, given), reveal: true };
+        if (keepAnswerDraft(data, draftFor(card)?.id) && !(await signedIn())) {
           toast("Your answer is kept in this browser until you sign in.");
         }
         return;
       }
-      store.setSending(true);
+      useReviewStore.getState().setRevealing(true);
       try {
-        const reveal = await putObservation(card.public_id, body);
-        // A draft of an earlier answer that failed to save is done with: this answer is the one that counts.
-        discardAnswerDrafts(card.public_id);
-        apply(reveal.finding);
-        useReviewStore.getState().revealed(reveal);
+        revealed(await revealAnswer(card.public_id, detailBody(meta, given)));
       } catch (error) {
-        useReviewStore.getState().setSending(false);
-        toast(`Your answer couldn't be sent. ${reasonOf(error)}`, {
-          kind: "error",
-          duration: 0,
-          action: { label: "Try again", onClick: () => void send(card, answer) },
-        });
+        useReviewStore.getState().setRevealing(false);
+        toastFailureWithRetry("It couldn't be shown.", error, () => void showComparison(card, visible, detail));
       }
-    },
-    [meta, ready, signedIn, apply, drafts],
-  );
+    }
+
+    return { answer, showComparison };
+  }, [meta, ready, identity, signedIn, apply, drafts]);
 }

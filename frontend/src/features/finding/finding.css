@@ -340,6 +340,26 @@
   background: var(--surface);
 }
 
+/* The second step of a second look: the answer is in, then the optional detail and the comparison. */
+.fc-detail-step {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* It takes focus straight after the answer, so the detail is read next: its ring stands off the text. */
+.fc-detail-step__given:focus-visible {
+  outline-offset: 4px;
+  border-radius: var(--radius-sm);
+}
+
+.fc-detail-step .fc-second-look__send {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
 .fc-given,
 .fc-reveal {
   display: flex;
@@ -442,6 +462,7 @@
 
 .fc-evidence__meta,
 .fc-evidence__by,
+.fc-evidence__votes,
 .fc-evidence__status {
   color: var(--text-muted);
   font-size: 13px;
@@ -507,14 +528,6 @@
 
 .fc-vote [aria-pressed="true"] {
   color: var(--accent-strong);
-}
-
-.fc-vote__total {
-  min-width: 2.5em;
-  padding: 0 6px;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--text-muted);
 }
 
 .fc-evidence-add,
@@ -773,15 +786,6 @@
 }
 
 /* No votes to give: the total, and why, which may need a second line. */
-p.fc-vote {
-  flex-wrap: wrap;
-  gap: 4px 8px;
-}
-
-p.fc-vote .fc-vote__total {
-  padding-left: 0;
-}
-
 /* On a phone a finding's title is its claim, and it appears nowhere else on the page, so once the sheet is up
    from its peek stop the title wraps rather than being cut short. At peek there is room for one line only. */
 .fc-sheet:not([data-stop="peek"]):has(.fc-finding) .fc-panel__title {

@@ -171,6 +171,21 @@ export interface RecordCategory {
   colour: string;
 }
 
+/**
+ * What meets one next step, the backend's `confidence.STEP_RULES`: a second
+ * look, or evidence of the kinds listed. `id` is the step's code.
+ */
+export interface NextStepRule {
+  id: string;
+  met_by: "second_look" | "evidence";
+  evidence_kinds: string[];
+  record_relations: string[];
+  outcome: string | null;
+  stance: string | null;
+  endorsement: string;
+  needs_verification: boolean;
+}
+
 export interface Vocab {
   feature_classes: FeatureClass[];
   periods: Period[];
@@ -181,6 +196,8 @@ export interface Vocab {
   explanations: Explanation[];
   mention_kinds: MentionKind[];
   record_categories: RecordCategory[];
+  /** Which steps a second look meets, and which evidence meets the rest. Checked by `parseMeta`. */
+  next_steps: NextStepRule[];
 }
 
 export interface SourceSummary {
@@ -305,8 +322,20 @@ export function parseMeta(value: unknown): Meta {
     "explanations",
     "mention_kinds",
     "record_categories",
+    "next_steps",
   ]) {
     check(Array.isArray(vocab[key]), `"vocab.${key}" is not a list`);
+  }
+  // Which steps are blind rests on these, so a rule that can't be read stops here rather than listing a
+  // second look's finding by name in help wanted (Decision 0008).
+  for (const rule of vocab.next_steps as unknown[]) {
+    check(
+      isRecord(rule) &&
+        typeof rule.id === "string" &&
+        (rule.met_by === "second_look" || rule.met_by === "evidence") &&
+        isStringArray(rule.evidence_kinds),
+      'each of "vocab.next_steps" needs an id, what meets it and its evidence kinds',
+    );
   }
   // Category colours go straight into the map style, which MapLibre refuses whole if one does not parse.
   for (const category of vocab.record_categories as unknown[]) {

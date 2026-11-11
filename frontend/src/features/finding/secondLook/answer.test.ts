@@ -6,7 +6,9 @@ import {
   type AnswerDraft,
   answerBody,
   answerFromBody,
+  detailBody,
   explanationFor,
+  hasDetail,
   newAnswer,
   sameAnswer,
   withCheck,
@@ -75,5 +77,20 @@ describe("othersSentence", () => {
     expect(othersSentence({ yes: 0, unsure: 2, no: 1 })).toBe("2 other people aren't sure and 1 can't see it.");
     expect(othersSentence({ yes: 0, unsure: 0, no: 3 })).toBe("3 other people can't see it.");
     expect(othersSentence({ yes: 0, unsure: 0, no: 0 })).toBe("Nobody else has answered yet.");
+  });
+});
+
+describe("the detail that follows an answer", () => {
+  it("is everything said but the answer, and nothing when nothing was said", () => {
+    const answer = withCheck({ ...newAnswer("yes"), featureClass: "enclosure", note: " ditch " }, "not_modern", "no");
+    expect(detailBody(meta, answer)).toEqual({ feature_class: "enclosure", not_modern: true, note: "ditch" });
+    expect(detailBody(meta, newAnswer("no"))).toEqual({});
+    expect(hasDetail({})).toBe(false);
+    expect(hasDetail({ note: "x" })).toBe(true);
+  });
+
+  it("restores an answer never revealed still waiting for its detail", () => {
+    const held = observationFixture({ visible: "unsure", feature_class: null, revealed: false, withdrawn: true });
+    expect(sameAnswer(held)).toEqual({ visible: "unsure", detail_follows: true });
   });
 });

@@ -54,11 +54,13 @@ test("second look: a card, its detail, the reveal", async ({ page }) => {
   await look.getByRole("group", { name: "Can you see it?" }).waitFor();
   await shoot(page, "review-01-card");
   await look.getByRole("button", { name: "I can see it", exact: true }).click();
+  await look.getByText(/Your answer is in/).waitFor();
+  await shoot(page, "review-02-answer-in");
   await look.getByRole("radio", { name: "Round barrow or mound" }).click();
-  await shoot(page, "review-02-detail");
+  await shoot(page, "review-02a-detail");
   await sheetTo(page, "full");
   await shoot(page, "review-02b-detail-full");
-  await look.getByRole("button", { name: "Send “I can see it”" }).click();
+  await look.getByRole("button", { name: "Add this and see how it compares" }).click();
   await look.getByRole("heading", { name: CLAIMED.title }).waitFor();
   await sheetTo(page, "half");
   await shoot(page, "review-03-reveal");
@@ -72,8 +74,9 @@ test("second look: a signed-out answer kept as a draft", async ({ page }) => {
   await openMap(page, `/review${VIEW}`);
   const look = page.getByRole("complementary", { name: "Second look" });
   await look.getByRole("button", { name: "Not sure", exact: true }).click();
+  await look.locator(".fc-draft-badge").waitFor();
   await shoot(page, "review-04a-signed-out-detail");
-  await look.getByRole("button", { name: "Send “Not sure”" }).click();
+  await look.getByRole("button", { name: "Sign in to see how it compares" }).click();
   const sheet = page.getByRole("dialog", { name: "Sign in" });
   await sheet.waitFor();
   await shoot(page, "review-04b-sign-in");

@@ -7,7 +7,7 @@ import type {
   SuggestedRecord,
   Suggestions,
 } from "../../features/finding/types.js";
-import { findingDetail, findingFeature, findingSummary, offset } from "./findings.js";
+import { findingDetail, findingFeature, findingSummary, MEMBER_ACTIONS, offset } from "./findings.js";
 
 /**
  * A finding's page as `GET /findings/{id}` sends it, for each tier, state
@@ -60,11 +60,42 @@ export function pageFixture(overrides: Partial<FindingDetail> = {}): FindingDeta
   return { ...merged, tier: merged.assessment.tier, state: merged.assessment.state };
 }
 
+type Actions = FindingDetail["actions"];
+
+/** What the finder may do on their own open finding, as the server says. */
+export const FINDER_ACTIONS: Actions = {
+  ...MEMBER_ACTIONS,
+  answer: { allowed: false, reason: "own_finding" },
+  edit: { allowed: true, reason: null },
+  withdraw: { allowed: true, reason: null },
+  raise_level: { allowed: true, reason: null },
+};
+
+/** What a signed-out visitor may do: nothing until they sign in. */
+export const SIGNED_OUT_ACTIONS: Actions = Object.fromEntries(
+  Object.keys(MEMBER_ACTIONS).map((name) => [name, { allowed: false, reason: "unauthorised" }]),
+) as Actions;
+
+/** What a member may do on a finding they see only as its square. */
+export const SQUARE_ACTIONS: Actions = {
+  ...MEMBER_ACTIONS,
+  answer: { allowed: false, reason: "location_hidden" },
+  add_evidence: { allowed: false, reason: "location_hidden" },
+};
+
+/** What a moderator who isn't the finder may do on an open finding. */
+export const MODERATOR_ACTIONS: Actions = {
+  ...MEMBER_ACTIONS,
+  raise_level: { allowed: true, reason: null },
+  lower_level: { allowed: true, reason: null },
+};
+
 /** The same finding as its finder sees it: answers visible, with the tallies. */
 export function finderView(overrides: Partial<FindingDetail> = {}): FindingDetail {
   return pageFixture({
     answers_visible: true,
     following: true,
+    actions: FINDER_ACTIONS,
     assessment: {
       ...pageFixture().assessment,
       next_steps: [{ code: "need_observers", prompt: "Two more people need to say they can see it.", people: 2 }],
@@ -111,7 +142,7 @@ export function seenFixture(overrides: Partial<FindingDetail> = {}): FindingDeta
 
 /** A finding shown as its square, at the square's centre, as a signed-out visitor gets a protected one. */
 export function squareFixture(overrides: Partial<FindingDetail> = {}): FindingDetail {
-  const base = pageFixture({ sensitivity: "protected" });
+  const base = pageFixture({ sensitivity: "protected", actions: SIGNED_OUT_ACTIONS });
   const square = findingFeature({ at: AT, public_id: base.public_id, tier: base.tier, obscured: true });
   const [lon, lat] = square.geometry.coordinates;
   return {
@@ -177,6 +208,18 @@ export function observationFixture(overrides: Partial<Observation> = {}): Observ
     revealed: true,
     ...overrides,
   };
+}
+
+/** The page of someone whose answer is in and waits for its detail: nothing revealed yet. */
+export function heldFixture(
+  visible: Observation["visible"] = "yes",
+  overrides: Partial<FindingDetail> = {},
+): FindingDetail {
+  return pageFixture({
+    my_observation: observationFixture({ visible, feature_class: null, revealed: false }),
+    actions: { ...MEMBER_ACTIONS, answer: { allowed: false, reason: "already_answered" } },
+    ...overrides,
+  });
 }
 
 /** What answering reveals: the finding with answers visible, and how this answer compares. */

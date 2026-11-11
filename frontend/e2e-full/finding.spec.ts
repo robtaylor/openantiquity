@@ -19,13 +19,14 @@ function panelFor(page: Page, title: string): Locator {
   return page.getByRole("complementary", { name: title });
 }
 
-/** Answer "I can see it", say it's an enclosure, and send it. */
+/** Answer "I can see it", which sends it, then say it's an enclosure and see how it compares. */
 async function secondLook(page: Page, publicId: string, title: string): Promise<Locator> {
   await openMap(page, `/f/${publicId}${VIEW}`);
   const look = panelFor(page, title).getByRole("region", { name: "Your second look" });
   await look.getByRole("button", { name: "I can see it" }).click();
+  await expect(look.getByText(/Your answer is in/)).toBeVisible();
   await look.getByRole("radio", { name: "Enclosure" }).click();
-  await look.getByRole("button", { name: "Send “I can see it”" }).click();
+  await look.getByRole("button", { name: "Add this and see how it compares" }).click();
   await expect(look.getByText("You can see it.")).toBeVisible();
   return look;
 }

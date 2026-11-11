@@ -66,6 +66,25 @@ describe("suggestTitle", () => {
     expect(suggestTitle(meta, "round_barrow", AVEBURY)).toBe("Round barrow or mound in SU 10 69");
   });
 
+  it("can never hold what the server refuses as a position in the title of a finding that isn't open", () => {
+    // The server's rules (backend services/text_positions.py) need, for a grid reference, groups of three
+    // figures or more; for coordinates, figures beside a decimal point or comma; for an easting and
+    // northing, six figures; and for a three-word address, words joined by dots. A suggestion with no run
+    // of three figures, no dot, no slash and no figure beside a comma has none of them, wherever the mark
+    // is and whatever the class.
+    const unsafe = /\d{3}|\.|\/|\d,|,\d/;
+    for (const entry of meta.vocab.feature_classes) expect(entry.label).not.toMatch(/\d|\./);
+    for (let lon = -10.5; lon <= 1.8; lon += 0.37) {
+      for (let lat = 50; lat <= 60.8; lat += 0.29) {
+        for (const featureClass of meta.vocab.feature_classes) {
+          expect(suggestTitle(meta, featureClass.id, [lon, lat])).not.toMatch(unsafe);
+        }
+      }
+    }
+    // Both grids are covered: Ireland's squares have one letter.
+    expect(suggestTitle(meta, "moat", [-6.26, 54.6])).toMatch(/ in [A-Z] \d{2} \d{2}$/);
+  });
+
   it("falls back to the class alone off the grids, and to a plain word with no class", () => {
     expect(suggestTitle(meta, "moat", [20, 50])).toBe("Moat");
     expect(suggestTitle(meta, null, null)).toBe("Finding");

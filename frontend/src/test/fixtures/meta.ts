@@ -1,4 +1,4 @@
-import type { Meta, RasterView, Vocab } from "../../api/meta.js";
+import type { Meta, NextStepRule, RasterView, Vocab } from "../../api/meta.js";
 
 /**
  * A stand-in for `GET /api/v1/meta`, used by tests and by `VITE_USE_FIXTURES=1`
@@ -76,6 +76,20 @@ function lidarView(id: string, title: string, description: string, isDefault = f
     attribution: EA_ATTRIBUTION,
     bounds: [-7.11, 49.85, 2.09, 55.88],
     ...(isDefault ? { default: true } : {}),
+  };
+}
+
+/** A next step that a second look meets, and nothing else. */
+function secondLookRule(id: string): NextStepRule {
+  return {
+    id,
+    met_by: "second_look",
+    evidence_kinds: [],
+    record_relations: [],
+    outcome: null,
+    stance: null,
+    endorsement: "not_needed",
+    needs_verification: false,
   };
 }
 
@@ -529,6 +543,43 @@ const vocab: Vocab = {
       id: "map_label",
       label: "Antiquities on old maps",
       colour: "#c9a27e",
+    },
+  ],
+  // The backend's `confidence.STEP_RULES`, as `/meta` serves them.
+  next_steps: [
+    secondLookRule("need_observers"),
+    {
+      id: "need_strand",
+      met_by: "evidence",
+      evidence_kinds: ["lidar_view", "aerial", "historic_map", "record_link", "document"],
+      record_relations: ["part_of", "related"],
+      outcome: null,
+      stance: "supports",
+      endorsement: "if_added_by_finder",
+      needs_verification: false,
+    },
+    secondLookRule("need_class_agreement"),
+    secondLookRule("need_check"),
+    secondLookRule("need_trusted_review"),
+    {
+      id: "need_ground",
+      met_by: "evidence",
+      evidence_kinds: ["photo", "field_visit", "geophysics", "excavation"],
+      record_relations: [],
+      outcome: "supports",
+      stance: null,
+      endorsement: "unless_added_by_trusted_other",
+      needs_verification: false,
+    },
+    {
+      id: "need_official",
+      met_by: "evidence",
+      evidence_kinds: ["her_record", "designation", "publication"],
+      record_relations: [],
+      outcome: null,
+      stance: "supports",
+      endorsement: "not_needed",
+      needs_verification: true,
     },
   ],
 };

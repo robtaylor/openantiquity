@@ -17,15 +17,15 @@ import { EvidenceSection, type OpenForm, openForm } from "./evidence/EvidenceSec
 import { RecordSuggestions } from "./evidence/RecordSuggestions.js";
 import { FindingHead } from "./FindingHead.js";
 import { findingPageKeys } from "./keys.js";
-import { useFindingOnMap } from "./mapView.js";
+import { panIntoView, useFindingOnMap, whenStageSettled } from "./mapView.js";
 import { NextSteps } from "./NextSteps.js";
 import { Answers, Credits } from "./People.js";
 import { FollowUpTimelineSlot, MentionsSlot } from "./Slots.js";
 import { SecondLook } from "./secondLook/SecondLook.js";
 import { actionForStep, STEP_PARAM, STRAND_PARAM, stepFromAddress } from "./stepLink.js";
 import { copyLink, Tools } from "./Tools.js";
-import type { FindingDetail, Reveal } from "./types.js";
-import { isNotFound, useApplyFinding, useFinding } from "./useFinding.js";
+import type { FindingDetail, Observation, Reveal } from "./types.js";
+import { isNotFound, useApplyFinding, useFinding, useOptimisticFinding } from "./useFinding.js";
 import "./finding.css";
 
 function BackToExplore() {
@@ -39,14 +39,16 @@ function BackToExplore() {
 /**
  * Bring a part of the page into view and give it focus. On a phone the sheet
  * opens to `stop` first: fully for a form, but only half-way for a second
- * look, because the person needs the map above the sheet to answer it.
+ * look, because the person needs the map above the sheet to answer it, and
+ * a sheet pulled up fully would cover the place (docs/UI.md, "Behaviour").
  */
 function useReveal() {
   const environment = usePanelEnvironment();
   return useCallback(
     (find: () => HTMLElement | null, stop: "half" | "full" = "full") => {
-      // A sheet already open fully stays so.
-      if (environment.isPhone && environment.stop !== "full" && environment.stop !== stop) environment.setStop(stop);
+      // A sheet already open fully stays so for a form. A second look brings it down to half-way.
+      const keepFull = environment.stop === "full" && stop === "full";
+      if (environment.isPhone && !keepFull && environment.stop !== stop) environment.setStop(stop);
       // After the render that opens the form or the sheet.
       requestAnimationFrame(() => {
         const element = find();
@@ -103,6 +105,18 @@ function FindingPage({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
     [client, finding.public_id],
   );
   const onRevealed = useCallback((answered: Reveal) => apply(answered.finding), [apply]);
+  const optimistic = useOptimisticFinding(finding.public_id);
+  // The server holds the answer for its detail. Only the person's own answer changes on the page: the tier and
+  // the score it moved wait for the reveal, which shows the move.
+  const onHeld = useCallback(
+    (observation: Observation) =>
+      void optimistic((current) => ({
+        ...current,
+        my_observation: observation,
+        actions: { ...current.actions, answer: { allowed: false, reason: "already_answered" } },
+      })),
+    [optimistic],
+  );
 
   function openEvidence(next: OpenForm): void {
     setForm(next);
@@ -113,6 +127,8 @@ function FindingPage({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
     switch (action.kind) {
       case "answer":
         reveal(() => secondLook.current, "half");
+        // Once the sheet has come down, the place is put back in sight if it now covers it.
+        if (position.seesExact) whenStageSettled(() => panIntoView([finding.location.lon, finding.location.lat]));
         return;
       case "share":
         void copyLink(finding.public_id);
@@ -163,6 +179,7 @@ function FindingPage({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
         position={position}
         ready={viewer.ready}
         onRevealed={onRevealed}
+        onHeld={onHeld}
         onRefresh={refresh}
       />
       {!linked && position.seesExact && position.takesWork && form === null ? (
@@ -187,7 +204,7 @@ function FindingPage({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
       <Credits finding={finding} />
       <MentionsSlot finding={finding} />
       <FollowUpTimelineSlot finding={finding} />
-      <Discussion finding={finding} viewer={viewer} displayName={displayName} />
+      <Discussion finding={finding} viewer={viewer} displayName={displayName} mayComment={position.mayComment} />
       <Tools meta={meta} finding={finding} position={position} onApplied={apply} />
     </div>
   );

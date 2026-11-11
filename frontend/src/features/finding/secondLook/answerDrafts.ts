@@ -1,45 +1,63 @@
 /**
  * A second look given by someone not signed in is a draft in this browser
  * (Decision 0002, docs/UI.md "Behaviour"). Its data is the finding's public
- * id and the body `PUT /findings/{id}/observation` will be sent, so saving it
- * after sign-in sends exactly what was answered. The saver is registered
- * when this module loads, which the shell does at start-up through the
- * finding's page, so a draft left from before a provider's round trip is
- * saved as soon as the person is ready.
+ * id, the answer and any detail, as one `ObservationIn` body, and whether the
+ * person asked to see how it compares. Saving it after sign-in sends them in
+ * the order the API takes them: the answer alone, saying its detail follows,
+ * then, if they asked for the reveal, the detail with it (Decision 0008). An
+ * answer whose reveal wasn't asked for is left waiting for its detail, which
+ * the finding's page or the queue then offers. The saver is registered when
+ * this module loads, which the shell does at start-up through the finding's
+ * page, so a draft left from before a provider's round trip is saved as soon
+ * as the person is ready.
  *
  * The blind queue gives its answers through the same kind.
  */
 
 import { create } from "zustand";
 import { isRecord } from "../../../api/guards.js";
+import { toast } from "../../../ui/toastStore.js";
 import { onPersonChanged } from "../../account/session.js";
 import { defineDraftKind } from "../../drafts/savers.js";
-import { DRAFT_KINDS, type Draft, discardDraft, listDrafts } from "../../drafts/store.js";
-import { putObservation } from "../api.js";
-import { ANSWERS, type ObservationIn, type Reveal } from "../types.js";
+import {
+  DRAFT_KINDS,
+  type Draft,
+  DraftBusyError,
+  DraftTooLargeError,
+  discardDraft,
+  listDrafts,
+} from "../../drafts/store.js";
+import { giveAnswer, revealAnswer } from "../api.js";
+import { ANSWERS, type Observation, type ObservationIn, type Reveal } from "../types.js";
+import { detailOf, isReveal } from "./answer.js";
 
 export interface AnswerDraftData {
   public_id: string;
   answer: ObservationIn;
+  /** True once the person asked to see how it compares, so saving it reveals. */
+  reveal: boolean;
 }
 
 export function parseAnswerDraft(value: unknown): AnswerDraftData | null {
   if (!isRecord(value) || typeof value.public_id !== "string" || value.public_id === "") return null;
   const { answer } = value;
   if (!isRecord(answer) || !(ANSWERS as readonly unknown[]).includes(answer.visible)) return null;
-  return { public_id: value.public_id, answer: answer as unknown as ObservationIn };
+  // A draft from before the answer came in two steps was made by pressing "Send", which asked for the reveal.
+  const reveal = value.reveal !== false;
+  return { public_id: value.public_id, answer: answer as unknown as ObservationIn, reveal };
 }
 
-interface SavedAnswer {
-  reveal: Reveal;
-  /** Its place in the order answers were saved, so a page opened later can tell it is older than what it shows. */
-  seq: number;
-}
+/** What saving a draft gave: the reveal, or the answer held for its detail. */
+export type SavedAnswer =
+  | { kind: "revealed"; reveal: Reveal; seq: number }
+  | { kind: "held"; observation: Observation; seq: number };
+
+type Outcome = { kind: "revealed"; reveal: Reveal } | { kind: "held"; observation: Observation };
 
 interface SavedAnswers {
-  /** What answering revealed, by finding, for answers saved from drafts in this page and not yet shown. */
-  revealed: Readonly<Record<string, SavedAnswer>>;
-  record: (reveal: Reveal) => void;
+  /** What saving answers from drafts gave, by finding, for drafts saved in this page and not yet dealt with. */
+  saved: Readonly<Record<string, SavedAnswer>>;
+  record: (publicId: string, outcome: Outcome) => void;
   /** Forget one, once a page has dealt with it. */
   forget: (publicId: string) => void;
   clear: () => void;
@@ -53,38 +71,69 @@ export function savedAnswerCount(): number {
 }
 
 /**
- * Answers saved from drafts, kept until the finding's page has dealt with
- * them, so an open page can show what they revealed. What a reveal holds was
- * for the person who answered, exact place and all, so it is forgotten when
- * the person changes.
+ * Answers saved from drafts, kept until the finding's page or the queue has
+ * dealt with them, so an open page can show what they revealed or offer the
+ * detail. What a reveal holds was for the person who answered, exact place
+ * and all, so it is forgotten when the person changes.
  */
 export const useSavedAnswers = create<SavedAnswers>()((set) => ({
-  revealed: {},
-  record: (reveal) => {
+  saved: {},
+  record: (publicId, outcome) => {
     saves += 1;
-    const entry = { reveal, seq: saves };
-    set((state) => ({ revealed: { ...state.revealed, [reveal.finding.public_id]: entry } }));
+    const entry: SavedAnswer = { ...outcome, seq: saves };
+    set((state) => ({ saved: { ...state.saved, [publicId]: entry } }));
   },
   forget: (publicId) =>
     set((state) => {
-      if (!(publicId in state.revealed)) return state;
-      const { [publicId]: _gone, ...rest } = state.revealed;
-      return { revealed: rest };
+      if (!(publicId in state.saved)) return state;
+      const { [publicId]: _gone, ...rest } = state.saved;
+      return { saved: rest };
     }),
-  clear: () => set({ revealed: {} }),
+  clear: () => set({ saved: {} }),
 }));
 
 onPersonChanged(() => useSavedAnswers.getState().clear());
+
+/**
+ * Send a drafted answer as the API takes it: the answer, then the detail
+ * with the reveal if it was asked for. Sent again after a failure, the first
+ * step finds the answer already in and the second the same detail, so
+ * nothing is given twice.
+ */
+async function saveAnswer(data: AnswerDraftData): Promise<Outcome> {
+  const first = await giveAnswer(data.public_id, data.answer.visible);
+  if (isReveal(first)) return { kind: "revealed", reveal: first };
+  if (!data.reveal) return { kind: "held", observation: first.observation };
+  return { kind: "revealed", reveal: await revealAnswer(data.public_id, detailOf(data.answer)) };
+}
 
 export const answerDrafts = defineDraftKind<AnswerDraftData>({
   kind: DRAFT_KINDS.observation,
   label: "Second look",
   parse: parseAnswerDraft,
   save: async (data) => {
-    useSavedAnswers.getState().record(await putObservation(data.public_id, data.answer));
+    useSavedAnswers.getState().record(data.public_id, await saveAnswer(data));
   },
   describe: () => "A second look",
 });
+
+/**
+ * Keep a signed-out answer, with any detail, as the finding's draft,
+ * replacing `id` when given. False, said in a toast, when the browser can't
+ * keep it or it is being saved this moment.
+ */
+export function keepAnswerDraft(data: AnswerDraftData, id?: string): boolean {
+  try {
+    answerDrafts.put(data, id);
+    return true;
+  } catch (error) {
+    if (error instanceof DraftTooLargeError || error instanceof DraftBusyError) {
+      toast(error.message, { kind: "error" });
+      return false;
+    }
+    throw error;
+  }
+}
 
 /** The drafts in this browser that answer the finding: one at most, as a new answer replaces the old. */
 export function answerDraftsFor(publicId: string): readonly Draft[] {

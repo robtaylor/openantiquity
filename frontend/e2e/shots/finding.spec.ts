@@ -8,6 +8,8 @@ import {
   evidenceFixture,
   FINDER,
   finderView,
+  heldFixture,
+  MODERATOR_ACTIONS,
   observationFixture,
   pageFixture,
   seenFixture,
@@ -61,9 +63,15 @@ async function scrollTo(locator: Locator): Promise<void> {
   await locator.evaluate((element) => element.scrollIntoView({ block: "start" }));
 }
 
+/** What the server lets someone do with evidence they added themselves: nothing. */
+const OWN_ITEM = {
+  vote: { allowed: false, reason: "vote_not_allowed" },
+  verify: { allowed: false, reason: "verify_not_allowed" },
+};
+
 const RICH = seenFixture({
   evidence: [
-    evidenceFixture({ id: 1 }),
+    evidenceFixture({ id: 1, actions: OWN_ITEM }),
     evidenceFixture({
       id: 2,
       kind: "aerial",
@@ -72,6 +80,8 @@ const RICH = seenFixture({
       note: "A dark ring in the barley.",
       contributor: EXPERT,
       vote_total: 2.5,
+      endorsements: 3,
+      disputes: 1,
     }),
     evidenceFixture({
       id: 3,
@@ -81,7 +91,9 @@ const RICH = seenFixture({
       url: null,
       note: null,
       vote_total: 0,
+      endorsements: 0,
       independent: false,
+      actions: OWN_ITEM,
     }),
   ],
 });
@@ -122,14 +134,38 @@ test("second look", async ({ page }) => {
   await scrollTo(look);
   await shoot(page, "10-look-ask");
   await look.getByRole("button", { name: "I can see it" }).click();
-  await scrollTo(look);
-  await shoot(page, "11-look-detail");
+  await look.getByText(/Your answer is in/).waitFor();
+  // On a phone the sheet has come down to half-way, so the place is in sight while the detail is asked.
+  await shoot(page, "11-look-answer-in");
   await look.getByRole("radio", { name: "Round barrow or mound" }).click();
   await shoot(page, "11b-look-detail-chosen");
-  await look.getByRole("button", { name: /^Send/ }).click();
+  await sheetTo(page, "full");
+  await scrollTo(look);
+  await shoot(page, "11c-look-detail-full");
+  await look.getByRole("button", { name: "Add this and see how it compares" }).click();
   await look.getByText(/other people can see it/).waitFor();
   await scrollTo(look);
   await shoot(page, "12-look-revealed");
+});
+
+test("second look left between the steps, and signed out", async ({ page }) => {
+  const session = await fakeSession(page, MEMBER);
+  const held = heldFixture("unsure", { answers_visible: false });
+  await fakeFindingPage(page, held);
+  const panel = await open(page, held);
+  const look = panel.getByRole("region", { name: "Your second look" });
+  await scrollTo(look);
+  await shoot(page, "14-look-held");
+
+  session.set(null);
+  const fresh = pageFixture({ public_id: "f-draft" });
+  await fakeFindingPage(page, fresh);
+  const signedOut = await open(page, fresh);
+  const draftLook = signedOut.getByRole("region", { name: "Your second look" });
+  await draftLook.getByRole("button", { name: "Not sure" }).click();
+  await draftLook.locator(".fc-draft-badge").waitFor();
+  await scrollTo(draftLook);
+  await shoot(page, "15-look-draft");
 });
 
 test("second look from what would move it up", async ({ page }) => {
@@ -167,6 +203,42 @@ test("viewers", async ({ page }) => {
   await page.keyboard.press("Escape");
   await panel.getByRole("button", { name: "Edit" }).click();
   await shoot(page, "25-finder-edit");
+  // A protected finding's note that says where it is: the server refuses it, and the dialog says so beside it.
+  await page.route(apiRoute("/findings/f-mine"), (route) =>
+    route.request().method() === "PATCH"
+      ? route.fulfill({
+          status: 422,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: {
+              code: "position_in_text",
+              message: "A protected or restricted finding's title and description can't say where it is.",
+              details: [{ field: "body.description", message: "The description gives a position." }],
+            },
+          }),
+        })
+      : route.fallback(),
+  );
+  const dialog = page.getByRole("dialog", { name: "Edit your finding" });
+  await dialog.getByLabel("Note (optional)").fill("Clearest at SU 1025 6996, with the light from the north-west.");
+  await dialog.getByRole("button", { name: "Save changes" }).click();
+  await dialog.getByText(/out of the note/).waitFor();
+  await shoot(page, "25b-finder-edit-refused");
+  await page.keyboard.press("Escape");
+
+  session.set(meWith({ handle: "Keeper", display_name: "Kit Keeper", role: "moderator" }));
+  const guarded = pageFixture({
+    public_id: "f-guarded",
+    sensitivity: "restricted",
+    actions: { ...MODERATOR_ACTIONS, raise_level: { allowed: false, reason: "highest_level" } },
+  });
+  await fakeFindingPage(page, guarded);
+  const moderated = await open(page, guarded);
+  await sheetTo(page, "full");
+  await scrollTo(moderated.getByRole("heading", { name: "Protecting it" }));
+  await shoot(page, "29-moderator-tools");
+  await moderated.getByRole("button", { name: "Lower its protection" }).click();
+  await shoot(page, "29b-moderator-lower");
 });
 
 test("states", async ({ page }) => {

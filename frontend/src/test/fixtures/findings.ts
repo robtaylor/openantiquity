@@ -130,6 +130,18 @@ export function findingPage(collection: FindingCollection, nextCursor: string | 
   return { items: collection.features.map((feature) => findingSummary(feature)), next_cursor: nextCursor };
 }
 
+/** What a signed-in member who isn't the finder may do on an open finding they see exactly. */
+export const MEMBER_ACTIONS: FindingDetail["actions"] = {
+  answer: { allowed: true, reason: null },
+  add_evidence: { allowed: true, reason: null },
+  comment: { allowed: true, reason: null },
+  edit: { allowed: false, reason: "not_finder" },
+  withdraw: { allowed: false, reason: "not_finder" },
+  raise_level: { allowed: false, reason: "sensitivity_change_forbidden" },
+  lower_level: { allowed: false, reason: "moderators_only" },
+  verify: { allowed: false, reason: "verify_not_allowed" },
+};
+
 /** A finding's page, as `GET /findings/{id}` and `POST /findings` send it, built on a summary. */
 export function findingDetail(summary: FindingSummary, overrides: Partial<FindingDetail> = {}): FindingDetail {
   return {
@@ -151,17 +163,7 @@ export function findingDetail(summary: FindingSummary, overrides: Partial<Findin
     answers_visible: true,
     my_observation: null,
     following: true,
-    // What a signed-in member who isn't the finder may do.
-    actions: {
-      answer: { allowed: true, reason: null },
-      add_evidence: { allowed: true, reason: null },
-      comment: { allowed: true, reason: null },
-      edit: { allowed: false, reason: "not_finder" },
-      withdraw: { allowed: false, reason: "not_finder" },
-      raise_level: { allowed: false, reason: "sensitivity_change_forbidden" },
-      lower_level: { allowed: false, reason: "sensitivity_change_forbidden" },
-      verify: { allowed: false, reason: "nothing_to_verify" },
-    },
+    actions: MEMBER_ACTIONS,
     ...overrides,
   };
 }

@@ -8,8 +8,9 @@ import { createdFinding } from "../../test/fixtures/findings.js";
 import { meFixture } from "../../test/fixtures/me.js";
 import { json, mapReady, renderShell, setUpShellTests, signedOutResponse } from "../../test/shellHarness.js";
 import { useAccountUi } from "../account/requireAccount.js";
-import { DRAFTS_STORAGE_KEY, listDrafts, resetDraftsForTests } from "../drafts/store.js";
+import { DRAFTS_STORAGE_KEY, listDrafts, resetDraftsForTests, updateDrafts } from "../drafts/store.js";
 import type { FindingCreate } from "../findings/types.js";
+import { findingDrafts } from "./findingDrafts.js";
 import { NUDGE_FAST_PX, NUDGE_PX } from "./MarkLayer.js";
 import { useMarkStore } from "./markStore.js";
 import { usePendingFindings } from "./pending.js";
@@ -246,6 +247,65 @@ describe("saving, signed in", () => {
     // Sending the same place again would be refused the same way, so the toast doesn't offer it.
     const toastBox = toast.closest(".fc-toast") as HTMLElement;
     expect(within(toastBox).queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  it("says beside the title when the server refuses one that says where a protected finding is", async () => {
+    const user = userEvent.setup();
+    const { map, routes } = await openMarking();
+    routes.on("POST /findings", () =>
+      json(
+        {
+          error: {
+            code: "position_in_text",
+            message: "A protected or restricted finding's title and description can't say where it is.",
+            details: [{ field: "body.title", message: "The title gives a position finer than the 1 km square." }],
+          },
+        },
+        422,
+      ),
+    );
+    act(() => map.click(400, 300));
+    await user.click(panel().getByRole("radio", { name: "Round barrow or mound" }));
+    await user.type(panel().getByLabelText("Title"), "Barrow at SU 1025 6996");
+    await user.click(panel().getByRole("button", { name: "Save finding" }));
+
+    const title = panel().getByLabelText("Title");
+    await waitFor(() => expect(title).toHaveAttribute("aria-invalid", "true"));
+    await waitFor(() => expect(title).toHaveFocus());
+    expect(
+      panel().getByText(/Take the grid reference, coordinates or three-word address out of the title\./),
+    ).toBeInTheDocument();
+    expect(panel().getByLabelText("Note (optional)")).not.toHaveAttribute("aria-invalid");
+    const toast = await screen.findByText(/Your finding couldn't be saved\./);
+    expect(within(toast.closest(".fc-toast") as HTMLElement).queryByRole("button", { name: "Try again" })).toBeNull();
+    await user.type(title, "!");
+    expect(title).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("says beside the note when a draft saved after sign-in was refused for a position in it", async () => {
+    const draft = findingDrafts.put({
+      point: [-1.8542, 51.4286],
+      feature_class: "round_barrow",
+      period: "unknown",
+      title: "Round barrow or mound in SU 10 69",
+      description: "Clearest at SU 1025 6996",
+      outline: null,
+      view_state: {},
+    });
+    updateDrafts((drafts) =>
+      drafts.map((each) => ({
+        ...each,
+        state: "failed",
+        failure: { code: "position_in_text", message: "It says where it is.", fields: ["body.description"] },
+      })),
+    );
+    routeApi(harness.fetchMock(), { "GET /auth/me": () => json(meFixture()) });
+    renderShell(`/mark/${draft.id}`);
+    await mapReady();
+    const note = await panel().findByLabelText("Note (optional)");
+    await waitFor(() => expect(note).toHaveAttribute("aria-invalid", "true"));
+    expect(panel().getByText(/out of the note\./)).toBeInTheDocument();
+    expect(panel().getByLabelText("Title")).not.toHaveAttribute("aria-invalid");
   });
 
   it("offers to try again after a failure that may pass, and sends the same finding", async () => {

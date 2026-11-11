@@ -46,11 +46,12 @@ test("a second account answers a finding through the queue, signing in on the wa
     await expect(page).toHaveURL(/#m=16\//);
     expect(await page.content()).not.toContain(title);
 
+    // Signed out, the answer and its detail are kept as a draft.
     await page.keyboard.press("1");
     await look.getByRole("radio", { name: "Enclosure" }).click();
-    await look.getByRole("button", { name: "Send “I can see it”" }).click();
+    await look.getByRole("button", { name: "Sign in to see how it compares" }).click();
 
-    // Signing in and joining, through the sheets, saves the waiting answer.
+    // Signing in and joining, through the sheets, saves the answer, then its detail with the reveal.
     const sheet = page.getByRole("dialog", { name: "Sign in" });
     await sheet.getByLabel("Development sign-in").fill(`Reviewer${tag}`);
     await sheet.getByRole("button", { name: "Sign in", exact: true }).click();

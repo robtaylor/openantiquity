@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetDraftsForTests } from "../drafts/store.js";
 import { answerDrafts, discardAnswerDrafts } from "../finding/secondLook/answerDrafts.js";
-import { CARD_STORAGE_KEY, readStoredCard, useReviewStore } from "./reviewStore.js";
+import { CARD_STORAGE_KEY, readStored, readStoredCard, useReviewStore } from "./reviewStore.js";
 import type { ReviewCard } from "./types.js";
 
 const CARD: ReviewCard = {
@@ -29,7 +29,7 @@ describe("the card kept for a provider's sign-in", () => {
 
   it("is written once the answer is a draft, and removed when the draft goes", () => {
     useReviewStore.getState().show(CARD);
-    answerDrafts.put({ public_id: CARD.public_id, answer: { visible: "unsure" } });
+    answerDrafts.put({ public_id: CARD.public_id, answer: { visible: "unsure" }, reveal: false });
     expect(JSON.parse(stored() ?? "null")).toMatchObject({ public_id: "f-ring" });
     discardAnswerDrafts(CARD.public_id);
     expect(stored()).toBeNull();
@@ -37,7 +37,7 @@ describe("the card kept for a provider's sign-in", () => {
 
   it("is removed when the person moves off the card", () => {
     useReviewStore.getState().show(CARD);
-    answerDrafts.put({ public_id: CARD.public_id, answer: { visible: "yes" } });
+    answerDrafts.put({ public_id: CARD.public_id, answer: { visible: "yes" }, reveal: false });
     useReviewStore.getState().next();
     expect(stored()).toBeNull();
   });
@@ -48,7 +48,7 @@ describe("the card kept for a provider's sign-in", () => {
     expect(stored()).toBeNull();
 
     // As after a reload: the draft is in localStorage, and the copy in sessionStorage.
-    answerDrafts.put({ public_id: CARD.public_id, answer: { visible: "yes" } });
+    answerDrafts.put({ public_id: CARD.public_id, answer: { visible: "yes" }, reveal: false });
     sessionStorage.setItem(CARD_STORAGE_KEY, JSON.stringify(CARD));
     expect(readStoredCard()).toEqual(CARD);
     expect(stored()).not.toBeNull();
@@ -57,6 +57,30 @@ describe("the card kept for a provider's sign-in", () => {
   it("removes a copy that can't be read", () => {
     sessionStorage.setItem(CARD_STORAGE_KEY, "{not json");
     expect(readStoredCard()).toBeNull();
+    expect(stored()).toBeNull();
+  });
+});
+
+describe("the card kept while its answer waits for its detail", () => {
+  it("is written once the server holds the answer, with whose it is, and removed with the reveal or the next card", () => {
+    useReviewStore.getState().show(CARD);
+    useReviewStore.getState().hold({ visible: "no", by: "person:42" });
+    expect(JSON.parse(stored() ?? "null")).toMatchObject({
+      public_id: "f-ring",
+      held: { visible: "no", by: "person:42" },
+    });
+    useReviewStore.getState().next();
+    expect(stored()).toBeNull();
+  });
+
+  it("is read back after a reload with its answer and person, with no draft needed", () => {
+    sessionStorage.setItem(CARD_STORAGE_KEY, JSON.stringify({ ...CARD, held: { visible: "yes", by: "person:42" } }));
+    expect(readStored()).toEqual({ card: CARD, held: { visible: "yes", by: "person:42" } });
+  });
+
+  it("drops a held answer it can't read, and the card with it when there is no draft", () => {
+    sessionStorage.setItem(CARD_STORAGE_KEY, JSON.stringify({ ...CARD, held: { visible: "maybe", by: "person:42" } }));
+    expect(readStored()).toBeNull();
     expect(stored()).toBeNull();
   });
 });

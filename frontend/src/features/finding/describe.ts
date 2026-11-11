@@ -5,9 +5,9 @@
  * and picks which form a step's button opens.
  */
 
-import type { EvidenceKind, Meta } from "../../api/meta.js";
+import type { EvidenceKind, Meta, NextStepRule } from "../../api/meta.js";
 import type { Sensitivity } from "../findings/types.js";
-import type { CreditKind, Evidence, FindingDetail, NextStep, NextStepCode as StepCode } from "./types.js";
+import type { ActionOut, CreditKind, Evidence, FindingDetail, NextStep } from "./types.js";
 
 export function labelOf(list: ReadonlyArray<{ id: string; label: string }>, id: string): string {
   return list.find((entry) => entry.id === id)?.label ?? id.replaceAll("_", " ");
@@ -36,51 +36,79 @@ export function distanceWords(metres: number): string {
 // Who is looking
 // --------------------------------------------------------------------------
 
-// Known duplication of the server's rules, listed in docs/ARCHITECTURE.md
-// ("A finding's page"): who may raise a level or verify, which steps a second
-// look or an evidence group meets, and who sees what at each level. They go
-// once `FindingDetail` says what this viewer may do and `/meta` says what
-// meets each step.
-
-/** Roles that may raise a finding's level as well as its finder (docs/ARCHITECTURE.md, "Location sensitivity"). */
-const RAISING_ROLES = new Set(["trusted", "expert", "moderator", "admin"]);
-/** Roles that may verify an official record. */
-const VERIFYING_ROLES = new Set(["expert", "moderator", "admin"]);
-
 export interface Viewer {
   /** Signed in and through the welcome step. */
   ready: boolean;
   signedIn: boolean;
   handle: string | null;
+  /** Only for drawing what this person adds before the server answers. What they may do is the server's to say. */
   role: string | null;
 }
 
+/**
+ * The reasons a route gives someone who would be let through once they sign
+ * in or finish the welcome step. Signed-out work is a draft, and a signed-in
+ * press asks for the missing step first, so these still offer the action.
+ */
+const AFTER_SIGN_IN = new Set(["unauthorised", "onboarding_required"]);
+
+/** Whether to offer an action the server rules on: allowed now, or once the person has signed in. */
+export function offered(action: ActionOut): boolean {
+  return action.allowed || (action.reason !== null && AFTER_SIGN_IN.has(action.reason));
+}
+
 export interface ViewerPosition {
+  /** Only for the words the page uses, such as "Your finding". */
   isFinder: boolean;
-  /** The server sent the exact place. Only then can this person answer, add evidence or vote. */
+  /** The server sent the exact place. */
   seesExact: boolean;
   /** Withdrawn findings take no more work. */
   takesWork: boolean;
-  /** Not the finder, sees it exactly, and hasn't answered: the inline second look is offered. */
+  /** The inline second look is offered: the server allows an answer, or will once they sign in. */
   mayAnswer: boolean;
   hasAnswered: boolean;
+  /** Their answer is in and counts, and waits for its detail or the reveal (Decision 0008). */
+  answerHeld: boolean;
+  mayAddEvidence: boolean;
+  mayComment: boolean;
+  mayEdit: boolean;
+  mayWithdraw: boolean;
   mayRaise: boolean;
+  /** A moderator may lower it, through the moderation route. */
+  mayLower: boolean;
   mayVerify: boolean;
 }
 
+/**
+ * What this viewer may do, from the finding's `actions`, which the server
+ * works out by running the checks each route runs. The client adds nothing
+ * to them but this: a signed-out visitor is told `unauthorised` for
+ * everything, so for them the page offers only what the finding itself
+ * allows, an exact place and a finding that isn't withdrawn.
+ */
 export function positionOf(finding: FindingDetail, viewer: Viewer): ViewerPosition {
+  const { actions } = finding;
   const isFinder = viewer.handle !== null && viewer.handle === finding.author.handle;
   const seesExact = !finding.location.obscured;
   const takesWork = finding.state !== "withdrawn";
-  const hasAnswered = finding.my_observation !== null;
+  const observation = finding.my_observation;
+  const hasAnswered = observation !== null;
+  /** Work that needs the exact place and an open finding: possible now, or once they sign in. */
+  const onTheGround = (action: ActionOut) => offered(action) && seesExact && takesWork;
   return {
     isFinder,
     seesExact,
     takesWork,
-    mayAnswer: !isFinder && seesExact && takesWork && !hasAnswered,
+    mayAnswer: !hasAnswered && onTheGround(actions.answer),
     hasAnswered,
-    mayRaise: takesWork && (isFinder || (viewer.role !== null && RAISING_ROLES.has(viewer.role))),
-    mayVerify: viewer.role !== null && VERIFYING_ROLES.has(viewer.role),
+    answerHeld: observation !== null && !observation.revealed && !observation.withdrawn,
+    mayAddEvidence: onTheGround(actions.add_evidence),
+    mayComment: offered(actions.comment),
+    mayEdit: actions.edit.allowed,
+    mayWithdraw: actions.withdraw.allowed,
+    mayRaise: actions.raise_level.allowed,
+    mayLower: actions.lower_level.allowed,
+    mayVerify: actions.verify.allowed,
   };
 }
 
@@ -143,29 +171,15 @@ export type StepAction =
   /** Ask other people: copy the page's link. */
   | { kind: "share"; label: string };
 
-/**
- * For every step code in the API, whether a second look meets it: the
- * backend's `ANSWER_CODES` in `services/findings.py`. Typed over every code
- * the schema has, so a code added there doesn't build until it is placed
- * here.
- */
-export const MET_BY_SECOND_LOOK = {
-  need_observers: true,
-  need_strand: false,
-  need_class_agreement: true,
-  need_check: true,
-  need_trusted_review: true,
-  need_ground: false,
-  need_official: false,
-} as const satisfies Record<StepCode, boolean>;
-
-/** True for a step that a second look meets, and so is offered only blind (Decision 0008). */
-export function isAnswerStep(code: string): boolean {
-  return Object.hasOwn(MET_BY_SECOND_LOOK, code) && MET_BY_SECOND_LOOK[code as StepCode];
+/** What meets a step, from `/meta`, or undefined for a code this server's rules don't name. */
+export function stepRule(meta: Meta, code: string): NextStepRule | undefined {
+  return meta.vocab.next_steps.find((rule) => rule.id === code);
 }
 
-/** Which group of evidence kinds in `/meta` meets each evidence step. */
-const STEP_GROUPS: Partial<Record<StepCode, string>> = { need_ground: "field", need_official: "official" };
+/** True for a step that a second look meets, and so is offered only blind (Decision 0008). */
+export function isAnswerStep(meta: Meta, code: string): boolean {
+  return stepRule(meta, code)?.met_by === "second_look";
+}
 
 export function addLabel(kind: EvidenceKind): string {
   return `Add ${lowerFirst(kind.label)}`;
@@ -179,9 +193,10 @@ export function addLabel(kind: EvidenceKind): string {
  * kinds. Evidence the step is waiting on can be gone to directly.
  */
 export function stepActions(step: NextStep, meta: Meta, position: ViewerPosition): StepAction[] {
-  if (!position.takesWork) return [];
+  const rule = stepRule(meta, step.code);
+  if (!position.takesWork || rule === undefined) return [];
   const actions: StepAction[] = [];
-  if (MET_BY_SECOND_LOOK[step.code]) {
+  if (rule.met_by === "second_look") {
     if (position.mayAnswer) actions.push({ kind: "answer", label: "Give a second look" });
     else if (position.isFinder) actions.push({ kind: "share", label: "Copy a link to ask others" });
     return actions;
@@ -190,10 +205,11 @@ export function stepActions(step: NextStep, meta: Meta, position: ViewerPosition
   if (pending.length > 0 && !position.isFinder) {
     actions.push({ kind: "endorse", evidenceIds: pending, label: pending.length === 1 ? "See it" : "See them" });
   }
-  const group = STEP_GROUPS[step.code];
-  const strands = new Set(step.missing_strands ?? []);
-  const kinds = meta.vocab.evidence_kinds.filter((kind) =>
-    group !== undefined ? kind.group === group : step.code === "need_strand" && strands.has(kind.strand),
+  if (!position.mayAddEvidence) return actions;
+  // A step that names the strands it is missing takes only their kinds.
+  const strands = step.missing_strands === undefined ? null : new Set(step.missing_strands);
+  const kinds = meta.vocab.evidence_kinds.filter(
+    (kind) => rule.evidence_kinds.includes(kind.id) && (strands === null || strands.has(kind.strand)),
   );
   for (const kind of kinds) actions.push({ kind: "evidence", evidenceKind: kind.id, label: addLabel(kind) });
   return actions;
@@ -248,9 +264,9 @@ export function groupEvidence(meta: Meta, evidence: readonly Evidence[]): Eviden
   return groups;
 }
 
-/** Kinds of evidence an expert or moderator verifies before they count: the official ones. */
+/** Kinds of evidence an expert or moderator verifies before they count, as `/meta`'s step rules say. */
 export function needsVerifying(meta: Meta, kindId: string): boolean {
-  return meta.vocab.evidence_kinds.find((kind) => kind.id === kindId)?.group === "official";
+  return meta.vocab.next_steps.some((rule) => rule.needs_verification && rule.evidence_kinds.includes(kindId));
 }
 
 const STANCE_WORDS: Record<string, string> = {

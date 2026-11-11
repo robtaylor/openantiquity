@@ -102,13 +102,31 @@ const LOOKING_ZOOM = 14;
  */
 export function inView(point: [number, number]): boolean {
   const map = useMainMapStore.getState().map;
+  return map !== null && map.getZoom() >= LOOKING_ZOOM && onUncoveredMap(point);
+}
+
+/** Whether the point is on the part of the map nothing covers, at any zoom. */
+function onUncoveredMap(point: [number, number]): boolean {
+  const map = useMainMapStore.getState().map;
   const stage = document.querySelector(".fc-stage")?.getBoundingClientRect();
-  if (!map || !stage || stage.width === 0 || map.getZoom() < LOOKING_ZOOM) return false;
+  if (!map || !stage || stage.width === 0) return false;
   const canvas = map.getCanvas().getBoundingClientRect();
   const at = map.project(point);
   const x = canvas.left + at.x;
   const y = canvas.top + at.y;
   return x >= stage.left && x <= stage.right && y >= stage.top && y <= stage.bottom;
+}
+
+/**
+ * Bring the point back onto the uncovered map if a panel or the sheet now
+ * covers it, keeping the zoom, bearing and tilt the person has. Left alone
+ * when it is already in sight.
+ */
+export function panIntoView(point: [number, number]): void {
+  if (onUncoveredMap(point)) return;
+  const { camera, requestCamera } = useMapStore.getState();
+  const [lng, lat] = centreFor(point, camera.zoom, camera.bearing, uncoveredOffset());
+  requestCamera({ lng, lat });
 }
 
 /** Go to the finding, keeping a closer zoom the person already has, unless it is already in view. */

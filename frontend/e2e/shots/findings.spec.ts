@@ -136,4 +136,30 @@ test("marking signed out, and failing", async ({ page }) => {
   await panel.getByRole("button", { name: "Save finding" }).click();
   await page.getByText("Your finding couldn't be saved.").waitFor();
   await shoot(page, "23-mark-refused");
+
+  // A protected finding's title that says where it is: refused, and said beside the title.
+  await page.route(apiRoute("/findings"), (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({
+          status: 422,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: {
+              code: "position_in_text",
+              message: "A protected or restricted finding's title and description can't say where it is.",
+              details: [{ field: "body.title", message: "The title gives a position." }],
+            },
+          }),
+        })
+      : route.fallback(),
+  );
+  // The same address again changes only the hash, so the page is loaded afresh to start a new mark.
+  await page.reload();
+  await page.getByRole("button", { name: "Place it here" }).click();
+  await panel.getByRole("radio", { name: "Round barrow or mound" }).click();
+  await panel.getByLabel("Title").fill("Barrow at SU 1025 6996");
+  await panel.getByRole("button", { name: "Save finding" }).click();
+  await panel.getByText(/out of the title/).waitFor();
+  await panel.getByLabel("Title").scrollIntoViewIfNeeded();
+  await shoot(page, "24-mark-position-refused");
 });

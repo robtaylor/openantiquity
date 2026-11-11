@@ -3,12 +3,18 @@ import { describe, expect, it } from "vitest";
 import {
   evidenceFixture,
   FINDER,
+  finderView,
+  heldFixture,
+  MODERATOR_ACTIONS,
   OTHER,
   observationFixture,
   pageFixture,
+  SIGNED_OUT_ACTIONS,
+  SQUARE_ACTIONS,
   seenFixture,
   squareFixture,
 } from "../../test/fixtures/findingPage.js";
+import { MEMBER_ACTIONS } from "../../test/fixtures/findings.js";
 import { metaFixture as meta } from "../../test/fixtures/meta.js";
 import {
   changeMessage,
@@ -16,7 +22,8 @@ import {
   groupEvidence,
   isAnswerStep,
   lowerFirst,
-  MET_BY_SECOND_LOOK,
+  needsVerifying,
+  offered,
   positionOf,
   squareSentence,
   stateReason,
@@ -30,31 +37,61 @@ const MEMBER: Viewer = { ready: true, signedIn: true, handle: OTHER.handle, role
 const THE_FINDER: Viewer = { ready: true, signedIn: true, handle: FINDER.handle, role: "member" };
 
 describe("positionOf", () => {
-  it("offers a second look to a member who hasn't answered and sees the place", () => {
+  it("offers a second look to a member the server lets answer", () => {
     expect(positionOf(pageFixture(), MEMBER)).toMatchObject({ isFinder: false, mayAnswer: true, mayRaise: false });
   });
 
-  it("never offers the finder a second look of their own finding, and lets them raise its level", () => {
-    expect(positionOf(pageFixture(), THE_FINDER)).toMatchObject({ isFinder: true, mayAnswer: false, mayRaise: true });
+  it("takes what the finder may do from the server: no second look, but edit, withdraw and raise", () => {
+    expect(positionOf(finderView(), THE_FINDER)).toMatchObject({
+      isFinder: true,
+      mayAnswer: false,
+      mayEdit: true,
+      mayWithdraw: true,
+      mayRaise: true,
+      mayLower: false,
+    });
   });
 
-  it("offers no second look once answered, nor on a square, nor once withdrawn", () => {
+  it("follows the server whatever the person's role, which it never reads", () => {
+    const trusted = pageFixture({ actions: { ...MEMBER_ACTIONS, raise_level: { allowed: true, reason: null } } });
+    expect(positionOf(trusted, MEMBER)).toMatchObject({ mayRaise: true, mayVerify: false });
+    expect(positionOf(pageFixture(), { ...MEMBER, role: "admin" })).toMatchObject({ mayRaise: false, mayLower: false });
+    expect(positionOf(pageFixture({ actions: MODERATOR_ACTIONS }), MEMBER)).toMatchObject({ mayLower: true });
+  });
+
+  it("offers no second look once answered, nor where the server says the place is hidden, nor once withdrawn", () => {
     expect(positionOf(pageFixture({ my_observation: observationFixture() }), MEMBER).mayAnswer).toBe(false);
-    expect(positionOf(squareFixture(), MEMBER).mayAnswer).toBe(false);
-    const withdrawn = pageFixture({ assessment: { ...pageFixture().assessment, state: "withdrawn" } });
+    expect(positionOf(squareFixture({ actions: SQUARE_ACTIONS }), MEMBER)).toMatchObject({
+      mayAnswer: false,
+      mayAddEvidence: false,
+    });
+    const withdrawn = pageFixture({
+      assessment: { ...pageFixture().assessment, state: "withdrawn" },
+      actions: { ...MEMBER_ACTIONS, answer: { allowed: false, reason: "finding_withdrawn" } },
+    });
     expect(positionOf(withdrawn, MEMBER)).toMatchObject({ mayAnswer: false, takesWork: false });
   });
 
-  it("offers a signed-out visitor a second look on a finding they see exactly", () => {
-    expect(positionOf(pageFixture(), SIGNED_OUT).mayAnswer).toBe(true);
+  it("offers a signed-out visitor what they could do once signed in, on a finding they see exactly", () => {
+    const open = positionOf(pageFixture({ actions: SIGNED_OUT_ACTIONS }), SIGNED_OUT);
+    expect(open).toMatchObject({ mayAnswer: true, mayAddEvidence: true, mayComment: true, mayEdit: false });
+    const square = positionOf(squareFixture({ actions: SIGNED_OUT_ACTIONS }), SIGNED_OUT);
+    expect(square).toMatchObject({ mayAnswer: false, mayAddEvidence: false, mayComment: true });
   });
 
-  it("lets trusted members raise a level, and experts verify", () => {
-    expect(positionOf(pageFixture(), { ...MEMBER, role: "trusted" })).toMatchObject({
-      mayRaise: true,
-      mayVerify: false,
-    });
-    expect(positionOf(pageFixture(), { ...MEMBER, role: "expert" }).mayVerify).toBe(true);
+  it("knows an answer that waits for its detail", () => {
+    expect(positionOf(heldFixture(), MEMBER)).toMatchObject({ hasAnswered: true, answerHeld: true, mayAnswer: false });
+    expect(positionOf(pageFixture({ my_observation: observationFixture() }), MEMBER).answerHeld).toBe(false);
+  });
+});
+
+describe("offered", () => {
+  it("offers what is allowed, and what signing in or the welcome step would allow, and nothing else", () => {
+    expect(offered({ allowed: true, reason: null })).toBe(true);
+    expect(offered({ allowed: false, reason: "unauthorised" })).toBe(true);
+    expect(offered({ allowed: false, reason: "onboarding_required" })).toBe(true);
+    expect(offered({ allowed: false, reason: "location_hidden" })).toBe(false);
+    expect(offered({ allowed: false, reason: null })).toBe(false);
   });
 });
 
@@ -119,10 +156,10 @@ describe("stepActions", () => {
     expect(stepActions(answerStep, meta, positionOf(pageFixture(), MEMBER))).toEqual([
       { kind: "answer", label: "Give a second look" },
     ]);
-    expect(stepActions(answerStep, meta, positionOf(pageFixture(), THE_FINDER))).toEqual([
+    expect(stepActions(answerStep, meta, positionOf(finderView(), THE_FINDER))).toEqual([
       { kind: "share", label: "Copy a link to ask others" },
     ]);
-    expect(stepActions(answerStep, meta, positionOf(squareFixture(), MEMBER))).toEqual([]);
+    expect(stepActions(answerStep, meta, positionOf(squareFixture({ actions: SQUARE_ACTIONS }), MEMBER))).toEqual([]);
   });
 
   it("offers a form for each kind in the missing strands, and only those", () => {
@@ -159,6 +196,23 @@ describe("stepActions", () => {
       positionOf(seenFixture(), MEMBER),
     );
     expect(actions[0]).toEqual({ kind: "endorse", evidenceIds: [7], label: "See it" });
+  });
+
+  it("takes the kinds that meet a step from /meta, and offers nothing for a step it doesn't name", () => {
+    const rules = meta.vocab.next_steps.map((rule) =>
+      rule.id === "need_official" ? { ...rule, evidence_kinds: ["designation"] } : rule,
+    );
+    const changed = { ...meta, vocab: { ...meta.vocab, next_steps: rules } };
+    const position = positionOf(seenFixture(), MEMBER);
+    expect(stepActions({ code: "need_official", prompt: "" }, changed, position)).toEqual([
+      { kind: "evidence", evidenceKind: "designation", label: "Add designation" },
+    ]);
+    expect(stepActions({ code: "need_photo" as "need_ground", prompt: "Add a photo." }, meta, position)).toEqual([]);
+  });
+
+  it("offers the forms only to someone who may add evidence", () => {
+    const square = squareFixture({ actions: SQUARE_ACTIONS });
+    expect(stepActions(strandStep, meta, positionOf(square, MEMBER))).toEqual([]);
   });
 
   it("offers nothing on a withdrawn finding", () => {
@@ -211,18 +265,21 @@ describe("groupEvidence", () => {
 });
 
 describe("isAnswerStep", () => {
-  it("matches the steps the backend's ANSWER_CODES says a second look meets", () => {
-    // services/findings.py, ANSWER_CODES. Change both together.
-    const met = Object.entries(MET_BY_SECOND_LOOK)
-      .filter(([, value]) => value)
-      .map(([code]) => code);
+  it("takes the steps a second look meets from /meta", () => {
+    const met = meta.vocab.next_steps.map((rule) => rule.id).filter((code) => isAnswerStep(meta, code));
     expect(met.sort()).toEqual(["need_check", "need_class_agreement", "need_observers", "need_trusted_review"]);
   });
 
-  it("is false for a code this build doesn't know, and for names on the object's prototype", () => {
-    expect(isAnswerStep("need_observers")).toBe(true);
-    expect(isAnswerStep("need_ground")).toBe(false);
-    expect(isAnswerStep("need_something_new")).toBe(false);
-    expect(isAnswerStep("toString")).toBe(false);
+  it("is false for a code /meta doesn't name", () => {
+    expect(isAnswerStep(meta, "need_ground")).toBe(false);
+    expect(isAnswerStep(meta, "need_something_new")).toBe(false);
+    expect(isAnswerStep(meta, "toString")).toBe(false);
+  });
+});
+
+describe("needsVerifying", () => {
+  it("is true for the kinds /meta's rules say are verified before they count", () => {
+    expect(needsVerifying(meta, "her_record")).toBe(true);
+    expect(needsVerifying(meta, "historic_map")).toBe(false);
   });
 });

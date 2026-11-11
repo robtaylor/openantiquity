@@ -1,10 +1,11 @@
 /**
  * How a one-kilometre square is written for people. The API sends it run
  * together, "SU1069", which is hard to read beside a grid reference such as
- * "SU 1025 6996", so it is shown spaced the same way: "SU 10 69".
+ * "SU 1025 6996", so it is shown spaced the same way: "SU 10 69", and an
+ * Irish square, which has one letter, as "V 26 24".
  */
 
-const SQUARE = /^([A-Z]{2})\s*(\d{2})\s*(\d{2})$/;
+const SQUARE = /^([A-Z]{1,2})\s*(\d{2})\s*(\d{2})$/;
 
 /** "SU1069" as "SU 10 69". Anything that isn't a square's reference comes back as it was. */
 export function squareWords(ref: string): string {

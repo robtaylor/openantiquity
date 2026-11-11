@@ -16,6 +16,7 @@ import { Button } from "../../ui/Button.js";
 import { ChipGroup } from "../../ui/Chip.js";
 import { Field } from "../../ui/Field.js";
 import { FeatureIcon } from "../../ui/featureIcons.js";
+import { scrollBehaviour } from "../../ui/motion.js";
 import { sheetHeights } from "../../ui/Sheet.js";
 import { toast } from "../../ui/toastStore.js";
 import { LAYOUT } from "../../ui/tokens.js";
@@ -23,6 +24,7 @@ import { useSession } from "../account/session.js";
 import { DraftBadge } from "../drafts/DraftBadge.js";
 import type { KindDraft } from "../drafts/savers.js";
 import { discardDraft, restoreDraft, retryDraft } from "../drafts/store.js";
+import { namedFields, POSITION_IN_TEXT, positionWords } from "../finding/positionInText.js";
 import { BARE_MAP_PATH } from "../shell/navigation.js";
 import { type PanelEnvironment, usePanelEnvironment } from "../shell/panelContext.js";
 import { exactGridRefOf, suggestTitle } from "./describe.js";
@@ -297,6 +299,21 @@ export function MarkForm({ meta, draft }: { meta: Meta; draft: KindDraft<Finding
   const note = useMarkStore((state) => state.note);
   const saving = useMarkStore((state) => state.saving);
   const pointProblem = useMarkStore((state) => (state.problem?.field === "point" ? state.problem.message : null));
+  const placed = useMarkStore((state) => state.placed);
+  const failure = draft?.state === "failed" ? draft.failure : undefined;
+  // A draft refused after sign-in for a position in its title or note says so beside the field, as a save here would.
+  useEffect(() => {
+    if (failure?.code === POSITION_IN_TEXT) useMarkStore.getState().setPlaced([...namedFields(failure.fields ?? [])]);
+  }, [failure]);
+  // The first field refused for a position takes focus and comes into view, so the reason beside it is seen.
+  const form = useRef<HTMLFormElement>(null);
+  const refused = placed.length > 0;
+  useEffect(() => {
+    if (!refused) return;
+    const field = form.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+    field?.focus({ preventScroll: true });
+    field?.closest(".fc-field")?.scrollIntoView?.({ block: "start", behavior: scrollBehaviour() });
+  }, [refused]);
   const store = useMarkStore.getState();
   const nation = usePointDetail(point ? { lng: point[0], lat: point[1] } : null).detail?.nation ?? null;
   const busy = saving || draft?.state === "saving";
@@ -333,6 +350,7 @@ export function MarkForm({ meta, draft }: { meta: Meta; draft: KindDraft<Finding
 
   return (
     <form
+      ref={form}
       className="fc-mark"
       onSubmit={(event) => {
         event.preventDefault();
@@ -373,7 +391,11 @@ export function MarkForm({ meta, draft }: { meta: Meta; draft: KindDraft<Finding
         )}
       </Field>
 
-      <Field label="Title" hint={`Leave it blank and it's called “${suggestion}”.`}>
+      <Field
+        label="Title"
+        hint={`Leave it blank and it's called “${suggestion}”.`}
+        error={placed.includes("title") ? positionWords("title") : undefined}
+      >
         {(control) => (
           <input
             {...control}
@@ -386,7 +408,11 @@ export function MarkForm({ meta, draft }: { meta: Meta; draft: KindDraft<Finding
         )}
       </Field>
 
-      <Field label="Note (optional)" hint="What you can see, and on which layer it shows best.">
+      <Field
+        label="Note (optional)"
+        hint="What you can see, and on which layer it shows best."
+        error={placed.includes("description") ? positionWords("description") : undefined}
+      >
         {(control) => (
           <textarea
             {...control}

@@ -7,6 +7,7 @@ import { useHideFindingsWhile } from "../../map/hiddenFindings.js";
 import { isMapLive } from "../../map/MapPane.js";
 import { useMainMap } from "../../map/mainMap.js";
 import { screenPoint, useMapFrame } from "../../map/useMapFrame.js";
+import { accountIdentity, useSession } from "../account/session.js";
 import { seeViewAt, whenStageSettled } from "../finding/mapView.js";
 import { useSavedAnswers } from "../finding/secondLook/answerDrafts.js";
 import { useApplyFinding } from "../finding/useFinding.js";
@@ -40,18 +41,27 @@ function useMoveToCard(meta: Meta, card: ReviewCard | null, reviewing: boolean):
 /**
  * An answer kept as a draft while signed out is saved by the drafts
  * machinery once the person has signed in. What its reply revealed is
- * shown on the card it answered, if that card is still up.
+ * shown on the card it answered, if that card is still up, or, when the
+ * person hadn't yet asked to see how it compares, the detail is offered.
  */
-function useRevealFromDraft(card: ReviewCard | null): void {
+function useSavedFromDraft(card: ReviewCard | null): void {
   const apply = useApplyFinding();
+  const { me } = useSession();
+  const identity = me ? accountIdentity(me) : null;
   const publicId = card?.public_id ?? null;
-  const saved = useSavedAnswers((state) => (publicId === null ? undefined : state.revealed[publicId]));
+  const saved = useSavedAnswers((state) => (publicId === null ? undefined : state.saved[publicId]));
   useEffect(() => {
     if (!saved || publicId === null) return;
+    // A held answer is kept for its person, who is known by the time a draft can be saved.
+    if (saved.kind === "held" && identity === null) return;
     useSavedAnswers.getState().forget(publicId);
+    if (saved.kind === "held") {
+      if (identity !== null) useReviewStore.getState().hold({ visible: saved.observation.visible, by: identity });
+      return;
+    }
     apply(saved.reveal.finding);
     useReviewStore.getState().revealed(saved.reveal);
-  }, [saved, publicId, apply]);
+  }, [saved, publicId, identity, apply]);
 }
 
 /**
@@ -93,7 +103,7 @@ export function ReviewLayer({ meta }: { meta: Meta }) {
   useHoldOverlayWhile(findOverlay(meta, "records")?.id ?? null, reviewing && !answered);
   useForgetClaimsWhile(reviewing);
   useMoveToCard(meta, card, reviewing);
-  useRevealFromDraft(card);
+  useSavedFromDraft(card);
   useMapFrame(card ? map : null);
 
   if (!card || !map || !isMapLive(map)) return null;

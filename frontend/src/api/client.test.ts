@@ -140,7 +140,28 @@ describe("error details and signed-out answers", () => {
   it("gives an empty details object when the envelope has none", async () => {
     stubFetch(json({ error: { code: "not_found", message: "Gone." } }, 404));
     const error = await apiFetch("/findings/x").catch((e: unknown) => e);
-    expect(error).toMatchObject({ details: {} });
+    expect(error).toMatchObject({ details: {}, fields: [] });
+  });
+
+  it("keeps the fields a refusal names when its details are a list of them", async () => {
+    stubFetch(
+      json(
+        {
+          error: {
+            code: "position_in_text",
+            message: "Take the position out.",
+            details: [{ field: "body.title", message: "The title gives a position." }, { odd: true }],
+          },
+        },
+        422,
+      ),
+    );
+    const error = await apiFetch("/findings/x", { method: "PATCH", body: {} }).catch((e: unknown) => e);
+    expect(error).toMatchObject({
+      code: "position_in_text",
+      details: {},
+      fields: [{ field: "body.title", message: "The title gives a position." }],
+    });
   });
 
   it("tells every listener about a 401, whichever path it came from, until they stop listening", async () => {

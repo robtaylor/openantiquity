@@ -73,10 +73,10 @@ describe("kindTasks and kindCount", () => {
   });
 
   it("counts second looks by the busiest of their groups, and a strand by what it has loaded", () => {
-    expect(kindCount(looks, GROUPS)).toEqual({ count: 4, more: false });
-    expect(kindCount(maps, GROUPS)).toEqual({ count: 1, more: false });
+    expect(kindCount(meta, looks, GROUPS)).toEqual({ count: 4, more: false });
+    expect(kindCount(meta, maps, GROUPS)).toEqual({ count: 1, more: false });
     const paged = [group("need_strand", [task("c", "need_strand", ["historic_map"])], 80, "next")];
-    expect(kindCount(maps, paged)).toEqual({ count: 1, more: true });
+    expect(kindCount(meta, maps, paged)).toEqual({ count: 1, more: true });
   });
 
   it("says the count in words", () => {

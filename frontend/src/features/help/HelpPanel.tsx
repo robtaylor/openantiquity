@@ -87,7 +87,7 @@ export function HelpPanel({ meta }: { meta: Meta }) {
   let body: ReactNode;
   if (query.data) {
     const groups = query.data.groups;
-    const kinds = helpKinds(meta, groups).map((kind) => ({ kind, count: kindCount(kind, groups) }));
+    const kinds = helpKinds(meta, groups).map((kind) => ({ kind, count: kindCount(meta, kind, groups) }));
     const waiting = kinds.filter(({ count }) => count.count > 0 || count.more);
     const quiet = kinds.filter(({ count }) => count.count === 0 && !count.more);
     body =

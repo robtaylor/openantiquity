@@ -31,6 +31,12 @@ export type ObservationPage = Schemas["Page_ObservationOut_"];
 export type Visible = Schemas["Visible"];
 export type ExplanationId = Schemas["Explanation"];
 export type Reveal = Schemas["Reveal"];
+/** An answer given with `detail_follows`: stored and counted, with nothing revealed yet. */
+export type AnswerHeld = Schemas["AnswerHeld"];
+/** The detail that follows an answer given in two steps. */
+export type ObservationDetailIn = Schemas["ObservationDetailIn"];
+/** Whether this viewer may do something, and if not, the code the route would refuse with. */
+export type ActionOut = Schemas["ActionOut"];
 export type Comparison = Schemas["ComparisonOut"];
 export type Tallies = Schemas["Tallies"];
 export type Comment = Schemas["CommentOut"];

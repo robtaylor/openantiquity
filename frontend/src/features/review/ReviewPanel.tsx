@@ -1,18 +1,19 @@
-import { Coffee, HandHelping, LogIn, RotateCcw, ScanSearch, Send, SkipForward, Unplug } from "lucide-react";
-import { type ReactNode, useEffect, useRef } from "react";
+import { Coffee, HandHelping, RotateCcw, ScanSearch, SkipForward, Unplug } from "lucide-react";
+import { type ReactNode, type RefObject, useEffect, useRef } from "react";
 import { Link } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { Button } from "../../ui/Button.js";
 import { EmptyState } from "../../ui/EmptyState.js";
 import { Skeleton } from "../../ui/Skeleton.js";
 import { useSession } from "../account/session.js";
-import { DraftBadge } from "../drafts/DraftBadge.js";
 import { type KindDraft, useKindDrafts } from "../drafts/savers.js";
-import { reasonOf, useSignedInFirst } from "../finding/feedback.js";
+import { discardDraft } from "../drafts/store.js";
+import { reasonOf } from "../finding/feedback.js";
 import { AnswerButtons } from "../finding/secondLook/AnswerButtons.js";
-import { AnswerDetail } from "../finding/secondLook/AnswerDetail.js";
-import { ANSWER_WORDS, answerFromBody, newAnswer } from "../finding/secondLook/answer.js";
+import { answerFromBody, newAnswer } from "../finding/secondLook/answer.js";
 import { type AnswerDraftData, answerDrafts } from "../finding/secondLook/answerDrafts.js";
+import { DetailStep, FailedDraftNotice } from "../finding/secondLook/DetailStep.js";
+import { useAnswerInSight } from "../finding/secondLook/useAnswerInSight.js";
 import type { Visible } from "../finding/types.js";
 import { useDocumentTitle } from "../placeholders.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
@@ -22,25 +23,44 @@ import { REVIEW_PATH } from "./ReviewLayer.js";
 import { useReviewStore } from "./reviewStore.js";
 import type { ReviewCard } from "./types.js";
 import { useAnswerKeys } from "./useAnswerKeys.js";
-import { useReviewQueue, useSendAnswer } from "./useReviewQueue.js";
+import { useCardAnswers, useReviewQueue } from "./useReviewQueue.js";
 import "../finding/finding.css";
 import "./review.css";
 
 /** The title of the panel and the page, the same whatever the card: it never names a finding. */
 export const REVIEW_TITLE = "Second look";
 
-/** The three answers, then the optional detail and the button that sends it all. */
-function Ask({ meta, card, draft }: { meta: Meta; card: ReviewCard; draft: KindDraft<AnswerDraftData> | null }) {
-  const answer = useReviewStore((state) => state.answer);
-  const sending = useReviewStore((state) => state.sending);
-  const { setAnswer, skip } = useReviewStore.getState();
-  const { ready } = useSession();
+/** Bring the phone sheet down to half-way before the next card, so the map moves to it in sight. */
+function useSheetDownThen(): (then: () => void) => () => void {
+  const { isPhone, stop, setStop } = usePanelEnvironment();
+  return (then) => () => {
+    if (isPhone && stop === "full") setStop("half");
+    then();
+  };
+}
+
+/**
+ * The three answers, each sent with one press, and skipping. `byKey` notes
+ * whether the answer was given by its key, for where focus goes next.
+ */
+function Ask({
+  meta,
+  card,
+  byKey,
+  failed,
+}: {
+  meta: Meta;
+  card: ReviewCard;
+  byKey: RefObject<boolean | null>;
+  /** An answer to this card kept as a draft that failed to save, and why. */
+  failed: KindDraft<AnswerDraftData> | null;
+}) {
+  const sending = useReviewStore((state) => state.sending !== null);
+  const { skip } = useReviewStore.getState();
   const { isPhone, shouldTakeFocus } = usePanelEnvironment();
-  const send = useSendAnswer(meta);
+  const { answer } = useCardAnswers(meta);
+  const sheetDownThen = useSheetDownThen();
   const question = useRef<HTMLParagraphElement>(null);
-  const sendBar = useRef<HTMLDivElement>(null);
-  /** An answer given by its key: focus goes to the send button, so Enter sends it. */
-  const byKey = useRef(false);
 
   // Each card starts at its question, so the keyboard and a screen reader start there too, not from the top of
   // the page: unless focus is somewhere else on purpose, or the page has only just loaded (see `PanelFrame`).
@@ -52,21 +72,12 @@ function Ask({ meta, card, draft }: { meta: Meta; card: ReviewCard; draft: KindD
     if (inPanel || (lost && shouldTakeFocus())) question.current?.focus({ preventScroll: true });
   }, [card.public_id]);
 
-  useEffect(() => {
-    if (!answer || !byKey.current) return;
-    byKey.current = false;
-    sendBar.current?.querySelector("button")?.focus({ preventScroll: true });
-  }, [answer]);
-
-  function choose(visible: Visible): void {
-    if (sending) return;
-    const now = useReviewStore.getState().answer;
-    setAnswer(now ? { ...now, visible } : newAnswer(visible));
+  function choose(visible: Visible, viaKey: boolean): void {
+    if (useReviewStore.getState().sending !== null) return;
+    byKey.current = viaKey;
+    void answer(card, visible);
   }
-  useAnswerKeys(!sending, (visible) => {
-    byKey.current = true;
-    choose(visible);
-  });
+  useAnswerKeys(!sending, (visible) => choose(visible, true));
 
   return (
     <div className="fc-review__ask">
@@ -77,100 +88,109 @@ function Ask({ meta, card, draft }: { meta: Meta; card: ReviewCard; draft: KindD
       <p className="fc-review__place">
         At <span className="fc-mono">{card.place.grid_ref ?? "this place"}</span>
       </p>
-      <AnswerButtons value={answer?.visible ?? null} onChoose={choose} disabled={sending} keyHints={!isPhone} />
+      {failed ? <FailedDraftNotice message={failed.failure?.message} /> : null}
+      <AnswerButtons
+        value={null}
+        onChoose={(visible) => choose(visible, false)}
+        disabled={sending}
+        keyHints={!isPhone}
+      />
       <p className="fc-finding__hint">
-        {isPhone ? "" : "Press 1, 2 or 3 to answer, then Enter to send. "}
-        You'll see what the finder thought, and what others said, once you've sent your answer.
+        {isPhone ? "" : "Press 1, 2 or 3 to answer. "}
+        Your answer counts as soon as you give it. Then you can say more, and see what the finder thought and what
+        others said.
       </p>
-      {answer ? (
-        <>
-          <AnswerDetail meta={meta} answer={answer} onChange={setAnswer} />
-          <div className="fc-second-look__send" ref={sendBar}>
-            <Button
-              variant="primary"
-              block
-              icon={<Send size={16} aria-hidden />}
-              disabled={sending}
-              onClick={() => void send(card, answer)}
-            >
-              {sending ? "Sending…" : `Send “${ANSWER_WORDS[answer.visible].button}”`}
-            </Button>
-            <p className="fc-finding__hint">
-              {ready
-                ? "Once it's sent, your answer is final."
-                : "You're not signed in, so it's kept in this browser until you are. You can change it until then."}
-            </p>
-            {draft ? (
-              <Button size="sm" variant="ghost" disabled={sending} onClick={() => setAnswer(null)}>
-                Keep the answer I gave
-              </Button>
-            ) : null}
-          </div>
-        </>
-      ) : null}
-      {draft ? null : (
-        <div className="fc-review__skip">
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={<SkipForward size={15} aria-hidden />}
-            disabled={sending}
-            onClick={skip}
-          >
-            Skip this one
-          </Button>
-          <span className="fc-finding__hint">Skipping says nothing about the finding.</span>
-        </div>
-      )}
+      <div className="fc-review__skip">
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={<SkipForward size={15} aria-hidden />}
+          disabled={sending}
+          onClick={sheetDownThen(skip)}
+        >
+          Skip this one
+        </Button>
+        <span className="fc-finding__hint">Skipping says nothing about the finding.</span>
+      </div>
     </div>
   );
 }
 
-/** An answer kept in this browser: not saved, so it can still change, and nothing is revealed yet. */
-function DraftKept({ meta, draft }: { meta: Meta; draft: KindDraft<AnswerDraftData> }) {
-  const signedIn = useSignedInFirst();
+/**
+ * The answer is in, or kept as a draft: the optional detail, then the
+ * comparison. Straight after an answer, focus goes to the line saying it is
+ * in, so the detail is read next, or after an answer given by its key to the
+ * button, so a number and Enter answer a card.
+ */
+function Detail({
+  meta,
+  card,
+  visible,
+  draft,
+  focus,
+}: {
+  meta: Meta;
+  card: ReviewCard;
+  visible: Visible;
+  draft: KindDraft<AnswerDraftData> | null;
+  focus: "given" | "reveal" | null;
+}) {
+  const sending = useReviewStore((state) => state.sending !== null);
+  const held = useReviewStore((state) => state.held !== null);
+  const revealing = useReviewStore((state) => state.revealing);
+  const answer = useReviewStore((state) => state.answer);
   const { ready } = useSession();
-  const { setAnswer, next } = useReviewStore.getState();
-  const saving = draft.state === "saving" || (ready && draft.state === "waiting");
-  let status: string;
-  if (saving) status = "Saving your answer…";
-  else if (draft.state === "failed")
-    status = `It couldn't be saved. ${draft.failure?.message ?? "Something went wrong."} The drafts bar can try again.`;
-  else
-    status =
-      "It's kept in this browser until you sign in. Until then you can change it. Once it's saved it's final, and you'll see what the finder and others said.";
+  const { showComparison } = useCardAnswers(meta);
+  const detail = answer ?? (draft ? answerFromBody(meta, draft.data.answer) : newAnswer(visible));
+  const savingDraft = draft !== null && !held && ready;
+
   return (
-    <div className="fc-given fc-review__draft">
-      <p>
-        <strong>{ANSWER_WORDS[draft.data.answer.visible].given}.</strong> <DraftBadge />
+    <div className="fc-review__ask">
+      <p className="fc-review__place">
+        At <span className="fc-mono">{card.place.grid_ref ?? "this place"}</span>
       </p>
-      <p className="fc-finding__hint" role="status">
-        {status}
-      </p>
-      <div className="fc-given__actions">
-        {ready ? null : (
-          <Button size="sm" variant="primary" icon={<LogIn size={15} aria-hidden />} onClick={() => void signedIn()}>
-            Sign in to save it
-          </Button>
-        )}
-        <Button size="sm" disabled={saving} onClick={() => setAnswer(answerFromBody(meta, draft.data.answer))}>
-          Change my answer
-        </Button>
-        <Button size="sm" variant="ghost" onClick={next}>
-          Next finding
-        </Button>
-      </div>
+      <DetailStep
+        meta={meta}
+        visible={visible}
+        status={sending || savingDraft ? "sending" : held ? "held" : "draft"}
+        detail={detail}
+        onDetail={useReviewStore.getState().setAnswer}
+        revealing={revealing}
+        onReveal={() => void showComparison(card, visible, detail)}
+        focusOnMount={focus}
+        onChangeAnswer={
+          draft && !held && !ready
+            ? () => {
+                discardDraft(draft.id);
+                useReviewStore.getState().setAnswer(null);
+              }
+            : undefined
+        }
+      />
     </div>
   );
 }
 
 function CardView({ meta, card }: { meta: Meta; card: ReviewCard }) {
   const reveal = useReviewStore((state) => state.reveal);
-  const editing = useReviewStore((state) => state.answer !== null);
+  const sending = useReviewStore((state) => state.sending);
+  const held = useReviewStore((state) => state.held?.visible ?? null);
+  const { ready } = useSession();
+  const sheetDownThen = useSheetDownThen();
   const draft = useKindDrafts(answerDrafts).find((entry) => entry.data.public_id === card.public_id) ?? null;
-  if (reveal) return <RevealCard meta={meta} reveal={reveal} onNext={useReviewStore.getState().next} />;
-  if (draft && !editing) return <DraftKept meta={meta} draft={draft} />;
-  return <Ask meta={meta} card={card} draft={draft} />;
+  /** Set as an answer is given here: null until then, so a card coming back to its detail takes no focus. */
+  const byKey = useRef<boolean | null>(null);
+  // A draft is shown until it is saved: signed out, or ready and on its way. One that failed is answered afresh.
+  const drafted = draft && (!ready || draft.state !== "failed") ? draft.data.answer.visible : null;
+  const answering = reveal ? null : (sending ?? held ?? drafted);
+  // While the person answers, the place stays in sight above the sheet.
+  useAnswerInSight([card.place.lon, card.place.lat], answering === null ? null : `${card.public_id}:detail`);
+  if (reveal) return <RevealCard meta={meta} reveal={reveal} onNext={sheetDownThen(useReviewStore.getState().next)} />;
+  if (answering !== null) {
+    const focus = byKey.current === null ? null : byKey.current ? "reveal" : "given";
+    return <Detail meta={meta} card={card} visible={answering} draft={drafted ? draft : null} focus={focus} />;
+  }
+  return <Ask meta={meta} card={card} byKey={byKey} failed={draft?.state === "failed" ? draft : null} />;
 }
 
 function EmptyQueue({ skipped }: { skipped: number }) {

@@ -78,10 +78,12 @@ export function apiRoute(path: string): RegExp {
 }
 
 /**
- * Requests for one finding's page or its parts, such as `/api/v1/findings/abc`
- * or `/api/v1/findings/abc/comments`. The id and the part are the first two groups.
+ * Requests for one finding's page or its parts, such as `/api/v1/findings/abc`,
+ * `/api/v1/findings/abc/comments` or `/api/v1/findings/abc/observation/reveal`.
+ * The id and the part are the first two groups.
  */
-export const FINDING_PAGE_ROUTE = /^https?:\/\/localhost(?::\d+)?\/api\/v1\/findings\/([^/?#]+)(\/[a-z-]+)?(?:\?|$)/;
+export const FINDING_PAGE_ROUTE =
+  /^https?:\/\/localhost(?::\d+)?\/api\/v1\/findings\/([^/?#]+)(\/[a-z-]+(?:\/[a-z-]+)?)?(?:\?|$)/;
 
 /** Requests under a backend tile path, such as `tilesRoute("/records/")`. */
 export function tilesRoute(prefix = "/"): RegExp {

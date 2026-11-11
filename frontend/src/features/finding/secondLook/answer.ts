@@ -1,17 +1,27 @@
 /**
- * A second look as the person gives it, and the body `PUT
- * /findings/{id}/observation` is sent. Shared by the inline second look on a
- * finding's page and the blind queue.
+ * A second look as the person gives it. Shared by the inline second look on
+ * a finding's page and the blind queue.
  *
- * An answer is final once sent (Decision 0008): only its note can change
- * afterwards. So the optional detail, what they think it is and whether
- * there is an ordinary explanation, is offered once the answer is chosen and
- * goes with it.
+ * It goes in two steps (Decision 0008, docs/UI.md "Behaviour"). The answer
+ * is one press and is sent at once, alone, saying its detail follows: it
+ * counts, and nothing is revealed. The optional detail, what they think it
+ * is and whether an ordinary explanation could account for it, is offered
+ * after it, and is sent once with the request for the reveal, or left out.
+ * Until then the person hasn't seen anyone else's answers, so what they say
+ * it is counts as unprompted. After the reveal only the note can change.
  */
 
 import type { Meta } from "../../../api/meta.js";
 import type { FeatureClassId } from "../../findings/types.js";
-import type { ExplanationId, Observation, ObservationIn, Visible } from "../types.js";
+import type {
+  AnswerHeld,
+  ExplanationId,
+  Observation,
+  ObservationDetailIn,
+  ObservationIn,
+  Reveal,
+  Visible,
+} from "../types.js";
 
 /** For each ordinary explanation: "no" rules it out, "yes" gives it as the explanation. */
 export type CheckAnswer = "no" | "yes" | null;
@@ -72,6 +82,27 @@ export function answerBody(meta: Meta, answer: AnswerDraft): ObservationIn {
   return body;
 }
 
+/** The detail alone, as `POST .../observation/reveal` takes it: only what was said. Empty skips it. */
+export function detailBody(meta: Meta, answer: AnswerDraft): ObservationDetailIn {
+  return detailOf(answerBody(meta, answer));
+}
+
+/** The detail in a whole answer's body: everything but the answer itself. */
+export function detailOf(body: ObservationIn): ObservationDetailIn {
+  const { visible: _visible, detail_follows: _follows, ...detail } = body;
+  return detail;
+}
+
+/** True when the person has said anything beyond the answer. */
+export function hasDetail(detail: ObservationDetailIn): boolean {
+  return Object.values(detail).some((value) => value !== null && value !== undefined);
+}
+
+/** True for the reply that reveals, as opposed to one that holds an answer back for its detail. */
+export function isReveal(reply: Reveal | AnswerHeld): reply is Reveal {
+  return reply.revealed;
+}
+
 /** An answer kept as its request body, read back as the person gave it: `answerBody` the other way. */
 export function answerFromBody(meta: Meta, body: ObservationIn): AnswerDraft {
   const checks: Record<string, CheckAnswer> = {};
@@ -83,8 +114,13 @@ export function answerFromBody(meta: Meta, body: ObservationIn): AnswerDraft {
   return { visible: body.visible, featureClass: body.feature_class ?? null, checks, note: body.note ?? "" };
 }
 
-/** The body that keeps an answer as given and changes only its note, or restores a withdrawn one. */
+/**
+ * The body that keeps an answer as given and changes only its note, or
+ * restores a withdrawn one. One that was never revealed is restored still
+ * waiting for its detail, so the detail is offered again.
+ */
 export function sameAnswer(observation: Observation, note: string | null = observation.note): ObservationIn {
+  if (!observation.revealed) return { visible: observation.visible, detail_follows: true };
   const body: ObservationIn = { visible: observation.visible };
   if (observation.feature_class !== null) body.feature_class = observation.feature_class;
   if (observation.period !== null) body.period = observation.period;

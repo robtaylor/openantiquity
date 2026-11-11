@@ -1,4 +1,4 @@
-import { Download, Link2, Pencil, ShieldPlus, Undo2 } from "lucide-react";
+import { Download, Link2, Pencil, ShieldMinus, ShieldPlus, Undo2 } from "lucide-react";
 import { useState } from "react";
 import type { Meta } from "../../api/meta.js";
 import { Button } from "../../ui/Button.js";
@@ -8,9 +8,10 @@ import { Field } from "../../ui/Field.js";
 import { toast } from "../../ui/toastStore.js";
 import { findingPath } from "../findings/selection.js";
 import { SENSITIVITIES, type Sensitivity } from "../findings/types.js";
-import { changeSensitivity, exportUrl, updateFinding, withdrawFinding } from "./api.js";
+import { changeSensitivity, exportUrl, lowerSensitivity, updateFinding, withdrawFinding } from "./api.js";
 import { type ViewerPosition, whoSees } from "./describe.js";
 import { reasonOf, toastFailure } from "./feedback.js";
+import { type PositionField, positionFields, positionWords } from "./positionInText.js";
 import type { FindingDetail, FindingUpdate } from "./types.js";
 
 /** The page's own address, to share. */
@@ -49,6 +50,8 @@ function EditDialog({
   const [featureClass, setFeatureClass] = useState<string>(finding.feature_class);
   const [period, setPeriod] = useState<string>(finding.period);
   const [problem, setProblem] = useState<string | null>(null);
+  /** The fields the server refused for saying where it is more closely than its square. */
+  const [placed, setPlaced] = useState<ReadonlySet<PositionField>>(new Set());
   const [saving, setSaving] = useState(false);
 
   async function save(): Promise<void> {
@@ -71,7 +74,10 @@ function EditDialog({
       toast("Your changes are saved.", { kind: "success" });
       onClose();
     } catch (error) {
-      setProblem(reasonOf(error));
+      const fields = positionFields(error);
+      setPlaced(fields);
+      // Said beside the field it is about. Anything else is said under the form.
+      setProblem(fields.size > 0 ? null : reasonOf(error));
     } finally {
       setSaving(false);
     }
@@ -92,14 +98,17 @@ function EditDialog({
       }
     >
       <div className="fc-dialog-form">
-        <Field label="Title">
+        <Field label="Title" error={placed.has("title") ? positionWords("title") : undefined}>
           {(control) => (
             <input
               {...control}
               className="fc-input"
               value={title}
               maxLength={120}
-              onChange={(event) => setTitle(event.target.value)}
+              onChange={(event) => {
+                setTitle(event.target.value);
+                setPlaced((fields) => without(fields, "title"));
+              }}
             />
           )}
         </Field>
@@ -135,7 +144,7 @@ function EditDialog({
             </select>
           )}
         </Field>
-        <Field label="Note (optional)">
+        <Field label="Note (optional)" error={placed.has("description") ? positionWords("description") : undefined}>
           {(control) => (
             <textarea
               {...control}
@@ -143,7 +152,10 @@ function EditDialog({
               rows={3}
               maxLength={5000}
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(event) => {
+                setDescription(event.target.value);
+                setPlaced((fields) => without(fields, "description"));
+              }}
             />
           )}
         </Field>
@@ -217,6 +229,97 @@ function RaiseDialog({
   );
 }
 
+/**
+ * A moderator lowers a finding's level through the moderation route, with a
+ * reason for the moderation log (docs/ARCHITECTURE.md, "Location sensitivity").
+ */
+function LowerDialog({
+  finding,
+  open,
+  onClose,
+  onSaved,
+}: {
+  finding: FindingDetail;
+  open: boolean;
+  onClose: () => void;
+  onSaved: (finding: FindingDetail) => void;
+}) {
+  const below = SENSITIVITIES.slice(0, SENSITIVITIES.indexOf(finding.sensitivity)).reverse();
+  const [level, setLevel] = useState<Sensitivity | null>(below[0] ?? null);
+  const [reason, setReason] = useState("");
+  const [problem, setProblem] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function save(): Promise<void> {
+    if (!level) return;
+    if (!reason.trim()) {
+      setProblem("Say why, for the moderation log.");
+      return;
+    }
+    setSaving(true);
+    try {
+      onSaved(await lowerSensitivity(finding.public_id, level, reason.trim()));
+      toast(`It's now ${LEVEL_NAMES[level].toLowerCase()}. ${whoSees(level)}`, { kind: "success" });
+      onClose();
+    } catch (error) {
+      setProblem(reasonOf(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="Lower its protection"
+      actions={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={saving || !level} onClick={() => void save()}>
+            {saving ? "Saving…" : "Lower it"}
+          </Button>
+        </>
+      }
+    >
+      <div className="fc-dialog-form">
+        <p>
+          It's {LEVEL_NAMES[finding.sensitivity].toLowerCase()} now. {whoSees(finding.sensitivity)}
+        </p>
+        <ChipGroup
+          label="New level"
+          value={level}
+          onChange={(value) => setLevel(value as Sensitivity)}
+          options={below.map((id) => ({ id, label: LEVEL_NAMES[id] }))}
+        />
+        {level ? <p>{whoSees(level)}</p> : null}
+        <Field label="Why" hint="Kept in the moderation log, which only moderators read." error={problem ?? undefined}>
+          {(control) => (
+            <textarea
+              {...control}
+              className="fc-input"
+              rows={2}
+              maxLength={500}
+              value={reason}
+              onChange={(event) => {
+                setReason(event.target.value);
+                setProblem(null);
+              }}
+            />
+          )}
+        </Field>
+      </div>
+    </Dialog>
+  );
+}
+
+function without<T>(set: ReadonlySet<T>, item: T): ReadonlySet<T> {
+  if (!set.has(item)) return set;
+  const next = new Set(set);
+  next.delete(item);
+  return next;
+}
+
 export interface ToolsProps {
   meta: Meta;
   finding: FindingDetail;
@@ -225,13 +328,15 @@ export interface ToolsProps {
 }
 
 /**
- * The finder's own controls (edit, withdraw, raise the level) and everyone's
- * (copy a link, download as GeoJSON or as a spreadsheet).
+ * The controls for whoever the server lets use them: edit and withdraw for
+ * the finder, raising the level for the finder, trusted members and
+ * moderators, lowering it for moderators; and everyone's: copy a link,
+ * download as GeoJSON or as a spreadsheet.
  */
 export function Tools({ meta, finding, position, onApplied }: ToolsProps) {
-  const [dialog, setDialog] = useState<"edit" | "raise" | "withdraw" | null>(null);
-  const canRaise = position.mayRaise && finding.sensitivity !== "restricted";
+  const [dialog, setDialog] = useState<"edit" | "raise" | "lower" | "withdraw" | null>(null);
   const close = () => setDialog(null);
+  const own = position.isFinder || position.mayEdit || position.mayWithdraw;
 
   async function withdraw(): Promise<void> {
     close();
@@ -245,22 +350,27 @@ export function Tools({ meta, finding, position, onApplied }: ToolsProps) {
 
   return (
     <>
-      {position.isFinder || canRaise ? (
+      {own || position.mayRaise || position.mayLower ? (
         <section className="fc-finding__section" aria-labelledby="fc-yours-title">
-          <h3 id="fc-yours-title">{position.isFinder ? "Your finding" : "Protecting it"}</h3>
+          <h3 id="fc-yours-title">{own ? "Your finding" : "Protecting it"}</h3>
           <p className="fc-finding__hint">{whoSees(finding.sensitivity)}</p>
           <div className="fc-finding__tools">
-            {position.isFinder && position.takesWork ? (
+            {position.mayEdit ? (
               <Button size="sm" icon={<Pencil size={15} aria-hidden />} onClick={() => setDialog("edit")}>
                 Edit
               </Button>
             ) : null}
-            {canRaise ? (
+            {position.mayRaise ? (
               <Button size="sm" icon={<ShieldPlus size={15} aria-hidden />} onClick={() => setDialog("raise")}>
                 Protect it more
               </Button>
             ) : null}
-            {position.isFinder && position.takesWork ? (
+            {position.mayLower ? (
+              <Button size="sm" icon={<ShieldMinus size={15} aria-hidden />} onClick={() => setDialog("lower")}>
+                Lower its protection
+              </Button>
+            ) : null}
+            {position.mayWithdraw ? (
               <Button
                 size="sm"
                 variant="ghost"
@@ -305,6 +415,7 @@ export function Tools({ meta, finding, position, onApplied }: ToolsProps) {
 
       {dialog === "edit" ? <EditDialog meta={meta} finding={finding} open onClose={close} onSaved={onApplied} /> : null}
       {dialog === "raise" ? <RaiseDialog finding={finding} open onClose={close} onSaved={onApplied} /> : null}
+      {dialog === "lower" ? <LowerDialog finding={finding} open onClose={close} onSaved={onApplied} /> : null}
       <Dialog
         open={dialog === "withdraw"}
         onClose={close}
