@@ -64,7 +64,7 @@ def test_spotted_to_seen_to_corroborated(db: Session, make_user: MakeUser) -> No
     # Two independent kinds of desk evidence, from two people who aren't the finder.
     add_desk_evidence(db, finding, ben, EvidenceKind.AERIAL)
     assert finding.tier == "seen"
-    _, result = add_desk_evidence(db, finding, cat, EvidenceKind.HISTORIC_MAP, title="OS 6-inch, 1888")
+    old_map, result = add_desk_evidence(db, finding, cat, EvidenceKind.HISTORIC_MAP, title="OS 6-inch, 1888")
     assert result.moved_up
     assert finding.tier == "corroborated"
     assert finding.community_class == "enclosure"
@@ -74,10 +74,11 @@ def test_spotted_to_seen_to_corroborated(db: Session, make_user: MakeUser) -> No
         for user, items in _notified(db, "tier_changed").items()
     }
     # Cat added the evidence that moved it, so Cat isn't told, and she has
-    # never been told of a tier change: the first was her own answer's.
+    # never been told of a tier change: the first was her own answer's. The
+    # step names the map that made it, where the first, an answer's, named nothing.
     assert corroborated == {
-        ann.id: [{"from": "seen", "to": "corroborated"}],
-        ben.id: [{"from": "seen", "to": "corroborated"}],
+        ann.id: [{"from": "seen", "to": "corroborated", "evidence_id": old_map.id}],
+        ben.id: [{"from": "seen", "to": "corroborated", "evidence_id": old_map.id}],
     }
     expected = sorted(
         [

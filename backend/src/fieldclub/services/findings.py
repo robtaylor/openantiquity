@@ -500,6 +500,7 @@ def reassess(
     *,
     state: FindingState | None = None,
     quiet_for: User | None = None,
+    evidence_id: int | None = None,
 ) -> Reassessment:
     """Recompute and store a finding's assessment. Call it holding `lock(db, finding)`.
 
@@ -509,9 +510,15 @@ def reassess(
     would tell every follower how they answered (Decision 0008). Pass that
     person as `quiet_for` instead, so they aren't notified of their own action.
 
+    `evidence_id` names the evidence item whose adding, removal, vote or
+    verification caused the change, and a `tier_changed` event carries it,
+    so the timeline can tell which follow-up moved a finding. A change a
+    second look caused names nothing: no item, and no actor.
+
     Reputation awards are written every time: `reputation.awards` works out
     what is new and `record_awards` never pays twice.
     """
+    assert evidence_id is None or actor is not None, "a change a second look caused names no evidence"
     old = load_assessment(finding.assessment)
     tier_before, state_before = Tier(finding.tier), FindingState(finding.state)
     new = assess(gather_inputs(db, finding, state))
@@ -538,7 +545,8 @@ def reassess(
             ActivityKind.TIER_CHANGED,
             actor,
             finding,
-            data={"from": tier_before.value, "to": new.tier.value},
+            data={"from": tier_before.value, "to": new.tier.value}
+            | ({"evidence_id": evidence_id} if evidence_id is not None else {}),
             quiet_for=quiet_for,
         )
     if new.state is not state_before:
@@ -593,6 +601,29 @@ def check_text_for_level(level: Sensitivity | str, texts: Mapping[str, str | Non
 
 
 _CLASS_LABELS = {info.id: info.label for info in FEATURE_CLASSES}
+# As long as a title may be (`schemas.findings.TITLE_MAX`).
+SUGGESTED_TITLE_MAX = 120
+
+
+def suggested_title(feature_class: FeatureClass | str, lon: float, lat: float) -> str:
+    """The title a finding takes when none is given: what it is, and its 1 km square.
+
+    Such as "Enclosure in SU 10 69", or "Enclosure in V 26 24" on the Irish
+    grid, spaced as the interface writes a square. Everyone may see the
+    square, whatever the finding's level, so the title never says more than
+    that (Decision 0005), and `services.text_positions` doesn't count a
+    square as a position. A point on neither grid gets the class alone.
+    """
+    label = _CLASS_LABELS[FeatureClass(feature_class)]
+    try:
+        square = gridref.gridref_at(lon, lat, sensitivity.SQUARE_DIGITS).format()
+    except gridref.GridRefError:
+        return label
+    title = f"{label} in {square}"[:SUGGESTED_TITLE_MAX]
+    assert not text_positions.holds_position(title), f"{title!r} says more than the square"
+    return title
+
+
 PUBLIC_ID_CONSTRAINT = "uq_findings_public_id"
 
 
@@ -635,7 +666,7 @@ def create_finding(
         lambda public_id: Finding(
             public_id=public_id,
             author_id=author.id,
-            title=title or _CLASS_LABELS[feature_class],
+            title=title or suggested_title(feature_class, lon, lat),
             description=description,
             feature_class=feature_class.value,
             period=Period(period).value,
@@ -1031,7 +1062,7 @@ def add_evidence(
         else ActivityKind.EVIDENCE_ADDED
     )
     activity.record(db, kind, user, finding, data={"evidence_id": evidence.id, "kind": evidence.kind})
-    return evidence, reassess(db, finding, user)
+    return evidence, reassess(db, finding, user, evidence_id=evidence.id)
 
 
 def get_evidence(db: Session, evidence_id: int, viewer: User | None) -> tuple[Evidence, Finding]:
@@ -1071,7 +1102,7 @@ def delete_evidence(db: Session, evidence_id: int, user: User) -> Reassessment:
         raise EvidenceForbiddenError()
     evidence.deleted_at = datetime.now(UTC)
     db.flush()
-    return reassess(db, finding, user)
+    return reassess(db, finding, user, evidence_id=evidence.id)
 
 
 def check_may_vote(finding: Finding, evidence: Evidence, user: User) -> None:
@@ -1099,7 +1130,7 @@ def vote(db: Session, evidence_id: int, user: User, value: int) -> Reassessment:
             .on_conflict_do_update(index_elements=["evidence_id", "user_id"], set_={"value": value})
         )
         follow(db, user, finding)
-    return reassess(db, finding, user)
+    return reassess(db, finding, user, evidence_id=evidence.id)
 
 
 def check_may_verify(finding: Finding, user: User, evidence: Evidence | None = None) -> None:
@@ -1131,7 +1162,7 @@ def verify(db: Session, evidence_id: int, user: User) -> Reassessment:
         evidence.verified_at = datetime.now(UTC)
         db.flush()
     follow(db, user, finding)
-    return reassess(db, finding, user)
+    return reassess(db, finding, user, evidence_id=evidence.id)
 
 
 def _standing_verifier(people: Mapping[int, User], user_id: int | None) -> User | None:

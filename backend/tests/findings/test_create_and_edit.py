@@ -22,7 +22,7 @@ def test_a_new_finding_is_spotted_assessed_followed_and_announced(db: Session, m
     assert finding.tier == "spotted"
     assert finding.state == "open"
     assert finding.confidence == 10
-    assert finding.title == "Enclosure"
+    assert finding.title == "Enclosure in SU 10 69"
     assert finding.grid_ref == gridref.to_gridref(LON, LAT)
     assert lon_lat(finding.location) == pytest.approx((LON, LAT))
     assert finding.assessment["version"] == 1

@@ -239,7 +239,7 @@ def test_tasks_are_grouped_by_code_and_page_within_one(
     assert groups["need_observers"]["total"] == 3
     assert groups["need_strand"]["total"] == 1
     (strand,) = groups["need_strand"]["items"]
-    assert strand["finding"]["title"] == "Enclosure"
+    assert strand["finding"]["title"].startswith("Enclosure in SU ")
     assert strand["step"]["strands_needed"] == 2
     assert "historic_map" in strand["step"]["missing_strands"]
 

@@ -63,6 +63,11 @@ class ActivityDetails(ApiModel):
     state_from: FindingState | None = None
     state_to: FindingState | None = None
     state_reason: StateReason | None = None
+    # The item added, for `evidence_added` and `followup_logged`. For
+    # `tier_changed`, the item whose adding, removal, vote or verification
+    # caused the step, or null: a step a second look caused names none. The
+    # item may since have been hidden or removed, so it may not be on the
+    # finding's page.
     evidence_id: int | None = None
     evidence_kind: EvidenceKind | None = None
     comment_id: int | None = None
@@ -77,7 +82,10 @@ class ActivityDetails(ApiModel):
             assert not data, "observation_added must carry no data"
             return cls()
         if kind is ActivityKind.TIER_CHANGED:
-            return cls(tier_from=data.get("from"), tier_to=data.get("to"))
+            # The evidence item that caused the step, when one did. Never one for a second look's step.
+            return cls(
+                tier_from=data.get("from"), tier_to=data.get("to"), evidence_id=data.get("evidence_id")
+            )
         if kind is ActivityKind.STATE_CHANGED:
             return cls(state_from=data.get("from"), state_to=data.get("to"), state_reason=data.get("reason"))
         if kind in (ActivityKind.EVIDENCE_ADDED, ActivityKind.FOLLOWUP_LOGGED):
