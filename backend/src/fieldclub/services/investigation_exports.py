@@ -12,9 +12,12 @@ Licences: every record carries its source's licence and attribution
 the contribution licence.
 
 The report is one HTML page with no scripts, no external requests and every
-piece of text escaped. Links are written only for `http` and `https`
-addresses. The route serves it with a sandboxing Content-Security-Policy as
-well, so even a slip here could not run anything.
+piece of text escaped. The investigation's notes and each item's note are
+read as the notebook reads them (`services.notes_markdown`): headings,
+paragraphs, lists, strong, emphasis and links, and never HTML or an image.
+Links are written only for `http` and `https` addresses. The route serves
+it with a sandboxing Content-Security-Policy as well, so even a slip here
+could not run anything.
 """
 
 from __future__ import annotations
@@ -33,7 +36,7 @@ from fieldclub.models import Investigation, User
 from fieldclub.schemas.common import GeoJSONFeature, GeoJSONGeometry, PublicUser, geojson_point
 from fieldclub.schemas.investigations import item_text
 from fieldclub.schemas.records import record_feature
-from fieldclub.services import exports, investigations
+from fieldclub.services import exports, investigations, notes_markdown
 from fieldclub.services.investigations import ItemView, MemberView, Unavailable
 from fieldclub.services.records import RecordResult
 from fieldclub.vocab import CONTRIBUTION_LICENCE, FEATURE_CLASSES, PERIODS, InvestigationItemKind, Visibility
@@ -260,6 +263,8 @@ h3 { font-size: 1.05rem; margin: 0 0 0.3rem; }
 .kicker, .meta, .kind { font: 0.8rem/1.4 system-ui, sans-serif; color: #5c574f; }
 .kind { text-transform: uppercase; letter-spacing: 0.05em; }
 .text { white-space: pre-wrap; }
+.notes > :first-child, .note > :first-child { margin-top: 0; }
+.notes h3, .notes h4, .notes h5, .note h4, .note h5, .note h6 { font-size: 1rem; margin: 0.8rem 0 0.2rem; }
 ol.items { list-style: none; padding: 0; }
 ol.items > li { border-top: 1px solid #e3ded5; padding: 0.8rem 0; break-inside: avoid; }
 .unavailable { color: #5c574f; font-style: italic; }
@@ -382,7 +387,8 @@ def _item_html(entry: Entry) -> str:
     else:
         default, body = _other_html(entry)
     heading = entry.title or default
-    note = f'<p class="text">{_e(entry.note)}</p>' if entry.note else ""
+    # Under the item's h3, so a note's own headings start at h4, as on the notebook's page.
+    note = f'<div class="note">{notes_markdown.render(entry.note, 4)}</div>' if entry.note else ""
     added = PublicUser.from_user(view.added_by).display_name
     return f'<li>{label}<h3>{_e(heading)}</h3>{body}{note}<p class="meta">Added by {_e(added)}</p></li>'
 
@@ -426,7 +432,9 @@ def to_html(export: InvestigationExport) -> str:
     }[Visibility(investigation.visibility)]
     summary = f'<p class="text">{_e(investigation.summary)}</p>' if investigation.summary else ""
     notes = (
-        f'<section><h2>Notes</h2><div class="text">{_e(investigation.notes)}</div></section>'
+        # Under the section's h2, so a note's own headings start at h3.
+        f'<section><h2>Notes</h2><div class="notes">{notes_markdown.render(investigation.notes, 3)}</div>'
+        "</section>"
         if investigation.notes
         else ""
     )

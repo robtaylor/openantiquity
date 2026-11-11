@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import html
 import io
 from datetime import UTC, datetime
 from html.parser import HTMLParser
@@ -246,3 +247,77 @@ def test_the_report_escapes_hostile_titles_and_notes(
     assert "javascript:" not in [href.lower()[:11] for href in parser.hrefs]
     assert "&lt;script&gt;alert(&quot;title&quot;)&lt;/script&gt;" in page
     assert "&lt;/style&gt;" in page
+
+
+# --------------------------------------------------------------------------
+# Notes in Markdown
+# --------------------------------------------------------------------------
+
+MARKDOWN_NOTES = """# The parish
+
+A **bank** with a *faint* ditch. See [the HER](https://example.org/her?id=1&x=2).
+
+- first
+- second
+
+1. one
+2. two
+
+[a script](javascript:alert(1)) ![a photo](https://example.org/photo.jpg) <b onclick=alert(2)>bold</b>
+"""
+
+
+def test_the_report_reads_notes_as_the_notebook_does(
+    db: Session, make_user: MakeUser, make_finding: MakeFinding, client_as: ClientAs
+) -> None:
+    owner = make_user()
+    investigation = make(db, owner, Visibility.PUBLIC, notes=MARKDOWN_NOTES)
+    add(db, investigation, owner, kind=KIND.NOTE, note="## Later\n\nAsk **again**.")
+    response = client_as(owner).get(url(investigation, "/export"), params={"format": "html"})
+    page = response.text
+    # The page keeps its policy: no scripts, no requests, no images, in a sandbox.
+    policy = response.headers["content-security-policy"]
+    assert "default-src 'none'" in policy
+    assert "sandbox" in policy
+    assert html.escape(investigation_exports.REPORT_CSP, quote=True) in page
+    # Notes sit under the section's h2, an item's note under the item's h3.
+    assert "<h3>The parish</h3>" in page
+    assert "<h5>Later</h5>" in page
+    assert "A <strong>bank</strong> with a <em>faint</em> ditch." in page
+    assert (
+        '<a href="https://example.org/her?id=1&amp;x=2" '
+        'rel="noopener noreferrer external nofollow">the HER</a>' in page
+    )
+    assert "<ul><li>first</li><li>second</li></ul><ol><li>one</li><li>two</li></ol>" in page
+    assert "Ask <strong>again</strong>." in page
+    parser = Tags()
+    parser.feed(page)
+    assert set(parser.tags) <= ALLOWED_TAGS | {"h4", "h5", "ul", "strong", "em"}, (
+        set(parser.tags) - ALLOWED_TAGS
+    )
+    assert "img" not in parser.tags
+    assert "b" not in parser.tags
+    assert not [name for name, _ in parser.attributes if name.startswith("on")]
+    assert all(href.startswith(("https://", "http://")) for href in parser.hrefs), parser.hrefs
+    assert "&lt;b onclick=alert(2)&gt;bold&lt;/b&gt;" in page
+
+
+def test_markup_in_an_item_note_cannot_show_a_hidden_position(
+    db: Session, make_user: MakeUser, make_finding: MakeFinding, client: TestClient
+) -> None:
+    """Redaction reads the note as typed, so markup that joins figures into a position falls back to text."""
+    owner = make_user()
+    finding = make_finding(sensitivity="protected", title="Barrow")
+    investigation = make(db, owner, Visibility.PUBLIC)
+    add(
+        db,
+        investigation,
+        owner,
+        kind=KIND.FINDING,
+        finding=finding.public_id,
+        note="Typed SU 1234 5678 here, and *also* SU 123**456**.",
+    )
+    page = client.get(url(investigation, "/export"), params={"format": "html"}).text
+    assert "SU 1234 5678" not in page
+    assert "[position hidden] here, and *also* SU 123**456**." in page
+    assert "<strong>456</strong>" not in page
