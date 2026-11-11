@@ -120,10 +120,17 @@ def _sky_view(z: np.ndarray, res: np.ndarray, zoom: int) -> np.ndarray:
     return vis.stretch(svf, 0.7, 1.0)
 
 
+# VAT flat's stretch for positive openness, in degrees. RVT's 8-bit default of 60 to 95
+# drew real ground flat grey: over Avebury, Silbury Hill and Fyfield Down at zooms 13
+# to 16 the 5th to 95th percentiles ran from 79.8 to 90.1 degrees, which that stretch
+# put between 0.57 and 0.86. This one puts the same ground between 0 and 0.64, and the
+# field systems on Fyfield Down show.
+OPENNESS_STRETCH = (85.0, 93.0)
+
+
 def _openness(z: np.ndarray, res: np.ndarray, zoom: int) -> np.ndarray:
     _, openness = vis.sky_view_and_openness(z, res, SVF_GENERAL.pixels(zoom))
-    # RVT's 8-bit stretch for positive openness.
-    return vis.stretch(openness, 60.0, 95.0)
+    return vis.stretch(openness, *OPENNESS_STRETCH)
 
 
 def _multi_shade(z: np.ndarray, res: np.ndarray, zoom: int) -> np.ndarray:
@@ -131,9 +138,18 @@ def _multi_shade(z: np.ndarray, res: np.ndarray, zoom: int) -> np.ndarray:
     return vis.multi_hillshade(z, res, MULTI_AZIMUTHS, 35.0)
 
 
+# The slope stretch's steepest end, in degrees: between VAT flat's 15 and VAT general's
+# 50. RVT's 8-bit 0 to 51 drew near-flat ground white: the median slope over Avebury,
+# Silbury Hill and Fyfield Down at zooms 13 to 16 was 1.3 to 6 degrees, which it put
+# above 0.88. VAT flat's 15 shows lynchets and field banks best but draws Silbury Hill
+# and the henge bank as solid black. At 25 the same median ground lies between 0.76 and
+# 0.95, and the mound and the bank keep their shape.
+SLOPE_MAX_DEGREES = 25.0
+
+
 def _slope(z: np.ndarray, res: np.ndarray, zoom: int) -> np.ndarray:
-    # RVT's 8-bit stretch of 0 to 51 degrees, inverted as in VAT so steep ground is dark.
-    return vis.stretch(vis.slope(z, res), 0.0, 51.0, invert=True)
+    # Inverted as in VAT, so steep ground is dark.
+    return vis.stretch(vis.slope(z, res), 0.0, SLOPE_MAX_DEGREES, invert=True)
 
 
 STYLES: dict[str, Style] = {
@@ -143,8 +159,8 @@ STYLES: dict[str, Style] = {
         Style("local_relief", "2", _local_relief, (SLRM,)),
         Style("sky_view", "2", _sky_view, (SVF_GENERAL,)),
         Style("multi_shade", "1", _multi_shade, ()),
-        Style("slope", "1", _slope, ()),
-        Style("openness", "2", _openness, (SVF_GENERAL,)),
+        Style("slope", "2", _slope, ()),
+        Style("openness", "3", _openness, (SVF_GENERAL,)),
     )
 }
 
