@@ -224,7 +224,7 @@ describe("Shell", () => {
   });
 
   it.each([
-    ["/f/abc123", "Finding", "Finding abc123"],
+    ["/f/abc123", "Finding not found", null],
     ["/r/42", "Heritage record", "Record 42"],
     ["/scan", "Scan a square", null],
     ["/help", "Help wanted", null],
@@ -236,7 +236,8 @@ describe("Shell", () => {
   ])("titles the panel at %s", async (path, title, subtitle) => {
     renderShell(path);
     await mapReady();
-    const panel = screen.getByRole("complementary", { name: title });
+    // A finding's page asks the server first, so its title can arrive a moment later.
+    const panel = await screen.findByRole("complementary", { name: title });
     if (subtitle) expect(within(panel).getByText(subtitle)).toBeInTheDocument();
   });
 
@@ -303,7 +304,7 @@ describe("Shell", () => {
     );
     const map = await mapReady();
     await user.click(screen.getByRole("link", { name: "Saved view" }));
-    expect(screen.getByRole("complementary", { name: "Finding" })).toBeInTheDocument();
+    expect(await screen.findByRole("complementary", { name: "Finding not found" })).toBeInTheDocument();
     expect(useMapStore.getState().mainView).toBe("slope");
     expect(useMapStore.getState().camera).toMatchObject({ zoom: 16, lat: 56.7968, lng: -5.0036 });
     expect(map.easeTo).toHaveBeenLastCalledWith(

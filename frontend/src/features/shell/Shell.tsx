@@ -35,6 +35,7 @@ import { EMAIL_LINK_PATH } from "../account/emailLink.js";
 import { DraftsBar } from "../drafts/DraftsBar.js";
 import { ExploreLayer } from "../explore/ExploreLayer.js";
 import { ExplorePanel } from "../explore/ExplorePanel.js";
+import { FindingPanel } from "../finding/FindingPanel.js";
 import { MarkButton } from "../mark/MarkButton.js";
 import { isMarkPath, MarkLayer } from "../mark/MarkLayer.js";
 import { MARK_PATH, MarkPanel } from "../mark/MarkPanel.js";
@@ -286,6 +287,7 @@ function ReadyShell({ meta }: { meta: Meta }) {
           <Routes>
             <Route path="/" element={bareMap ? null : <ExplorePanel meta={meta} />} />
             <Route path="/mark/:draftId?" element={<MarkPanel meta={meta} />} />
+            <Route path="/f/:id" element={<FindingPanel meta={meta} />} />
             <Route path="/account" element={<AccountPage />} />
             <Route path={EMAIL_LINK_PATH} element={<EmailLinkPage />} />
             {PLACEHOLDER_ROUTES.map((route) => (

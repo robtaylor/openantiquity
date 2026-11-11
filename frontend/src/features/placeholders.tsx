@@ -6,7 +6,6 @@ import {
   Info,
   Landmark,
   type LucideIcon,
-  MapPin,
   MapPinned,
   NotebookText,
   ScanSearch,
@@ -37,13 +36,6 @@ export interface PlaceholderRoute {
 }
 
 export const PLACEHOLDER_ROUTES: PlaceholderRoute[] = [
-  {
-    path: "/f/:id",
-    title: "Finding",
-    subtitle: (params) => `Finding ${params.id ?? ""}`,
-    icon: MapPin,
-    body: "A finding's page will show its confidence meter, the evidence people have added, and what would raise it to the next step.",
-  },
   {
     path: "/r/:id",
     title: "Heritage record",
