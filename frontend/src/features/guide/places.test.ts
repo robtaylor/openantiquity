@@ -50,9 +50,13 @@ describe("the guide's catalogue", () => {
   it("names every real example by a class in /meta, and every modern or data look-alike by an explanation", () => {
     for (const pair of PAIRS) {
       expect(featureClassLabel(metaFixture, pair.real.featureClass), pair.id).not.toBeNull();
-      if (pair.lookalike.explanation) {
-        expect(explanationLabel(metaFixture, pair.lookalike.explanation), pair.id).not.toBeNull();
-      }
+      const { lookalike } = pair;
+      // Something mistaken for an earthwork is either named for what it is instead, or is itself an earthwork.
+      // One that is neither would be shown as a look-alike with nothing to say what it is.
+      expect(Boolean(lookalike.explanation) !== Boolean(lookalike.featureClass), pair.id).toBe(true);
+      if (lookalike.explanation) expect(explanationLabel(metaFixture, lookalike.explanation), pair.id).not.toBeNull();
+      if (lookalike.featureClass)
+        expect(featureClassLabel(metaFixture, lookalike.featureClass), pair.id).not.toBeNull();
     }
     expect(featureClassLabel(metaFixture, "no_such_class")).toBeNull();
     expect(explanationLabel(metaFixture, undefined)).toBeNull();

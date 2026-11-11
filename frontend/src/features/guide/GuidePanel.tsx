@@ -6,6 +6,7 @@ import { Attribution } from "../../map/attribution.js";
 import { Button } from "../../ui/Button.js";
 import { scrollBehaviour } from "../../ui/motion.js";
 import { TierBadge } from "../../ui/TierBadge.js";
+import { takesUnder18s } from "../about/facts.js";
 import { useDocumentTitle } from "../placeholders.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { usePanelEnvironment } from "../shell/panelContext.js";
@@ -59,7 +60,11 @@ function Section({ id, title, children }: { id: SectionId; title: string; childr
   );
 }
 
-/** "Show on the map": opens the place in its view, and calls a slow move off if the page goes first. */
+/**
+ * "Show tramlines on the map": opens the place in its view, and calls a
+ * slow move off if the page goes first. The words name the example, so the
+ * button's name is the words it shows (WCAG 2.5.3).
+ */
 function ShowOnMap({ meta, place, label }: { meta: Meta; place: MapPlace; label: string }) {
   const environment = usePanelEnvironment();
   const cancel = useRef<(() => void) | null>(null);
@@ -69,13 +74,12 @@ function ShowOnMap({ meta, place, label }: { meta: Meta; place: MapPlace; label:
       size="sm"
       variant="ghost"
       icon={<MapPin size={16} aria-hidden />}
-      aria-label={label}
       onClick={() => {
         cancel.current?.();
         cancel.current = showPlace(meta, place, environment);
       }}
     >
-      Show on the map
+      {label}
     </Button>
   );
 }
@@ -190,6 +194,9 @@ function ExampleCard({ meta, example, side }: { meta: Meta; example: Example; si
       ) : null}
       <p>{example.body}</p>
       {place ? <p className="fc-guide__muted">{place.name}.</p> : null}
+      {example.picture?.enhanced ? (
+        <p className="fc-guide__muted">The picture's contrast has been raised, so it shows more than the map does.</p>
+      ) : null}
       <Records example={example} />
       {place ? <ShowOnMap meta={meta} place={place} label={`Show ${example.title.toLowerCase()} on the map`} /> : null}
     </div>
@@ -204,7 +211,7 @@ function PairItem({ meta, pair }: { meta: Meta; pair: Pair }) {
         {pair.real.title} or {lowerFirst(pair.lookalike.title)}?
       </h4>
       <ExampleCard meta={meta} example={pair.real} side="real" />
-      <ExampleCard meta={meta} example={pair.lookalike} side="lookalike" />
+      <ExampleCard meta={meta} example={pair.lookalike} side={pair.lookalike.featureClass ? "real" : "lookalike"} />
       <p className="fc-guide__tell">
         <strong>Telling them apart. </strong>
         {pair.tell}
@@ -218,8 +225,8 @@ function Lookalikes({ meta }: { meta: Meta }) {
     <>
       <p>
         Most of what looks like an earthwork in LIDAR isn't one. Here are real earthworks beside the modern or natural
-        things most often mistaken for them. Marking a doubtful feature is still useful, because other people's second
-        looks are how doubtful things get checked.
+        things most often mistaken for them, and two kinds of earthwork that are easily confused. Marking a doubtful
+        feature is still useful, because other people's second looks are how doubtful things get checked.
       </p>
       <ul className="fc-guide__pairs">
         {PAIRS.map((pair) => (
@@ -251,9 +258,9 @@ function Ladder({ meta }: { meta: Meta }) {
         ))}
       </ol>
       <p>
-        Two rules keep the ladder honest. Agreement is weighted, so a trusted regular counts for one and a half members
-        and a recognised archaeologist counts for three. And the evidence has to be independent: a finder can't
-        corroborate their own finding by attaching five screenshots.
+        Two rules keep the ladder honest. Agreement is weighted, so a trusted regular or a recognised archaeologist
+        counts for more than one member. And the evidence has to be independent: a finder can't corroborate their own
+        finding by attaching five screenshots.
       </p>
       <p>
         A finding can also leave the ladder. If most people can't see it, or agree it's a modern drain, a golf bunker or
@@ -331,7 +338,9 @@ function Ground({ meta }: { meta: Meta }) {
           </details>
         );
       })}
-      <p className="fc-guide__muted">For members who are 16 or 17 it adds: “{meta.notices.field_visit_16_17}”</p>
+      {takesUnder18s(meta) ? (
+        <p className="fc-guide__muted">For members who are 16 or 17 it adds: “{meta.notices.field_visit_16_17}”</p>
+      ) : null}
     </>
   );
 }

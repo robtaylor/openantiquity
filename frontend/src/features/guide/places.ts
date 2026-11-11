@@ -44,6 +44,8 @@ export interface Picture {
   src: string;
   /** What the picture shows, for anyone who can't see it. */
   alt: string;
+  /** True when its contrast was raised, so it shows more than the map does, which the card says. */
+  enhanced?: boolean;
 }
 
 /** The two sentences on what a terrain view is good for, and a picture of it. */
@@ -168,6 +170,11 @@ export interface Example {
 export interface Pair {
   id: string;
   real: Example;
+  /**
+   * What the real one is mistaken for: usually something modern, natural or
+   * in the data, named by an explanation. One with a feature class instead
+   * is another kind of earthwork that is easily confused with the first.
+   */
   lookalike: Example;
   /** How to tell them apart, in a sentence or two. */
   tell: string;
@@ -205,7 +212,7 @@ export const PAIRS: Pair[] = [
     lookalike: {
       title: "A small reservoir",
       explanation: "modern",
-      body: "South of Bulford Camp a small round reservoir, with a sharp rim and a hollow middle, sits beside three bowl barrows. The barrows are the soft domes to its left.",
+      body: "South of Bulford Camp a small round reservoir, with a sharp rim and a hollow middle, sits beside four of a group of five bowl barrows. The barrows are the soft domes to its left.",
       place: {
         name: "South of Bulford Camp, near Stonehenge",
         lon: -1.7327,
@@ -215,7 +222,7 @@ export const PAIRS: Pair[] = [
       },
       picture: {
         src: reservoirPicture,
-        alt: "Three small round mounds and, a little to the right, a ring with a hollow centre, at the edge of a field beside buildings and yards.",
+        alt: "Four small round mounds in a cluster and, to their right, a sharp ring with a dark hollow centre, on a strip of rough ground between fields.",
       },
       records: [aim("Reservoir"), nhle("A group of five bowl barrows south of Bulford Camp", "1009576")],
       judgement: false,
@@ -240,18 +247,19 @@ export const PAIRS: Pair[] = [
       judgement: false,
     },
     lookalike: {
-      title: "Plough marks",
+      title: "Tramlines",
       explanation: "modern",
-      body: "Fine, evenly spaced lines that fill one modern field, left by modern ploughing and drilling. The curving bank above them is a real earthwork: Historic England's aerial mapping records it as a strip lynchet of a medieval field system.",
-      place: { name: "Below Milk Hill, Vale of Pewsey", lon: -1.85715, lat: 51.36959, layer: "local_relief", zoom: 16 },
+      body: "Straight, evenly spaced lines that fill one modern field and stop at its edge. They are tramlines: the wheel marks a tractor leaves every few tens of metres as it sprays and spreads.",
+      place: { name: "Below Milk Hill, Vale of Pewsey", lon: -1.85412, lat: 51.36834, layer: "local_relief", zoom: 16 },
       picture: {
         src: ploughPicture,
-        alt: "A flat field covered in fine parallel lines running from side to side, with a curving bank across the top.",
+        alt: "A field crossed from side to side by straight parallel lines, all ending at a track and bank that runs down the right of the picture.",
+        enhanced: true,
       },
       records: [],
       judgement: true,
     },
-    tell: "Old field banks are uneven, meet at odd angles and ignore today's hedges. Plough lines are dead straight, closely spaced and end exactly at the edge of a modern field.",
+    tell: "Old field banks are uneven, meet at odd angles and ignore today's hedges. Tramlines and plough lines are dead straight, evenly spaced, run one way across a whole field and end exactly at its modern edge.",
   },
   {
     id: "hollow_way",
@@ -300,7 +308,8 @@ export const PAIRS: Pair[] = [
     },
     lookalike: {
       title: "A dew pond",
-      body: "A dew pond is a hollow lined to hold rainwater for stock, ringed by the bank of the soil dug out of it. This one is the small square below the enclosure.",
+      featureClass: "pond",
+      body: "A dew pond is a hollow lined to hold rainwater for stock, ringed by the bank of the soil dug out of it. It is an earthwork too: this one, the small square below the enclosure, is scheduled with it.",
       place: {
         name: "North of Barbury Castle, Marlborough Downs",
         lon: -1.78619,
@@ -327,6 +336,7 @@ export const PAIRS: Pair[] = [
       picture: {
         src: ridgePicture,
         alt: "Broad, gently curving parallel ridges in one part of a field, cut off by a later field edge.",
+        enhanced: true,
       },
       records: [aim("Ridge and furrow")],
       judgement: false,

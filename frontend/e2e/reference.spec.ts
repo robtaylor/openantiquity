@@ -40,12 +40,15 @@ test("the guide opens from the rail, shows its pictures and sends each example t
   await expect(panel.getByRole("heading", { name: "The views", level: 3 })).toBeVisible();
   await picturesLoaded(panel);
 
-  const show = panel.getByRole("button", { name: "Show plough marks on the map" });
+  const show = panel.getByRole("button", { name: "Show tramlines on the map" });
   await show.scrollIntoViewIfNeeded();
   await show.click();
   // The map goes to the place in the view the example uses, and the address says so.
   await expect(page).toHaveURL(/v=local_relief/);
   await expect(page).toHaveURL(/m=16\/51\.36\d*\/-1\.85\d*/);
+  // Record squares and finding markers would sit on the feature, so they are hidden, and the address says so.
+  await expect(page).toHaveURL(/records:\d+:h/);
+  await expect(page).toHaveURL(/findings:\d+:h/);
   if (isPhone(page)) await expect(page.locator(".fc-shell")).toHaveAttribute("data-sheet", "peek");
 });
 

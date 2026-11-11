@@ -77,7 +77,7 @@ test("guide", async ({ page }) => {
   await panel.getByText("Northern Ireland", { exact: true }).click();
   await shoot(page, "guide-ground-ni");
   await scrollTo(panel.getByRole("heading", { name: "Real or not?", level: 3 }));
-  await panel.getByRole("button", { name: "Show plough marks on the map" }).click();
+  await panel.getByRole("button", { name: "Show tramlines on the map" }).click();
   await page.waitForTimeout(1500);
   await shoot(page, "guide-shown-on-map");
 });
