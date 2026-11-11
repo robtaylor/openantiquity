@@ -62,7 +62,7 @@ Panels are opaque. Controls floating directly on the map use `--surface` at 92% 
 
 ## Markers
 
-Findings are circles coloured by tier, with a dark 1.5 px outline so they hold up against any layer. Size grows slightly with tier. Known findings are hollow rings. Ruled-out findings are small hollow grey rings and are hidden by default. A finding the viewer may not see exactly arrives with `obscured` set, whether it is protected or restricted, and is drawn as a dashed one-kilometre square in its tier colour, never a point. Records are small squares coloured by category, clearly different in shape from findings.
+Findings are circles coloured by tier, with a dark 1.5 px outline so they hold up against any layer. Size grows slightly with tier. Known findings are hollow rings. Ruled-out findings are small hollow grey rings and are hidden by default. A finding the viewer may not see exactly arrives with `obscured` set, whether it is protected or restricted, and is drawn as a dashed one-kilometre square in its tier colour, never a point. Records are small squares coloured by category, clearly different in shape from findings, with the same dark outline. Several category colours are close in lightness to mid-grey terrain, so the outline, not the fill, is what separates a square from a grey LIDAR view. A category swatch in a panel sits beside its label and carries a 1 px `--text-muted` outline, because some colours fall below 3:1 against `--surface` and `--raised`.
 
 Colour never carries meaning alone. Tier is also shown as a label in every list and panel.
 
