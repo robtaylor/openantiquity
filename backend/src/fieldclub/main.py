@@ -268,10 +268,6 @@ def create_app(settings: Settings | None = None, *, include_dev_routes: bool | N
     return app
 
 
-# How long a stopping server waits for open requests before closing them.
-GRACEFUL_SHUTDOWN_SECONDS = 5
-
-
 def run() -> None:
     """`fieldclub-api`: serve the app with uvicorn."""
     import uvicorn

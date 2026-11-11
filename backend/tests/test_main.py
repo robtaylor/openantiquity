@@ -267,18 +267,12 @@ def test_healthz(client: TestClient) -> None:
     assert "/healthz" not in client.get("/api/openapi.json").json()["paths"]
 
 
-def test_the_server_stops_within_seconds_even_with_a_request_open(monkeypatch: pytest.MonkeyPatch) -> None:
-    import uvicorn
+def test_the_server_stops_within_seconds_even_with_a_request_open() -> None:
+    from fieldclub.config import Settings
 
-    from fieldclub import main
-
-    calls: list[dict[str, object]] = []
-    monkeypatch.setattr(uvicorn, "run", lambda app, **options: calls.append(options))
-    main.run()
-    [options] = calls
-    # Cloud Run gives a stopping instance ten seconds before it kills it.
-    assert options["timeout_graceful_shutdown"] == main.GRACEFUL_SHUTDOWN_SECONDS
-    assert 0 < main.GRACEFUL_SHUTDOWN_SECONDS < 10
+    # Cloud Run gives a stopping instance ten seconds before it kills it. The grace is how long
+    # uvicorn waits for open requests, and the test of run() below checks it gets there.
+    assert 0 < Settings.model_fields["shutdown_grace_s"].default < 10
 
 
 # --------------------------------------------------------------------------
