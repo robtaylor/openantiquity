@@ -4,7 +4,7 @@
  * nation's reporting route for finds.
  */
 
-import type { Meta } from "../../api/meta.js";
+import type { FindReporting, Meta } from "../../api/meta.js";
 
 /**
  * Who will see exactly where a new finding of this class is, in one
@@ -13,7 +13,7 @@ import type { Meta } from "../../api/meta.js";
  * can raise it later from the finding's page.
  */
 export function sensitivityNotice(meta: Meta, featureClass: string | null): string | null {
-  const level = meta.vocab.feature_classes.find((candidate) => candidate.id === featureClass)?.default_sensitivity;
+  const level = meta.vocab.feature_classes.find((candidate) => candidate.id === featureClass)?.sensitivity;
   if (level === "protected") {
     return "To protect sites like this, only signed-in members will see exactly where it is, and everyone else will see the one-kilometre square around it.";
   }
@@ -28,15 +28,9 @@ export const FINDS_NOTICE =
   "This map is for earthworks, not objects. If you've found something in the ground, don't mark it here.";
 
 /**
- * Where to report a find in this nation, from `/meta`: its own finds notice
- * once the backend sends one, otherwise the line of the nation's field-visit
- * notices that says to report a find. Null when neither is there, or the
+ * Where to report a find in this nation, from `/meta`, or null when the
  * nation isn't known.
  */
-export function findsRoute(meta: Meta, nation: string | null): string | null {
-  if (nation === null) return null;
-  const own = meta.notices.finds?.[nation];
-  if (own) return own;
-  const lines = meta.notices.field_visit[nation] ?? [];
-  return lines.find((line) => /report/i.test(line) && /\bfind|found\b/i.test(line)) ?? null;
+export function findsRoute(meta: Meta, nation: string | null): FindReporting | null {
+  return nation === null ? null : (meta.notices.find_reporting[nation] ?? null);
 }

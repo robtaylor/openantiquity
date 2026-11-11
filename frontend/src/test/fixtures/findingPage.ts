@@ -215,6 +215,7 @@ export function commentFixture(overrides: Partial<Comment> = {}): Comment {
     created_at: "2026-11-02T10:00:00Z",
     edited_at: null,
     deleted: false,
+    hidden: false,
     ...overrides,
   };
 }

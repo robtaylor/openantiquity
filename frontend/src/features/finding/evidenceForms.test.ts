@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { metaFixture } from "../../test/fixtures/meta.js";
-import { composeEvidence, formSpec, isRecordKind, needsVisitReminder, today } from "./evidenceForms.js";
+import { composeEvidence, formSpec, isRecordKind, needsVisitReminder, photoProblem, today } from "./evidenceForms.js";
 
 const NOW = new Date(2026, 10, 11, 12, 0, 0);
 
@@ -110,10 +110,22 @@ describe("composeEvidence", () => {
     });
   });
 
-  it("says why a ground photo can't be added yet", () => {
-    expect(composeEvidence("photo", {}, null, NOW)).toMatchObject({
+  it("needs a ground photo's picture, and leaves the upload to whoever sends it", () => {
+    expect(formSpec("photo").usesPhoto).toBe(true);
+    expect(composeEvidence("photo", {}, null, NOW)).toEqual({
       ok: false,
-      message: expect.stringMatching(/uploading/),
+      field: "photo",
+      message: "Choose the photo first.",
     });
+    expect(composeEvidence("photo", { photo: "barrow.jpg", note: "From the east." }, null, NOW)).toEqual({
+      ok: true,
+      body: { kind: "photo", stance: "supports", note: "From the east." },
+    });
+  });
+
+  it("refuses a photo over the server's limit before uploading it", () => {
+    expect(photoProblem({ size: 16 * 1024 * 1024, type: "image/jpeg" })).toMatch(/15 MB/);
+    expect(photoProblem({ size: 1024, type: "image/gif" })).toMatch(/JPEG, PNG or WebP/);
+    expect(photoProblem({ size: 1024, type: "image/webp" })).toBeNull();
   });
 });

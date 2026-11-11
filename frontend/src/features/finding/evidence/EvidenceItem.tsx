@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { BadgeCheck, ExternalLink, ThumbsDown, ThumbsUp, Trash2 } from "lucide-react";
+import { useState } from "react";
 import type { Meta } from "../../../api/meta.js";
 import { Button } from "../../../ui/Button.js";
-import { fetchRecord } from "../api.js";
+import { fetchRecord, mediaUrl } from "../api.js";
 import { formatDate, labelOf, needsVerifying, outcomeWords, stanceWords } from "../describe.js";
 import { findingPageKeys } from "../keys.js";
 import type { Evidence } from "../types.js";
@@ -23,6 +24,26 @@ function RecordName({ meta, recordId }: { meta: Meta; recordId: number }) {
         {record.data.source.name} · {labelOf(meta.vocab.record_categories, record.data.category)}
       </span>
     </>
+  );
+}
+
+/**
+ * An uploaded photo. Until a moderator or trusted member approves it, only
+ * its uploader and the people who approve photos are sent it, so anyone
+ * else is told it is waiting.
+ */
+function Photo({ mediaId, alt }: { mediaId: number; alt: string }) {
+  const [missing, setMissing] = useState(false);
+  if (missing) return <p className="fc-finding__hint">The photo shows here once it has been approved.</p>;
+  return (
+    <img
+      className="fc-evidence__photo"
+      src={mediaUrl(mediaId)}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      onError={() => setMissing(true)}
+    />
   );
 }
 
@@ -108,6 +129,13 @@ export function EvidenceItem({
           </a>
         ) : null}
       </div>
+
+      {item.media_id !== null && !pending ? (
+        <Photo
+          mediaId={item.media_id}
+          alt={`${labelOf(meta.vocab.evidence_kinds, item.kind)} added by ${item.contributor.display_name}`}
+        />
+      ) : null}
 
       <div className="fc-evidence__tags">
         <span className={`fc-stance fc-stance--${item.stance}`}>{stanceWords(item.stance)}</span>

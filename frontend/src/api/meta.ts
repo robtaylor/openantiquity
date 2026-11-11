@@ -102,12 +102,8 @@ export interface FeatureClass {
   label: string;
   hint: string;
   fish_term: string;
-  /**
-   * The level a new finding of this class starts at (docs/ARCHITECTURE.md,
-   * "Location sensitivity"). The backend doesn't send it yet, so the form
-   * explains a class's level only when it appears.
-   */
-  default_sensitivity?: "open" | "protected" | "restricted";
+  /** The level a new finding of this class starts at (docs/ARCHITECTURE.md, "Location sensitivity"). */
+  sensitivity: "open" | "protected" | "restricted";
 }
 
 export interface Period {
@@ -180,6 +176,8 @@ export interface SourceSummary {
   attribution: string;
   homepage: string | null;
   category: string;
+  /** "bulk" for a source whose records are stored here. Any other value is a source that may only be linked (Decision 0007). */
+  access: string;
   record_count: number | null;
 }
 
@@ -192,6 +190,12 @@ export interface SignInProvider {
   id: string;
   label: string;
   enabled: boolean;
+}
+
+export interface FindReporting {
+  scheme: string;
+  url: string | null;
+  text: string;
 }
 
 export interface Meta {
@@ -213,12 +217,8 @@ export interface Meta {
     field_visit: Record<string, string[]>;
     field_visit_16_17: string;
     sensitivity: string;
-    /**
-     * Where to report an object found in the ground, by nation (Decision
-     * 0005). The backend doesn't send it yet; until it does, the form takes
-     * the reporting line from that nation's `field_visit` notices.
-     */
-    finds?: Record<string, string>;
+    /** Where to report an object found in the ground, by nation (Decision 0005). `url` is null where there is no one address. */
+    find_reporting: Record<string, FindReporting>;
   };
 }
 
@@ -288,6 +288,7 @@ export function parseMeta(value: unknown): Meta {
   check(Array.isArray(sources), '"sources" is not a list');
   check(isRecord(notices), '"notices" is missing');
   check(typeof notices.field_visit_16_17 === "string", '"notices.field_visit_16_17" is missing');
+  check(isRecord(notices.find_reporting), '"notices.find_reporting" is missing');
 
   check(isRecord(layers), '"layers" is missing');
   const { views, dem, overlays, initial_view: initialView } = layers;

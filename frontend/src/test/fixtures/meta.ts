@@ -19,9 +19,7 @@ import type { Meta, RasterView, Vocab } from "../../api/meta.js";
  * Records tiles and the findings endpoint keep their contract paths, which
  * answer nothing until the backend is running.
  *
- * One thing here is ahead of the backend: each protected class's
- * `default_sensitivity`, from `PROTECTED_CLASSES` in vocab.py, which the
- * backend doesn't serve in /meta yet.
+ * Each class's `sensitivity` follows `PROTECTED_CLASSES` in vocab.py.
  */
 
 const EA_ATTRIBUTION = "© Environment Agency copyright and/or database right 2022. All rights reserved.";
@@ -73,130 +71,147 @@ const vocab: Vocab = {
       label: "Enclosure",
       hint: "A patch of ground with a bank, a ditch or both running round it.",
       fish_term: "ENCLOSURE",
+      sensitivity: "open",
     },
     {
       id: "hillfort",
       label: "Hillfort",
       hint: "A hilltop ringed by one or more big banks and ditches, usually Iron Age.",
       fish_term: "HILLFORT",
+      sensitivity: "open",
     },
     {
       id: "round_barrow",
       label: "Round barrow or mound",
       hint: "A round burial mound, often with a ditch circling it, usually Bronze Age.",
       fish_term: "ROUND BARROW",
-      default_sensitivity: "protected",
+      sensitivity: "protected",
     },
     {
       id: "long_barrow",
       label: "Long barrow",
       hint: "A long, low burial mound from the Neolithic, often with a ditch down each side.",
       fish_term: "LONG BARROW",
-      default_sensitivity: "protected",
+      sensitivity: "protected",
     },
     {
       id: "hut_circle",
       label: "Hut circle",
       hint: "A low ring a few metres across, left by the wall of a prehistoric round house.",
       fish_term: "HUT CIRCLE",
+      sensitivity: "open",
     },
     {
       id: "settlement",
       label: "Settlement earthworks",
       hint: "The bumps and hollows left by the houses, yards and lanes of an abandoned village or farm.",
       fish_term: "SETTLEMENT",
-      default_sensitivity: "protected",
+      sensitivity: "protected",
     },
     {
       id: "field_system",
       label: "Field system",
       hint: "A pattern of old field edges, seen as low banks, ditches or steps in a slope.",
       fish_term: "FIELD SYSTEM",
+      sensitivity: "open",
     },
     {
       id: "ridge_and_furrow",
       label: "Ridge and furrow",
       hint: "Long parallel ridges, like corduroy, left by medieval and later ploughing.",
       fish_term: "RIDGE AND FURROW",
+      sensitivity: "open",
     },
     {
       id: "linear",
       label: "Linear bank or ditch",
       hint: "A single bank or ditch running across country, such as an old boundary.",
       fish_term: "LINEAR EARTHWORK",
+      sensitivity: "open",
     },
     {
       id: "trackway",
       label: "Trackway or hollow way",
       hint: "An old route worn into the ground by feet, hooves and wheels, often a sunken lane.",
       fish_term: "TRACKWAY",
+      sensitivity: "open",
     },
     {
       id: "road",
       label: "Road",
       hint: "A built road, often straight and raised on a bank, such as a Roman road.",
       fish_term: "ROAD",
+      sensitivity: "open",
     },
     {
       id: "moat",
       label: "Moat",
       hint: "A wide ditch, once full of water, round the island where a house stood.",
       fish_term: "MOAT",
+      sensitivity: "open",
     },
     {
       id: "motte",
       label: "Motte or castle earthwork",
       hint: "A steep man-made mound or ring of bank built for an early castle.",
       fish_term: "MOTTE",
+      sensitivity: "open",
     },
     {
       id: "platform",
       label: "Platform",
       hint: "A levelled patch cut into a slope or built out from it, where a building once stood.",
       fish_term: "BUILDING PLATFORM",
+      sensitivity: "open",
     },
     {
       id: "pond",
       label: "Pond or water management",
       hint: "Ponds, dams and channels made to hold or move water, such as fishponds and water meadows.",
       fish_term: "POND",
+      sensitivity: "open",
     },
     {
       id: "pit",
       label: "Pit or quarry",
       hint: "A hollow or cluster of hollows left by digging for stone, chalk, clay or ore.",
       fish_term: "EXTRACTIVE PIT",
+      sensitivity: "open",
     },
     {
       id: "industrial",
       label: "Industrial",
       hint: "Remains of industry, such as spoil heaps, kilns, tramways and mine workings.",
       fish_term: "INDUSTRIAL SITE",
+      sensitivity: "open",
     },
     {
       id: "military",
       label: "Military",
       hint: "Remains of defence or training, such as trenches, gun positions and airfields.",
       fish_term: "MILITARY INSTALLATION",
+      sensitivity: "open",
     },
     {
       id: "ritual",
       label: "Ritual monument",
       hint: "A prehistoric ceremonial site, such as a henge, a stone circle or a cursus.",
       fish_term: "RELIGIOUS RITUAL AND FUNERARY",
-      default_sensitivity: "protected",
+      sensitivity: "protected",
     },
     {
       id: "garden",
       label: "Garden earthworks",
       hint: "Terraces, mounds, ponds and paths left by a formal garden that has gone.",
       fish_term: "GARDEN",
+      sensitivity: "open",
     },
     {
       id: "unknown",
       label: "Not sure",
       hint: "You can see something but can't say what it is. Other people can help work it out.",
       fish_term: "SITE",
+      sensitivity: "open",
     },
   ],
   periods: [
@@ -593,6 +608,7 @@ export const metaFixture: Meta = {
       attribution: "© Historic England. Contains Ordnance Survey data © Crown copyright and database right.",
       homepage: "https://historicengland.org.uk/listing/the-list/",
       category: "designation",
+      access: "bulk",
       record_count: 0,
     },
   ],
@@ -622,6 +638,28 @@ export const metaFixture: Meta = {
         "Using a metal detector on a scheduled monument or a monument in state care without written consent from the Department for Communities is a criminal offence.",
         "Any archaeological object you find must be reported within 14 days to the Ulster Museum, the police or the Department for Communities.",
       ],
+    },
+    find_reporting: {
+      england: {
+        scheme: "Portable Antiquities Scheme",
+        url: "https://finds.org.uk/",
+        text: "Report anything you find to the Portable Antiquities Scheme. Possible treasure must be reported to the coroner within 14 days.",
+      },
+      scotland: {
+        scheme: "Treasure Trove Scotland",
+        url: "https://treasuretrovescotland.co.uk/",
+        text: "Every archaeological object you find, whatever it's made of, must be reported to Treasure Trove.",
+      },
+      wales: {
+        scheme: "Portable Antiquities Scheme in Wales",
+        url: "https://finds.org.uk/",
+        text: "Report anything you find to the Portable Antiquities Scheme in Wales. Possible treasure must be reported to the coroner within 14 days.",
+      },
+      northern_ireland: {
+        scheme: "Department for Communities",
+        url: null,
+        text: "Report any archaeological object you find within 14 days, to the Ulster Museum, the police or the Department for Communities. Possible treasure must be reported to the coroner within 14 days.",
+      },
     },
     field_visit_16_17: "You're 16 or 17, so go with an adult you know, and tell someone at home where you're going.",
     sensitivity:

@@ -6,9 +6,9 @@
  * does at start-up, so drafts left from before a provider's round trip are
  * saved as soon as the person is ready.
  *
- * The server takes no idempotency key yet, so the `draftId` the drafts
- * machinery passes is not sent. The machinery's claim on each draft is what
- * keeps a draft from being sent twice.
+ * The draft's id goes as the finding's `client_ref`, so a draft sent again
+ * after a tab died mid-save is stored once: the server answers a reference it
+ * has seen from the same person with the finding it already made.
  */
 
 import { create } from "zustand";
@@ -62,9 +62,11 @@ export function parseFindingDraft(value: unknown): FindingDraft | null {
 /**
  * The body for `POST /findings`. Class and period ids come from `/meta`,
  * which is the server's own vocabulary, so they are the server's to judge.
+ * `clientRef` is the same for every attempt to save one finding.
  */
-export function createBody(draft: FindingDraft): FindingCreate {
+export function createBody(draft: FindingDraft, clientRef: string): FindingCreate {
   const body: FindingCreate = {
+    client_ref: clientRef,
     location: { type: "Point", coordinates: [draft.point[0], draft.point[1]] },
     feature_class: draft.feature_class as FeatureClassId,
     period: draft.period as PeriodId,
@@ -114,7 +116,7 @@ export const findingDrafts = defineDraftKind<FindingDraft>({
   label: "Finding",
   parse: parseFindingDraft,
   save: async (data, { draftId }) => {
-    useSavedDrafts.getState().record(draftId, await createFinding(createBody(data)));
+    useSavedDrafts.getState().record(draftId, await createFinding(createBody(data, draftId)));
   },
   describe: (data) => data.title,
 });

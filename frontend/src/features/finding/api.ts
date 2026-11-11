@@ -11,12 +11,12 @@ import type {
   EvidenceIn,
   FindingDetail,
   FindingUpdate,
+  Media,
   ObservationIn,
   ObservationPage,
   RecordOut,
   RecordPage,
   Reveal,
-  Source,
   Suggestions,
 } from "./types.js";
 
@@ -55,6 +55,16 @@ export function fetchObservations(publicId: string, signal?: AbortSignal): Promi
 
 export function addEvidence(publicId: string, body: EvidenceIn): Promise<FindingDetail> {
   return apiFetch<FindingDetail>(findingUrl(publicId, "/evidence"), { method: "POST", body });
+}
+
+/** Upload a photo. The answer's id goes with the evidence as `media_id`. */
+export function uploadPhoto(file: Blob): Promise<Media> {
+  return apiFetch<Media>("/media", { method: "POST", file });
+}
+
+/** Where a photo is served. Only people who may see it get it: others get 404. */
+export function mediaUrl(mediaId: number): string {
+  return `${API_BASE}/media/${mediaId}`;
 }
 
 export function deleteEvidence(evidenceId: number): Promise<void> {
@@ -105,10 +115,6 @@ export function searchRecords(q: string, signal?: AbortSignal): Promise<RecordPa
 
 export function fetchRecord(recordId: number, signal?: AbortSignal): Promise<RecordOut> {
   return apiFetch<RecordOut>(`/records/${recordId}`, { signal });
-}
-
-export function fetchSources(signal?: AbortSignal): Promise<Source[]> {
-  return apiFetch<Source[]>("/sources", { signal });
 }
 
 /** The address that downloads one finding as GeoJSON or as a spreadsheet a records officer can use. */

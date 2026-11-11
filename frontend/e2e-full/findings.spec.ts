@@ -51,7 +51,7 @@ test("saves a finding marked signed out as a real finding at the same place, onc
     tier: "spotted",
     view_state: { layer: "composite", zoom: 15 },
   });
-  expect(finding.title).toMatch(/^Enclosure at SU \d{3} \d{3}$/);
+  expect(finding.title).toMatch(/^Enclosure in SU\d{4}$/);
   expect(finding.location.obscured).toBe(false);
   expect(finding.location.lon).toBeCloseTo(lon, 6);
   expect(finding.location.lat).toBeCloseTo(lat, 6);

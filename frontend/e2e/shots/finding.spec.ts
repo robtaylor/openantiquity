@@ -16,7 +16,8 @@ import {
 import { fakeSession, meWith } from "../support/account.js";
 import { openMap } from "../support/app.js";
 import { fakeFindingPage } from "../support/findingPage.js";
-import { stubNetwork } from "../support/network.js";
+import { apiRoute, stubNetwork } from "../support/network.js";
+import { solidPng } from "../support/png.js";
 
 /**
  * Screenshots of a finding's page, taken with `pnpm shots`, for looking at
@@ -224,6 +225,52 @@ test("states", async ({ page }) => {
   await openMap(page, `/f/slow${VIEW}`);
   await shoot(page, "37-loading");
   release();
+});
+
+test("a ground photo, a hidden comment and the nearest place", async ({ page }) => {
+  await fakeSession(page, MEMBER);
+  const finding = seenFixture({
+    evidence: [
+      evidenceFixture({ id: 5, kind: "photo", title: null, url: null, media_id: 77, note: "From the east bank." }),
+      evidenceFixture({ id: 6, kind: "photo", title: null, url: null, media_id: 78, note: "Waiting for approval." }),
+    ],
+  });
+  await fakeFindingPage(page, finding, {
+    comments: [
+      commentFixture({
+        id: 3,
+        author: { handle: MEMBER.handle, display_name: MEMBER.display_name, role: "member" },
+        body: "This one was hidden by a moderator.",
+        hidden: true,
+      }),
+    ],
+  });
+  await page.route(apiRoute("/media/77"), (route) =>
+    route.fulfill({ status: 200, contentType: "image/png", body: solidPng(480, 320, [96, 112, 72]) }),
+  );
+  await page.route(apiRoute("/media/78"), (route) =>
+    route.fulfill({ status: 404, contentType: "application/json", body: "{}" }),
+  );
+  await page.route(apiRoute("/geo/point"), (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        grid_ref: "SU 1025 6996",
+        nation: "england",
+        elevation: 160,
+        place: { name: "Avebury", kind: "village", distance_m: 640, source: null },
+      }),
+    }),
+  );
+  const panel = await open(page, finding);
+  await sheetTo(page, "full");
+  await panel.getByText("Avebury, 640 m away").waitFor();
+  await shoot(page, "26-nearest-place");
+  await scrollTo(panel.getByRole("heading", { name: "Evidence" }));
+  await shoot(page, "27-photo-evidence");
+  await scrollTo(panel.getByRole("heading", { name: "Discussion" }));
+  await shoot(page, "28-hidden-comment");
 });
 
 test("evidence forms", async ({ page }) => {

@@ -15,6 +15,8 @@ import { fakeSession, meWith } from "./support/account.js";
 import { openMap } from "./support/app.js";
 import { fakeFindingPage } from "./support/findingPage.js";
 import { expect, test } from "./support/fixtures.js";
+import { apiRoute } from "./support/network.js";
+import { solidPng } from "./support/png.js";
 
 /**
  * A finding's page in fixture mode, at desktop and phone width: for each
@@ -232,6 +234,40 @@ test("adds an old map at once and keeps it once the server has it", async ({ pag
   release();
   await expect(item).not.toContainText("Saving…");
   expect(fake.sent["POST evidence"]).toEqual([{ kind: "historic_map", stance: "supports", title: "OS 6-inch, 1888" }]);
+});
+
+test("uploads a ground photo, adds it, and shows it", async ({ page }) => {
+  await fakeSession(page, MEMBER);
+  const finding = seenFixture();
+  const fake = await fakeFindingPage(page, finding);
+  const uploads: string[] = [];
+  await page.route(apiRoute("/media"), (route) => {
+    uploads.push(route.request().headers()["content-type"] ?? "");
+    return route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({ id: 77, url: "/api/v1/media/77", approved: false }),
+    });
+  });
+  await page.route(apiRoute("/media/77"), (route) =>
+    route.fulfill({ status: 200, contentType: "image/png", body: solidPng(64, 48, [96, 112, 72]) }),
+  );
+  const panel = await openFinding(page, finding);
+  await panel.getByRole("button", { name: "Add evidence" }).click();
+  await panel.locator(".fc-kind-list").getByRole("button", { name: "Ground photo", exact: true }).click();
+  const form = panel.getByRole("form", { name: "Add ground photo" });
+  await form.getByLabel("The photo").setInputFiles({
+    name: "barrow.png",
+    mimeType: "image/png",
+    buffer: solidPng(64, 48, [96, 112, 72]),
+  });
+  await expect(form.getByText("Chosen: barrow.png")).toBeVisible();
+  await form.getByRole("button", { name: "Add it" }).click();
+  const photo = panel.getByRole("img", { name: "Ground photo added by Mary Anning" });
+  await expect(photo).toBeVisible();
+  await expect.poll(() => photo.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(64);
+  expect(uploads).toEqual(["image/png"]);
+  expect(fake.sent["POST evidence"]).toEqual([{ kind: "photo", stance: "supports", media_id: 77 }]);
 });
 
 // Each of these makes a request fail on purpose, which the browser logs as an error.

@@ -203,6 +203,8 @@ describe("saving, signed in", () => {
       view_state: { layer: "composite", sun_azimuth: 120, sun_altitude: 15, zoom: 14, bearing: 0, pitch: 0 },
     });
 
+    expect(body.client_ref).toEqual(expect.any(String));
+
     act(() => answer(json(createdFinding(body, "abc123"), 201)));
     await waitFor(() => expect(address()).toBe("/f/abc123"));
     await waitFor(() => expect(usePendingFindings.getState().pending).toEqual([]));
@@ -230,7 +232,10 @@ describe("saving, signed in", () => {
     const toastBox = toast.closest(".fc-toast") as HTMLElement;
     await user.click(within(toastBox).getByRole("button", { name: "Try again" }));
     await waitFor(() => expect(address()).toBe("/f/moat1"));
+    const [first, second] = routes.callsTo("POST /findings").map((call) => (call.body as FindingCreate).client_ref);
     expect(routes.callsTo("POST /findings")).toHaveLength(2);
+    // Tried again, it is the same finding to the server, so a save that went through unheard isn't made twice.
+    expect(second).toBe(first);
   });
 });
 

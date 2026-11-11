@@ -5,9 +5,9 @@ import type { Meta } from "../../../api/meta.js";
 import { useMapStore } from "../../../map/store.js";
 import { Button } from "../../../ui/Button.js";
 import { viewStateFrom } from "../../mark/describe.js";
-import { addEvidence, deleteEvidence, verifyEvidence, voteEvidence } from "../api.js";
+import { addEvidence, deleteEvidence, uploadPhoto, verifyEvidence, voteEvidence } from "../api.js";
 import { groupEvidence, lowerFirst, type Viewer, type ViewerPosition } from "../describe.js";
-import { composeEvidence, type FieldId, type FormValues, isRecordKind } from "../evidenceForms.js";
+import { composeEvidence, type FieldId, type FormValues, isRecordKind, photoProblem } from "../evidenceForms.js";
 import { reasonOf, toastFailure, useSignedInFirst } from "../feedback.js";
 import { findingPageKeys } from "../keys.js";
 import type { Evidence, EvidenceIn, FindingDetail } from "../types.js";
@@ -20,12 +20,14 @@ import { composeRecordLink, NO_RECORD, RecordLinkForm, type RecordLinkValues } f
 export interface OpenForm {
   kindId: string;
   values: FormValues;
+  /** The picture chosen for a form that takes one. */
+  file: File | null;
   record: RecordLinkValues;
   problem: { field: FieldId | null; message: string } | null;
 }
 
 export function openForm(kindId: string, record: Partial<RecordLinkValues> = {}): OpenForm {
-  return { kindId, values: {}, record: { ...NO_RECORD, ...record }, problem: null };
+  return { kindId, values: {}, file: null, record: { ...NO_RECORD, ...record }, problem: null };
 }
 
 /** A stand-in for evidence being saved, shown at once and replaced by the server's answer. */
@@ -111,7 +113,9 @@ export function EvidenceSection({
     setForm(null);
     setPending((items) => [...items, placeholder]);
     try {
-      onApplied(await addEvidence(finding.public_id, composed.body));
+      // A form holds a file only when its kind takes a photo, which goes up first.
+      const body = open.file ? { ...composed.body, media_id: (await uploadPhoto(open.file)).id } : composed.body;
+      onApplied(await addEvidence(finding.public_id, body));
     } catch (error) {
       setForm({ ...open, problem: { field: null, message: reasonOf(error) } });
       toastFailure("Your evidence couldn't be added.", error);
@@ -229,6 +233,17 @@ export function EvidenceSection({
                 values={form.values}
                 problem={form.problem}
                 onChange={(values) => setForm({ ...form, values, problem: null })}
+                onFile={(file) => {
+                  // Said at once, rather than after the upload is refused.
+                  const problem = file ? photoProblem(file) : null;
+                  const kept = problem ? null : file;
+                  setForm({
+                    ...form,
+                    file: kept,
+                    values: { ...form.values, photo: kept?.name ?? "" },
+                    problem: problem ? { field: "photo", message: problem } : null,
+                  });
+                }}
                 onSubmit={() => void submit(form)}
                 onCancel={() => setForm(null)}
               />

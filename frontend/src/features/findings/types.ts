@@ -25,7 +25,7 @@ export type FindingPage = Schemas["Page_FindingSummary_"];
 export type ViewState = Schemas["ViewState"];
 export type GeoJSONGeometry = Schemas["GeoJSONGeometry"];
 /** A finding's position as this viewer may see it. */
-export type FindingLocation = Schemas["LocationOut"];
+export type FindingLocation = Schemas["Location"];
 export type FeatureClassId = Schemas["FeatureClass"];
 export type PeriodId = Schemas["Period"];
 export type TierId = Schemas["Tier"];

@@ -9,7 +9,7 @@ import type {
   Reveal,
 } from "../../src/features/finding/types.js";
 import { observationFixture, revealFixture, suggestionsFixture } from "../../src/test/fixtures/findingPage.js";
-import { apiRoute, FINDING_PAGE_ROUTE } from "./network.js";
+import { FINDING_PAGE_ROUTE } from "./network.js";
 
 /**
  * A stand-in for one finding's page and everything on it, in fixture mode:
@@ -132,6 +132,7 @@ export async function fakeFindingPage(
         created_at: new Date().toISOString(),
         edited_at: null,
         deleted: false,
+        hidden: false,
       };
       comments = [...comments, comment];
       return json(route, comment, 201);
@@ -161,7 +162,7 @@ export async function fakeFindingPage(
         source_key: body.source_key ?? null,
         reference: body.reference ?? null,
         relation: body.relation ?? null,
-        media_id: null,
+        media_id: body.media_id ?? null,
         view: body.view ?? null,
         occurred_on: body.occurred_on ?? null,
         organisation: body.organisation ?? null,
@@ -184,9 +185,6 @@ export async function fakeFindingPage(
     }
     return route.fallback();
   });
-
-  // The sources a record from elsewhere can come from. None are link-only in fixture mode.
-  await page.route(apiRoute("/sources"), (route) => json(route, []));
 
   await page.route(EVIDENCE_ROUTE, async (route) => {
     const match = EVIDENCE_ROUTE.exec(route.request().url());

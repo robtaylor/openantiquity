@@ -260,7 +260,6 @@ const CREDIT_WORDS: Record<CreditKind, string> = {
   could_not_see: "can't see it",
   unsure: "isn't sure",
   explained: "explained it",
-  answered: "gave a second look",
   added_evidence: "added evidence",
   endorsed: "endorsed evidence",
   verified: "verified a record",

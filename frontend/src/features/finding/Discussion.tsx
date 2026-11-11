@@ -129,6 +129,7 @@ export function Discussion({ finding, viewer, displayName }: DiscussionProps) {
       created_at: new Date().toISOString(),
       edited_at: null,
       deleted: false,
+      hidden: false,
     };
     const undo = optimisticComments((all) => [...all, placeholder]);
     setReplyTo(null);
@@ -192,6 +193,13 @@ export function Discussion({ finding, viewer, displayName }: DiscussionProps) {
               <span className="fc-muted">{comment.id < 0 ? "Posting…" : formatDate(comment.created_at)}</span>
             </p>
             <p className="fc-comment__body">{comment.body}</p>
+            {comment.hidden ? (
+              <p className="fc-comment__hidden">
+                {own
+                  ? "A moderator hid this comment. Only you and moderators can still see it."
+                  : "A moderator hid this comment. Only its author and moderators can see it."}
+              </p>
+            ) : null}
             {comment.id > 0 ? (
               <div className="fc-comment__actions">
                 <Button

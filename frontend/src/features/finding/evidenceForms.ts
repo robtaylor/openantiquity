@@ -12,7 +12,17 @@
 import type { ViewState } from "../findings/types.js";
 import type { EvidenceIn, EvidenceKindId, Outcome, Stance } from "./types.js";
 
-export type FieldId = "title" | "url" | "reference" | "organisation" | "occurred_on" | "outcome" | "note" | "stance";
+/** `photo` holds the chosen file's name. The file itself is uploaded by whoever sends the form. */
+export type FieldId =
+  | "title"
+  | "url"
+  | "reference"
+  | "organisation"
+  | "occurred_on"
+  | "outcome"
+  | "note"
+  | "stance"
+  | "photo";
 
 export interface FieldSpec {
   id: FieldId;
@@ -25,6 +35,8 @@ export interface FormSpec {
   fields: FieldSpec[];
   /** A LIDAR view records the map as it is now, instead of anything typed. */
   usesView?: boolean;
+  /** The form takes a picture, uploaded with `POST /media` before the evidence is sent. */
+  usesPhoto?: boolean;
   /** At least one of these must be filled, with this message when none is. */
   oneOf?: { fields: FieldId[]; message: string };
   /** The form can't be used yet, and this says why. */
@@ -112,8 +124,17 @@ const SPECS: Partial<Record<EvidenceKindId, FormSpec>> = {
     ],
   },
   photo: {
-    fields: [],
-    unavailable: "Photos can't be added yet, because uploading isn't open. A site visit can be logged now.",
+    usesPhoto: true,
+    fields: [
+      {
+        id: "photo",
+        label: "The photo",
+        required: true,
+        hint: "A JPEG, PNG or WebP of up to 15 MB. Where and when it was taken is stripped from the file. Others see it once a moderator or trusted member has approved it.",
+      },
+      NOTE,
+      STANCE,
+    ],
   },
   field_visit: dated("visit", false),
   geophysics: dated("survey", true),
@@ -142,6 +163,17 @@ export function needsVisitReminder(kindId: string): boolean {
 }
 
 export type FormValues = Partial<Record<FieldId, string>>;
+
+/** The largest photo `POST /media` takes, and the kinds of image it reads (docs/ARCHITECTURE.md, "Photos"). */
+export const PHOTO_MAX_BYTES = 15 * 1024 * 1024;
+export const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+
+/** Why this file can't be uploaded, or null when it can. The server checks again, more closely. */
+export function photoProblem(file: { size: number; type: string }): string | null {
+  if (!(PHOTO_TYPES as readonly string[]).includes(file.type)) return "The photo needs to be a JPEG, PNG or WebP.";
+  if (file.size > PHOTO_MAX_BYTES) return "That photo is over 15 MB. Try a smaller copy.";
+  return null;
+}
 
 export type Composed = { ok: true; body: EvidenceIn } | { ok: false; field: FieldId | null; message: string };
 
@@ -185,7 +217,9 @@ export function composeEvidence(
   };
   for (const field of spec.fields) {
     if (field.required && text(field.id) === null) {
-      return { ok: false, field: field.id, message: `${field.label.replace(/ \(optional\)$/, "")} is needed.` };
+      const message =
+        field.id === "photo" ? "Choose the photo first." : `${field.label.replace(/ \(optional\)$/, "")} is needed.`;
+      return { ok: false, field: field.id, message };
     }
   }
   const { oneOf } = spec;

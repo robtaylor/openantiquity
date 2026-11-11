@@ -26,7 +26,7 @@ export type ObservationPage = Schemas["Page_ObservationOut_"];
 export type Visible = Schemas["Visible"];
 export type ExplanationId = Schemas["Explanation"];
 export type Reveal = Schemas["Reveal"];
-export type Comparison = Schemas["Comparison"];
+export type Comparison = Schemas["ComparisonOut"];
 export type Tallies = Schemas["Tallies"];
 export type Comment = Schemas["CommentOut"];
 export type CommentPage = Schemas["Page_CommentOut_"];
@@ -36,7 +36,7 @@ export type SuggestedRecord = Schemas["SuggestedRecord"];
 export type RecordSummary = Schemas["RecordSummary"];
 export type RecordPage = Schemas["RecordPage"];
 export type RecordOut = Schemas["RecordOut"];
-export type Source = Schemas["fieldclub__schemas__records__SourceOut"];
+export type Media = Schemas["MediaOut"];
 
 /** The three answers to a second look, in the order they are offered. */
 export const ANSWERS = ["yes", "unsure", "no"] as const satisfies readonly Visible[];

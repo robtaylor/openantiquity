@@ -20,12 +20,6 @@ const VIEW = "#m=16/51.4286/-1.8542/0/0&v=composite";
 async function stub(page: Page): Promise<void> {
   await stubUpstream(page);
   await page.route(tilesRoute(), (route) => route.fulfill({ status: 204 }));
-  await page.route(/\/api\/v1\/meta(\?|$)/, async (route) => {
-    const response = await route.fetch();
-    const meta = (await response.json()) as { auth: Record<string, unknown> };
-    meta.auth.dev_login = true;
-    await route.fulfill({ response, json: meta });
-  });
 }
 
 /** Sign `page`'s browser in as a new member who has been through the welcome step. */
@@ -62,7 +56,7 @@ async function secondLook(page: Page, publicId: string, title: string): Promise<
   const look = panelFor(page, title).getByRole("region", { name: "Your second look" });
   await look.getByRole("button", { name: "I can see it" }).click();
   await look.getByRole("radio", { name: "Enclosure" }).click();
-  await look.getByRole("button", { name: "Send: i can see it" }).click();
+  await look.getByRole("button", { name: "Send “I can see it”" }).click();
   await expect(look.getByText("You can see it.")).toBeVisible();
   return look;
 }

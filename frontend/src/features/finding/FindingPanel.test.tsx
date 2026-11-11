@@ -19,7 +19,15 @@ import {
   suggestionsFixture,
 } from "../../test/fixtures/findingPage.js";
 import { meFixture } from "../../test/fixtures/me.js";
-import { json, mapReady, renderShell, setUpShellTests, signedOutResponse } from "../../test/shellHarness.js";
+import { metaFixture } from "../../test/fixtures/meta.js";
+import {
+  json,
+  mapReady,
+  metaResponse,
+  renderShell,
+  setUpShellTests,
+  signedOutResponse,
+} from "../../test/shellHarness.js";
 import type { Me } from "../account/api.js";
 import { useAccountUi } from "../account/requireAccount.js";
 import { DRAFTS_STORAGE_KEY, resetDraftsForTests } from "../drafts/store.js";
@@ -85,6 +93,23 @@ describe("a finding's head", () => {
     expect(panel.getByText("SU 1025 6996")).toBeInTheDocument();
     expect(panel.getByRole("button", { name: "See it as the finder did" })).toBeInTheDocument();
     expect(useSelectedFinding.getState().selected).toMatchObject({ publicId: "f-ring", square: null });
+  });
+
+  it("names the nearest place, from the position this viewer is shown", async () => {
+    const finding = seenFixture();
+    const routes = serve(finding);
+    routes.on("GET /geo/point", () =>
+      json({
+        grid_ref: "SU 1025 6996",
+        nation: "england",
+        elevation: 160,
+        place: { name: "Avebury", kind: "village", distance_m: 640, source: null },
+      }),
+    );
+    const { panel } = await open(finding, MEMBER, routes);
+    expect(await panel.findByText("Avebury, 640 m away")).toBeInTheDocument();
+    const [call] = routes.callsTo("GET /geo/point");
+    expect(call?.url.searchParams.get("lon")).toBe(String(finding.location.lon));
   });
 
   it("restores the finder's view: layer, light and zoom", async () => {
@@ -379,6 +404,63 @@ describe("evidence", () => {
     expect(await panel.findByRole("heading", { name: /Site visit/ })).toBeInTheDocument();
   });
 
+  it("uploads a ground photo, then adds it as evidence, and says it waits for approval", async () => {
+    const user = userEvent.setup();
+    const finding = seenFixture();
+    const { panel, routes } = await open(finding);
+    routes.on("POST /media", () =>
+      json(
+        {
+          id: 77,
+          url: "/api/v1/media/77",
+          content_type: "image/jpeg",
+          bytes: 2048,
+          width: 800,
+          height: 600,
+          approved: false,
+          rejected: false,
+          hidden: false,
+          created_at: "2026-11-11T10:00:00Z",
+        },
+        201,
+      ),
+    );
+    routes.on("POST /findings/f-ring/evidence", () =>
+      json(
+        seenFixture({ evidence: [evidenceFixture({ id: 9, kind: "photo", title: null, url: null, media_id: 77 })] }),
+        201,
+      ),
+    );
+    await user.click(panel.getByRole("button", { name: "Add evidence" }));
+    await user.click(panel.getByRole("button", { name: "Ground photo" }));
+    const form = within(await panel.findByRole("form", { name: "Add ground photo" }));
+    await user.click(form.getByRole("button", { name: "Add it" }));
+    expect(form.getByText("Choose the photo first.")).toBeInTheDocument();
+    expect(routes.callsTo("POST /media")).toHaveLength(0);
+
+    const tooBig = new File([new Uint8Array(16 * 1024 * 1024)], "huge.jpg", { type: "image/jpeg" });
+    await user.upload(form.getByLabelText("The photo"), tooBig);
+    expect(form.getByText(/over 15 MB/)).toBeInTheDocument();
+    expect(form.queryByText("Chosen: huge.jpg")).toBeNull();
+
+    const photo = new File([new Uint8Array(2048)], "barrow.jpg", { type: "image/jpeg" });
+    await user.upload(form.getByLabelText("The photo"), photo);
+    await user.type(form.getByLabelText("Note (optional)"), "From the east bank.");
+    await user.click(form.getByRole("button", { name: "Add it" }));
+    await waitFor(() => expect(routes.callsTo("POST /findings/f-ring/evidence")).toHaveLength(1));
+    const [upload] = harness.fetchMock().mock.calls.filter(([input]) => String(input).endsWith("/api/v1/media"));
+    expect(upload?.[1]).toMatchObject({ method: "POST", body: photo });
+    expect(new Headers(upload?.[1]?.headers).get("Content-Type")).toBe("image/jpeg");
+    expect(routes.callsTo("POST /findings/f-ring/evidence")[0]?.body).toEqual({
+      kind: "photo",
+      stance: "supports",
+      note: "From the east bank.",
+      media_id: 77,
+    });
+    const item = await panel.findByRole("img", { name: /Ground photo added by/ });
+    expect(item).toHaveAttribute("src", "/api/v1/media/77");
+  });
+
   it("opens the form again as it was, with the server's reason, when evidence is refused", async () => {
     const user = userEvent.setup();
     const { panel, routes } = await open(seenFixture());
@@ -420,12 +502,21 @@ describe("evidence", () => {
     const user = userEvent.setup();
     const finding = seenFixture();
     const routes = serve(finding);
-    routes.on("GET /sources", () => json([]));
+    const linkOnly = { ...metaFixture.sources[0], key: "her-wilts", name: "Wiltshire HER", access: "link" };
+    routes.on("GET /meta", () => metaResponse({ ...metaFixture, sources: [...metaFixture.sources, linkOnly] }));
     routes.on("POST /findings/f-ring/evidence", () => json(finding, 201));
     const { panel } = await open(finding, MEMBER, routes);
     await user.click(panel.getByRole("button", { name: "Add heritage record" }));
     const form = within(await panel.findByRole("form", { name: "Link a heritage record" }));
     await user.click(form.getByRole("button", { name: "It's a record from somewhere else" }));
+    // Only the sources whose records may only be linked are offered, from /meta.
+    const where = form.getByLabelText("Where it's from (optional)");
+    expect(
+      within(where)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["Not listed", "Wiltshire HER"]);
+    await user.selectOptions(where, "her-wilts");
     await user.type(form.getByLabelText("Record identifier"), "MWI4567");
     await user.type(form.getByLabelText("Record address"), "https://her.example.org/MWI4567");
     await user.click(form.getByRole("radio", { name: "Related" }));
@@ -437,6 +528,7 @@ describe("evidence", () => {
       relation: "related",
       reference: "MWI4567",
       url: "https://her.example.org/MWI4567",
+      source_key: "her-wilts",
     });
   });
 });
@@ -465,6 +557,25 @@ describe("discussion", () => {
     await waitFor(() => expect(panel.queryByText("I can see it in slope too.", { selector: "p" })).toBeNull());
     expect(await screen.findByText(/Your comment couldn't be posted\. Slow down a little\./)).toBeInTheDocument();
     expect(panel.getByLabelText("Add a comment")).toHaveValue("I can see it in slope too.");
+  });
+
+  it("tells the author of a comment a moderator hid that only they and moderators still see it", async () => {
+    const finding = pageFixture();
+    const routes = serve(finding);
+    const mine = { handle: MEMBER.handle, display_name: MEMBER.display_name, role: "member" };
+    routes.on("GET /findings/f-ring/comments", () =>
+      json({
+        items: [
+          commentFixture({ id: 1, author: mine, body: "Mine, hidden.", hidden: true }),
+          commentFixture({ id: 2, author: null, body: null, deleted: true }),
+        ],
+        next_cursor: null,
+      }),
+    );
+    const { panel } = await open(finding, MEMBER, routes);
+    expect(await panel.findByText("Mine, hidden.")).toBeInTheDocument();
+    expect(panel.getByText(/A moderator hid this comment/)).toBeInTheDocument();
+    expect(panel.getByText("This comment was removed.")).toBeInTheDocument();
   });
 
   it("follows at once and puts it back, with a toast, when the server refuses", async () => {

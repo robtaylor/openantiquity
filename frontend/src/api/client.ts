@@ -72,6 +72,8 @@ export interface ApiRequest {
   query?: Record<string, QueryParam>;
   /** Sent as JSON. */
   body?: unknown;
+  /** Sent as it is, with its own type, in place of `body`: an image for `POST /media`. */
+  file?: Blob;
   signal?: AbortSignal;
 }
 
@@ -131,7 +133,10 @@ export async function apiFetch<T>(path: string, request: ApiRequest = {}): Promi
   const headers: Record<string, string> = { Accept: "application/json" };
   if (!SAFE_METHODS.has(method)) headers["X-FieldClub-Client"] = "web";
   const init: RequestInit = { method, headers, credentials: "include", signal: request.signal };
-  if (request.body !== undefined) {
+  if (request.file !== undefined) {
+    headers["Content-Type"] = request.file.type || "application/octet-stream";
+    init.body = request.file;
+  } else if (request.body !== undefined) {
     headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(request.body);
   }

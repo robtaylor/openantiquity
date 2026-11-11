@@ -6,7 +6,7 @@ import { useMapStore } from "../../map/store.js";
 import { toast } from "../../ui/toastStore.js";
 import { AccountRequiredError, useRequireAccount } from "../account/requireAccount.js";
 import { useSession } from "../account/session.js";
-import { DraftBusyError, DraftTooLargeError } from "../drafts/store.js";
+import { DraftBusyError, DraftTooLargeError, newId } from "../drafts/store.js";
 import { createFinding } from "../findings/api.js";
 import { findingKeys } from "../findings/keys.js";
 import { findingPath, useSelectedFinding } from "../findings/selection.js";
@@ -55,6 +55,11 @@ export function useSaveMark(meta: Meta): () => Promise<void> {
   const { ready } = session;
   /** The save itself, for a toast's "Try again", which sends the form as it is by then. */
   const again = useRef<() => Promise<void>>(async () => {});
+  /**
+   * One reference for every attempt to save this mark, so trying again after
+   * a save the server made but whose answer was lost doesn't make it twice.
+   */
+  const clientRef = useRef<string>(newId());
 
   const keepAsDraft = useCallback(
     async (draft: FindingDraft, draftId: string | null): Promise<void> => {
@@ -89,7 +94,9 @@ export function useSaveMark(meta: Meta): () => Promise<void> {
       mark.setSaving(true);
       const pendingId = pending.add({ point: draft.point, title: draft.title, featureClass: draft.feature_class });
       try {
-        openSavedFinding(client, navigate, await createFinding(createBody(draft)));
+        const finding = await createFinding(createBody(draft, clientRef.current));
+        clientRef.current = newId();
+        openSavedFinding(client, navigate, finding);
         // The mark stays until the map and the list have the real finding.
         void client.invalidateQueries({ queryKey: findingKeys.all }).finally(() => pending.remove(pendingId));
       } catch (error) {

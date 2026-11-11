@@ -85,6 +85,8 @@ test("marking", async ({ page }) => {
   await shoot(page, "11-mark-form");
   await panel.getByRole("radio", { name: "Round barrow or mound" }).click();
   await shoot(page, "12-mark-protected");
+  await panel.getByText(/This map is for earthworks, not objects/).scrollIntoViewIfNeeded();
+  await shoot(page, "12b-mark-finds-notice");
 
   await panel.getByRole("button", { name: "Draw an outline" }).click();
   const map = page.locator(".fc-map__pane--main canvas");

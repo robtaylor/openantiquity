@@ -6,7 +6,7 @@ import { ChipGroup } from "../../../ui/Chip.js";
 import { Field } from "../../../ui/Field.js";
 import { Skeleton } from "../../../ui/Skeleton.js";
 import { useDebounced } from "../../../ui/useDebounced.js";
-import { fetchSources, fetchSuggestedRecords, searchRecords } from "../api.js";
+import { fetchSuggestedRecords, searchRecords } from "../api.js";
 import { distanceWords, labelOf } from "../describe.js";
 import { findingPageKeys } from "../keys.js";
 import { type EvidenceIn, RELATIONS, type RecordSummary, type Relation } from "../types.js";
@@ -128,13 +128,7 @@ export function RecordLinkForm({ meta, publicId, values, problem, onChange, onSu
     enabled: q.length >= 2,
     staleTime: 60_000,
   });
-  const sources = useQuery({
-    queryKey: findingPageKeys.sources,
-    queryFn: ({ signal }) => fetchSources(signal),
-    enabled: values.external,
-    staleTime: Number.POSITIVE_INFINITY,
-  });
-  const linkOnly = (sources.data ?? []).filter((source) => source.access !== "bulk");
+  const linkOnly = meta.sources.filter((source) => source.access !== "bulk");
   const choose = (record: RecordSummary) => onChange({ ...values, recordId: String(record.id), external: false });
   const set = (change: Partial<RecordLinkValues>) => onChange({ ...values, ...change });
 

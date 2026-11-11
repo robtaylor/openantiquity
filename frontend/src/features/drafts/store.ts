@@ -119,7 +119,8 @@ interface StoredDrafts {
 
 const STATES: readonly DraftState[] = ["waiting", "saving", "failed"];
 
-function newId(): string {
+/** A random id, also where `crypto.randomUUID` is missing (a page not served over HTTPS). */
+export function newId(): string {
   return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
     ? crypto.randomUUID()
     : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;

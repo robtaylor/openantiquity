@@ -20,5 +20,4 @@ export const findingPageKeys = {
   ] as const,
   recordSearch: (q: string) => ["records", "search", q] as const,
   record: (id: number) => ["records", "detail", id] as const,
-  sources: ["sources"] as const,
 };

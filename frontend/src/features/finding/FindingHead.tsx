@@ -1,6 +1,7 @@
 import { Eye, LogIn } from "lucide-react";
 import { Link } from "react-router";
 import { type Meta, viewTitle } from "../../api/meta.js";
+import { usePointDetail } from "../../map/usePointDetail.js";
 import { Avatar } from "../../ui/Avatar.js";
 import { Button } from "../../ui/Button.js";
 import { FeatureIcon } from "../../ui/featureIcons.js";
@@ -8,7 +9,7 @@ import { Meter } from "../../ui/Meter.js";
 import { TierBadge } from "../../ui/TierBadge.js";
 import { tierVar } from "../../ui/tokens.js";
 import { useAccountUi } from "../account/requireAccount.js";
-import { formatDate, labelOf, squareSentence, stateReason } from "./describe.js";
+import { distanceWords, formatDate, labelOf, squareSentence, stateReason } from "./describe.js";
 import { seeAsFinderDid } from "./mapView.js";
 import { ReportSlot } from "./Slots.js";
 import type { FindingDetail } from "./types.js";
@@ -76,6 +77,8 @@ export function FindingHead({ meta, finding, signedIn, change }: FindingHeadProp
   const reason = stateReason(meta, finding);
   const community = finding.answers_visible ? (assessment.tallies?.community_class ?? null) : null;
   const openSignIn = useAccountUi((ui) => ui.openSignIn);
+  // Asked of the position this viewer is shown, so a square's finding is named from its square.
+  const place = usePointDetail({ lng: location.lon, lat: location.lat }).detail?.place ?? null;
 
   return (
     <section className="fc-finding__head" aria-label="About this finding">
@@ -132,6 +135,14 @@ export function FindingHead({ meta, finding, signedIn, change }: FindingHeadProp
           <dt>Period</dt>
           <dd>{labelOf(meta.vocab.periods, finding.period)}</dd>
         </div>
+        {place ? (
+          <div>
+            <dt>Near</dt>
+            <dd>
+              {place.name}, {distanceWords(place.distance_m)}
+            </dd>
+          </div>
+        ) : null}
         <div>
           <dt>{location.obscured ? "Square" : "Grid reference"}</dt>
           <dd className="fc-mono">{location.obscured ? (location.square ?? location.grid_ref) : location.grid_ref}</dd>

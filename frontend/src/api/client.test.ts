@@ -44,6 +44,17 @@ describe("apiFetch", () => {
     expect(init?.credentials).toBe("include");
   });
 
+  it("sends a file as it is, with its own type, and the client header", async () => {
+    const mock = stubFetch(json({ id: 1 }, 201));
+    const photo = new Blob(["jpeg bytes"], { type: "image/jpeg" });
+    await apiFetch("/media", { method: "POST", file: photo });
+    const init = mock.mock.calls[0]?.[1];
+    const headers = new Headers(init?.headers);
+    expect(init?.body).toBe(photo);
+    expect(headers.get("Content-Type")).toBe("image/jpeg");
+    expect(headers.get("X-FieldClub-Client")).toBe("web");
+  });
+
   it("throws a typed error from the error envelope", async () => {
     stubFetch(json({ error: { code: "not_found", message: "No finding with that id." } }, 404));
     const error = await apiFetch("/findings/nope").catch((e: unknown) => e);

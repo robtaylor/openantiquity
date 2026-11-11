@@ -226,7 +226,18 @@ function FindsNotice({ meta, nation }: { meta: Meta; nation: string | null }) {
   return (
     <div className="fc-mark__notice fc-mark__notice--finds">
       <p>{FINDS_NOTICE}</p>
-      <p>{route ?? "Report it to the finds recording scheme for the nation it was found in."}</p>
+      {route ? (
+        <p>
+          {route.text}{" "}
+          {route.url ? (
+            <a href={route.url} target="_blank" rel="noreferrer noopener">
+              {route.scheme} website
+            </a>
+          ) : null}
+        </p>
+      ) : (
+        <p>Report it to the finds recording scheme for the nation it was found in.</p>
+      )}
     </div>
   );
 }

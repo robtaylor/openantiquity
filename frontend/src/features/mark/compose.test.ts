@@ -1,12 +1,14 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../api/client.js";
 import { parseMeta } from "../../api/meta.js";
 import { defaultsFromMeta } from "../../map/store.js";
+import { createdFinding } from "../../test/fixtures/findings.js";
 import { metaFixture } from "../../test/fixtures/meta.js";
+import { saverFor } from "../drafts/savers.js";
 import { composeFinding, OUTSIDE_MESSAGE, saveProblem } from "./compose.js";
 import { gridRefOf, suggestTitle, viewStateFrom } from "./describe.js";
-import { createBody, parseFindingDraft } from "./findingDrafts.js";
+import { createBody, findingDrafts, parseFindingDraft } from "./findingDrafts.js";
 import { EMPTY_MARK, type MarkFields } from "./markStore.js";
 import { FINDS_NOTICE, findsRoute, sensitivityNotice } from "./notices.js";
 import { closeShape, type LngLat } from "./outline.js";
@@ -79,11 +81,14 @@ describe("notices", () => {
 
   it("gives each nation's reporting route for finds, from /meta", () => {
     expect(FINDS_NOTICE).toMatch(/earthworks, not objects/);
-    expect(findsRoute(meta, "england")).toMatch(/Portable Antiquities Scheme/);
-    expect(findsRoute(meta, "scotland")).toMatch(/Treasure Trove/);
+    expect(findsRoute(meta, "england")).toMatchObject({
+      scheme: "Portable Antiquities Scheme",
+      url: "https://finds.org.uk/",
+    });
+    expect(findsRoute(meta, "scotland")?.text).toMatch(/Treasure Trove/);
+    expect(findsRoute(meta, "northern_ireland")?.url).toBeNull();
+    expect(findsRoute(meta, "atlantis")).toBeNull();
     expect(findsRoute(meta, null)).toBeNull();
-    const own = { ...meta, notices: { ...meta.notices, finds: { wales: "Tell the finds officer in Wales." } } };
-    expect(findsRoute(own, "wales")).toBe("Tell the finds officer in Wales.");
   });
 });
 
@@ -178,8 +183,27 @@ describe("finding drafts", () => {
     expect(parseFindingDraft(null)).toBeNull();
   });
 
-  it("becomes the body of POST /findings, with the point as GeoJSON", () => {
-    expect(createBody(draft)).toEqual({
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("is saved after sign-in with the draft's own id as its reference, so a resent draft is stored once", async () => {
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Parameters<typeof createdFinding>[0];
+      return new Response(JSON.stringify(createdFinding(body, "made1")), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const saver = saverFor(findingDrafts.kind);
+    if (!saver) throw new Error("No saver for finding drafts");
+    await saver.save(draft, { draftId: "draft-7" });
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    expect(JSON.parse(String(init?.body))).toMatchObject({ client_ref: "draft-7", feature_class: "enclosure" });
+  });
+
+  it("becomes the body of POST /findings, with the point as GeoJSON and the reference that makes a resend harmless", () => {
+    expect(createBody(draft, "draft-1")).toEqual({
+      client_ref: "draft-1",
       location: { type: "Point", coordinates: AVEBURY },
       feature_class: "enclosure",
       period: "unknown",
