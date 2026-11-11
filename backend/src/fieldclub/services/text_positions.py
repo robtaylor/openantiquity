@@ -12,22 +12,30 @@ What counts as a position finer than a 1 km square:
 
 - A grid reference of six figures or more on the British or Irish grid, in
   any case, with or without spaces: `SU 123 456`, `su123456`,
-  `SU 12345 67890`, `J 338 740`. The letters must name a real square and
-  stand on their own, so `NHLE 1012345` isn't one. Four figures name a 1 km
-  square and are left alone. The figures must split evenly: six, eight or
-  ten together, or two equal groups. An odd run such as `SU 1234567` is left
-  alone, as `parse_gridref` refuses it.
+  `SU 12345 67890`, `J 338 740`. The figure groups may also be split by a
+  hyphen, dot, comma or slash (`SU 123-456`, `SU.123.456`, `SU 123,456`),
+  and the letters from the figures by a hyphen or dot (`SU-123456`). The
+  letters must name a real square and stand on their own, so `NHLE 1012345`
+  isn't one. Four figures name a 1 km square and are left alone. The figures
+  must split evenly: six, eight or ten together, or two equal groups. An odd
+  run such as `SU 1234567` is left alone, as `parse_gridref` refuses it.
 - A latitude and longitude pair in the British Isles (latitude 49 to 61.5,
   longitude -14 to 2.5), in either order: decimal degrees with at least two
-  decimal places on each (`51.4286, -1.8542`, `51.43N 1.85W`, `@51.4286,-1.8542`,
-  `51.4286/-1.8542`), or degrees and minutes with seconds or decimal minutes
-  (`51°25'43"N 1°51'15"W`, `51° 25.7' N, 1° 51.2' W`). Two decimal places
-  are 1.1 km of latitude but 0.7 km of longitude, and whole minutes 1.9 by
+  decimal places on each, with a decimal point or a decimal comma
+  (`51.4286, -1.8542`, `51.43N 1.85W`, `@51.4286,-1.8542`, `51.4286/-1.8542`,
+  `51,4286 -1,8542`), perhaps labelled (`lat 51.4286 lon -1.8542`,
+  `Lat: 51.4286, Long: -1.8542`, `lat=51.4286&lon=-1.8542`), or degrees and
+  minutes with seconds or decimal minutes (`51°25'43"N 1°51'15"W`,
+  `51° 25.7' N, 1° 51.2' W`, `51d25m43s N 1d51m15s W`). Degrees and minutes
+  written with spaces alone count when both carry a hemisphere
+  (`N51 25.716 W1 51.250`, `51 25 43N 1 51 15W`). Two decimal places are
+  1.1 km of latitude but 0.7 km of longitude, and whole minutes 1.9 by
   1.2 km, so the first is a position and the second isn't.
 - A British National Grid easting and northing in metres, labelled
   (`E 410250 N 169960`, `410250E 169960N`, `easting 410250, northing 169960`)
-  or as a pair with a comma (`410250, 169960`), unless both are whole
-  kilometres.
+  or as a pair of six figures and six or seven separated by a comma, a slash
+  or a space (`410250, 169960`, `410250/169960`, `410250 169960`), inside
+  the grid and unless both are whole kilometres.
 - A three-word address: three words joined by dots, after `///` or a
   what3words link, or on their own when none of the words is part of a web
   or file address (`www`, `com`, `uk`, `pdf` and the like) and each has at
@@ -38,8 +46,9 @@ Some text only looks like a position, and is left alone: postcodes
 entry numbers (`1012345`), a single number, and prices. Some ordinary text
 is caught, and is accepted as the cost of not missing a position: a word of
 one or two letters that names a grid square followed by six figures (`no
-123456`, `A 123 456`), two six-figure numbers with a comma between them, and
-three dotted words such as `fish.and.chips`.
+123456`, `A 123 456`, `No. 123.456`), two six-figure numbers side by side,
+two numbers with a decimal comma that could be a latitude and a longitude
+(`52,000 1,250`), and three dotted words such as `fish.and.chips`.
 """
 
 from __future__ import annotations
@@ -67,19 +76,28 @@ _SQUARES = frozenset(
 assert {"SU", "NO", "TQ", "HU", "J", "O"} <= _SQUARES, "the grid squares are known"
 assert "AB" not in _SQUARES
 
+# The figure groups may be split by spaces or by one hyphen, dot, comma or
+# slash, and the letters from the figures by spaces or a hyphen or dot.
+_GROUPS = rf"(?:{_SEP}*[-.,/]{_SEP}*|{_SEP}+)"
 _GRID = re.compile(
-    rf"(?<![A-Za-z0-9])(?P<letters>[A-Za-z]{{1,2}}){_SEP}*"
-    rf"(?:(?P<east>\d{{3,5}}){_SEP}+(?P<north>\d{{3,5}})|(?P<compact>\d{{6,10}}))(?!\d)"
+    rf"(?<![A-Za-z0-9])(?P<letters>[A-Za-z]{{1,2}}){_SEP}*[-.]?{_SEP}*"
+    rf"(?:(?P<east>\d{{3,5}}){_GROUPS}(?P<north>\d{{3,5}})|(?P<compact>\d{{6,10}}))(?![.,]?\d)"
 )
 
-# A signed decimal number of degrees.
-_NUMBER = r"[-+\u2212]?\d{1,3}\.\d+"
+# A signed decimal number of degrees, with a decimal point or a decimal comma.
+_NUMBER = r"[-+\u2212]?\d{1,3}[.,]\d+"
 _HEMISPHERE = r"[NSEWnsew]"
-_DEGREE = r"[\u00b0\u00ba\u02da]"
-_MINUTE = r"['\u2032\u2019]"
-_SECOND = r"(?:\"|\u2033|\u201d|'')"
+_DEGREE = r"[\u00b0\u00ba\u02dad]"
+_MINUTE = r"['\u2032\u2019m]"
+_SECOND = r"(?:\"|\u2033|\u201d|''|s)"
 _BETWEEN = rf"(?:{_SEP}*[,;/|]{_SEP}*|{_SEP}+)"
 _BETWEEN_OR_NONE = rf"{_SEP}*[,;/|]?{_SEP}*"
+# A word naming the axis, as in `lat 51.43` or `lon=-1.85`.
+_AXIS_LABEL = r"(?i:latitude|lat|longitude|long|lon|lng)"
+
+
+def _label(i: int) -> str:
+    return rf"(?P<l{i}>{_AXIS_LABEL}){_SEP}*[:=]?{_SEP}*"
 
 
 def _decimal(i: int, *, leading: bool) -> str:
@@ -91,10 +109,16 @@ def _decimal(i: int, *, leading: bool) -> str:
 
 
 def _dms(i: int, *, leading: bool) -> str:
-    """Degrees and minutes, perhaps with seconds, with the hemisphere before it or, perhaps, after it."""
+    """Degrees and minutes, perhaps with seconds, with the hemisphere before it or, perhaps, after it.
+
+    The marks may be symbols, the letters `d`, `m` and `s`, or spaces. A
+    value without a degree mark (`51 25 43N`) only counts when both values
+    carry a hemisphere, which `_dms_pair` checks.
+    """
     value = (
-        rf"(?P<d{i}>\d{{1,3}}){_SEP}*{_DEGREE}{_SEP}*(?P<m{i}>\d{{1,2}}(?:\.\d+)?){_SEP}*{_MINUTE}"
-        rf"(?:{_SEP}*(?P<s{i}>\d{{1,2}}(?:\.\d+)?){_SEP}*{_SECOND})?"
+        rf"(?P<d{i}>\d{{1,3}})(?:{_SEP}*(?P<k{i}>{_DEGREE}){_SEP}*|{_SEP}+)(?P<m{i}>\d{{1,2}}(?:\.\d+)?)"
+        rf"(?:(?:{_SEP}*{_MINUTE}{_SEP}*|{_SEP}+)(?P<s{i}>\d{{1,2}}(?:\.\d+)?)(?:{_SEP}*{_SECOND})?"
+        rf"|{_SEP}*{_MINUTE})?"
     )
     if leading:
         return rf"(?P<h{i}>{_HEMISPHERE}){_SEP}*{value}"
@@ -105,10 +129,11 @@ def _dms(i: int, *, leading: bool) -> str:
 # into more figures or a word. Each pair is written with the hemispheres
 # before the numbers (`N 51.43 W 1.85`) or after them, or without them, and a
 # pattern is tried for each, because a letter between two numbers could
-# belong to either.
+# belong to either. A decimal pair may name its axes (`lat 51.43 lon -1.85`).
 _DECIMAL_PAIRS = tuple(
     re.compile(
-        rf"(?<![\w.\u00a3$\u20ac]){_decimal(1, leading=leading)}{_BETWEEN}{_decimal(2, leading=leading)}"
+        rf"(?<![\w.\u00a3$\u20ac])(?:{_label(1)})?{_decimal(1, leading=leading)}"
+        rf"(?:{_BETWEEN}|{_SEP}*[,;/|&]?{_SEP}*{_label(2)}){_decimal(2, leading=leading)}"
         r"(?!\.?\d)(?![^\W\d_])"
     )
     for leading in (True, False)
@@ -123,7 +148,9 @@ _EAST_NORTH_LABELLED = re.compile(
     rf"(?:n|northing){_SEP}*[:=]?{_SEP}*(?P<n>\d{{6,7}})(?!\.?\d)(?!\w)"
     rf"|(?<![\w.])(?P<e2>\d{{6}}){_SEP}*(?:e|east){_SEP}*[,;]?{_SEP}*(?P<n2>\d{{6,7}}){_SEP}*(?:n|north)(?![\w])"
 )
-_EAST_NORTH_PAIR = re.compile(rf"(?<![\w.,])(?P<e>\d{{6}}){_SEP}*,{_SEP}*(?P<n>\d{{6,7}})(?!\.?\d)(?!\w)")
+_EAST_NORTH_PAIR = re.compile(
+    rf"(?<![\w.,/])(?P<e>\d{{6}})(?:{_SEP}*[,/]{_SEP}*|{_SEP}+)(?P<n>\d{{6,7}})(?![.,/]?\d)(?!\w)"
+)
 
 _WORD = r"[^\W\d_]+"
 _WORDS = re.compile(
@@ -168,7 +195,7 @@ def _grid(match: re.Match[str]) -> bool:
 
 
 def _signed(value: str, hemisphere: str | None) -> float:
-    number = float(value.replace("\u2212", "-"))
+    number = float(value.replace("\u2212", "-").replace(",", "."))
     return -abs(number) if hemisphere is not None and hemisphere.upper() in "SW" else number
 
 
@@ -186,20 +213,29 @@ def _lat_lon(first: float, second: float, axes: tuple[str | None, str | None]) -
     return inside(first, second) or inside(second, first)
 
 
-def _axis(hemisphere: str | None) -> str | None:
+def _axis(match: re.Match[str], i: int) -> str | None:
+    """The axis a value names by its label, or else by its hemisphere."""
+    label = match.groupdict().get(f"l{i}")
+    if label is not None:
+        return "lat" if label.lower().startswith("lat") else "lon"
+    hemisphere = match[f"h{i}"]
     if hemisphere is None:
         return None
     return "lat" if hemisphere.upper() in "NS" else "lon"
 
 
 def _decimal_pair(match: re.Match[str]) -> bool:
-    if min(len(match["v1"].split(".")[1]), len(match["v2"].split(".")[1])) < 2:
+    if min(len(re.split("[.,]", match[f"v{i}"])[1]) for i in (1, 2)) < 2:
         return False
     return _pair(_signed(match["v1"], match["h1"]), _signed(match["v2"], match["h2"]), match)
 
 
 def _dms_pair(match: re.Match[str]) -> bool:
     if not any(match[f"s{i}"] is not None or "." in match[f"m{i}"] for i in (1, 2)):
+        return False
+    if any(float(match[f"m{i}"]) >= 60 or float(match[f"s{i}"] or 0) >= 60 for i in (1, 2)):
+        return False
+    if not all(match[f"k{i}"] is not None or match[f"h{i}"] is not None for i in (1, 2)):
         return False
 
     def degrees(i: int) -> float:
@@ -210,7 +246,7 @@ def _dms_pair(match: re.Match[str]) -> bool:
 
 
 def _pair(first: float, second: float, match: re.Match[str]) -> bool:
-    axes = (_axis(match["h1"]), _axis(match["h2"]))
+    axes = (_axis(match, 1), _axis(match, 2))
     if axes[0] is not None and axes[0] == axes[1]:
         return False
     return _lat_lon(first, second, axes)

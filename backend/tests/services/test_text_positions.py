@@ -37,6 +37,13 @@ GRID_REFERENCES = [
     # Shetland and the far south-west.
     "HU 4741 4112",
     "SV 9050 1025",
+    # Figure groups split by a hyphen, a dot, a comma or a slash.
+    "SU 102-699",
+    "SU-102-699",
+    "SU.102.699",
+    "SU 102,699",
+    "SU 102/699",
+    "SU-102699",
 ]
 
 COORDINATES = [
@@ -63,6 +70,23 @@ COORDINATES = [
     # Dublin and Lerwick, on the edges of what is looked for.
     "53.3498, -6.2603",
     "60.1546, -1.1494",
+    # Labelled latitude and longitude.
+    "lat 51.4286 lon -1.8542",
+    "Lat: 51.4286, Long: -1.8542",
+    "latitude 51.4286 longitude -1.8542",
+    "lat=51.4286&lon=-1.8542",
+    "lng -1.8542, lat 51.4286",
+    # Degrees and decimal minutes without symbols, the hemisphere first.
+    "N51 25.716 W1 51.250",
+    "N 51 25.716, W 1 51.252",
+    # Degrees, minutes and seconds without symbols, or with letters.
+    "51 25 43N 1 51 15W",
+    "51 25 43 N, 1 51 15 W",
+    "51d25m43s N 1d51m15s W",
+    "51d 25m 43s N, 1d 51m 15s W",
+    # Decimal commas.
+    "51,4286 -1,8542",
+    "51,4286; -1,8542",
 ]
 
 EASTINGS_AND_NORTHINGS = [
@@ -74,6 +98,9 @@ EASTINGS_AND_NORTHINGS = [
     "410250, 169960",
     "410250,169960",
     "447410, 1141250",
+    # Separated by a space or a slash.
+    "410250 169960",
+    "410250/169960",
 ]
 
 THREE_WORDS = [
@@ -130,10 +157,27 @@ LOOKALIKES = [
     "SU 1234567",
     # Two hemispheres of one kind.
     "51.4286N 1.8542N",
+    # Numbers with hemisphere letters that aren't a position.
+    "51 25 43N",
+    "N51 25 W1 51",
+    "51 75 43N 1 51 15W",
+    # Words between two numbers that aren't labels.
+    "51.4286 metres from -1.8542",
+    # A telephone number and a date, both with spaces.
+    "07700 900123",
+    "20241111 120000",
 ]
 
 # Ordinary text that is caught, as the module docstring accepts.
-CAUGHT_ALL_THE_SAME = ["no 123456", "A 123 456", "fish.and.chips", "52.10 0.25"]
+CAUGHT_ALL_THE_SAME = [
+    "no 123456",
+    "A 123 456",
+    "No. 123.456",
+    "fish.and.chips",
+    "52.10 0.25",
+    "52,000 1,250",
+    "123456 654321",
+]
 
 
 @pytest.mark.parametrize("text", GRID_REFERENCES)

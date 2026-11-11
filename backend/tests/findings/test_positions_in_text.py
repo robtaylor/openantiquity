@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from fieldclub.models import Finding
@@ -71,6 +72,25 @@ def test_a_protected_finding_refuses_a_position_in_its_title_or_description(
     # The 1 km square, and an open finding, are fine.
     assert _create(client, feature_class="round_barrow", title="Barrow in SU 10 69").status_code == 201
     assert _create(client, feature_class="enclosure", title=WRITTEN["title"]).status_code == 201
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "Lat: 51.4286, Long: -1.8542",
+        "Bank at SU 123-456",
+        "GPS N51 25.716 W1 51.250",
+        "Centre 410250 169960",
+        "51d25m43s N 1d51m15s W",
+        "51,4286 -1,8542",
+    ],
+)
+def test_positions_written_loosely_are_refused_too(
+    client_as: ClientAs, make_user: MakeUser, description: str
+) -> None:
+    refused = _create(client_as(make_user()), feature_class="round_barrow", description=description)
+    assert refused.status_code == 422, description
+    assert error_code(refused) == "position_in_text"
 
 
 def test_editing_refuses_a_position_once_the_finding_is_not_open(
@@ -233,3 +253,30 @@ def test_a_download_hides_what_its_position_hides(
     assert "51.4286" not in csv
     assert PLACEHOLDER in csv
     assert "51.4286" in client_as(finder).get(f"{API}/findings/{finding.public_id}/export?format=csv").text
+
+
+def test_a_stale_hidden_title_catches_up_the_next_time_the_finding_is_saved(
+    db: Session, client: TestClient, make_user: MakeUser
+) -> None:
+    """A title stored under older rules, or by a write that skipped the ORM, is redone at the next save."""
+    finding = create(db, make_user(), feature_class=FeatureClass.ENCLOSURE, title="Bank at SU 123-456")
+    db.commit()
+
+    def found(q: str) -> bool:
+        items = client.get(f"{API}/findings", params={"q": q}).json()["items"]
+        return finding.public_id in [item["public_id"] for item in items]
+
+    finding.sensitivity = Sensitivity.PROTECTED.value
+    db.commit()
+    assert not found("123-456")
+    # As the rules before hyphens counted, and as a row written by Core would leave it.
+    for stale in ("Bank at SU 123-456", None):
+        db.execute(update(Finding).where(Finding.id == finding.id).values(title_public=stale))
+        db.commit()
+        db.refresh(finding)
+        findings.reassess(db, findings.lock(db, finding), None)
+        db.commit()
+        db.refresh(finding)
+        assert finding.title_public == f"Bank at {PLACEHOLDER}"
+        assert not found("123-456")
+        assert found("Bank")
