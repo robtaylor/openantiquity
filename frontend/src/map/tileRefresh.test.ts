@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Meta, RasterView } from "../api/meta.js";
 import { metaFixture } from "../test/fixtures/meta.js";
-import { DEM_SOURCE, DEM_TERRAIN_SOURCE, viewSourceId } from "./style.js";
+import { DEM_SOURCE, DEM_TERRAIN_SOURCE, overlaySourceId, viewSourceId } from "./style.js";
 import { applyTileChanges, changedTiles, tileAddresses } from "./tileRefresh.js";
 
 /** The fixture with every terrain address given a new version token. */
@@ -11,6 +11,15 @@ function withNewToken(meta: Meta, token: string): Meta {
     if (view.type === "raster" && view.group === "lidar") view.tiles = view.tiles.map((url) => `${url}&v=${token}`);
   }
   next.layers.dem.tiles = next.layers.dem.tiles.map((url) => `${url}?v=${token}`);
+  return next;
+}
+
+/** The fixture with the records tiles' token changed, as a finished ingest run changes it. */
+function withNewRecordsToken(meta: Meta, token: string): Meta {
+  const next = structuredClone(meta);
+  for (const overlay of next.layers.overlays) {
+    if (overlay.type === "records") overlay.tiles = overlay.tiles.map((url) => url.replace(/\?v=.*$/, `?v=${token}`));
+  }
   return next;
 }
 
@@ -37,11 +46,17 @@ describe("changedTiles", () => {
       [
         DEM_SOURCE,
         DEM_TERRAIN_SOURCE,
-        ...["composite", "local_relief", "sky_view", "multi_shade", "slope"].map(viewSourceId),
+        ...["composite", "local_relief", "sky_view", "multi_shade", "slope", "openness"].map(viewSourceId),
       ].sort(),
     );
     expect(changes.has(viewSourceId("osm_standard"))).toBe(false);
     expect(changes.get(DEM_SOURCE)?.[0]).toMatch(/\?v=new$/);
+  });
+
+  it("finds the heritage records' tiles when their token changes", () => {
+    const changes = changedTiles(metaFixture, withNewRecordsToken(metaFixture, "after-ingest"));
+    expect([...changes.keys()]).toEqual([overlaySourceId("records")]);
+    expect(changes.get(overlaySourceId("records"))?.[0]).toMatch(/\.mvt\?v=after-ingest$/);
   });
 
   it("leaves a source the new catalogue doesn't have", () => {

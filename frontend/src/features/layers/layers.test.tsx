@@ -73,7 +73,9 @@ describe("the layer panel", () => {
     // Each tiled view's preview is one of its own tiles, from the address /meta gives.
     const composite = metaFixture.layers.views.find((view) => view.id === "composite") as RasterView;
     const previews = terrain.querySelectorAll<HTMLImageElement>(".fc-view-preview img");
-    expect(previews.length).toBe(5);
+    // Every tiled terrain view, openness among them.
+    expect(previews.length).toBe(6);
+    expect(within(terrain).getByRole("radio", { name: "Openness" })).toHaveAccessibleDescription(/How much sky/);
     const first = new URL(previews[0]?.src ?? "");
     expect(first.origin + first.pathname).toBe(new URL(composite.tiles[0] ?? "").origin + first.pathname);
     expect(first.searchParams.get("bbox")?.split(",")).toHaveLength(4);
@@ -113,6 +115,29 @@ describe("the layer panel", () => {
     expect(within(osmCredit as HTMLElement).getByRole("link", { name: "OpenStreetMap" })).toHaveAttribute(
       "href",
       "https://www.openstreetmap.org/copyright",
+    );
+    // Its licence, by name, is one tap away beside the credit.
+    expect(within(osmCredit as HTMLElement).getByRole("link", { name: "Open Database License 1.0" })).toHaveAttribute(
+      "href",
+      "https://www.openstreetmap.org/copyright",
+    );
+  });
+
+  it("names a layer's licence once, when its credit already links it", async () => {
+    const views = metaFixture.layers.views.map((view) =>
+      view.id === "composite"
+        ? {
+            ...view,
+            attribution: `© Environment Agency <a href="${view.licence_url}">Open Government Licence v3.0</a>`,
+          }
+        : view,
+    );
+    api.on("GET /meta", () => metaResponse({ ...metaFixture, layers: { ...metaFixture.layers, views } }));
+    open("/?panel=layers");
+    await mapReady();
+    const credit = screen.getByRole("complementary", { name: "Layers" }).querySelector(".fc-layer-credit");
+    expect(within(credit as HTMLElement).getAllByRole("link", { name: "Open Government Licence v3.0" })).toHaveLength(
+      1,
     );
   });
 
@@ -317,7 +342,7 @@ describe("coverage", () => {
     await user.click(within(panel).getByRole("switch", { name: "Where there's one-metre LIDAR" }));
     await waitFor(() => expect(map.isVisible(COVERAGE_LAYERS.coverageLine)).toBe(true));
     expect(await within(panel).findByTestId("coverage-summary")).toHaveTextContent(
-      /In view: 2022 composite, with \d+ of \d+ squares empty/,
+      /In view: 2022 composite, flown between 2005 and 2022, with \d+ of \d+ squares empty\./,
     );
   });
 

@@ -1,6 +1,14 @@
 import { ArrowLeftRight } from "lucide-react";
 import { memo, useId, useState } from "react";
-import { type Meta, type Overlay, VIEW_GROUPS, type View, type ViewGroup, viewTitle } from "../api/meta.js";
+import {
+  type LayerTerms,
+  type Meta,
+  type Overlay,
+  VIEW_GROUPS,
+  type View,
+  type ViewGroup,
+  viewTitle,
+} from "../api/meta.js";
 import { TerrainTools } from "../features/layers/TerrainTools.js";
 import { ViewPreview } from "../features/layers/ViewPreview.js";
 import { LiveSourceControls, RecordFilterControls } from "../features/records/RecordLayerControls.js";
@@ -8,7 +16,7 @@ import { Button } from "../ui/Button.js";
 import { Slider } from "../ui/Slider.js";
 import { Switch } from "../ui/Switch.js";
 import { TabPanel, Tabs } from "../ui/Tabs.js";
-import { Attribution, useAttributions } from "./attribution.js";
+import { Attribution, parseAttribution, safeHref, useAttributions } from "./attribution.js";
 import { LIMITS } from "./permalink.js";
 import { useMapStore } from "./store.js";
 import { overlayTroubleKey } from "./trouble.js";
@@ -36,12 +44,33 @@ export function orderedViews(views: readonly View[]): View[] {
   return [...views].sort((a, b) => Number(b.default === true) - Number(a.default === true));
 }
 
-/** A layer's credit and licence, shown while the layer is on. Its links open the licence and the source. */
-function LayerCredit({ attribution }: { attribution: string | undefined }) {
-  if (!attribution?.trim()) return null;
+/**
+ * A layer's credit and licence, shown while the layer is on. The licence is
+ * named, as a link to its terms, unless the credit already links it by name.
+ */
+function LayerCredit({ attribution, terms }: { attribution: string | undefined; terms?: LayerTerms }) {
+  const credit = attribution?.trim() ?? "";
+  const licence = terms?.licence?.trim() ?? "";
+  const named = licence !== "" && parseAttribution(credit).some((part) => part.href && part.text.trim() === licence);
+  const showLicence = licence !== "" && !named;
+  if (credit === "" && !showLicence) return null;
+  const href = safeHref(terms?.licence_url);
   return (
     <p className="fc-layer-credit">
-      <Attribution html={attribution} />
+      {credit !== "" ? <Attribution html={credit} /> : null}
+      {showLicence ? (
+        <span className="fc-layer-credit__licence">
+          {credit !== "" ? " · " : null}
+          Licence:{" "}
+          {href ? (
+            <a href={href} target="_blank" rel="noopener noreferrer">
+              {licence}
+            </a>
+          ) : (
+            licence
+          )}
+        </span>
+      ) : null}
     </p>
   );
 }
@@ -96,7 +125,7 @@ function ViewOption({
           ) : null}
         </span>
       </label>
-      {checked ? <LayerCredit attribution={view.attribution} /> : null}
+      {checked ? <LayerCredit attribution={view.attribution} terms={view} /> : null}
     </div>
   );
 }
@@ -136,7 +165,10 @@ function OverlayRow({ meta, overlay }: { meta: Meta; overlay: Overlay }) {
             format={(value) => `${value}%`}
             onChange={(value) => setOpacity(overlay.id, value / 100)}
           />
-          <LayerCredit attribution={overlay.attribution} />
+          <LayerCredit
+            attribution={overlay.attribution}
+            terms={overlay.type === "openmaptiles" ? overlay : undefined}
+          />
           {overlay.type === "findings" && ruledOut ? (
             <Switch
               label={`Show ${ruledOut.label.toLowerCase()} findings`}

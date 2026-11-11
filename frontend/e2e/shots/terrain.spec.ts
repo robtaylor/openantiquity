@@ -22,7 +22,7 @@ mkdirSync(OUT, { recursive: true });
 
 const AVEBURY = { lat: 51.4286, lng: -1.8542 };
 const FYFIELD = { lat: 51.435, lng: -1.795 };
-const VIEWS = ["composite", "local_relief", "sky_view", "multi_shade", "slope", "raking"];
+const VIEWS = ["composite", "local_relief", "sky_view", "multi_shade", "slope", "openness", "raking"];
 /** Everything over the terrain is off, so the pictures show the ground alone. */
 const BARE = "o=osm:80:h,records:100:h,findings:100:h";
 

@@ -4,8 +4,8 @@ import { gridMetresToWgs84, wgs84ToGridMetres } from "../../../map/gridref.js";
 
 /**
  * Where one-metre elevation exists, from `GET /terrain/coverage`, and the
- * squares in view where it doesn't. The schema types the answer as unknown,
- * so it is checked here as it arrives.
+ * squares in view where it doesn't. The answer comes from another part of
+ * the system and draws the map, so it is checked here as it arrives.
  */
 
 export class CoverageError extends Error {
@@ -24,6 +24,8 @@ export interface CoverageTile {
   /** What the data is, such as "2022 composite", when the API says. */
   capture: string | null;
   resolutionM: number | null;
+  /** The years the survey flights behind this tile were flown, earliest first. Empty when the API doesn't say. */
+  years: number[];
   ring: Ring;
   bounds: Bounds;
 }
@@ -57,6 +59,9 @@ export function parseCoverage(value: unknown): CoverageTile[] {
       tile: typeof props.tile === "string" ? props.tile : String(feature.id ?? index),
       capture: typeof props.capture === "string" && props.capture !== "" ? props.capture : null,
       resolutionM: isFiniteNumber(props.resolution_m) ? props.resolution_m : null,
+      years: Array.isArray(props.years)
+        ? [...new Set(props.years.filter((year): year is number => Number.isInteger(year)))].sort((a, b) => a - b)
+        : [],
       ring,
       bounds: ringBounds(ring),
     };
@@ -99,6 +104,23 @@ export function capturesIn(tiles: readonly CoverageTile[], view: Bounds): string
     if (tile.capture !== null && overlaps(tile.bounds, view) && !found.includes(tile.capture)) found.push(tile.capture);
   }
   return found;
+}
+
+/** The years the tiles touching a view were flown, earliest first, each once. */
+export function yearsIn(tiles: readonly CoverageTile[], view: Bounds): number[] {
+  const found = new Set<number>();
+  for (const tile of tiles) if (overlaps(tile.bounds, view)) for (const year of tile.years) found.add(year);
+  return [...found].sort((a, b) => a - b);
+}
+
+/** When the data was flown, in words, from years earliest first. Empty when nothing is known. */
+export function yearsText(years: readonly number[]): string {
+  const first = years[0];
+  const last = years[years.length - 1];
+  if (first === undefined || last === undefined) return "";
+  if (years.length === 1) return `flown in ${first}`;
+  if (years.length === 2) return `flown in ${first} and ${last}`;
+  return `flown between ${first} and ${last}`;
 }
 
 /** The elevation is mirrored in 5 km squares of the British National Grid. */

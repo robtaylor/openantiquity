@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { BORDER_COVERAGE, BORDER_VIEW, ENGLAND_SPOT, WALES_SPOT } from "../../../test/fixtures/coverage.js";
-import { CoverageError, capturesIn, coverageBox, gapsIn, insideRing, MAX_CELLS, parseCoverage } from "./coverage.js";
+import {
+  CoverageError,
+  capturesIn,
+  coverageBox,
+  gapsIn,
+  insideRing,
+  MAX_CELLS,
+  parseCoverage,
+  yearsIn,
+  yearsText,
+} from "./coverage.js";
 
 const tiles = parseCoverage(BORDER_COVERAGE);
 
@@ -11,6 +21,7 @@ describe("parseCoverage", () => {
     expect(first?.tile).toBe("SO50se");
     expect(first?.capture).toBe("2022 composite");
     expect(first?.resolutionM).toBe(1);
+    expect(first?.years).toEqual([2017, 2018]);
     expect(first?.ring).toHaveLength(5);
     expect(first?.bounds[0]).toBeLessThan(first?.bounds[2] ?? 0);
   });
@@ -29,6 +40,21 @@ describe("parseCoverage", () => {
     });
     expect(tile?.capture).toBeNull();
     expect(tile?.resolutionM).toBeNull();
+    expect(tile?.years).toEqual([]);
+  });
+});
+
+describe("yearsIn and yearsText", () => {
+  it("gathers the years the tiles in view were flown, earliest first, each once", () => {
+    expect(yearsIn(tiles, BORDER_VIEW)).toEqual([2005, 2006, 2009, 2010, 2016, 2017, 2018, 2019, 2020, 2021, 2022]);
+    expect(yearsIn(tiles, [0, 0, 1, 1])).toEqual([]);
+  });
+
+  it("says when the data was flown in plain words", () => {
+    expect(yearsText([])).toBe("");
+    expect(yearsText([2018])).toBe("flown in 2018");
+    expect(yearsText([2017, 2018])).toBe("flown in 2017 and 2018");
+    expect(yearsText([2005, 2018, 2022])).toBe("flown between 2005 and 2022");
   });
 });
 

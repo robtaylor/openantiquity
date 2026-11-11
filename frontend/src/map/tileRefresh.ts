@@ -4,11 +4,11 @@ import { useEffect } from "react";
 import type { Meta } from "../api/meta.js";
 import { fetchMeta } from "../api/useMeta.js";
 import { isMapLive } from "./MapPane.js";
-import { absoluteUrl, DEM_SOURCE, DEM_TERRAIN_SOURCE, viewSourceId } from "./style.js";
+import { absoluteUrl, DEM_SOURCE, DEM_TERRAIN_SOURCE, overlaySourceId, viewSourceId } from "./style.js";
 
 /**
- * Terrain tile addresses carry a version token (`?v=`) that changes when the
- * rendering or the data does, so a tile asked for with the current token can
+ * Terrain and record tile addresses carry a version token (`?v=`) that
+ * changes when the rendering or the data does, so a tile asked for with the current token can
  * be cached for good. A page left open across such a change would go on
  * asking for the old token. Every so often, and when the page comes back into
  * view, the catalogue is asked for again, and any source whose addresses have
@@ -27,6 +27,10 @@ export function tileAddresses(meta: Meta): Map<string, readonly string[]> {
   }
   found.set(DEM_SOURCE, meta.layers.dem.tiles);
   found.set(DEM_TERRAIN_SOURCE, meta.layers.dem.tiles);
+  // The records tiles' token changes when an ingest run finishes, so a page left open sees the new records.
+  for (const overlay of meta.layers.overlays) {
+    if (overlay.type === "records") found.set(overlaySourceId(overlay.id), overlay.tiles);
+  }
   return found;
 }
 

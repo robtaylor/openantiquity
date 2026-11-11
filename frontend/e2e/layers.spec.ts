@@ -46,7 +46,7 @@ test.describe("the layer panel", () => {
     await expect(terrain.getByRole("radio").first()).toHaveAccessibleName("Composite");
     // Every tiled preview loads, from the view's own address.
     const previews = terrain.locator(".fc-view-preview img");
-    await expect(previews).toHaveCount(5);
+    await expect(previews).toHaveCount(6);
     for (const preview of await previews.all()) {
       await expect.poll(() => preview.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
     }
@@ -207,7 +207,9 @@ test.describe("coverage", () => {
     await expect(page.getByTestId("coverage-notice")).toContainText("Shaded squares have no one-metre LIDAR");
     const layers = panel(page, "Layers");
     await layers.getByRole("switch", { name: "Where there's one-metre LIDAR" }).check();
-    await expect(layers.getByTestId("coverage-summary")).toContainText(/In view: 2022 composite, with \d+ of \d+/);
+    await expect(layers.getByTestId("coverage-summary")).toContainText(
+      /In view: 2022 composite, flown between 2005 and 2022, with \d+ of \d+/,
+    );
 
     // On a map that isn't drawn from the elevation, there is nothing to shade.
     await layers.getByRole("radio", { name: "OpenStreetMap" }).check();

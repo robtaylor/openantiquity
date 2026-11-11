@@ -9,6 +9,8 @@ export interface CoverageSummary {
   status: "idle" | "wide" | "loading" | "ready" | "failed";
   /** The capture descriptions of the data in view, such as "2022 composite". */
   captures: string[];
+  /** The years the data in view was flown, earliest first. */
+  years: number[];
   /** 5 km squares in view with no one-metre elevation, and squares in view in all. */
   gaps: number;
   cells: number;
@@ -22,15 +24,19 @@ export interface CoverageState {
   setSummary: (summary: CoverageSummary) => void;
 }
 
-export const IDLE_SUMMARY: CoverageSummary = { status: "idle", captures: [], gaps: 0, cells: 0 };
+export const IDLE_SUMMARY: CoverageSummary = { status: "idle", captures: [], years: [], gaps: 0, cells: 0 };
+
+function sameList<T>(a: readonly T[], b: readonly T[]): boolean {
+  return a.length === b.length && a.every((item, i) => item === b[i]);
+}
 
 function sameSummary(a: CoverageSummary, b: CoverageSummary): boolean {
   return (
     a.status === b.status &&
     a.gaps === b.gaps &&
     a.cells === b.cells &&
-    a.captures.length === b.captures.length &&
-    a.captures.every((capture, i) => capture === b.captures[i])
+    sameList(a.captures, b.captures) &&
+    sameList(a.years, b.years)
   );
 }
 

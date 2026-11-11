@@ -19,7 +19,22 @@ export type ViewGroup = "lidar" | "imagery" | "historic" | "map" | "geology";
 
 export const VIEW_GROUPS: readonly ViewGroup[] = ["lidar", "imagery", "historic", "map", "geology"];
 
-interface ViewBase {
+/** How freely a layer someone else publishes may be reused (Decision 0004). */
+export type Reuse = "open" | "share_alike" | "non_commercial" | "link_only";
+
+/**
+ * The terms of a layer someone else publishes: its licence by name, the
+ * licence's page and its reuse class. The backend sends them for every such
+ * layer. They are typed as possibly absent because `parseMeta` doesn't
+ * check them, and the map works without them.
+ */
+export interface LayerTerms {
+  licence?: string;
+  licence_url?: string;
+  reuse?: Reuse;
+}
+
+interface ViewBase extends LayerTerms {
   id: string;
   title: string;
   description: string;
@@ -46,7 +61,7 @@ export interface RakingView extends ViewBase {
 
 export type View = RasterView | RakingView;
 
-export interface DemLayer {
+export interface DemLayer extends LayerTerms {
   tiles: string[];
   tile_size: number;
   encoding: "terrarium" | "mapbox";
@@ -63,7 +78,7 @@ interface OverlayBase {
 }
 
 /** An OpenMapTiles-schema vector source that the frontend styles itself. */
-export interface OpenMapTilesOverlay extends OverlayBase {
+export interface OpenMapTilesOverlay extends OverlayBase, LayerTerms {
   type: "openmaptiles";
   tilejson: string;
   glyphs: string;

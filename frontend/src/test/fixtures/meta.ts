@@ -47,8 +47,23 @@ const EA_HILLSHADE_TILES = [
     "&format=image/png&transparent=true&crs=EPSG:3857&width=512&height=512&bbox={bbox-epsg-3857}",
 ];
 
+/** The licence every LIDAR view and the elevation are under, as the backend's catalogue names it. */
+const OGL = {
+  licence: "Open Government Licence v3.0",
+  licence_url: "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+  reuse: "open",
+} as const;
+
+/** OpenStreetMap's data licence, for the standard map and the overlay. */
+const ODBL = {
+  licence: "Open Database License 1.0",
+  licence_url: "https://www.openstreetmap.org/copyright",
+  reuse: "share_alike",
+} as const;
+
 function lidarView(id: string, title: string, description: string, isDefault = false): RasterView {
   return {
+    ...OGL,
     id,
     title,
     description,
@@ -550,9 +565,14 @@ export const metaFixture: Meta = {
       lidarView(
         "multi_shade",
         "Multi-direction shade",
-        "Sixteen light directions at once, so nothing hides by running parallel to the sun.",
+        "Three lights in red, green and blue, so nothing hides by running parallel to the sun.",
       ),
       lidarView("slope", "Slope", "Steepness. Picks out the sharp edges of platforms, lynchets and quarries."),
+      lidarView(
+        "openness",
+        "Openness",
+        "How much sky each spot sees, without the light. Banks and ridges go bright, ditches dark.",
+      ),
       {
         id: "raking",
         title: "Raking light",
@@ -560,6 +580,7 @@ export const metaFixture: Meta = {
         group: "lidar",
         type: "raking",
         attribution: DEM_ATTRIBUTION,
+        ...OGL,
       },
       {
         id: "osm_standard",
@@ -572,6 +593,7 @@ export const metaFixture: Meta = {
         minzoom: 0,
         maxzoom: 19,
         attribution: OSM_ATTRIBUTION,
+        ...ODBL,
         bounds: null,
       },
     ],
@@ -582,6 +604,7 @@ export const metaFixture: Meta = {
       minzoom: 0,
       maxzoom: 15,
       attribution: DEM_ATTRIBUTION,
+      ...OGL,
     },
     overlays: [
       {
@@ -592,8 +615,14 @@ export const metaFixture: Meta = {
         glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
         default_opacity: 0.8,
         attribution: OPENFREEMAP_ATTRIBUTION,
+        ...ODBL,
       },
-      { id: "records", title: "Heritage records", type: "records", tiles: ["/tiles/records/{z}/{x}/{y}.mvt"] },
+      {
+        id: "records",
+        title: "Heritage records",
+        type: "records",
+        tiles: ["/tiles/records/{z}/{x}/{y}.mvt?v=fixture1"],
+      },
       { id: "findings", title: "Findings", type: "findings" },
       { id: "coverage", title: "Scan coverage", type: "coverage" },
     ],

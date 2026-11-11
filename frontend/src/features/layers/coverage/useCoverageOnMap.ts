@@ -8,7 +8,7 @@ import { useMapStore, useViewAreaStore } from "../../../map/store.js";
 import { COLOURS } from "../../../ui/tokens.js";
 import { EMPTY_COLLECTION, type FeatureCollection } from "../../records/geojson.js";
 import { terrainKeys } from "../keys.js";
-import { capturesIn, coverageBox, fetchCoverage, gapsIn, type Ring } from "./coverage.js";
+import { capturesIn, coverageBox, fetchCoverage, gapsIn, type Ring, yearsIn } from "./coverage.js";
 import { type CoverageSummary, IDLE_SUMMARY, useCoverageStore } from "./store.js";
 
 /** Below this zoom coverage isn't asked for: the view holds too many squares to say anything useful. */
@@ -133,6 +133,7 @@ export function useCoverageOnMap(meta: Meta, main: MapLibreMap | null, compare: 
       summary = {
         status: gaps === null ? "wide" : "ready",
         captures: capturesIn(tiles, bounds),
+        years: yearsIn(tiles, bounds),
         gaps: gaps?.rings.length ?? 0,
         cells: gaps?.cells ?? 0,
       };

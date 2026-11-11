@@ -49,7 +49,7 @@ export async function serveRecordTiles(
   layer: "records" | "record_counts" = "records",
 ): Promise<void> {
   const index = new GeoJSONVT(collection(points), TILE_OPTIONS);
-  const pattern = /^https?:\/\/localhost(:\d+)?\/tiles\/records\/(\d+)\/(\d+)\/(\d+)\.mvt$/;
+  const pattern = /^https?:\/\/localhost(:\d+)?\/tiles\/records\/(\d+)\/(\d+)\/(\d+)\.mvt(\?.*)?$/;
   await page.route(pattern, (route) => {
     const match = pattern.exec(route.request().url());
     if (!match) return route.fulfill({ status: 404 });

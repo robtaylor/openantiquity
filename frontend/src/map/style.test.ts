@@ -172,7 +172,8 @@ describe("buildStyle", () => {
     expect(style.sources[DEM_SOURCE]).toMatchObject({ tiles: ["https://fieldclub.test/tiles/dem/{z}/{x}/{y}.png"] });
     expect(style.sources[overlaySourceId("records")]).toMatchObject({
       type: "vector",
-      tiles: ["https://fieldclub.test/tiles/records/{z}/{x}/{y}.mvt"],
+      // The version token is kept as /meta gives it.
+      tiles: ["https://fieldclub.test/tiles/records/{z}/{x}/{y}.mvt?v=fixture1"],
     });
   });
 

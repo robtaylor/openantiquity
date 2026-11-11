@@ -3,6 +3,7 @@ import { Spline } from "lucide-react";
 import { Link } from "react-router";
 import { Button } from "../../ui/Button.js";
 import { Switch } from "../../ui/Switch.js";
+import { yearsText } from "./coverage/coverage.js";
 import { useCoverageStore } from "./coverage/store.js";
 import { terrainKeys } from "./keys.js";
 import { PROFILE_PATH } from "./profile/line.js";
@@ -31,16 +32,25 @@ function CoverageDetail() {
           </Button>
         </p>
       );
-    case "ready":
+    case "ready": {
+      if (summary.gaps === summary.cells) {
+        return (
+          <p className="fc-field__hint" data-testid="coverage-summary">
+            No one-metre LIDAR in view.
+          </p>
+        );
+      }
+      const what = [
+        summary.captures.length > 0 ? summary.captures.join(", ") : "one-metre LIDAR",
+        yearsText(summary.years),
+      ];
+      if (summary.gaps > 0) what.push(`with ${summary.gaps} of ${summary.cells} squares empty`);
       return (
         <p className="fc-field__hint" data-testid="coverage-summary">
-          {summary.gaps === summary.cells
-            ? "No one-metre LIDAR in view."
-            : `In view: ${summary.captures.length > 0 ? summary.captures.join(", ") : "one-metre LIDAR"}${
-                summary.gaps > 0 ? `, with ${summary.gaps} of ${summary.cells} squares empty` : ""
-              }.`}
+          In view: {what.filter(Boolean).join(", ")}.
         </p>
       );
+    }
   }
 }
 

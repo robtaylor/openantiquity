@@ -26,6 +26,7 @@ export const BORDER_COVERAGE = {
         tile: "SO50se",
         capture: "2022 composite",
         resolution_m: 1,
+        years: [2017, 2018],
       },
     },
     {
@@ -47,6 +48,7 @@ export const BORDER_COVERAGE = {
         tile: "SO50sw",
         capture: "2022 composite",
         resolution_m: 1,
+        years: [2017, 2018],
       },
     },
     {
@@ -68,6 +70,7 @@ export const BORDER_COVERAGE = {
         tile: "ST48ne",
         capture: "2022 composite",
         resolution_m: 1,
+        years: [2005, 2006, 2010, 2016, 2018, 2019, 2020, 2021],
       },
     },
     {
@@ -89,6 +92,7 @@ export const BORDER_COVERAGE = {
         tile: "ST58ne",
         capture: "2022 composite",
         resolution_m: 1,
+        years: [2018, 2019, 2020, 2022],
       },
     },
     {
@@ -110,6 +114,7 @@ export const BORDER_COVERAGE = {
         tile: "ST58nw",
         capture: "2022 composite",
         resolution_m: 1,
+        years: [2005, 2006, 2009, 2010, 2016, 2017, 2018, 2019, 2020, 2021, 2022],
       },
     },
     {
@@ -131,6 +136,7 @@ export const BORDER_COVERAGE = {
         tile: "ST59ne",
         capture: "2022 composite",
         resolution_m: 1,
+        years: [2017, 2018, 2019, 2022],
       },
     },
     {
@@ -152,6 +158,7 @@ export const BORDER_COVERAGE = {
         tile: "ST59nw",
         capture: "2022 composite",
         resolution_m: 1,
+        years: [2017, 2018],
       },
     },
     {
@@ -173,6 +180,7 @@ export const BORDER_COVERAGE = {
         tile: "ST59se",
         capture: "2022 composite",
         resolution_m: 1,
+        years: [2018, 2019, 2020, 2022],
       },
     },
     {
@@ -194,6 +202,7 @@ export const BORDER_COVERAGE = {
         tile: "ST59sw",
         capture: "2022 composite",
         resolution_m: 1,
+        years: [2005, 2006, 2018, 2019, 2020, 2022],
       },
     },
   ],
