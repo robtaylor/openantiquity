@@ -55,8 +55,8 @@ import { RECENT_MENTIONS_PATH } from "../mentions/paths.js";
 import { RecentMentionsPanel } from "../mentions/RecentMentionsPanel.js";
 import { MOD_ROUTE, ModerationPanel } from "../moderation/ModerationPanel.js";
 import { NotificationAnnouncer } from "../notifications/NotificationAnnouncer.js";
-import { PROFILE_ROUTE, ProfilePanel as PersonPanel } from "../people/ProfilePanel.js";
-import { APP_NAME, NotFoundPanel, PLACEHOLDER_ROUTES, PlaceholderPanel } from "../placeholders.js";
+import { ProfilePanel as PersonPanel, PROFILE_ROUTE } from "../people/ProfilePanel.js";
+import { APP_NAME, NotFoundPanel } from "../placeholders.js";
 import { OpenElsewherePanel } from "../records/OpenElsewherePanel.js";
 import { ELSEWHERE_PATH, RECORD_SEARCH_PATH } from "../records/paths.js";
 import { RecordPage } from "../records/RecordPage.js";
@@ -349,9 +349,6 @@ function ReadyShell({ meta }: { meta: Meta }) {
             <Route path={GUIDE_PATH} element={<GuidePanel meta={meta} />} />
             <Route path={ABOUT_PATH} element={<AboutPanel meta={meta} />} />
             <Route path={NOTICE_ROUTE} element={<NoticePanel meta={meta} />} />
-            {PLACEHOLDER_ROUTES.map((route) => (
-              <Route key={route.path} path={route.path} element={<PlaceholderPanel route={route} />} />
-            ))}
             {Gallery ? (
               <Route
                 path="/_ui"

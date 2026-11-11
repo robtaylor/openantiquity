@@ -54,7 +54,7 @@ describe("creditGroups", () => {
   it("credits layers that share an attribution once, naming them all", () => {
     const layers = creditGroups(META, [])[0];
     const lidar = layers?.credits.find((credit) => credit.attribution?.includes("Environment Agency"));
-    expect(lidar?.name).toBe("Composite, Local relief, Sky-view, Multi-direction shade, Slope");
+    expect(lidar?.name).toBe("Composite, Local relief, Sky-view, Multi-direction shade, Slope, Openness");
     // Every attribution the map shows is in the list once.
     const attributions = layers?.credits.map((credit) => credit.attribution) ?? [];
     expect(new Set(attributions).size).toBe(attributions.length);
@@ -79,7 +79,7 @@ describe("creditGroups", () => {
     const credited = layers?.credits.filter((credit) => credit.attribution === ea) ?? [];
     expect(credited.map((credit) => [credit.name, credit.licence, credit.licenceUrl])).toEqual([
       [
-        "Composite, Local relief, Sky-view, Multi-direction shade",
+        "Composite, Local relief, Sky-view, Multi-direction shade, Openness",
         "OGL v3.0",
         "https://www.nationalarchives.gov.uk/doc/ogl/",
       ],

@@ -368,8 +368,8 @@ function Takedown({ meta }: { meta: Meta }) {
     <>
       <h4>Removing your own work</h4>
       <p>
-        You can delete your own comments and evidence from a finding's page, and withdraw a finding you made. Deleting
-        your account removes your personal details, but not what you published (see the{" "}
+        You can delete your own comments, evidence and mentions from a finding's page, and withdraw a finding you made.
+        Deleting your account removes your personal details, but not what you published (see the{" "}
         <Link to="/about/terms">contributor terms</Link>).
       </p>
 

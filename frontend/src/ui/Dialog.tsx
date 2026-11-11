@@ -70,16 +70,6 @@ export function Dialog({ open, onClose, title, children, actions, className }: D
     };
   }, [open]);
 
-  // A dialog taken out of the page while open is closed first, so the
-  // browser puts focus back where it was, as it does when one is closed.
-  useLayoutEffect(
-    () => () => {
-      const dialog = ref.current;
-      if (dialog?.open && typeof dialog.close === "function") dialog.close();
-    },
-    [],
-  );
-
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;

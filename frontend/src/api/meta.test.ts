@@ -108,6 +108,14 @@ describe("parseMeta", () => {
       (m: Breakable) => delete m.auth.providers[0].enabled,
       'each of "auth.providers" needs an id, a label and an enabled flag',
     ],
+    ["no step rules", (m: Breakable) => delete m.vocab.next_steps, '"vocab.next_steps" is not a list'],
+    [
+      "a step rule that doesn't say what meets it",
+      (m: Breakable) => delete m.vocab.next_steps[0].met_by,
+      'each of "vocab.next_steps" needs an id, what meets it and its evidence kinds',
+    ],
+    ["no report reasons", (m: Breakable) => delete m.vocab.report_reasons, '"vocab.report_reasons" is not a list'],
+    ["age bands that aren't a list", (m: Breakable) => (m.auth.age_bands = "16_17"), '"auth.age_bands" is not a list'],
     [
       "no under-18 field visit notice",
       (m: Breakable) => delete m.notices.field_visit_16_17,

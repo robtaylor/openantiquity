@@ -167,8 +167,10 @@ describe("the notices", () => {
     serve();
     const panel = await openPanel("/about/takedown", "Asking for something to be taken down");
     expect(panel.getByText(/within 48 hours of the report/)).toBeInTheDocument();
-    // Links (mentions) can't be deleted from a finding's page yet, so the notice doesn't say they can.
-    expect(panel.getByText(/delete your own comments and evidence from a finding's page/)).toBeInTheDocument();
+    // Whoever added a mention can remove it from the finding's page, as they can a comment or evidence.
+    expect(
+      panel.getByText(/delete your own comments, evidence and mentions from a finding's page/),
+    ).toBeInTheDocument();
     const others = within(panel.getByRole("navigation", { name: "The other notices" }));
     expect(others.getByRole("link", { name: "Privacy notice" })).toHaveAttribute("href", "/about/privacy");
     expect(others.getByRole("link", { name: "About Field Club" })).toHaveAttribute("href", "/about");

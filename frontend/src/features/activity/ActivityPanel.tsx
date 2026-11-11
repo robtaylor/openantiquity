@@ -1,12 +1,13 @@
-import { History, SearchX, SlidersHorizontal, Unplug } from "lucide-react";
+import { History, Megaphone, SearchX, SlidersHorizontal, Unplug } from "lucide-react";
 import { useId, useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { Button } from "../../ui/Button.js";
 import { ChipGroup } from "../../ui/Chip.js";
 import { EmptyState } from "../../ui/EmptyState.js";
 import { Skeleton } from "../../ui/Skeleton.js";
 import { MARK_PATH } from "../mark/MarkPanel.js";
+import { RECENT_MENTIONS_PATH } from "../mentions/paths.js";
 import { useDocumentTitle } from "../placeholders.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { EventRow } from "./EventRow.js";
@@ -67,6 +68,11 @@ function Filters() {
             Clear filters
           </Button>
         ) : null}
+        {/* Mentions in videos and articles have their own feed, which belongs to Activity. */}
+        <Link className="fc-button fc-button--secondary fc-button--sm fc-activity__mentions" to={RECENT_MENTIONS_PATH}>
+          <Megaphone size={14} aria-hidden />
+          Recent mentions
+        </Link>
       </div>
       {open ? (
         <div className="fc-activity__filter-body" id={bodyId}>

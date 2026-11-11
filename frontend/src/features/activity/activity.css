@@ -11,6 +11,11 @@
   gap: 8px;
 }
 
+/* "Recent mentions", at the far end of the filter bar. */
+.fc-activity__mentions {
+  margin-left: auto;
+}
+
 .fc-activity__filter-body {
   display: flex;
   flex-direction: column;

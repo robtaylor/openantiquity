@@ -1,31 +1,16 @@
-import { type LucideIcon, MapPinned } from "lucide-react";
+import { MapPinned } from "lucide-react";
 import { useEffect } from "react";
-import { Link, useLocation, useParams } from "react-router";
+import { Link, useLocation } from "react-router";
 import { EmptyState } from "../ui/EmptyState.js";
 import { PanelFrame } from "./shell/PanelFrame.js";
 
 /**
- * Every route that is not the bare map, with a titled placeholder panel.
- * Each feature replaces its entry with the real page as it is built.
+ * What every page shares: the app's name, the window title, and the panel
+ * for an address that leads nowhere. Each route once had a placeholder here
+ * until its page was built, and every one now has its page.
  */
 
 export const APP_NAME = "Field Club";
-
-type Params = Readonly<Record<string, string | undefined>>;
-
-export interface PlaceholderRoute {
-  path: string;
-  title: string;
-  /** A second line under the title, such as the id being shown. */
-  subtitle?: (params: Params) => string;
-  icon: LucideIcon;
-  /** What this page will do, in a sentence or two. */
-  body: string;
-  /** A part of it that is built already, offered beside "Back to the map". */
-  built?: { to: string; label: string };
-}
-
-export const PLACEHOLDER_ROUTES: PlaceholderRoute[] = [];
 
 /** Sets the window title to `title · Field Club` while the page is shown. */
 export function useDocumentTitle(title: string): void {
@@ -42,35 +27,6 @@ function BackToMap() {
     <Link className="fc-button fc-button--secondary fc-button--md" to="/">
       Back to the map
     </Link>
-  );
-}
-
-export function PlaceholderPanel({ route }: { route: PlaceholderRoute }) {
-  const params = useParams();
-  const { pathname } = useLocation();
-  useDocumentTitle(route.title);
-  const Icon = route.icon;
-  return (
-    <PanelFrame panelKey={pathname} title={route.title} subtitle={route.subtitle?.(params)}>
-      <EmptyState
-        icon={<Icon size={22} />}
-        title="This part isn't built yet"
-        action={
-          route.built ? (
-            <>
-              <Link className="fc-button fc-button--primary fc-button--md" to={route.built.to}>
-                {route.built.label}
-              </Link>
-              <BackToMap />
-            </>
-          ) : (
-            <BackToMap />
-          )
-        }
-      >
-        <p>{route.body}</p>
-      </EmptyState>
-    </PanelFrame>
   );
 }
 
