@@ -146,7 +146,12 @@ test("an uploaded photo waits for approval, and shows to others once a trusted m
     await openMap(third.page, `/f/${publicId}`);
     const theirs = third.page.getByRole("complementary", { name: title });
     await theirs.locator(".fc-evidence").first().scrollIntoViewIfNeeded();
-    await expect(theirs.getByText("This photo shows here once it has been approved.")).toBeVisible();
+    // Said neutrally, as the page can't tell waiting for approval from taken down.
+    await expect(
+      theirs.getByText(
+        "This photo can't be shown to you. It may still be waiting for approval, or have been taken down.",
+      ),
+    ).toBeVisible();
     await expect(theirs.getByRole("img", { name: /Ground photo added by/ })).toHaveCount(0);
 
     // A trusted member approves it from the queue.
