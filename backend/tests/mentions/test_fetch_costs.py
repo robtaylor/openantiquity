@@ -169,11 +169,11 @@ def test_a_used_up_budget_leaves_the_address_unfetched_and_uncached(
 @pytest.mark.parametrize(
     "url",
     [
-        "https://example.org/gro‮exe.lmth",
-        "https://exa​mple.org/",
-        "https://example.org/a⁦b",
-        "https://example.org/﻿",
-        "https://example.org/a­b",
+        "https://example.org/gro\u202eexe.lmth",
+        "https://exa\u200bmple.org/",
+        "https://example.org/a\u2066b",
+        "https://example.org/\ufeff",
+        "https://example.org/a\u00adb",
     ],
 )
 def test_an_address_with_invisible_characters_is_refused(
@@ -182,7 +182,7 @@ def test_an_address_with_invisible_characters_is_refused(
     assert error_code(post(client_as(make_user()), make_finding(), url)) == "invalid_address"
 
 
-@pytest.mark.parametrize("note", ["​‮", "  ﻿ ", ""])
+@pytest.mark.parametrize("note", ["\u200b\u202e", "  \ufeff ", ""])
 def test_a_note_with_nothing_visible_is_no_note(
     client_as: ClientAs,
     make_user: MakeUser,

@@ -52,7 +52,8 @@ import httpcore
 import httpx
 
 from fieldclub.config import get_settings
-from fieldclub.errors import AppError
+from fieldclub.errors import FetchFailedError as FetchFailedError
+from fieldclub.errors import FetchRefusedError as FetchRefusedError
 
 logger = logging.getLogger(__name__)
 
@@ -82,22 +83,6 @@ _REFUSED_V6 = (ipaddress.ip_network("::/96"), ipaddress.ip_network("::ffff:0:0:0
 
 # Something `inet_aton` reads as an IPv4 address: decimal, octal or hex parts.
 _NUMERIC_HOST = re.compile(r"[0-9a-fA-FxX.]+")
-
-
-class FetchRefusedError(AppError):
-    """The address isn't one we will fetch."""
-
-    status_code = 422
-    code = "fetch_refused"
-    message = "That address can't be fetched."
-
-
-class FetchFailedError(AppError):
-    """The fetch was allowed but didn't give a usable answer."""
-
-    status_code = 502
-    code = "fetch_failed"
-    message = "That address didn't answer usefully."
 
 
 @dataclass(frozen=True)

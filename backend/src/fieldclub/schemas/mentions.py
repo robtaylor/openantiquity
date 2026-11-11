@@ -103,7 +103,7 @@ class MentionOut(ApiModel):
         )
 
 
-class MentionedFinding(ApiModel):
+class MentionedFindingOut(ApiModel):
     """The finding a mention in the recent feed is about. No answers, and the position this viewer may see."""
 
     public_id: str
@@ -115,7 +115,7 @@ class MentionedFinding(ApiModel):
     author: PublicUser
 
     @classmethod
-    def build(cls, finding: Finding, author: User, viewer: User | None) -> MentionedFinding:
+    def build(cls, finding: Finding, author: User, viewer: User | None) -> MentionedFindingOut:
         assert author.has_id(finding.author_id), "the author passed is not the finding's author"
         return cls(
             public_id=finding.public_id,
@@ -129,4 +129,4 @@ class MentionedFinding(ApiModel):
 
 
 class RecentMentionOut(MentionOut):
-    finding: MentionedFinding
+    finding: MentionedFindingOut

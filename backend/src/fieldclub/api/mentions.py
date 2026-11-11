@@ -13,10 +13,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Response, status
 
 from fieldclub.api.deps import Contributor, Db, OptionalUser, PageQuery, private
-from fieldclub.ratelimit import contributor_rate_limit
+from fieldclub.ratelimit import rate_limit
 from fieldclub.schemas.common import Page
 from fieldclub.schemas.mentions import (
-    MentionedFinding,
+    MentionedFindingOut,
     MentionIn,
     MentionOut,
     MentionPreviewIn,
@@ -27,13 +27,13 @@ from fieldclub.services import findings, mentions
 
 router = APIRouter(tags=["mentions"])
 
-_per_member = contributor_rate_limit("mentions", 30, per_seconds=3600)
+_per_member = rate_limit("mentions", 30, per_seconds=3600, contributor=True)
 
 
 @router.post(
     "/mentions/preview",
     response_model=MentionPreviewOut,
-    dependencies=[Depends(contributor_rate_limit("mention-previews", 20, per_seconds=3600))],
+    dependencies=[Depends(rate_limit("mention-previews", 20, per_seconds=3600, contributor=True))],
 )
 def preview(body: MentionPreviewIn, user: Contributor, db: Db) -> MentionPreviewOut:
     """What a mention of this address would show. Nothing is saved, and a failed fetch is not an error."""
@@ -104,7 +104,7 @@ def recent(page: PageQuery, db: Db, viewer: OptionalUser, response: Response) ->
             RecentMentionOut(
                 # dict(), not model_dump(), so `added_by` stays a PublicUser.
                 **dict(MentionOut.build(mention, adder)),
-                finding=MentionedFinding.build(finding, found.finders[finding.author_id], viewer),
+                finding=MentionedFindingOut.build(finding, found.finders[finding.author_id], viewer),
             )
         )
     return Page[RecentMentionOut](items=items, next_cursor=found.next_cursor)

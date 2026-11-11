@@ -91,7 +91,7 @@ def test_a_page_without_open_graph_falls_back_to_its_title() -> None:
 
 def test_page_text_is_cleaned_before_it_is_kept() -> None:
     html = (
-        '<head><meta property="og:title" content="Bad‮\u0007title​ here">'
+        '<head><meta property="og:title" content="Bad\u202e\u0007title\u200b here">'
         f'<meta property="og:site_name" content="{"x" * 500}"></head>'
     )
     meta = page_metadata(html, ARTICLE_URL)

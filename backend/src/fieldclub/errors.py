@@ -139,6 +139,22 @@ class UpstreamError(AppError):
     message = "A service we depend on didn't answer properly."
 
 
+class FetchRefusedError(AppError):
+    """An address someone else chose that `safe_fetch` won't fetch."""
+
+    status_code = 422
+    code = "fetch_refused"
+    message = "That address can't be fetched."
+
+
+class FetchFailedError(AppError):
+    """A fetch `safe_fetch` allowed that gave no usable answer. `services.unfurl` raises it too."""
+
+    status_code = 502
+    code = "fetch_failed"
+    message = "That address didn't answer usefully."
+
+
 class ConfigError(AppError):
     code = "config_error"
     message = "The server is misconfigured."
