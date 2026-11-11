@@ -1,6 +1,8 @@
-"""Builds the `/meta` document: vocabularies, tiers, layers, providers, sources and terrain."""
+"""Builds the `/meta` document: vocabularies, the ladder's numbers, layers, providers, sources and terrain."""
 
 from __future__ import annotations
+
+from dataclasses import asdict
 
 from sqlalchemy.orm import Session
 
@@ -11,10 +13,23 @@ from fieldclub.config import Settings
 from fieldclub.layers import TileVersion, build_layers, default_tile_version
 from fieldclub.schemas import meta as schema
 from fieldclub.services import record_tiles, records, sensitivity
-from fieldclub.services.confidence import STEP_RULES
+from fieldclub.services.confidence import STEP_RULES, THRESHOLDS
+from fieldclub.services.findings import FIELD_KINDS, OFFICIAL_KINDS
 from fieldclub.terrain.catalogue import england_catalogue
 from fieldclub.terrain.service import TerrainStatus
 from fieldclub.terrain.styles import FINE_MINZOOM
+
+
+def follow_up(kind: vocab.EvidenceKind) -> vocab.FollowUp:
+    """Whether adding evidence of this kind logs `followup_logged`, and of which sort.
+
+    From the sets `services.findings` logs it by, so the timeline and the log agree.
+    """
+    if kind in FIELD_KINDS:
+        return vocab.FollowUp.FIELD
+    if kind in OFFICIAL_KINDS:
+        return vocab.FollowUp.OFFICIAL
+    return vocab.FollowUp.NONE
 
 
 def build_vocab() -> schema.Vocab:
@@ -31,7 +46,10 @@ def build_vocab() -> schema.Vocab:
             for item in vocab.FEATURE_CLASSES
         ],
         periods=[schema.PeriodOut.model_validate(item) for item in vocab.PERIODS],
-        evidence_kinds=[schema.EvidenceKindOut.model_validate(item) for item in vocab.EVIDENCE_KINDS],
+        evidence_kinds=[
+            schema.EvidenceKindOut(**asdict(item), follow_up=follow_up(item.id))
+            for item in vocab.EVIDENCE_KINDS
+        ],
         tiers=[schema.TierOut.model_validate(item) for item in vocab.TIERS],
         states=[schema.State.model_validate(item) for item in vocab.STATES],
         checks=[schema.CheckKindOut.model_validate(item) for item in vocab.CHECKS],
@@ -56,6 +74,49 @@ def build_vocab() -> schema.Vocab:
         ],
         link_shows=[schema.LinkShowsOut.model_validate(item) for item in vocab.LINK_SHOWS],
         link_coverages=[schema.LinkCoverageOut.model_validate(item) for item in vocab.LINK_COVERAGES],
+        link_verified=[schema.LinkVerifiedOut.model_validate(item) for item in vocab.LINK_VERIFIED],
+        sensitivity_levels=[
+            schema.SensitivityLevelOut(
+                id=item.id,
+                label=item.label,
+                who_sees=item.who_sees,
+                square_sentence=item.square_sentence,
+                exact_for=[viewer for viewer in vocab.SensitivityViewer if viewer in item.exact_for],
+            )
+            for item in vocab.SENSITIVITY_LEVELS
+        ],
+    )
+
+
+def build_ladder() -> schema.Ladder:
+    """The ladder's numbers, read from the engine's `THRESHOLDS` and role weights, never copied."""
+    t = THRESHOLDS
+    weight = vocab.role_weight
+    return schema.Ladder(
+        weights=schema.LadderWeights(
+            member=weight(vocab.Role.MEMBER),
+            trusted=weight(vocab.Role.TRUSTED),
+            expert=weight(vocab.Role.EXPERT),
+        ),
+        seen=schema.SeenRule(weight=t.seen_weight, observers=t.seen_observers, ratio=t.seen_ratio),
+        corroborated=schema.CorroboratedRule(
+            strands=t.corroborating_strands,
+            class_agreement=t.class_agreement,
+            class_people=t.class_people,
+            class_support=t.class_support,
+        ),
+        probable=schema.ProbableRule(
+            check_weight=t.check_weight,
+            check_margin=t.check_margin,
+            seen_without_reviewer=t.probable_seen_without_reviewer,
+        ),
+        evidence=schema.EvidenceRule(endorsement_weight=t.endorsement_weight, known_weight=t.known_weight),
+        disputed=schema.DisputedRule(
+            weight=t.disputed_weight, ratio_low=t.disputed_ratio_low, ratio_high=t.disputed_ratio_high
+        ),
+        ruled_out=schema.RuledOutRule(
+            unseen=t.ruled_out_unseen, ratio=t.ruled_out_ratio, explanation=t.ruled_out_explanation
+        ),
     )
 
 
@@ -100,13 +161,20 @@ def terrain_state(status: TerrainStatus | None) -> schema.TerrainState:
         return schema.TerrainState(
             fine_minzoom=FINE_MINZOOM,
             catalogue_tiles=len(england_catalogue()),
-            overview=schema.OverviewState(built=False, built_at=None, tiles=0),
+            mirrored_tiles=None,
+            overview=schema.OverviewState(built=False, built_at=None, tiles=0, covers_mirror=None),
         )
     overview = status.overview
     return schema.TerrainState(
         fine_minzoom=status.fine_minzoom,
         catalogue_tiles=status.catalogue_tiles,
-        overview=schema.OverviewState(built=overview.built, built_at=overview.built_at, tiles=overview.tiles),
+        mirrored_tiles=status.mirrored_tiles,
+        overview=schema.OverviewState(
+            built=overview.built,
+            built_at=overview.built_at,
+            tiles=overview.tiles,
+            covers_mirror=overview.covers_mirror,
+        ),
     )
 
 
@@ -121,7 +189,11 @@ def build_meta(
     normally both the terrain service's."""
     return schema.Meta(
         app=schema.AppInfo(
-            name=APP_NAME, version=__version__, contribution_licence=vocab.CONTRIBUTION_LICENCE
+            name=APP_NAME,
+            version=__version__,
+            contribution_licence=vocab.CONTRIBUTION_LICENCE,
+            contribution_licence_url=vocab.CONTRIBUTION_LICENCE_URL,
+            contact=settings.contact.strip() or None,
         ),
         auth=schema.AuthInfo(
             providers=[
@@ -137,4 +209,5 @@ def build_meta(
         sources=list_sources(db),
         notices=build_notices(),
         terrain=terrain_state(terrain),
+        ladder=build_ladder(),
     )

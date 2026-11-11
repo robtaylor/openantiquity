@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from fieldclub import vocab
+from fieldclub import layers, vocab
 from fieldclub.auth import providers
 from fieldclub.models import Source
-from fieldclub.services import sensitivity
+from fieldclub.services import confidence, findings, sensitivity
+from fieldclub.services import meta as meta_service
 
 
 @pytest.fixture
@@ -23,11 +25,29 @@ def meta(client: TestClient) -> dict:
 
 
 def test_top_level_keys(meta: dict) -> None:
-    assert list(meta) == ["app", "auth", "vocab", "layers", "sources", "notices", "terrain"]
+    assert list(meta) == ["app", "auth", "vocab", "layers", "sources", "notices", "terrain", "ladder"]
 
 
 def test_app(meta: dict) -> None:
-    assert meta["app"] == {"name": "Open Antiquity", "version": "0.1.0", "contribution_licence": "CC BY 4.0"}
+    assert meta["app"] == {
+        "name": "Open Antiquity",
+        "version": "0.1.0",
+        "contribution_licence": "CC BY 4.0",
+        "contribution_licence_url": "https://creativecommons.org/licenses/by/4.0/",
+        "contact": None,
+    }
+
+
+def test_app_gives_the_public_contact_from_settings(client: TestClient, env: Callable[..., None]) -> None:
+    env(CONTACT="  hello@openantiquity.example ")
+    assert client.get("/api/v1/meta").json()["app"]["contact"] == "hello@openantiquity.example"
+    env(CONTACT="   ")
+    assert client.get("/api/v1/meta").json()["app"]["contact"] is None
+
+
+def test_the_contribution_licence_address_is_the_one_the_layers_use_for_it() -> None:
+    assert vocab.CONTRIBUTION_LICENCE == "CC BY 4.0"
+    assert vocab.CONTRIBUTION_LICENCE_URL == layers.CC_BY_4_URL
 
 
 SIGN_IN_ORDER = [
@@ -86,6 +106,8 @@ def test_vocab_has_exactly_the_documented_vocabularies(meta: dict) -> None:
         "next_steps",
         "link_shows",
         "link_coverages",
+        "link_verified",
+        "sensitivity_levels",
     ]
 
 
@@ -94,7 +116,7 @@ def test_vocab_has_exactly_the_documented_vocabularies(meta: dict) -> None:
     [
         ("feature_classes", ["id", "label", "hint", "fish_term", "sensitivity"], len(vocab.FeatureClass)),
         ("periods", ["id", "label", "hint"], len(vocab.Period)),
-        ("evidence_kinds", ["id", "label", "strand", "group", "hint"], len(vocab.EvidenceKind)),
+        ("evidence_kinds", ["id", "label", "strand", "group", "hint", "follow_up"], len(vocab.EvidenceKind)),
         ("tiers", ["id", "label", "description", "base_score"], len(vocab.Tier)),
         ("states", ["id", "label", "description"], len(vocab.FindingState)),
         ("checks", ["id", "question", "hint"], len(vocab.Check)),
@@ -103,6 +125,7 @@ def test_vocab_has_exactly_the_documented_vocabularies(meta: dict) -> None:
         ("record_categories", ["id", "label", "colour"], len(vocab.RecordCategory)),
         ("link_shows", ["id", "label", "description"], len(vocab.LinkShows)),
         ("link_coverages", ["id", "label"], len(vocab.LinkCoverage)),
+        ("link_verified", ["id", "label", "description"], len(vocab.LinkVerified)),
     ],
 )
 def test_each_vocabulary_has_the_documented_item_shape(
@@ -403,5 +426,72 @@ def test_meta_says_where_the_one_metre_data_starts_and_whether_the_overview_is_b
     assert meta["terrain"] == {
         "fine_minzoom": 13,
         "catalogue_tiles": 5877,
-        "overview": {"built": False, "built_at": None, "tiles": 0},
+        "mirrored_tiles": 0,
+        "overview": {"built": False, "built_at": None, "tiles": 0, "covers_mirror": True},
     }
+
+
+def test_each_evidence_kind_says_whether_it_is_a_follow_up(meta: dict) -> None:
+    """From the sets `followup_logged` is recorded by, which are the engine's field and official strands."""
+    kinds = {item["id"]: item["follow_up"] for item in meta["vocab"]["evidence_kinds"]}
+    assert {kind for kind, value in kinds.items() if value == "field"} == findings.FIELD_KINDS
+    assert {kind for kind, value in kinds.items() if value == "official"} == findings.OFFICIAL_KINDS
+    # The same sets the confidence engine counts towards Checked on the ground and On record.
+    for kind, value in kinds.items():
+        strand = vocab.EVIDENCE_STRANDS[vocab.EvidenceKind(kind)]
+        expected = (
+            "field"
+            if strand in confidence.FIELD_STRANDS
+            else "official"
+            if strand is vocab.Strand.OFFICIAL
+            else "none"
+        )
+        assert value == expected, kind
+    assert kinds["aerial"] == "none"
+
+
+def test_the_ladder_numbers_are_the_engine_s_own(meta: dict) -> None:
+    """Every threshold the engine uses is stated once, with the engine's value, and so are the weights."""
+    ladder = meta["ladder"]
+    assert ladder["weights"] == {
+        "member": vocab.role_weight(vocab.Role.MEMBER),
+        "trusted": vocab.role_weight(vocab.Role.TRUSTED),
+        "expert": vocab.role_weight(vocab.Role.EXPERT),
+    }
+    assert ladder["weights"] == {"member": 1.0, "trusted": 1.5, "expert": 3.0}
+    # Moderators and admins count as trusted, so a guide stating three weights says it all.
+    assert {vocab.role_weight(role) for role in vocab.Role} == set(ladder["weights"].values())
+    stated = {
+        "seen_weight": ladder["seen"]["weight"],
+        "seen_observers": ladder["seen"]["observers"],
+        "seen_ratio": ladder["seen"]["ratio"],
+        "corroborating_strands": ladder["corroborated"]["strands"],
+        "class_agreement": ladder["corroborated"]["class_agreement"],
+        "class_support": ladder["corroborated"]["class_support"],
+        "class_people": ladder["corroborated"]["class_people"],
+        "check_weight": ladder["probable"]["check_weight"],
+        "check_margin": ladder["probable"]["check_margin"],
+        "probable_seen_without_reviewer": ladder["probable"]["seen_without_reviewer"],
+        "endorsement_weight": ladder["evidence"]["endorsement_weight"],
+        "known_weight": ladder["evidence"]["known_weight"],
+        "disputed_weight": ladder["disputed"]["weight"],
+        "disputed_ratio_low": ladder["disputed"]["ratio_low"],
+        "disputed_ratio_high": ladder["disputed"]["ratio_high"],
+        "ruled_out_unseen": ladder["ruled_out"]["unseen"],
+        "ruled_out_ratio": ladder["ruled_out"]["ratio"],
+        "ruled_out_explanation": ladder["ruled_out"]["explanation"],
+    }
+    # A threshold added to the engine fails here until the ladder states it.
+    assert set(stated) == {field.name for field in dataclasses.fields(confidence.Thresholds)}
+    assert stated == dataclasses.asdict(confidence.THRESHOLDS)
+
+
+def test_the_ladder_follows_the_engine_when_a_threshold_moves(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Read from the engine at request time, not copied: a tuned threshold reaches `/meta`."""
+    tuned = dataclasses.replace(confidence.THRESHOLDS, seen_weight=2.5, probable_seen_without_reviewer=8.0)
+    monkeypatch.setattr(confidence, "THRESHOLDS", tuned)
+    monkeypatch.setattr(meta_service, "THRESHOLDS", tuned)
+    ladder = client.get("/api/v1/meta").json()["ladder"]
+    assert (ladder["seen"]["weight"], ladder["probable"]["seen_without_reviewer"]) == (2.5, 8.0)

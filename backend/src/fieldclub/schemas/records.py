@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from fieldclub.schemas.common import ApiModel, GeoJSONFeature, RecordCount, geojson_geometry, to_geojson
-from fieldclub.vocab import LinkCoverage, LinkShows, LiveFormat
+from fieldclub.vocab import CreditPlacement, LinkCoverage, LinkShows, LinkVerified, LiveFormat
 
 if TYPE_CHECKING:
     from fieldclub.models import Source
@@ -204,6 +204,10 @@ class LiveSource(BaseModel):
     # Always true in `GET /context/live-sources`, which leaves out every source
     # the research hasn't settled how to credit, or that isn't in this release.
     shown: bool
+    # Where the credit must be shown: `layer`, once wherever the source's
+    # layer or list is shown, or `record`, beside each record it gives. Null
+    # when the source isn't shown.
+    credit_placement: CreditPlacement | None
     # The credit and licence to show a visitor beside what the source gives.
     # Null when the source isn't shown.
     credit: str | None
@@ -234,8 +238,9 @@ class ContextLink(BaseModel):
     coverage: LinkCoverage
     # What the viewer shows at the place. `/meta` names each as `vocab.link_shows`.
     shows: LinkShows
-    # yes, redirect_only or not_tested, as the research found it on 2026-11-10.
-    verified: str
+    # What the research found when it opened the viewer on 2026-11-10. `/meta`
+    # names each as `vocab.link_verified`.
+    verified: LinkVerified
     # The publisher forbids framing, so open it in a new tab.
     no_frame: bool
 

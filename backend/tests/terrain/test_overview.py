@@ -194,9 +194,56 @@ def test_meta_says_whether_the_overview_is_built_and_how_much_it_holds(
     assert state == {
         "fine_minzoom": 13,
         "catalogue_tiles": len(terrain.catalogue),
-        "overview": {"built": True, "built_at": manifest.created, "tiles": len(manifest.tiles)},
+        "mirrored_tiles": len(TILES) - 1,
+        "overview": {
+            "built": True,
+            "built_at": manifest.created,
+            "tiles": len(manifest.tiles),
+            "covers_mirror": True,
+        },
     }
     assert 0 < state["overview"]["tiles"] < state["catalogue_tiles"]
+
+
+def test_meta_says_whether_the_overview_holds_every_mirrored_tile(
+    app: FastAPI, client: TestClient, terrain: Terrain, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """While the country is still being copied the mirror runs ahead of the build, and `/meta` says so.
+
+    The mirror is listed at most once a minute however often `/meta` is asked,
+    so a page load lists no bucket.
+    """
+    now = [0.0]
+    overview = Overview(terrain.mirror, terrain.overview.store, refresh_s=60, clock=lambda: now[0])
+    watched = Terrain(terrain.mirror, overview, terrain.renderer.storage)
+    app.dependency_overrides[get_terrain] = lambda: watched
+    listings: list[int] = []
+    real_names = terrain.mirror.store.names
+
+    def names() -> list[str]:
+        listings.append(1)
+        return real_names()
+
+    monkeypatch.setattr(terrain.mirror.store, "names", names)
+
+    def state() -> tuple[int | None, bool | None]:
+        terrain_state = client.get("/api/v1/meta").json()["terrain"]
+        return terrain_state["mirrored_tiles"], terrain_state["overview"]["covers_mirror"]
+
+    assert state() == (len(TILES) - 1, True)
+    terrain.mirror.ensure(LATER)
+    for _ in range(5):
+        # The listing is kept for a minute, so the new tile isn't seen yet.
+        assert state() == (len(TILES) - 1, True)
+    assert len(listings) == 1, "a request to /meta listed the mirror"
+    now[0] = 61.0
+    assert state() == (len(TILES), False)
+    assert len(listings) == 2
+    build(terrain.mirror, tmp_path)
+    listed_by_the_build = len(listings)
+    now[0] = 122.0
+    assert state() == (len(TILES), True)
+    assert len(listings) == listed_by_the_build + 1
 
 
 def test_only_tiles_mirrored_since_the_build_count_against_the_fallback_cap(
@@ -244,4 +291,11 @@ def test_meta_still_answers_when_the_overview_cannot_be_read(
     assert views["composite"]["tiles"][0].endswith(f"?v={default_tile_version('composite')}")
     assert response.json()["layers"]["dem"]["tiles"][0].endswith(f"?v={default_tile_version('dem')}")
     assert "Couldn't read the overview's build" in caplog.text
-    assert response.json()["terrain"]["overview"] == {"built": None, "built_at": None, "tiles": 0}
+    assert response.json()["terrain"]["overview"] == {
+        "built": None,
+        "built_at": None,
+        "tiles": 0,
+        "covers_mirror": None,
+    }
+    # The mirror could still be listed.
+    assert response.json()["terrain"]["mirrored_tiles"] == len(TILES) - 1

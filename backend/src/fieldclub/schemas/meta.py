@@ -14,12 +14,15 @@ from fieldclub.services.confidence import Endorsement, MetBy
 from fieldclub.vocab import (
     AgeBand,
     EvidenceKind,
+    FollowUp,
     LinkCoverage,
     LinkShows,
+    LinkVerified,
     NextStepCode,
     Outcome,
     Relation,
     Sensitivity,
+    SensitivityViewer,
     SourceReuse,
     Stance,
 )
@@ -50,6 +53,9 @@ class EvidenceKindOut(ApiModel):
     strand: str
     group: str
     hint: str
+    # Whether adding one is logged as a follow-up (`followup_logged`), and of
+    # which sort: `field`, `official`, or `none` for the desk kinds.
+    follow_up: FollowUp
 
 
 class TierOut(ApiModel):
@@ -139,6 +145,29 @@ class LinkCoverageOut(ApiModel):
     label: str
 
 
+class LinkVerifiedOut(ApiModel):
+    """What the research found when it opened an external viewer, as `GET /context/links` gives `verified`."""
+
+    id: LinkVerified
+    label: str
+    description: str
+
+
+class SensitivityLevelOut(ApiModel):
+    """The words for one location level (Decision 0005), true of `services.sensitivity`."""
+
+    id: Sensitivity
+    label: str
+    # Who sees the exact place, and who sees the 1 km square.
+    who_sees: str
+    # The sentence for someone shown only the square: why, and what would
+    # change it. Null for `open`, which nobody sees as a square.
+    square_sentence: str | None
+    # The viewers who see the exact place: `signed_out`, `member`, `finder`,
+    # `trusted`, `expert` and `moderator` (admins count as moderators).
+    exact_for: list[SensitivityViewer]
+
+
 class Vocab(BaseModel):
     feature_classes: list[FeatureClassOut]
     periods: list[PeriodOut]
@@ -153,6 +182,8 @@ class Vocab(BaseModel):
     next_steps: list[NextStepRuleOut]
     link_shows: list[LinkShowsOut]
     link_coverages: list[LinkCoverageOut]
+    link_verified: list[LinkVerifiedOut]
+    sensitivity_levels: list[SensitivityLevelOut]
 
 
 # --------------------------------------------------------------------------
@@ -279,6 +310,11 @@ class AppInfo(BaseModel):
     name: str
     version: str
     contribution_licence: str
+    # The contribution licence's own page.
+    contribution_licence_url: str
+    # Who to write to about this service (`FIELDCLUB_CONTACT`): an email
+    # address or a web address. Null when it isn't set.
+    contact: str | None
 
 
 class Provider(BaseModel):
@@ -346,6 +382,10 @@ class OverviewState(BaseModel):
     built_at: str | None
     # How many of the 5 km tiles of 1 m elevation the build holds.
     tiles: int
+    # True when the build holds every tile the mirror holds, false when the
+    # mirror has tiles the build doesn't yet, and null when either couldn't
+    # be read just now. The mirror is listed at most once a minute.
+    covers_mirror: bool | None = None
 
 
 class TerrainState(BaseModel):
@@ -355,7 +395,86 @@ class TerrainState(BaseModel):
     fine_minzoom: int
     # How many 5 km tiles of 1 m elevation exist.
     catalogue_tiles: int
+    # How many of them the mirror holds, or null when it couldn't be listed just now.
+    mirrored_tiles: int | None = None
     overview: OverviewState
+
+
+# --------------------------------------------------------------------------
+# The ladder's numbers
+# --------------------------------------------------------------------------
+
+
+class LadderWeights(BaseModel):
+    """The weight one person's agreement carries. Moderators and admins count as trusted."""
+
+    member: float
+    trusted: float
+    expert: float
+
+
+class SeenRule(BaseModel):
+    """Seen by others: summed weight of yeses, distinct people saying yes, and the share of yes."""
+
+    weight: float
+    observers: int
+    ratio: float
+
+
+class CorroboratedRule(BaseModel):
+    """Corroborated: supporting desk strands, and agreement on the class."""
+
+    strands: int
+    class_agreement: float
+    class_people: int
+    class_support: float
+
+
+class ProbableRule(BaseModel):
+    """Probable: each check cleared, and a reviewer's yes or enough weight without one."""
+
+    # The weight asserting a check must reach, and the multiple of the
+    # matching explanation's weight it must exceed.
+    check_weight: float
+    check_margin: float
+    # The weight of yeses that stands in for a yes from a trusted member or archaeologist.
+    seen_without_reviewer: float
+
+
+class EvidenceRule(BaseModel):
+    """What an evidence item needs: the endorsement weight that makes it independent and
+    checks it on the ground, and the weight that makes a matching record known."""
+
+    endorsement_weight: float
+    known_weight: float
+
+
+class DisputedRule(BaseModel):
+    """Disputed: both weights at least `weight`, with the share of yes strictly inside the band."""
+
+    weight: float
+    ratio_low: float
+    ratio_high: float
+
+
+class RuledOutRule(BaseModel):
+    """Ruled out: enough weight of no with a low share of yes, or one heavy explanation."""
+
+    unseen: float
+    ratio: float
+    explanation: float
+
+
+class Ladder(BaseModel):
+    """The numbers of the confidence ladder, from the engine's own `Thresholds` and role weights."""
+
+    weights: LadderWeights
+    seen: SeenRule
+    corroborated: CorroboratedRule
+    probable: ProbableRule
+    evidence: EvidenceRule
+    disputed: DisputedRule
+    ruled_out: RuledOutRule
 
 
 class Meta(BaseModel):
@@ -366,3 +485,4 @@ class Meta(BaseModel):
     sources: list[SourceOut]
     notices: Notices
     terrain: TerrainState
+    ladder: Ladder

@@ -163,6 +163,13 @@ LIVE_READING: dict[str, dict[str, Any]] = {
 }
 
 
+# Where a source's credit must be shown: once for its layer, or beside each
+# record. Each shown source names one, and says whether the work-list recorded
+# it. Where it didn't, the stricter, beside each record, is taken.
+LAYER = "layer"
+RECORD = "record"
+
+
 def _credit(
     credit: str,
     licence: str,
@@ -170,10 +177,14 @@ def _credit(
     credit_field: str | None = None,
     licence_field: str | None = None,
     preferred_credit_field: str | None = None,
+    *,
+    placement: str,
 ) -> dict[str, Any]:
     """How a source the browser may show is credited to a visitor."""
+    assert placement in (LAYER, RECORD), f"{placement} is not a credit placement"
     return {
         "shown": True,
+        "credit_placement": placement,
         "credit": credit,
         "licence_label": licence,
         "homepage": homepage,
@@ -187,6 +198,7 @@ def _withheld(homepage: str | None) -> dict[str, Any]:
     """A source the work-list doesn't say how to credit, which the browser must not show yet."""
     return {
         "shown": False,
+        "credit_placement": None,
         "credit": None,
         "licence_label": None,
         "homepage": homepage,
@@ -236,11 +248,12 @@ LIVE_CREDITS: dict[str, dict[str, Any]] = {
     "ads-catalogue-search": _withheld(ADS_HOME),
     "ads-catalogue-map": _withheld(ADS_HOME),
     "ads-catalogue-record": _withheld(ADS_HOME),
+    # "Use the per-record Copyright field": recorded, beside each record.
     "he-aerial-photos-obliques": _credit(
-        "Historic England Archive", NO_LICENCE, HE_HOME, credit_field="Copyright"
+        "Historic England Archive", NO_LICENCE, HE_HOME, credit_field="Copyright", placement=RECORD
     ),
     "he-aerial-photos-verticals": _credit(
-        "Historic England Archive", NO_LICENCE, HE_HOME, credit_field="Copyright"
+        "Historic England Archive", NO_LICENCE, HE_HOME, credit_field="Copyright", placement=RECORD
     ),
     "bristol-kyp-devon-hist-2021-v2": _withheld(KYP_HOME),
     "bristol-kyp-som-hist-2022": _withheld(KYP_HOME),
@@ -252,26 +265,30 @@ LIVE_CREDITS: dict[str, dict[str, Any]] = {
     "bristol-kyp-her-2026": _withheld(KYP_HOME),
     "bristol-kyp-worcester-city": _withheld(KYP_HOME),
     "enpa-exmoor-her": _withheld("https://www.exmoorher.co.uk/"),
-    # The items' own credit. The catalogue names no home page.
+    # The items' own credit. The catalogue names no home page. Where to show it
+    # isn't recorded, nor for the next three, so beside each record.
     "dnpa-dartmoor-her": _credit(
         "Dartmoor National Park Authority; © Crown copyright and database rights 2026 OS AC0000823576",
         NO_LICENCE,
         None,
+        placement=RECORD,
     ),
     "wiltshire-her-monuments": _credit(
         "Wiltshire Council Archaeology Service (Wiltshire and Swindon HER)",
         NO_LICENCE,
         "https://services.wiltshire.gov.uk/HistoryEnvRecord/Home/Index",
+        placement=RECORD,
     ),
     # The catalogue names no home page.
     "wolverhampton-walsall-her": _credit(
-        "City of Wolverhampton Council / Wolverhampton and Walsall HER", NO_LICENCE, None
+        "City of Wolverhampton Council / Wolverhampton and Walsall HER", NO_LICENCE, None, placement=RECORD
     ),
     # Each record's `copyright` reads "Subject to confirmation", which is no credit.
     "cambridge-cucap-pois": _credit(
         "Cambridge University Collection of Aerial Photography",
         "No open licence",
         "https://www.cambridgeairphotos.com/",
+        placement=RECORD,
     ),
     "wikimedia-commons-geosearch": _credit(
         "Wikimedia Commons",
@@ -280,12 +297,15 @@ LIVE_CREDITS: dict[str, dict[str, Any]] = {
         credit_field=COMMONS_ARTIST,
         licence_field=COMMONS_LICENCE,
         # "Per file, from extmetadata Artist, Attribution and LicenseShortName":
-        # a file that sets its own credit line asks for that one.
+        # a file that sets its own credit line asks for that one. Recorded: per file, beside each.
         preferred_credit_field=COMMONS_ATTRIBUTION,
+        placement=RECORD,
     ),
     # "Link to the article and state the licence". The thumbnails are licensed
-    # file by file, and the answer doesn't say how.
-    "wikimedia-wikipedia-geosearch": _credit("Wikipedia", "CC BY-SA 4.0", "https://en.wikipedia.org/"),
+    # file by file, and the answer doesn't say how. Recorded: with each article.
+    "wikimedia-wikipedia-geosearch": _credit(
+        "Wikipedia", "CC BY-SA 4.0", "https://en.wikipedia.org/", placement=RECORD
+    ),
     "aberdeenshire-her": _withheld("https://her.aberdeenshire.gov.uk/"),
 }
 

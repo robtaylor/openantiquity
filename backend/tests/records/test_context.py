@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from fieldclub import gridref
 from fieldclub.services import context
-from fieldclub.vocab import LinkShows, LiveFormat
+from fieldclub.vocab import CreditPlacement, LinkShows, LinkVerified, LiveFormat
 from tests.helpers import AVEBURY, admin_area
 from tests.records import context_data
 
@@ -75,8 +75,8 @@ def test_the_live_sources_endpoint(client: TestClient) -> None:
     assert set(wiltshire) == {
         "key", "name", "publisher", "coverage", "endpoint", "query_pattern", "response_fields",
         "licence", "attribution", "link_template", "limits", "answer_format", "id_field",
-        "name_field", "limit_param", "max_limit", "min_zoom", "shown", "credit", "licence_label",
-        "homepage", "credit_field", "licence_field", "preferred_credit_field",
+        "name_field", "limit_param", "max_limit", "min_zoom", "shown", "credit_placement", "credit",
+        "licence_label", "homepage", "credit_field", "licence_field", "preferred_credit_field",
     }  # fmt: skip
     assert (wiltshire["answer_format"], wiltshire["id_field"], wiltshire["name_field"]) == (
         "geojson",
@@ -300,3 +300,36 @@ def test_the_links_endpoint(client: TestClient) -> None:
 )
 def test_the_links_endpoint_needs_a_position(client: TestClient, params: dict[str, str]) -> None:
     assert client.get("/api/v1/context/links", params=params).status_code == 422
+
+
+def test_each_shown_live_source_says_where_its_credit_goes() -> None:
+    """Once for the layer, or beside each record. Where the research didn't say, the stricter."""
+    items = {item["key"]: item for item in context.live_sources()}
+    for key, item in items.items():
+        if item["shown"]:
+            assert item["credit_placement"] in {placement.value for placement in CreditPlacement}, key
+        else:
+            assert item["credit_placement"] is None, key
+    # A source whose terms ask for a credit taken from each record shows it beside each record.
+    for key, item in items.items():
+        if item["credit_field"] is not None:
+            assert item["credit_placement"] == CreditPlacement.RECORD, key
+    # The research recorded no placement for these, so they take the stricter.
+    for key in (
+        "dnpa-dartmoor-her",
+        "wiltshire-her-monuments",
+        "wolverhampton-walsall-her",
+        "cambridge-cucap-pois",
+    ):
+        assert items[key]["credit_placement"] == CreditPlacement.RECORD, key
+
+
+def test_a_link_says_how_it_was_checked_in_words_meta_gives(client: TestClient) -> None:
+    values = {item["verified"] for item in context.deep_links()}
+    # The values the catalogue holds are exactly the enum's, so none is served as an unknown string.
+    assert values == {value.value for value in LinkVerified}
+    words = client.get("/api/v1/meta").json()["vocab"]["link_verified"]
+    assert [item["id"] for item in words] == [value.value for value in LinkVerified]
+    assert all(item["label"] and item["description"] for item in words)
+    schema = client.get("/api/openapi.json").json()["components"]["schemas"]
+    assert schema["ContextLink"]["properties"]["verified"] == {"$ref": "#/components/schemas/LinkVerified"}

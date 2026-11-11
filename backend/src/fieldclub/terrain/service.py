@@ -82,6 +82,8 @@ class OverviewStatus:
     built_at: str | None
     # How many 5 km tiles the build holds.
     tiles: int
+    # Whether the build holds every tile the mirror holds. None when either couldn't be read.
+    covers_mirror: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -93,6 +95,8 @@ class TerrainStatus:
     # How many 5 km tiles of 1 m elevation exist (`terrain/catalogue.py`).
     catalogue_tiles: int
     overview: OverviewStatus
+    # How many of them the mirror holds, or None when it couldn't be listed.
+    mirrored_tiles: int | None = None
 
 
 # Where a point's height came from: `ready`, the 1 m data. Where the 1 m data exists but its tile
@@ -148,24 +152,37 @@ class Terrain:
         return lambda kind: tile_version(kind, editions)
 
     def status(self) -> TerrainStatus:
-        """Where the 1 m data starts and how far the overview has been built.
+        """Where the 1 m data starts, how far the overview has been built, and whether it has
+        caught up with the mirror.
 
         Like `url_versions`, it still answers when the overview's manifest
-        can't be read, with `built` as None.
+        can't be read, with `built` as None. The mirror's tiles come from the
+        listing the overview keeps, which is refreshed at most once a
+        `refresh_s`, so asking on every page load lists no bucket.
         """
+        try:
+            mirrored: frozenset[str] | None = self.overview.mirrored()
+        except Exception:
+            logger.exception("Couldn't list the mirror; /meta says how much it holds is unknown")
+            mirrored = None
         try:
             manifest = self.overview.snapshot().manifest
         except Exception:
             logger.exception("Couldn't read the overview's build; /meta says its state is unknown")
             overview = OverviewStatus(built=None, built_at=None, tiles=0)
         else:
+            built = manifest.tiles if manifest is not None else frozenset[str]()
             overview = OverviewStatus(
                 built=manifest is not None,
                 built_at=manifest.created if manifest is not None else None,
-                tiles=len(manifest.tiles) if manifest is not None else 0,
+                tiles=len(built),
+                covers_mirror=mirrored <= built if mirrored is not None else None,
             )
         return TerrainStatus(
-            fine_minzoom=FINE_MINZOOM, catalogue_tiles=len(self.catalogue), overview=overview
+            fine_minzoom=FINE_MINZOOM,
+            catalogue_tiles=len(self.catalogue),
+            overview=overview,
+            mirrored_tiles=len(mirrored) if mirrored is not None else None,
         )
 
     def select(self, zoom: int) -> Selection:

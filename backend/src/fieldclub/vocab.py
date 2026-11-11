@@ -784,6 +784,55 @@ PROTECTED_CLASSES: frozenset[FeatureClass] = frozenset(
 )
 
 
+class SensitivityViewer(StrEnum):
+    """The kinds of viewer the sensitivity table tells apart. Admins count as moderators."""
+
+    SIGNED_OUT = "signed_out"
+    MEMBER = "member"
+    FINDER = "finder"
+    TRUSTED = "trusted"
+    EXPERT = "expert"
+    MODERATOR = "moderator"
+
+
+@dataclass(frozen=True)
+class SensitivityInfo:
+    id: Sensitivity
+    label: str
+    # Who sees the exact place, and who sees the square, in one or two sentences.
+    who_sees: str
+    # What someone shown only the square is told: why, and what would change it. None for open.
+    square_sentence: str | None
+    # The viewers who see the exact place. `tests/services/test_sensitivity_words.py`
+    # holds each to `services.sensitivity.sees_exact`.
+    exact_for: frozenset[SensitivityViewer]
+
+
+_KEPT_BACK = "Sites like this can attract illegal metal detecting, so its exact place is kept back."
+_FEW_SEE_IT = "Only its finder, trusted members, archaeologists and moderators see"
+_EVERYONE_ELSE = "Everyone else sees its one-kilometre square."
+
+SENSITIVITY_LEVELS: tuple[SensitivityInfo, ...] = (
+    SensitivityInfo(
+        Sensitivity.OPEN, "Open", "Everyone sees its exact place.", None, frozenset(SensitivityViewer)
+    ),
+    SensitivityInfo(
+        Sensitivity.PROTECTED,
+        "Protected",
+        f"Only people who have signed in see its exact place. {_EVERYONE_ELSE}",
+        f"{_KEPT_BACK} Sign in to see it.",
+        frozenset(SensitivityViewer) - {SensitivityViewer.SIGNED_OUT},
+    ),
+    SensitivityInfo(
+        Sensitivity.RESTRICTED,
+        "Restricted",
+        f"{_FEW_SEE_IT} its exact place. {_EVERYONE_ELSE}",
+        f"{_KEPT_BACK} {_FEW_SEE_IT} it.",
+        frozenset(SensitivityViewer) - {SensitivityViewer.SIGNED_OUT, SensitivityViewer.MEMBER},
+    ),
+)
+
+
 # --------------------------------------------------------------------------
 # Mentions
 # --------------------------------------------------------------------------
@@ -1282,6 +1331,54 @@ SENSITIVITY_NOTICE = (
 )
 
 CONTRIBUTION_LICENCE = "CC BY 4.0"
+CONTRIBUTION_LICENCE_URL = "https://creativecommons.org/licenses/by/4.0/"
+
+
+class FollowUp(StrEnum):
+    """Whether an evidence kind is a follow-up, and of which sort: work at the site, or the official record.
+
+    `none` for the desk kinds. A follow-up is logged as `followup_logged`.
+    """
+
+    FIELD = "field"
+    OFFICIAL = "official"
+    NONE = "none"
+
+
+class LinkVerified(StrEnum):
+    """Whether the research found that a deep link opens where it should (`GET /context/links`)."""
+
+    YES = "yes"
+    REDIRECT_ONLY = "redirect_only"
+    NOT_TESTED = "not_tested"
+
+
+@dataclass(frozen=True)
+class LinkVerifiedInfo:
+    id: LinkVerified
+    label: str
+    description: str
+
+
+LINK_VERIFIED: tuple[LinkVerifiedInfo, ...] = (
+    LinkVerifiedInfo(LinkVerified.YES, "Checked", "When it was last checked, the page opened."),
+    LinkVerifiedInfo(
+        LinkVerified.REDIRECT_ONLY,
+        "Redirects",
+        "When it was last checked, the address sent the browser on to a new one, "
+        "but the page it reached wasn't seen.",
+    ),
+    LinkVerifiedInfo(LinkVerified.NOT_TESTED, "Not checked", "Nobody has checked yet that it opens."),
+)
+
+
+class CreditPlacement(StrEnum):
+    """Where a live source's credit must be shown (`GET /context/live-sources`)."""
+
+    # Once, wherever the source's layer or list is shown.
+    LAYER = "layer"
+    # Beside each record the source gives.
+    RECORD = "record"
 
 
 def _check_complete() -> None:
@@ -1301,6 +1398,8 @@ def _check_complete() -> None:
         (NextStepCode, NEXT_STEPS),
         (LinkShows, LINK_SHOWS),
         (LinkCoverage, LINK_COVERAGES),
+        (Sensitivity, SENSITIVITY_LEVELS),
+        (LinkVerified, LINK_VERIFIED),
     )
     for enum_cls, rows in tables:
         ids = [getattr(row, "id") for row in rows]  # noqa: B009 - rows are heterogeneous dataclasses
