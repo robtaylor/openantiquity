@@ -149,6 +149,8 @@ Investigations, mentions, follow-ups, activity and moderation. See Decision 0009
 
 **Status:** Not started. Follows the API of WS3 to WS6.
 
+Findings track (`f1/findings`), as of 2026-11-11: built are marking a finding, Explore's list of the findings in view, and a finding's page with its second look, evidence, discussion and the finder's controls. Not built: the blind second-look queue and the help-wanted lists. The "Second look" and "Help wanted" tabs still open placeholder panels, and `secondLook/` holds the answer buttons, the detail, the reveal and the draft kind for the queue to reuse.
+
 Every screen over the map. See `UI.md`.
 
 **Deliverables:**
