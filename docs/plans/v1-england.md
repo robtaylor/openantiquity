@@ -164,7 +164,7 @@ Every screen over the map. See `UI.md`.
 
 ### WS8 — Deployment
 
-**Status:** Not started. Blocked on the owner naming a Google Cloud project.
+**Status:** In progress. The image, Terraform, CI workflows and the runbook (`infra/README.md`) shipped on 2026-11-11, checked on a workstation only. The project `fieldclub-uk` exists. Nothing is applied yet: the billing account has no free place for a sixth project, which is an owner action (`owner-actions.md`, WS2).
 
 **Deliverables:**
 
