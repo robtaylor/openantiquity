@@ -210,9 +210,7 @@ describe("Shell", () => {
     const map = await mapReady();
     const panel = screen.getByRole("complementary", { name: "Second look" });
     // The fixtures have nothing waiting for a second look.
-    expect(
-      await within(panel).findByRole("heading", { name: "Nothing waiting just now" }),
-    ).toBeInTheDocument();
+    expect(await within(panel).findByRole("heading", { name: "Nothing waiting just now" })).toBeInTheDocument();
     const rail = screen.getByRole("navigation", { name: "Modes" });
     expect(within(rail).getByRole("link", { name: "Second look" })).toHaveAttribute("aria-current", "page");
     expect(within(rail).getByRole("link", { name: "Explore" })).not.toHaveAttribute("aria-current");
