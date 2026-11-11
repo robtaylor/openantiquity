@@ -24,6 +24,8 @@ export const NHLE_SOURCE: SourceRef = {
   licence_url: "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
   attribution: "© Historic England. Contains Ordnance Survey data © Crown copyright and database right.",
   reuse: "open",
+  licence_label: "OGL v3",
+  credit: "© Historic England",
 };
 
 const PAS_SOURCE: SourceRef = {
@@ -34,6 +36,8 @@ const PAS_SOURCE: SourceRef = {
   licence_url: "https://creativecommons.org/licenses/by/4.0/",
   attribution: 'Portable Antiquities Scheme, <a href="https://finds.org.uk">finds.org.uk</a>',
   reuse: "open",
+  licence_label: "CC BY 4.0",
+  credit: "Portable Antiquities Scheme",
 };
 
 /** The gazetteer the search box's place names come from. */
@@ -45,6 +49,8 @@ export const OS_NAMES_SOURCE: SourceRef = {
   licence_url: "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
   attribution: "Contains OS data © Crown copyright and database right 2026",
   reuse: "open",
+  licence_label: "OGL v3",
+  credit: "Contains OS data © Crown copyright and database right 2026",
 };
 
 /** A source whose name, credit and links are hostile, as an outside service might send. */
@@ -56,6 +62,8 @@ const HOSTILE_SOURCE: SourceRef = {
   licence_url: "javascript:alert(1)",
   attribution: '<a href="javascript:alert(1)">Click me</a><script>alert(2)</script><img src=x onerror="alert(3)">',
   reuse: "open",
+  licence_label: "<b>OGL</b>",
+  credit: "<script>alert(4)</script>Hostile credit",
 };
 
 const AVENUE_AT = offset(0, -120);

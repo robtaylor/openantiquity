@@ -17,7 +17,7 @@ function task(publicId: string, code: TaskItem["code"], missing: string[] = []):
 }
 
 function group(code: TaskItem["code"], items: TaskItem[], total = items.length, next: string | null = null): TaskGroup {
-  return { code, total, items, next_cursor: next };
+  return { code, total, items, next_cursor: next, strands: [] };
 }
 
 const GROUPS: TaskGroup[] = [

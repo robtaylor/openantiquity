@@ -109,7 +109,7 @@ test("second look: empty, loading and failed", async ({ page }) => {
 
 const FINDING = seenFixture();
 const GROUPS: TaskGroup[] = [
-  { code: "need_observers", total: 12, items: [], next_cursor: null },
+  { code: "need_observers", total: 12, items: [], next_cursor: null, strands: [] },
   {
     code: "need_strand",
     total: 3,
@@ -142,8 +142,9 @@ const GROUPS: TaskGroup[] = [
       },
     ],
     next_cursor: null,
+    strands: [],
   },
-  { code: "need_ground", total: 1, items: [], next_cursor: null },
+  { code: "need_ground", total: 1, items: [], next_cursor: null, strands: [] },
 ];
 
 test("help wanted: kinds, a list, and a finding opened with its form ready", async ({ page }) => {

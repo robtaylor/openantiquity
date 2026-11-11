@@ -1790,7 +1790,10 @@ export interface paths {
          * @description Open next steps across findings, grouped by code, so people can pick the help they like.
          *
          *     Without `code`, every group with its first `limit` tasks. With `code`, that
-         *     group alone, paged by `cursor`. Steps met by a second look are blind.
+         *     group alone, paged by `cursor`. Steps met by a second look are blind. The
+         *     evidence step, `need_strand`, also counts its findings by each kind of desk
+         *     evidence they lack (`strands`), and `code=need_strand&strand=` lists only
+         *     those lacking that kind.
          */
         get: operations["review_tasks"];
         put?: never;
@@ -1896,7 +1899,8 @@ export interface paths {
         };
         /**
          * Get Coverage
-         * @description The 5 km tiles that have 1 m elevation, with the years they were flown, as GeoJSON.
+         * @description The 5 km tiles that have 1 m elevation, with the years they were flown and whether each is
+         *     in the mirror yet, as GeoJSON.
          */
         get: operations["terrain_get_coverage"];
         put?: never;
@@ -2259,8 +2263,7 @@ export interface components {
         };
         /** ContextLink */
         ContextLink: {
-            /** Coverage */
-            coverage: string;
+            coverage: components["schemas"]["LinkCoverage"];
             /** Key */
             key: string;
             /** Name */
@@ -2394,6 +2397,8 @@ export interface components {
         CoveragePropertiesOut: {
             /** Capture */
             capture: string;
+            /** Mirrored */
+            mirrored: boolean;
             /** Resolution M */
             resolution_m: number;
             /** Tile */
@@ -2966,6 +2971,11 @@ export interface components {
             county: string | null;
             /** Elevation */
             elevation: number | null;
+            /**
+             * Elevation Status
+             * @enum {string}
+             */
+            elevation_status: "ready" | "preparing" | "failed" | "not_mirrored" | "none";
             /** Grid Ref */
             grid_ref: string | null;
             /** Lat */
@@ -3229,11 +3239,37 @@ export interface components {
             type: "LineString";
         };
         /**
+         * LinkCoverage
+         * @description Where an external viewer in `GET /context/links` has something to show.
+         * @enum {string}
+         */
+        LinkCoverage: "england" | "scotland" | "wales" | "northern_ireland" | "gb" | "uk" | "wider";
+        /**
+         * LinkCoverageOut
+         * @description Where an external viewer has something to show, as `GET /context/links` gives its `coverage`.
+         */
+        LinkCoverageOut: {
+            id: components["schemas"]["LinkCoverage"];
+            /** Label */
+            label: string;
+        };
+        /**
          * LinkShows
          * @description What an external viewer in `GET /context/links` shows at a place.
          * @enum {string}
          */
         LinkShows: "records" | "historic_maps" | "aerial_photographs" | "lidar" | "photographs" | "other";
+        /**
+         * LinkShowsOut
+         * @description What an external viewer shows at a place, as `GET /context/links` gives its `shows`.
+         */
+        LinkShowsOut: {
+            /** Description */
+            description: string;
+            id: components["schemas"]["LinkShows"];
+            /** Label */
+            label: string;
+        };
         /**
          * LinkedFinding
          * @description A finding whose evidence links a record, as listed on the record's page.
@@ -3662,12 +3698,19 @@ export interface components {
         /**
          * NextStepRuleOut
          * @description What meets one next step, from `services.confidence.STEP_RULES`. `id` is the step's code.
+         *
+         *     `label` and `description` name the work it asks of someone, for the
+         *     help-wanted lists: "Another kind of evidence", "Check old maps, ...".
          */
         NextStepRuleOut: {
+            /** Description */
+            description: string;
             endorsement: components["schemas"]["Endorsement"];
             /** Evidence Kinds */
             evidence_kinds: components["schemas"]["EvidenceKind"][];
             id: components["schemas"]["NextStepCode"];
+            /** Label */
+            label: string;
             met_by: components["schemas"]["MetBy"];
             /** Needs Verification */
             needs_verification: boolean;
@@ -4661,6 +4704,8 @@ export interface components {
             category: string;
             /** Coverage */
             coverage: string | null;
+            /** Credit */
+            credit: string;
             /** Homepage */
             homepage: string | null;
             /** Key */
@@ -4669,6 +4714,8 @@ export interface components {
             last_ingest_at: string | null;
             /** Licence */
             licence: string;
+            /** Licence Label */
+            licence_label: string;
             /** Licence Url */
             licence_url: string | null;
             /** Name */
@@ -4683,14 +4730,22 @@ export interface components {
         /**
          * SourceRef
          * @description What a record must be shown with: who published it and under what terms.
+         *
+         *     `licence` and `attribution` are the terms in full, with the research's
+         *     notes, for the source's page and for exports. Beside the map show
+         *     `licence_label`, the licence's short name, and `credit`, the credit line.
          */
         SourceRef: {
             /** Attribution */
             attribution: string;
+            /** Credit */
+            credit: string;
             /** Key */
             key: string;
             /** Licence */
             licence: string;
+            /** Licence Label */
+            licence_label: string;
             /** Licence Url */
             licence_url: string | null;
             /** Name */
@@ -4754,6 +4809,20 @@ export interface components {
          * @enum {string}
          */
         StateReason: "not_visible" | "modern" | "natural" | "artefact" | "ground_check";
+        /**
+         * Strand
+         * @enum {string}
+         */
+        Strand: "lidar" | "aerial" | "historic_map" | "records" | "literature" | "ground" | "survey" | "official";
+        /**
+         * StrandCount
+         * @description How many findings in the evidence step lack one kind of desk evidence.
+         */
+        StrandCount: {
+            strand: components["schemas"]["Strand"];
+            /** Total */
+            total: number;
+        };
         /**
          * StreamEvent
          * @description One live event. Public ids and kinds only: fetch the details through the API.
@@ -4924,6 +4993,8 @@ export interface components {
             items: components["schemas"]["TaskItem"][];
             /** Next Cursor */
             next_cursor: string | null;
+            /** Strands */
+            strands: components["schemas"]["StrandCount"][];
             /** Total */
             total: number;
         };
@@ -5059,6 +5130,10 @@ export interface components {
             explanations: components["schemas"]["ExplanationOut"][];
             /** Feature Classes */
             feature_classes: components["schemas"]["FeatureClassOut"][];
+            /** Link Coverages */
+            link_coverages: components["schemas"]["LinkCoverageOut"][];
+            /** Link Shows */
+            link_shows: components["schemas"]["LinkShowsOut"][];
             /** Mention Kinds */
             mention_kinds: components["schemas"]["MentionKindOut"][];
             /** Next Steps */
@@ -8336,6 +8411,7 @@ export interface operations {
                 limit?: number;
                 cursor?: string | null;
                 code?: components["schemas"]["NextStepCode"] | null;
+                strand?: components["schemas"]["Strand"] | null;
             };
             header?: never;
             path?: never;

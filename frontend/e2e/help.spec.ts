@@ -44,8 +44,9 @@ const GROUPS: TaskGroup[] = [
       },
     ],
     next_cursor: null,
+    strands: [],
   },
-  { code: "need_strand", total: 1, items: [evidenceTask()], next_cursor: null },
+  { code: "need_strand", total: 1, items: [evidenceTask()], next_cursor: null, strands: [] },
 ];
 
 test("lists the kinds of help, and a finding opens with the form for that work ready", async ({ page }) => {

@@ -247,6 +247,8 @@ export function suggestionFixture(overrides: Partial<SuggestedRecord> = {}): Sug
       licence_url: null,
       attribution: "© Historic England 2026",
       reuse: "open",
+      licence_label: "OGL v3",
+      credit: "© Historic England",
     },
     ...overrides,
   };

@@ -29,7 +29,7 @@ function task(publicId: string, code: TaskItem["code"], title: string, missing: 
 }
 
 const GROUPS: TaskGroup[] = [
-  { code: "need_observers", total: 3, items: [task("blind-1", "need_observers", "")], next_cursor: null },
+  { code: "need_observers", total: 3, items: [task("blind-1", "need_observers", "")], next_cursor: null, strands: [] },
   {
     code: "need_strand",
     total: 2,
@@ -38,6 +38,10 @@ const GROUPS: TaskGroup[] = [
       task("f-bank", "need_strand", "Bank along the parish edge", ["aerial"]),
     ],
     next_cursor: null,
+    strands: [
+      { strand: "historic_map", total: 1 },
+      { strand: "aerial", total: 2 },
+    ],
   },
 ];
 
