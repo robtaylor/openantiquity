@@ -258,6 +258,11 @@ export async function stubBackend(page: Page, log: NetworkLog = newLog()): Promi
       const body = { items: [], next_cursor: null, unread_count: 0 };
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
     }
+    if (path === "/api/v1/context/live-sources" && route.request().method() === "GET") {
+      // The about page credits these. A test that wants some answers the route itself.
+      count("live-sources");
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) });
+    }
     if (path === "/api/v1/geo/point") {
       count("geo-point");
       const body = { grid_ref: STUB_GRID_REF, nation: "england", elevation: STUB_HEIGHT_M };
