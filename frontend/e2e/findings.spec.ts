@@ -106,7 +106,7 @@ test("marks a finding by pointer and keyboard, saves it at once, and opens its p
   const release = findings.holdCreates();
   await markPanel(page).getByRole("radio", { name: "Linear bank or ditch" }).click();
   await markPanel(page).getByRole("button", { name: "Save finding" }).click();
-  await expect(page.getByRole("img", { name: /^Linear bank or ditch at SU \d{3} \d{3}, saving$/ })).toBeVisible();
+  await expect(page.getByRole("img", { name: /^Linear bank or ditch in SU\d{4}, saving$/ })).toBeVisible();
   await expect(page.getByRole("list", { name: "Your marks" })).toHaveCount(0);
   release();
 
@@ -116,7 +116,7 @@ test("marks a finding by pointer and keyboard, saves it at once, and opens its p
   expect(body).toMatchObject({
     feature_class: "linear",
     period: "unknown",
-    title: expect.stringMatching(/^Linear bank or ditch at SU/),
+    title: expect.stringMatching(/^Linear bank or ditch in SU\d{4}/),
     view_state: { layer: "composite", zoom: 15, bearing: 0, pitch: 0, sun_azimuth: 315, sun_altitude: 25 },
   });
   await expect(page.getByRole("img", { name: /saving$/ })).toHaveCount(0);
@@ -125,7 +125,7 @@ test("marks a finding by pointer and keyboard, saves it at once, and opens its p
   await page.getByRole("navigation", { name: "Modes" }).getByRole("link", { name: "Explore" }).click();
   if (isPhone(page)) await page.getByRole("button", { name: /Press to resize/ }).click();
   const list = page.getByRole("list", { name: "Findings in view" });
-  await expect(list.getByRole("link", { name: /^Linear bank or ditch at SU/ })).toBeVisible();
+  await expect(list.getByRole("link", { name: /^Linear bank or ditch in SU\d{4}/ })).toBeVisible();
   const lastBox = findings.boxes.at(-1);
   expect(lastBox, "the map asked again after the save").toBeDefined();
 });
@@ -224,7 +224,7 @@ test("keeps a signed-out mark as a draft through a reload and a sign-in, then sa
   expect(findings.created).toHaveLength(1);
   expect(findings.created[0]).toMatchObject({
     feature_class: "hillfort",
-    title: expect.stringMatching(/^Hillfort at/),
+    title: expect.stringMatching(/^Hillfort in SU\d{4}$/),
   });
   const left = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "{}"), DRAFTS_STORAGE_KEY);
   expect(left.drafts).toEqual([]);

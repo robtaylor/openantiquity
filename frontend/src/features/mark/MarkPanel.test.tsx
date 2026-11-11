@@ -141,7 +141,10 @@ describe("the form", () => {
 
     expect(panel().getByText(/This map is for earthworks, not objects/)).toBeInTheDocument();
     expect(panel().getByLabelText("Period")).toHaveValue("unknown");
-    expect(panel().getByLabelText("Title")).toHaveAttribute("placeholder", expect.stringMatching(/^Enclosure at SU/));
+    expect(panel().getByLabelText("Title")).toHaveAttribute(
+      "placeholder",
+      expect.stringMatching(/^Enclosure in SU\d{4}$/),
+    );
   });
 
   it("draws an outline: corners by tapping, undo, and closing on the first corner", async () => {
@@ -188,14 +191,14 @@ describe("saving, signed in", () => {
     await user.click(panel().getByRole("button", { name: "Save finding" }));
 
     // Optimistic: on the map before the server has answered.
-    expect(await screen.findByRole("img", { name: /^Enclosure at SU .*, saving$/ })).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: /^Enclosure in SU\d{4}, saving$/ })).toBeInTheDocument();
     const [call] = routes.callsTo("POST /findings");
     const body = call?.body as FindingCreate;
     expect(body).toMatchObject({
       location: { type: "Point", coordinates: point() },
       feature_class: "enclosure",
       period: "unknown",
-      title: expect.stringMatching(/^Enclosure at SU \d{3} \d{3}$/),
+      title: expect.stringMatching(/^Enclosure in SU\d{4}$/),
       description: "Faint ring by the barn.",
       view_state: { layer: "composite", sun_azimuth: 120, sun_altitude: 15, zoom: 14, bearing: 0, pitch: 0 },
     });

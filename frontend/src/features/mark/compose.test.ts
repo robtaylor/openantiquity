@@ -49,9 +49,19 @@ describe("viewStateFrom", () => {
 });
 
 describe("suggestTitle", () => {
-  it("says what it looks like and where, so saving needs no typing", () => {
-    expect(gridRefOf(AVEBURY)).toMatch(/^SU \d{3} \d{3}$/);
-    expect(suggestTitle(meta, "round_barrow", AVEBURY)).toBe(`Round barrow or mound at ${gridRefOf(AVEBURY)}`);
+  it("says what it looks like and which kilometre square, so saving needs no typing", () => {
+    expect(suggestTitle(meta, "enclosure", AVEBURY)).toBe("Enclosure in SU1069");
+  });
+
+  it("never names a place finer than the square, whatever the class, because the title is shown to everyone", () => {
+    const fine = gridRefOf(AVEBURY);
+    expect(fine).toMatch(/^SU \d{3} \d{3}$/);
+    for (const featureClass of [...meta.vocab.feature_classes.map((entry) => entry.id), null]) {
+      const title = suggestTitle(meta, featureClass, AVEBURY);
+      expect(title).not.toContain(fine ?? "");
+      expect(title).toMatch(/ in SU\d{4}$/);
+    }
+    expect(suggestTitle(meta, "round_barrow", AVEBURY)).toBe("Round barrow or mound in SU1069");
   });
 
   it("falls back to the class alone off the grids, and to a plain word with no class", () => {

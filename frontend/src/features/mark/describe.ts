@@ -4,7 +4,7 @@
  */
 
 import type { Meta } from "../../api/meta.js";
-import { formatGridRef, wgs84ToGrid } from "../../map/gridref.js";
+import { formatGridRef, kmSquareAt, wgs84ToGrid } from "../../map/gridref.js";
 import { LIMITS } from "../../map/permalink.js";
 import type { MapState } from "../../map/store.js";
 import type { ViewState } from "../findings/types.js";
@@ -60,11 +60,14 @@ export function exactGridRefOf([lng, lat]: LngLat): string | null {
 }
 
 /**
- * A title that needs no typing: what it looks like, and where. The server
- * can't yet say what the nearest place is, so it is the grid reference.
+ * A title that needs no typing: what it looks like, and which one-kilometre
+ * square it is in, such as "Enclosure in SU1069". The title is shown to
+ * everyone, signed out too, and the level that decides who may see the exact
+ * place is the server's to set, so the title never names anything finer than
+ * the square (Decision 0005).
  */
 export function suggestTitle(meta: Meta, featureClass: string | null, point: LngLat | null): string {
   const label = meta.vocab.feature_classes.find((candidate) => candidate.id === featureClass)?.label ?? "Finding";
-  const where = point ? gridRefOf(point) : null;
-  return (where ? `${label} at ${where}` : label).slice(0, TITLE_MAX);
+  const square = point ? kmSquareAt(point[0], point[1]) : null;
+  return (square ? `${label} in ${square.ref}` : label).slice(0, TITLE_MAX);
 }
