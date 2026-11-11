@@ -510,10 +510,11 @@ def reassess(
     would tell every follower how they answered (Decision 0008). Pass that
     person as `quiet_for` instead, so they aren't notified of their own action.
 
-    `evidence_id` names the evidence item whose adding, removal, vote or
+    `evidence_id` names the evidence item whose adding, removal or
     verification caused the change, and a `tier_changed` event carries it,
     so the timeline can tell which follow-up moved a finding. A change a
-    second look caused names nothing: no item, and no actor.
+    vote caused names no item, since it would say how the actor voted on
+    it. A change a second look caused names nothing: no item, and no actor.
 
     Reputation awards are written every time: `reputation.awards` works out
     what is new and `record_awards` never pays twice.
@@ -726,11 +727,15 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
     A move keeps `grid_ref`, `nation` and the public position in step. A new
     feature class can raise the level (`sensitivity.level_after_class_change`,
     applied on save) and is reassessed, because the finder's class counts.
+    A title that is still the `suggested_title` follows a move or a new class
+    when no title is sent, so it never names a square the finding has left.
     """
     check_finder(finding, actor)
     unknown = set(changes) - _EDITABLE
     assert not unknown, f"not editable: {sorted(unknown)}"
-    location: Point = changes.get("location") or Point(point_lon_lat(finding.location))
+    before = point_lon_lat(finding.location)
+    suggested = finding.title == suggested_title(finding.feature_class, *before)
+    location: Point = changes.get("location") or Point(before)
     if "location" in changes:
         check_in_british_isles(location)
     outline = changes.get("outline")
@@ -755,6 +760,8 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
     if changes.get("feature_class") is not None and changes["feature_class"] != finding.feature_class:
         finding.feature_class = FeatureClass(changes["feature_class"]).value
         class_changed = True
+    if suggested and changes.get("title") is None and ("location" in changes or class_changed):
+        finding.title = suggested_title(finding.feature_class, *_point_parts(location))
     level_before = finding.sensitivity
     db.flush()
     # The flush applies a level a new class raises. A raised level checks the
@@ -1130,7 +1137,9 @@ def vote(db: Session, evidence_id: int, user: User, value: int) -> Reassessment:
             .on_conflict_do_update(index_elements=["evidence_id", "user_id"], set_={"value": value})
         )
         follow(db, user, finding)
-    return reassess(db, finding, user, evidence_id=evidence.id)
+    # A step names no item here: with the voter as actor it would say who voted on which
+    # item and, from the step's direction, how, which the item itself gives only as counts.
+    return reassess(db, finding, user)
 
 
 def check_may_verify(finding: Finding, user: User, evidence: Evidence | None = None) -> None:

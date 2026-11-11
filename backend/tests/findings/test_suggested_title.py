@@ -77,3 +77,35 @@ def test_a_protected_finding_takes_the_suggested_title_and_refuses_a_finer_one(
     finer = gridref.gridref_at(lon, lat, 6).format()
     refused = client.post(f"{API}/findings", json=body | {"title": f"Round barrow at {finer}"})
     assert (refused.status_code, error_code(refused)) == (422, "position_in_text")
+
+
+def test_a_suggested_title_follows_the_finding_into_its_new_square(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    """A title naming the old square beside a map showing the new one places the point near their edge."""
+    finder = make_user()
+    finding = create(db, finder, lon=-1.8542, lat=51.4286, feature_class=FeatureClass.ROUND_BARROW)
+    assert finding.title == "Round barrow or mound in SU 10 69"
+    client: TestClient = client_as(finder)
+    url = f"{API}/findings/{finding.public_id}"
+    # About 1.5 km east, into the next square.
+    moved = client.patch(url, json={"location": point(-1.8326, 51.4286)})
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["title"] == "Round barrow or mound in SU 11 69"
+    renamed = client.patch(url, json={"feature_class": "enclosure"})
+    assert renamed.json()["title"] == "Enclosure in SU 11 69"
+    # A title sent with the move is the one kept.
+    sent = client.patch(url, json={"location": point(-1.8542, 51.4286), "title": "The bank by the gate"})
+    assert sent.json()["title"] == "The bank by the gate"
+
+
+def test_a_title_the_finder_wrote_is_left_alone_by_a_move(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    finder = make_user()
+    finding = create(db, finder, lon=-1.8542, lat=51.4286, title="Bank by the old gate")
+    moved = client_as(finder).patch(
+        f"{API}/findings/{finding.public_id}", json={"location": point(-1.8326, 51.4286)}
+    )
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["title"] == "Bank by the old gate"

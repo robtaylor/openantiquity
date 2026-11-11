@@ -1,4 +1,4 @@
-"""A `tier_changed` event names the evidence that caused it, and a second look's names nothing.
+"""A `tier_changed` event names the evidence that caused it, except a vote's and a second look's.
 
 The timeline puts a step up the ladder down to the follow-up that made it.
 It reads `details.evidence_id` on the step instead of matching the step to a
@@ -128,6 +128,60 @@ def test_a_step_a_verification_made_names_the_item_verified(
     assert finding.tier == "confirmed"
     (step,) = _steps(items(client.get(f"{API}/activity", params={"limit": 200})), finding)
     assert (step["actor"]["handle"], step["details"]["evidence_id"]) == ("Archaeologist", entry.id)
+
+
+def test_a_step_a_vote_made_names_no_item(
+    db: Session, make_user: MakeUser, client: TestClient, client_as: ClientAs
+) -> None:
+    """An item gives its votes only as counts, so a step a vote caused can't name the item.
+
+    With the voter as actor, the item and the step's direction would say who
+    voted on which item and how.
+    """
+    finder, follower = make_user(handle="Finder"), make_user(handle="Follower")
+    voter = make_user(handle="Voter")
+    finding = create(db, finder, title="Bank")
+    follow(db, finding, follower)
+    visit, _ = findings.add_evidence(
+        db,
+        findings.lock(db, finding),
+        finder,
+        EvidenceFields(
+            kind=EvidenceKind.FIELD_VISIT,
+            stance=Stance.SUPPORTS,
+            outcome=Outcome.SUPPORTS,
+            occurred_on=date(2026, 10, 1),
+            note="Walked it.",
+        ),
+    )
+    db.commit()
+    db.refresh(finding)
+    assert finding.tier == "spotted", "the finder's own visit needs an endorsement to count"
+    moves = []
+    for value in (1, -1):
+        response = client_as(voter).put(f"{API}/evidence/{visit.id}/vote", json={"value": value})
+        assert response.status_code == 200, response.text
+        db.refresh(finding)
+        moves.append(finding.tier)
+    assert moves == ["ground_checked", "spotted"], "both votes moved the finding"
+
+    for viewer in (client, client_as(follower)):
+        steps = _steps(items(viewer.get(f"{API}/activity", params={"limit": 200})), finding)
+        assert len(steps) == 2
+        assert all(step["details"].get("evidence_id") is None for step in steps), steps
+    notes = client_as(follower).get(f"{API}/notifications", params={"limit": 200}).json()["items"]
+    noted = [note for note in notes if note["kind"] == "tier_changed"]
+    assert len(noted) == 2
+    assert all(note["details"].get("evidence_id") is None for note in noted), noted
+    rows = db.scalars(
+        select(Activity)
+        .where(Activity.kind == "tier_changed", Activity.finding_id == finding.id)
+        .order_by(Activity.id)
+    ).all()
+    assert [row.data for row in rows] == [
+        {"from": "spotted", "to": "ground_checked"},
+        {"from": "ground_checked", "to": "spotted"},
+    ]
 
 
 def test_a_step_a_second_look_made_names_nothing(
