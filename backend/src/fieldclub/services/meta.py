@@ -18,6 +18,7 @@ from fieldclub.terrain.styles import FINE_MINZOOM
 
 
 def build_vocab() -> schema.Vocab:
+    steps = {info.id: info for info in vocab.NEXT_STEPS}
     return schema.Vocab(
         feature_classes=[
             schema.FeatureClassOut(
@@ -41,6 +42,8 @@ def build_vocab() -> schema.Vocab:
         next_steps=[
             schema.NextStepRuleOut(
                 id=rule.code,
+                label=steps[rule.code].label,
+                description=steps[rule.code].description,
                 met_by=rule.met_by,
                 evidence_kinds=list(rule.evidence_kinds),
                 record_relations=list(rule.record_relations),
@@ -51,6 +54,8 @@ def build_vocab() -> schema.Vocab:
             )
             for rule in STEP_RULES
         ],
+        link_shows=[schema.LinkShowsOut.model_validate(item) for item in vocab.LINK_SHOWS],
+        link_coverages=[schema.LinkCoverageOut.model_validate(item) for item in vocab.LINK_COVERAGES],
     )
 
 

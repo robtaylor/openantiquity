@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from fieldclub.schemas.common import ApiModel, GeoJSONFeature, RecordCount, geojson_geometry, to_geojson
-from fieldclub.vocab import LinkShows, LiveFormat
+from fieldclub.vocab import LinkCoverage, LinkShows, LiveFormat
 
 if TYPE_CHECKING:
     from fieldclub.models import Source
@@ -230,8 +230,9 @@ class ContextLink(BaseModel):
     name: str
     title: str
     url: str
-    coverage: str
-    # What the viewer shows at the place.
+    # Where the viewer has something to show. `/meta` names each as `vocab.link_coverages`.
+    coverage: LinkCoverage
+    # What the viewer shows at the place. `/meta` names each as `vocab.link_shows`.
     shows: LinkShows
     # yes, redirect_only or not_tested, as the research found it on 2026-11-10.
     verified: str

@@ -702,7 +702,7 @@
  {
   "key": "ncap-air-photo-finder",
   "name": "NCAP Air Photo Finder at a point",
-  "title": "NCAP Air Photo Finder",
+  "title": "National Collection of Aerial Photography",
   "template": "https://airphotofinder.ncap.org/map?c={northing}:{easting}&z={zoom}",
   "coverage": "uk",
   "shows": "aerial_photographs",

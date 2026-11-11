@@ -84,6 +84,8 @@ def test_vocab_has_exactly_the_documented_vocabularies(meta: dict) -> None:
         "record_categories",
         "report_reasons",
         "next_steps",
+        "link_shows",
+        "link_coverages",
     ]
 
 
@@ -99,6 +101,8 @@ def test_vocab_has_exactly_the_documented_vocabularies(meta: dict) -> None:
         ("explanations", ["id", "label", "hint"], len(vocab.Explanation)),
         ("mention_kinds", ["id", "label"], len(vocab.MentionKind)),
         ("record_categories", ["id", "label", "colour"], len(vocab.RecordCategory)),
+        ("link_shows", ["id", "label", "description"], len(vocab.LinkShows)),
+        ("link_coverages", ["id", "label"], len(vocab.LinkCoverage)),
     ],
 )
 def test_each_vocabulary_has_the_documented_item_shape(
@@ -127,7 +131,7 @@ def test_vocab_examples_from_the_contract(meta: dict) -> None:
     assert by_id["record_categories"]["designation"] == {
         "id": "designation",
         "label": "Designations",
-        "colour": "#d9544d",
+        "colour": "#ff2f99",
     }
 
 

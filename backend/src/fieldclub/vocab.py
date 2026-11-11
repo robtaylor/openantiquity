@@ -709,6 +709,54 @@ class NextStepCode(StrEnum):
     NEED_OFFICIAL = "need_official"
 
 
+@dataclass(frozen=True)
+class NextStepInfo:
+    """A next step as the help-wanted lists name it: the work it asks of someone, in a line."""
+
+    id: NextStepCode
+    label: str
+    description: str
+
+
+NEXT_STEPS: tuple[NextStepInfo, ...] = (
+    NextStepInfo(
+        NextStepCode.NEED_OBSERVERS,
+        "Second looks",
+        "Look at it as the finder did and say whether you can see it too.",
+    ),
+    NextStepInfo(
+        NextStepCode.NEED_STRAND,
+        "Another kind of evidence",
+        "Check old maps, aerial photos, heritage records and reports for it.",
+    ),
+    NextStepInfo(
+        NextStepCode.NEED_CLASS_AGREEMENT,
+        "Say what it is",
+        "Look at it and say what kind of feature you think it is.",
+    ),
+    NextStepInfo(
+        NextStepCode.NEED_CHECK,
+        "Rule out the everyday",
+        "Say whether it could be something modern, something natural or a quirk of the data.",
+    ),
+    NextStepInfo(
+        NextStepCode.NEED_TRUSTED_REVIEW,
+        "An experienced eye",
+        "A trusted member or an archaeologist looks at it and says whether they see it.",
+    ),
+    NextStepInfo(
+        NextStepCode.NEED_GROUND,
+        "Look on the ground",
+        "Visit it with the landowner's permission, or survey it, and say what you found.",
+    ),
+    NextStepInfo(
+        NextStepCode.NEED_OFFICIAL,
+        "Find it on record",
+        "Find a heritage record, designation or publication that includes it, for an archaeologist to check.",
+    ),
+)
+
+
 class Sensitivity(StrEnum):
     """How much of a finding's position each viewer sees (Decision 0005).
 
@@ -788,16 +836,23 @@ class RecordCategoryInfo:
     colour: str
 
 
-# Colours are chosen to stay apart from each other on greyscale terrain. Records
-# are drawn as squares, so they never rely on colour to differ from findings.
+# Records are drawn as squares, so they never rely on colour to differ from
+# findings, but a square's colour mustn't read as a finding's tier or state
+# either. So the colours keep apart, by CIEDE2000, from every colour token of
+# docs/UI.md (the tiers, the states, good, warn, bad, info, the accent and the
+# text colours) by at least 21, from each other by at least 21, and from every
+# grey of the terrain by at least 23, and each has at least 3:1 contrast with
+# the dark chrome (`--bg`), as UI.md asks of what isn't text. The earlier set
+# reused `--bad`, `--info` and `--good` outright. `tests/test_vocab.py` checks
+# the distances.
 RECORD_CATEGORIES: tuple[RecordCategoryInfo, ...] = (
-    RecordCategoryInfo(RecordCategory.DESIGNATION, "Designations", "#d9544d"),
-    RecordCategoryInfo(RecordCategory.MONUMENT, "Monument records", "#4fb3a5"),
-    RecordCategoryInfo(RecordCategory.FIND, "Finds", "#e6c84f"),
-    RecordCategoryInfo(RecordCategory.EVENT, "Fieldwork", "#6ba6c9"),
-    RecordCategoryInfo(RecordCategory.DOCUMENT, "Reports and publications", "#b08fd8"),
-    RecordCategoryInfo(RecordCategory.COMMUNITY, "Community data", "#7fb069"),
-    RecordCategoryInfo(RecordCategory.MAP_LABEL, "Antiquities on old maps", "#c9a27e"),
+    RecordCategoryInfo(RecordCategory.DESIGNATION, "Designations", "#ff2f99"),
+    RecordCategoryInfo(RecordCategory.MONUMENT, "Monument records", "#2ae3e4"),
+    RecordCategoryInfo(RecordCategory.FIND, "Finds", "#aeff00"),
+    RecordCategoryInfo(RecordCategory.EVENT, "Fieldwork", "#3557e6"),
+    RecordCategoryInfo(RecordCategory.DOCUMENT, "Reports and publications", "#ffb3e6"),
+    RecordCategoryInfo(RecordCategory.COMMUNITY, "Community data", "#18ffae"),
+    RecordCategoryInfo(RecordCategory.MAP_LABEL, "Antiquities on old maps", "#c400ff"),
 )
 
 
@@ -1151,6 +1206,60 @@ class LinkShows(StrEnum):
     OTHER = "other"
 
 
+@dataclass(frozen=True)
+class LinkShowsInfo:
+    id: LinkShows
+    label: str
+    description: str
+
+
+LINK_SHOWS: tuple[LinkShowsInfo, ...] = (
+    LinkShowsInfo(
+        LinkShows.RECORDS, "Heritage records", "What a register or database of known sites holds here."
+    ),
+    LinkShowsInfo(LinkShows.HISTORIC_MAPS, "Old maps", "Maps of this place from the last two hundred years."),
+    LinkShowsInfo(
+        LinkShows.AERIAL_PHOTOGRAPHS, "Aerial photographs", "Photographs of this place taken from the air."
+    ),
+    LinkShowsInfo(
+        LinkShows.LIDAR, "LIDAR", "The shape of the ground here, from laser survey, in another viewer."
+    ),
+    LinkShowsInfo(LinkShows.PHOTOGRAPHS, "Photographs", "Photographs people have taken here on the ground."),
+    LinkShowsInfo(
+        LinkShows.OTHER, "Other", "Something else about this place, such as a report or a place-name."
+    ),
+)
+
+
+class LinkCoverage(StrEnum):
+    """Where an external viewer in `GET /context/links` has something to show."""
+
+    ENGLAND = "england"
+    SCOTLAND = "scotland"
+    WALES = "wales"
+    NORTHERN_IRELAND = "northern_ireland"
+    GB = "gb"
+    UK = "uk"
+    WIDER = "wider"
+
+
+@dataclass(frozen=True)
+class LinkCoverageInfo:
+    id: LinkCoverage
+    label: str
+
+
+LINK_COVERAGES: tuple[LinkCoverageInfo, ...] = (
+    LinkCoverageInfo(LinkCoverage.ENGLAND, "England"),
+    LinkCoverageInfo(LinkCoverage.SCOTLAND, "Scotland"),
+    LinkCoverageInfo(LinkCoverage.WALES, "Wales"),
+    LinkCoverageInfo(LinkCoverage.NORTHERN_IRELAND, "Northern Ireland"),
+    LinkCoverageInfo(LinkCoverage.GB, "Great Britain"),
+    LinkCoverageInfo(LinkCoverage.UK, "The United Kingdom"),
+    LinkCoverageInfo(LinkCoverage.WIDER, "Beyond the UK too"),
+)
+
+
 class LiveFormat(StrEnum):
     """The shape of a live source's answer, so the browser reads it without guessing (Decision 0007)."""
 
@@ -1189,6 +1298,9 @@ def _check_complete() -> None:
         (FindingState, STATES),
         (MentionKind, MENTION_KINDS),
         (RecordCategory, RECORD_CATEGORIES),
+        (NextStepCode, NEXT_STEPS),
+        (LinkShows, LINK_SHOWS),
+        (LinkCoverage, LINK_COVERAGES),
     )
     for enum_cls, rows in tables:
         ids = [getattr(row, "id") for row in rows]  # noqa: B009 - rows are heterogeneous dataclasses

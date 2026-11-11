@@ -14,6 +14,8 @@ from fieldclub.services.confidence import Endorsement, MetBy
 from fieldclub.vocab import (
     AgeBand,
     EvidenceKind,
+    LinkCoverage,
+    LinkShows,
     NextStepCode,
     Outcome,
     Relation,
@@ -95,9 +97,15 @@ class ReportReasonOut(ApiModel):
 
 
 class NextStepRuleOut(ApiModel):
-    """What meets one next step, from `services.confidence.STEP_RULES`. `id` is the step's code."""
+    """What meets one next step, from `services.confidence.STEP_RULES`. `id` is the step's code.
+
+    `label` and `description` name the work it asks of someone, for the
+    help-wanted lists: "Another kind of evidence", "Check old maps, ...".
+    """
 
     id: NextStepCode
+    label: str
+    description: str
     met_by: MetBy
     # For a step met by evidence: the kinds that count, and what the item must say.
     evidence_kinds: list[EvidenceKind]
@@ -116,6 +124,21 @@ class NextStepRuleOut(ApiModel):
     needs_verification: bool
 
 
+class LinkShowsOut(ApiModel):
+    """What an external viewer shows at a place, as `GET /context/links` gives its `shows`."""
+
+    id: LinkShows
+    label: str
+    description: str
+
+
+class LinkCoverageOut(ApiModel):
+    """Where an external viewer has something to show, as `GET /context/links` gives its `coverage`."""
+
+    id: LinkCoverage
+    label: str
+
+
 class Vocab(BaseModel):
     feature_classes: list[FeatureClassOut]
     periods: list[PeriodOut]
@@ -128,6 +151,8 @@ class Vocab(BaseModel):
     record_categories: list[RecordCategoryOut]
     report_reasons: list[ReportReasonOut]
     next_steps: list[NextStepRuleOut]
+    link_shows: list[LinkShowsOut]
+    link_coverages: list[LinkCoverageOut]
 
 
 # --------------------------------------------------------------------------

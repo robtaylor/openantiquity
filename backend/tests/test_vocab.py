@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import itertools
+import math
 import re
+from pathlib import Path
 
 import pytest
 
@@ -205,7 +208,113 @@ def test_record_categories_have_distinct_colours() -> None:
     assert all(re.fullmatch(r"#[0-9a-f]{6}", colour) for colour in colours)
     assert len(set(colours)) == len(colours)
     assert vocab.RECORD_CATEGORIES[0].label == "Designations"
-    assert vocab.RECORD_CATEGORIES[0].colour == "#d9544d"
+    assert vocab.RECORD_CATEGORIES[0].colour == "#ff2f99"
+
+
+UI_DOC = Path(__file__).resolve().parents[2] / "docs" / "UI.md"
+
+
+def _lab(colour: str) -> tuple[float, float, float]:
+    """CIE L*a*b* (D65) of an sRGB colour."""
+    channels = [int(colour[i : i + 2], 16) / 255 for i in (1, 3, 5)]
+    r, g, b = (c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in channels)
+    x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047
+    y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883
+
+    def f(t: float) -> float:
+        return t ** (1 / 3) if t > 216 / 24389 else (24389 / 27 * t + 16) / 116
+
+    return 116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))
+
+
+def _de2000(one: str, two: str) -> float:
+    """The CIEDE2000 colour difference."""
+    (l1, a1, b1), (l2, a2, b2) = _lab(one), _lab(two)
+    c_bar = (math.hypot(a1, b1) + math.hypot(a2, b2)) / 2
+    g = 0.5 * (1 - math.sqrt(c_bar**7 / (c_bar**7 + 25**7)))
+    a1p, a2p = (1 + g) * a1, (1 + g) * a2
+    c1p, c2p = math.hypot(a1p, b1), math.hypot(a2p, b2)
+    h1p = math.degrees(math.atan2(b1, a1p)) % 360
+    h2p = math.degrees(math.atan2(b2, a2p)) % 360
+    dh = h2p - h1p
+    if c1p * c2p == 0:
+        dh = 0.0
+    elif dh > 180:
+        dh -= 360
+    elif dh < -180:
+        dh += 360
+    d_hp = 2 * math.sqrt(c1p * c2p) * math.sin(math.radians(dh / 2))
+    l_bar, c_barp = (l1 + l2) / 2, (c1p + c2p) / 2
+    if c1p * c2p == 0:
+        h_bar = h1p + h2p
+    elif abs(h1p - h2p) <= 180:
+        h_bar = (h1p + h2p) / 2
+    else:
+        h_bar = (h1p + h2p + (360 if h1p + h2p < 360 else -360)) / 2
+    t = (
+        1
+        - 0.17 * math.cos(math.radians(h_bar - 30))
+        + 0.24 * math.cos(math.radians(2 * h_bar))
+        + 0.32 * math.cos(math.radians(3 * h_bar + 6))
+        - 0.20 * math.cos(math.radians(4 * h_bar - 63))
+    )
+    rotation = 30 * math.exp(-(((h_bar - 275) / 25) ** 2))
+    r_c = 2 * math.sqrt(c_barp**7 / (c_barp**7 + 25**7))
+    s_l = 1 + 0.015 * (l_bar - 50) ** 2 / math.sqrt(20 + (l_bar - 50) ** 2)
+    s_c, s_h = 1 + 0.045 * c_barp, 1 + 0.015 * c_barp * t
+    r_t = -math.sin(math.radians(2 * rotation)) * r_c
+    dl, dc = (l2 - l1) / s_l, (c2p - c1p) / s_c
+    return math.sqrt(dl**2 + dc**2 + (d_hp / s_h) ** 2 + r_t * dc * (d_hp / s_h))
+
+
+def _contrast(one: str, two: str) -> float:
+    def luminance(colour: str) -> float:
+        channels = [int(colour[i : i + 2], 16) / 255 for i in (1, 3, 5)]
+        r, g, b = (c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in channels)
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+    high, low = sorted((luminance(one), luminance(two)), reverse=True)
+    return (high + 0.05) / (low + 0.05)
+
+
+def test_the_cielab_difference_is_the_standard_one() -> None:
+    # A colour is 0 from itself, and black is 100 from white.
+    assert _de2000("#336699", "#336699") == 0
+    assert _de2000("#000000", "#ffffff") == pytest.approx(100, abs=0.01)
+
+
+def test_record_colours_stand_apart_from_the_interfaces_tiers_and_states() -> None:
+    """A record's square mustn't read as a finding's tier or state, nor vanish into grey terrain."""
+    css = UI_DOC.read_text(encoding="utf-8")
+    tokens = dict(re.findall(r"--([a-z-]+):\s*(#[0-9a-f]{6})", css))
+    named = {"tier-seen", "tier-confirmed", "state-known", "state-ruled-out", "good", "bad", "info", "accent"}
+    assert named <= set(tokens)
+    background = tokens.pop("bg")
+    for name in ("surface", "raised", "border", "on-accent"):
+        tokens.pop(name)
+    colours = [info.colour for info in vocab.RECORD_CATEGORIES]
+    greys = [f"#{level:02x}{level:02x}{level:02x}" for level in range(16, 256, 16)]
+    for colour in colours:
+        assert min(_de2000(colour, token) for token in tokens.values()) >= 20, colour
+        assert min(_de2000(colour, grey) for grey in greys) >= 20, colour
+        assert _contrast(colour, background) >= 3, colour
+    for one, two in itertools.combinations(colours, 2):
+        assert _de2000(one, two) >= 20, (one, two)
+
+
+def test_every_next_step_and_every_kind_of_link_has_words_to_show() -> None:
+    for table in (vocab.NEXT_STEPS, vocab.LINK_SHOWS):
+        for info in table:
+            assert info.label, info
+            assert info.description.endswith("."), info
+            assert "_" not in info.label, info
+    assert [info.label for info in vocab.LINK_COVERAGES][:4] == [
+        "England",
+        "Scotland",
+        "Wales",
+        "Northern Ireland",
+    ]
 
 
 def test_roles_are_the_five_in_the_contract() -> None:

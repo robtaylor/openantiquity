@@ -68,7 +68,8 @@ LINK_TITLES = {
     "he-apex-viewer": "Historic England Aerial Photo Explorer",
     "trove-map-at-point": "trove.scot map",
     "britain-from-above-map": "Britain from Above",
-    "ncap-air-photo-finder": "NCAP Air Photo Finder",
+    # NCAP is the National Collection of Aerial Photography, which few visitors will know by its initials.
+    "ncap-air-photo-finder": "National Collection of Aerial Photography",
     "nls-explore-at-point": "National Library of Scotland maps",
     # The viewer sets LIDAR beside a choice of old maps, of which CVAT is the first offered.
     "nls-side-by-side-lidar": "National Library of Scotland LIDAR and maps, side by side",

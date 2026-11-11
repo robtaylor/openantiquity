@@ -124,7 +124,10 @@ LIDAR_STYLES: tuple[tuple[str, str, str], ...] = (
     (
         "sky_view",
         "Sky-view",
-        "Ditches and hollows go dark, banks go bright. Good for enclosures and hollow ways.",
+        (
+            "How much of the sky each spot can see. Ditches and hollows go dark, banks and mounds stay "
+            "light. Good for enclosures and old sunken tracks."
+        ),
     ),
     (
         "multi_shade",
