@@ -8,6 +8,7 @@ import type { Me } from "../../features/account/api.js";
  */
 export function meFixture(overrides: Partial<Me> = {}): Me {
   return {
+    id: 42,
     handle: "QuietBarrow42",
     display_name: "Ada Lovelace",
     role: "member",
