@@ -12,13 +12,14 @@ A deployed Field Club covering England. People explore 1 m LIDAR in archaeologic
 - Decisions 0001 to 0009 are written. Each stays Proposed until its code is built and checked.
 - The build contract in `ARCHITECTURE.md` describes the tables, API and confidence rules to build.
 
-## Where things stand (2026-11-10)
+## Where things stand (2026-11-11)
 
-- WS0 and WS1 are shipped in the first commits on `main`: the backend core, the frontend shell on MapLibre 6, the rename to Field Club, and the contract sync.
-- The backend halves of WS2 to WS5 are on `main`: terrain tiles, sign-in, findings with the confidence engine, and the record index with its first connector. Each was built in its own worktree, reviewed adversarially, fixed, and rebased onto `main`. The backend suite stood at about 2,500 tests when they were combined.
-- Combining them showed that `rasterio` and `pyogrio` each bundle their own GDAL, and that the process aborts when `pyogrio`'s loads first. `ingest/adapters/ogr.py` is the one place `pyogrio` is imported, and it loads `rasterio` first.
-- Review changed two rules, both now in the decision records. An answer to a second look is final (Decision 0008). Promotion to trusted is a moderator's call (Decision 0005).
-- Next: the remaining connectors, the collaboration and moderation API, the terrain follow-ups, and the interface. Each track is built in its own worktree and branch under `.claude/worktrees/` and rebased onto `main` when it has been reviewed.
+- WS0 and WS1 are shipped in the first commits on `main`.
+- The whole backend is on `main`: terrain, sign-in, findings with the confidence engine, the record index with its connectors, the collaboration and moderation routes, and the scheduled jobs. It serves 93 routes and its suite stood at about 4,960 tests on 2026-11-11. Each track was built in its own worktree, reviewed adversarially, fixed, and rebased onto `main`, and the places where tracks meet were reviewed twice more.
+- The interface on `main` covers joining, Explore, marking a finding, a finding's page, second looks, help wanted, heritage records, search, the layer panel and the terrain tools. The rest of WS7 is being built.
+- The development database holds about 1.45 million records from 36 sources, a gazetteer of 273,525 place names, and the nation and county boundaries.
+- Decisions 0010 to 0015 were written during the build, each from a review finding or a seam between tracks. All are Proposed until WS9 checks them against the code.
+- The Google Cloud project `fieldclub-uk` exists. Nothing is applied to it: its billing link waits on the owner (`owner-actions.md`, WS2).
 - Defra supplied England's 2022 composite DTM in bulk on the day it was asked, ticket DSP3-11967. See `owner-actions.md` and `../sources/lidar-england-bulk-supply.md`. Eleven tiles around Avebury and Stonehenge are in the local mirror folder for development.
 
 ## Workstreams
@@ -57,7 +58,7 @@ One audited rename from the working name to `fieldclub` across directories, impo
 
 ### WS2 — Terrain
 
-**Status:** In progress. The mirror, the visualisations, the tile endpoints, the height profile, the coverage layer and the mirror command shipped on 2026-11-10. The national overview (Decision 0012), capture years on the coverage layer, the LIDAR `sources` rows, the bucket lock and the resumable whole-country mirror job followed the same day. Left: running the mirror job and the overview build in the cloud (WS8), and the browser screenshot. Known artefact: the 2022 composite has no tiles over 351 km² of the North York Moors, so the DEM there draws a sea-level pit with cliffs of 200 to 400 m at its edge, in 3D terrain and DEM hillshade. The remedy is Defra's post-2022 tiles, which cover it; until then the gap stays.
+**Status:** Shipped 2026-11-11. The exit criteria are met: the synthetic-terrain and seam tests pass, Avebury's bank and ditch are clear with no seams in every view in the running app, and a cached tile is served from the cache alone. Two things remain and are tracked elsewhere: the whole-country copy into a bucket (WS8), and the 351 km² gap over the North York Moors, which needs Defra's post-2022 tiles and is deferred.
 
 England's elevation behind one interface, the visualisations, and the tile endpoints. See Decision 0006 and `sources/lidar.md`.
 
@@ -77,7 +78,7 @@ England's elevation behind one interface, the visualisations, and the tile endpo
 
 ### WS3 — Accounts
 
-**Status:** In progress. The server side shipped on 2026-11-10: provider sign-in, account linking and the emailed link. Left: the sign-in sheet, the welcome sheet and browser drafts in the interface. Provider credentials are an owner action.
+**Status:** Shipped 2026-11-11. Each provider flow passes against a mocked provider, and `frontend/e2e-full/findings.spec.ts` marks a finding signed out, signs in through the development sign-in and finds the draft saved once. Provider credentials are an owner action, so no real provider has been exercised.
 
 Provider sign-in, the emailed link, the welcome sheet and account deletion. See Decisions 0002 and 0009.
 
@@ -94,7 +95,7 @@ Provider sign-in, the emailed link, the welcome sheet and account deletion. See 
 
 ### WS4 — Findings and confidence
 
-**Status:** In progress. The server side shipped on 2026-11-10: the confidence engine, findings, second looks, evidence, discussion, the review queue, reputation and exports. The end-to-end test through the interface passes on `f1/findings` (`frontend/e2e-full/finding.spec.ts`), waiting to be rebased onto `main`.
+**Status:** Shipped 2026-11-11. The engine has its boundary, invariant and adversarial tests, `frontend/e2e-full/finding.spec.ts` takes a finding from spotted to corroborated with three accounts, and `backend/tests/test_routes.py` fails for any route that carries a position without a leak test.
 
 The core loop. See Decisions 0003, 0005 and 0008.
 
@@ -112,7 +113,7 @@ The core loop. See Decisions 0003, 0005 and 0008.
 
 ### WS5 — Records
 
-**Status:** In progress. The shared ingest adapters, the scheduled monuments connector (20,006 records, the count the research recorded), search, nearby records, record pages, vector tiles, suggestions and the live-source and deep-link catalogues shipped on 2026-11-10. Left: connectors for the other 47 sources, the place-name gazetteer, and the nation and county lookup.
+**Status:** Shipped 2026-11-11 for the sources that are records. Thirty-six sources are stored, with counts equal to the research's wherever a source is stored whole. Sources that turned out not to be records have no connector and are listed in `ARCHITECTURE.md` under Ingest: access land, the landscape characterisation grid, the woodland opportunity map, Defra's survey indexes and the monument-type thesaurus. Wikidata is stored as a cross-walk and kept off the map (Decision 0011).
 
 England's open records, stored, searchable and linked. See Decision 0007 and `sources/records-england.md`.
 
@@ -130,7 +131,7 @@ England's open records, stored, searchable and linked. See Decision 0007 and `so
 
 ### WS6 — Collaboration
 
-**Status:** Not started.
+**Status:** Shipped 2026-11-11 on the server: investigations, mentions and the channel scan, field follow-ups as evidence, the activity feed, notifications, the event stream, scan a square, reports, moderation and photo approval. A mention notifies the finder and the helpers once, and hidden content is gone from every read route for everyone but its owner and moderators. The screens for these are part of WS7.
 
 Investigations, mentions, follow-ups, activity and moderation. See Decision 0009.
 
@@ -147,7 +148,7 @@ Investigations, mentions, follow-ups, activity and moderation. See Decision 0009
 
 ### WS7 — Interface
 
-**Status:** Not started. Follows the API of WS3 to WS6.
+**Status:** In progress. On `main`: joining and drafts, Explore, marking a finding, a finding's page, second looks, help wanted, records, search, the layer panel and the terrain tools, each with end-to-end tests at both widths. Being built: the one-press second look, mentions and the follow-up timeline, investigations, scan a square, the activity feed and notifications, profiles, reports and moderation, the guide and the notices.
 
 Findings track (`f1/findings`), as of 2026-11-11: built are marking a finding, Explore's list of the findings in view, a finding's page with its second look, evidence, discussion and the finder's controls, the blind second-look queue at `/review`, and help wanted at `/help`. Its full-stack tests take a finding from spotted to corroborated with three accounts (`e2e-full/finding.spec.ts`), and have a second account, starting signed out, answer a finding through the queue and see the reveal (`e2e-full/review.spec.ts`).
 
