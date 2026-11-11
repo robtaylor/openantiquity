@@ -19,7 +19,7 @@ A deployed Field Club covering England. People explore 1 m LIDAR in archaeologic
 - The interface on `main` covers joining, Explore, marking a finding, a finding's page, second looks, help wanted, heritage records, search, the layer panel and the terrain tools. The rest of WS7 is being built.
 - The development database holds about 1.45 million records from 31 sources, a gazetteer of 273,525 place names, and the nation and county boundaries.
 - Decisions 0010 to 0016 were written during the build, each from a review finding or a seam between tracks. All are Proposed until WS9 checks them against the code.
-- The Google Cloud project `fieldclub-uk` has the first Terraform stage, applied on 2026-11-11: registry, buckets, database, empty secrets, service accounts and a budget alert. No service runs yet.
+- The Google Cloud project `fieldclub-uk` runs the service and its jobs, held back from the public (`service_public = false`), since 2026-11-11. The tables exist and the whole-country elevation copy was started that evening.
 - Defra supplied England's 2022 composite DTM in bulk on the day it was asked, ticket DSP3-11967. See `owner-actions.md` and `../sources/lidar-england-bulk-supply.md`. Eleven tiles around Avebury and Stonehenge are in the local mirror folder for development.
 
 ## Workstreams
@@ -167,7 +167,7 @@ Every screen over the map. See `UI.md`.
 
 ### WS8 — Deployment
 
-**Status:** In progress. The image, Terraform, CI workflows and the runbook (`infra/README.md`) shipped on 2026-11-11. Steps 1 to 3 of the runbook were carried out that day in the project `fieldclub-uk`: billing is linked, the state bucket exists, and the first apply created 78 resources with `run_workloads = false`. A second plan reported no changes. Next, each needing the owner's go-ahead: the database login and secrets (step 4), the first image (step 5), and the second apply that starts the public service (step 6), which also needs the contributor terms' address. One thing to settle in WS9's security review: Google gave the project's automatic Compute Engine service account the Editor role. No Field Club workload uses that account.
+**Status:** In progress. The owner gave standing permission for the deployment on 2026-11-11, and steps 1 to 7 of the runbook (`infra/README.md`) were carried out that day in the project `fieldclub-uk`. Billing is linked, both applies are done, the database login and the six required secrets have values, the first image is in the registry, and the schema job created the 28 tables. The service is held back from the public with `service_public = false`: an anonymous request gets 403, and the owner's gets the API and the interface. The elevation copy (step 8) was started at 19:23 on 2026-11-11 and should take about eight hours. Left: the national overview (step 9) and the first ingests (step 10) once the copy has finished, a new image when the rest of the interface lands, the sign-in providers' credentials (`owner-actions.md`, WS3), and opening the site, which waits on WS9's security review. Google gave the project's default Compute Engine service account the Editor role; that grant was removed, and the runbook now says to.
 
 **Deliverables:**
 

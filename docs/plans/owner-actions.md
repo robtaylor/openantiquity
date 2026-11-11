@@ -18,7 +18,7 @@ The plan serves [v1-england.md](v1-england.md) and the decisions on accounts ([0
 ## Where things stand (2026-11-11)
 
 - WS1 England LIDAR: done on 2026-11-10. Defra supplied the 2022 composite in bulk with no time limit, ticket DSP3-11967.
-- WS2 Google Cloud project: the project `fieldclub-uk` has billing and the first Terraform stage, applied on 2026-11-11. A public site address is still to choose.
+- WS2 Google Cloud project: the project `fieldclub-uk` has billing, and the owner gave standing permission for its deployment on 2026-11-11. The deployment's state is in `v1-england.md`, WS8. A public site address is still to choose.
 - WS3 Sign-in credentials: to do. Only OpenStreetMap and Google were looked at by the research.
 - WS4 Other keys and accounts: to do. None is needed for the first build.
 - WS5 Archaeology Data Service: letter sent on 2026-11-11. Awaiting a reply.
@@ -64,7 +64,7 @@ What the supply holds, and how it behaves in transfer, is recorded in `../source
 
 ### WS2 — Google Cloud project
 
-**Status:** In progress. On 2026-11-11 the owner approved the project `fieldclub-uk`, the first Terraform stage, a budget alert of £75 a month and the contact address `fieldclub@shape.build`. The owner freed places on the billing account that day, the project was linked to it, and the first stage was applied: the registry, the buckets, the database, twelve empty secrets, the service accounts and the budget alert. No service runs and nothing is public. Still to provide: a public address for the site, and the go-ahead for each later stage (`v1-england.md`, WS8).
+**Status:** Done, apart from the site's address. On 2026-11-11 the owner approved the project `fieldclub-uk`, a budget alert of £75 a month and the contact address `fieldclub@shape.build`, freed places on the billing account, and gave standing permission for the deployment. What has been deployed is recorded in `v1-england.md`, WS8. Still to provide: a public address for the site, if the run.app address isn't to be the one people use.
 
 **Who.** The owner, in their own Google Cloud account. The research created nothing in it.
 
