@@ -113,18 +113,66 @@ def test_a_yes_and_a_no_look_the_same_on_their_profiles(
         assert _without_identity(saw) == _without_identity(missed), f"{name} can tell the answers apart"
         assert saw["reputation"] == 0  # the point for matching the outcome isn't shown to others
         assert saw["reputation_total"] is None
-        assert saw["counts"]["second_looks"] == 1
-
-        looks = {
-            handle: items(viewer.get(f"{API}/users/{handle}/contributions", params={"kind": "second_look"}))
-            for handle in ("Saw", "Missed")
-        }
-        assert looks["Saw"] == looks["Missed"]
-        assert looks["Saw"][0]["kind"] == "second_look"
-        # Never when: a date beside the tier history would show whose answer moved it.
-        assert (looks["Saw"][0]["id"], looks["Saw"][0]["created_at"]) == (None, None)
-        assert_nothing_about_answers(looks, f"{name}'s view of second looks")
+        # Second looks are counted and listed only to the person (Decision 0010).
+        assert saw["counts"]["second_looks"] is None
+        for handle in ("Saw", "Missed"):
+            looks = items(viewer.get(f"{API}/users/{handle}/contributions", params={"kind": "second_look"}))
+            assert looks == [], f"{name} can list {handle}'s second looks"
         assert items(viewer.get(f"{API}/users/Saw/contributions")) == []
+
+    own = {
+        handle: items(
+            client_as(answered[handle.lower()]).get(
+                f"{API}/users/{handle}/contributions", params={"kind": "second_look"}
+            )
+        )
+        for handle in ("Saw", "Missed")
+    }
+    assert own["Saw"] == own["Missed"]
+    assert own["Saw"][0]["kind"] == "second_look"
+    # Never when: a date beside the tier history would show whose answer moved it.
+    assert (own["Saw"][0]["id"], own["Saw"][0]["created_at"]) == (None, None)
+    assert_nothing_about_answers(own, "a person's own second looks")
+    assert client_as(answered["saw"]).get(f"{API}/users/Saw").json()["counts"]["second_looks"] == 1
+
+
+def test_a_watched_profile_gives_nothing_away_as_answers_arrive(
+    db: Session, make_user: MakeUser, client: TestClient, client_as: ClientAs
+) -> None:
+    """Someone polling a member's profile sees the same page before and after each of their answers.
+
+    One answer takes the finding to Seen and the other leaves it, so if the
+    profile moved with them, the tier at that moment would say how each went.
+    """
+    finder, ann = make_user(handle="Finder"), make_user(handle="Ann")
+    watcher = client_as(make_user(handle="Watcher"))
+    first, second = create(db, finder, title="Bank"), create(db, finder, title="Ditch")
+    answer(db, first, make_user(), Visible.YES, feature_class=FeatureClass.ENCLOSURE)
+
+    def watched() -> list[Any]:
+        return [
+            viewer.get(f"{API}/users/Ann{path}", params=params).json()
+            for viewer in (watcher, client)
+            for path, params in (
+                ("", {}),
+                ("/contributions", {}),
+                ("/contributions", {"kind": "second_look"}),
+                ("/findings", {}),
+            )
+        ]
+
+    before = watched()
+    answer(db, first, ann, Visible.YES, feature_class=FeatureClass.ENCLOSURE)
+    db.refresh(first)
+    assert first.tier == "seen", "the yes moved the finding, so a profile that moved with it would tell"
+    after_yes = watched()
+    answer(db, second, ann, Visible.NO)
+    after_no = watched()
+    assert before == after_yes == after_no
+    assert_nothing_about_answers(after_no, "a watched profile")
+    # Ann herself sees both.
+    mine = client_as(ann).get(f"{API}/users/Ann").json()
+    assert mine["counts"]["second_looks"] == 2
 
 
 def test_points_are_itemised_only_for_the_person(

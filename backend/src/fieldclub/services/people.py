@@ -8,12 +8,13 @@ band, follows Decision 0009 through `PublicUser`: the handle and no picture.
 Their bio is left out too, because free text on a profile is where contact
 details would go.
 
-Blind second looks (Decision 0008). The finding page already credits each
-standing answerer as having answered, without saying how, so a profile may
-list "took a second look" on the same findings. It lists them on their own,
-without a date and in the findings' order, because a date set beside a
-finding's tier history would show which answer moved it, and so how it went.
-The reputation anyone else sees leaves out the points an answer earns
+Blind second looks (Decisions 0008 and 0010). A profile counts and lists the
+findings a person took a second look at only to that person. Everyone else
+gets no count and an empty list: someone polling a profile would see when an
+answer arrived, and the unnamed tier change at that moment would show which
+way it went, across every finding the person answers at once. The person sees
+them on their own, without a date and in the findings' order. The reputation
+anyone else sees leaves out the points an answer earns
 (`reputation.ANSWER_REASONS`), which are paid only when it matched how the
 finding turned out. The itemised points, and the full total, are for the
 person themselves.
@@ -36,10 +37,10 @@ from typing import Any
 from sqlalchemy import ColumnElement, Select, func, literal, select, tuple_, union_all
 from sqlalchemy.orm import Session
 
-from fieldclub.errors import ForbiddenError, NotFoundError
+from fieldclub.errors import ForbiddenError, InvalidCursorError, NotFoundError
 from fieldclub.models import Comment, Evidence, Finding, Mention, Observation, ReputationEvent, User
-from fieldclub.schemas.common import InvalidCursorError, decode_cursor, int_from_cursor, paginate
-from fieldclub.services import feed, findings, reputation
+from fieldclub.schemas.common import cursor_int, decode_cursor, int_from_cursor, paginate
+from fieldclub.services import feed, findings, reputation, sensitivity
 from fieldclub.services.findings import FindingFilters
 
 
@@ -62,7 +63,7 @@ def get_person(db: Session, handle: str) -> User:
 
 
 def is_self(person: User, viewer: User | None) -> bool:
-    active = viewer if viewer is not None and viewer.is_active else None
+    active = sensitivity.active_viewer(viewer)
     return active is not None and active.has_id(person.id)
 
 
@@ -74,7 +75,8 @@ def is_self(person: User, viewer: User | None) -> bool:
 @dataclass(frozen=True)
 class Counts:
     findings: int
-    second_looks: int
+    # For the person themselves. None for everyone else: see the module docstring.
+    second_looks: int | None
     evidence: int
     comments: int
     mentions: int
@@ -155,7 +157,7 @@ def profile(db: Session, person: User, viewer: User | None) -> Profile:
     mine = is_self(person, viewer)
     counts = Counts(
         findings=_count(db, _findings_of(person, viewer)),
-        second_looks=_count(db, _second_looks(person, viewer)),
+        second_looks=_count(db, _second_looks(person, viewer)) if mine else None,
         evidence=_count(db, _evidence(person, viewer)),
         comments=_count(db, _comments(person, viewer)),
         mentions=_count(db, _mentions(person, viewer)),
@@ -221,9 +223,12 @@ def list_contributions(
 
     Without `kind`: evidence, comments and mentions together, newest first.
     `kind=second_look` lists the findings they took a second look at, newest
-    finding first, with no dates.
+    finding first, with no dates, to the person alone. For anyone else it is
+    empty, whatever they have answered (see the module docstring).
     """
     if kind is ContributionKind.SECOND_LOOK:
+        if not is_self(person, viewer):
+            return ContributionPage([], None)
         return _list_second_looks(db, person, viewer, limit=limit, cursor=cursor)
     parts = {
         ContributionKind.EVIDENCE: _evidence,
@@ -257,8 +262,9 @@ def list_contributions(
 
 def _contribution_cursor(cursor: str) -> tuple[datetime, str, int]:
     when, kind, last_id = decode_cursor(cursor, 3)
-    if kind not in ContributionKind or not isinstance(last_id, int) or isinstance(last_id, bool):
+    if kind not in ContributionKind:
         raise InvalidCursorError()
+    last_id = cursor_int(last_id)
     try:
         return datetime.fromisoformat(when), kind, last_id
     except (TypeError, ValueError):

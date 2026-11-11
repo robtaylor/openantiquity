@@ -2,10 +2,11 @@
 
 `ROUTES` names each route by method and path, as the app lists them, with:
 
-- `leak_test`: the test in `tests/findings/test_leaks.py` that calls it as
-  every kind of viewer against every sensitivity level, when the route
-  returns a finding or anything derived from a finding's position
-  (Decision 0005). None when it returns neither.
+- `leak_test`: the test that calls it as every kind of viewer against every
+  sensitivity level, when the route returns a finding or anything derived
+  from a finding's position (Decision 0005). None when it returns neither.
+  A bare name is a test in `tests/findings/test_leaks.py`. A test in
+  another module is named in full, as `tests.activity.test_leaks:test_the_feed`.
 - `writer`: for a route that changes data, `CONTRIBUTOR` when it stores a
   contribution and so needs the welcome step (Decision 0009), or why it
   doesn't. None for a read.
@@ -21,6 +22,7 @@ if it carries a position.
 
 from __future__ import annotations
 
+import importlib
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,7 +52,7 @@ MUTATING = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 class Expect:
     leak_test: str | None = None
     writer: str | None = None
-    # `{finding}` and `{record}` are filled in with ones the test makes.
+    # `{finding}`, `{record}` and `{person}` are filled in with ones the test makes.
     sample: str | None = None
     # Why there is no sample, when there isn't one for a read.
     unsampled: str | None = None
@@ -61,6 +63,8 @@ OWN_ACCOUNT = "changes only the caller's own account, which needs no welcome ste
 SIGN_IN = "signs someone in, before any welcome step"
 NOT_STORED = "stores nothing: a read that needs a body"
 NEEDS_MIRROR = "needs a mirror: tests/terrain/test_api.py checks its caching"
+ACTIVITY_LEAKS = "tests.activity.test_leaks:"
+U = "/api/v1/users/{person}"
 
 ROUTES: dict[tuple[str, str], Expect] = {
     # Accounts
@@ -140,6 +144,27 @@ ROUTES: dict[tuple[str, str], Expect] = {
     ("GET", "/api/v1/terrain/coverage"): Expect(sample="/api/v1/terrain/coverage?bbox=-1.9,51.4,-1.8,51.45"),
     ("GET", "/tiles/lidar/{style}/{z}/{x}/{y}.png"): Expect(unsampled=NEEDS_MIRROR),
     ("GET", "/tiles/dem/{z}/{x}/{y}.png"): Expect(unsampled=NEEDS_MIRROR),
+    # People
+    ("GET", "/api/v1/users/{handle}"): Expect(
+        ACTIVITY_LEAKS + "test_profiles_findings_and_contributions", sample=U
+    ),
+    ("GET", "/api/v1/users/{handle}/findings"): Expect(
+        ACTIVITY_LEAKS + "test_profiles_findings_and_contributions", sample=U + "/findings"
+    ),
+    ("GET", "/api/v1/users/{handle}/contributions"): Expect(
+        ACTIVITY_LEAKS + "test_profiles_findings_and_contributions", sample=U + "/contributions"
+    ),
+    ("GET", "/api/v1/users/{handle}/points"): Expect(ACTIVITY_LEAKS + "test_points", sample=U + "/points"),
+    # Activity
+    ("GET", "/api/v1/activity"): Expect(ACTIVITY_LEAKS + "test_the_feed", sample="/api/v1/activity"),
+    ("GET", "/api/v1/notifications"): Expect(
+        ACTIVITY_LEAKS + "test_notifications", sample="/api/v1/notifications"
+    ),
+    ("POST", "/api/v1/notifications/read"): Expect(writer=CONTRIBUTOR),
+    ("GET", "/api/v1/events/stream"): Expect(
+        ACTIVITY_LEAKS + "test_stream_payloads_carry_no_position",
+        unsampled="a stream that stays open: tests/activity/test_events.py checks it is sent no-cache",
+    ),
     # The app itself
     ("GET", "/healthz"): Expect(sample="/healthz"),
 }
@@ -219,11 +244,18 @@ def test_every_route_the_app_serves_has_a_stated_expectation(
     assert not gone, f"ROUTES lists routes the app no longer has: {gone}"
 
 
+def leak_test(name: str) -> Callable[..., Any] | None:
+    """The test a row names: `test_name` in tests/findings/test_leaks.py, or `module:test_name`."""
+    module_name, _, test_name = name.rpartition(":")
+    module = importlib.import_module(module_name) if module_name else test_leaks
+    return getattr(module, test_name, None)
+
+
 def test_each_route_that_returns_a_position_has_a_leak_test() -> None:
     for key, expect in ROUTES.items():
         if expect.leak_test is not None:
-            test = getattr(test_leaks, expect.leak_test, None)
-            assert callable(test), f"{key}: there is no {expect.leak_test} in tests/findings/test_leaks.py"
+            test = leak_test(expect.leak_test)
+            assert callable(test), f"{key}: there is no {expect.leak_test}"
 
 
 def test_every_write_says_who_may_make_it_and_every_read_how_it_is_checked() -> None:
@@ -276,11 +308,12 @@ def test_the_published_schema_covers_every_route_but_the_terrain_images(
 
 @pytest.fixture
 def samples(db: Session, make_user: MakeUser) -> dict[str, str]:
-    finding = create(db, make_user())
+    finder = make_user()
+    finding = create(db, finder)
     record = add_record(db, add_source(db), "Bowl barrow", -1.85, 51.43)
     record_tiles.refresh_counts(db)
     db.commit()
-    return {"finding": finding.public_id, "record": str(record.id)}
+    return {"finding": finding.public_id, "record": str(record.id), "person": finder.handle}
 
 
 @pytest.mark.parametrize(

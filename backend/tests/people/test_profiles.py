@@ -65,12 +65,14 @@ def test_a_profile(db: Session, make_user: MakeUser, client: TestClient, client_
         "joined_at": body["joined_at"],
         "reputation": 2,
         "reputation_total": None,
-        "counts": {"findings": 1, "second_looks": 1, "evidence": 1, "comments": 1, "mentions": 1},
+        # Second looks are counted only to the person themselves (Decision 0010).
+        "counts": {"findings": 1, "second_looks": None, "evidence": 1, "comments": 1, "mentions": 1},
         "is_me": False,
     }
     assert datetime.fromisoformat(body["joined_at"]) == ann.created_at
+    assert client_as(other).get(f"{API}/users/AnnDigs").json()["counts"]["second_looks"] is None
     me = client_as(ann).get(f"{API}/users/AnnDigs").json()
-    assert (me["is_me"], me["reputation_total"]) == (True, 2)
+    assert (me["is_me"], me["reputation_total"], me["counts"]["second_looks"]) == (True, 2, 1)
 
 
 @pytest.mark.parametrize("band", [AgeBand.AGE_16_17.value, None])
@@ -186,18 +188,32 @@ def test_a_bad_contributions_cursor(
 
 
 def test_second_looks_are_listed_by_finding_and_paged(
-    db: Session, make_user: MakeUser, client: TestClient
+    db: Session, make_user: MakeUser, client: TestClient, client_as: ClientAs
 ) -> None:
     ann, finder = make_user(handle="Ann"), make_user()
     looked = [create(db, finder) for _ in range(3)]
     for finding in reversed(looked):  # answered in the opposite order to the findings
         answer(db, finding, ann, Visible.UNSURE)
-    first = client.get(f"{API}/users/Ann/contributions", params={"kind": "second_look", "limit": 2}).json()
-    rest = client.get(
+    own = client_as(ann)
+    first = own.get(f"{API}/users/Ann/contributions", params={"kind": "second_look", "limit": 2}).json()
+    rest = own.get(
         f"{API}/users/Ann/contributions", params={"kind": "second_look", "cursor": first["next_cursor"]}
     ).json()
     order = [item["finding"]["public_id"] for item in first["items"] + rest["items"]]
     assert order == [f.public_id for f in reversed(looked)]  # newest finding first, whatever the answer order
+
+
+@pytest.mark.parametrize("viewer", ["signed_out", "member", "finder", "moderator"])
+def test_second_looks_are_listed_only_to_the_person(
+    db: Session, make_user: MakeUser, client: TestClient, client_as: ClientAs, viewer: str
+) -> None:
+    ann, finder = make_user(handle="Ann"), make_user()
+    answer(db, create(db, finder), ann, Visible.YES)
+    others = {"signed_out": client, "finder": client_as(finder)}
+    others |= {role: client_as(make_user(role)) for role in ("member", "moderator")}
+    response = others[viewer].get(f"{API}/users/Ann/contributions", params={"kind": "second_look"})
+    assert response.json() == {"items": [], "next_cursor": None}
+    assert others[viewer].get(f"{API}/users/Ann").json()["counts"]["second_looks"] is None
 
 
 def test_points_are_for_the_person_alone(

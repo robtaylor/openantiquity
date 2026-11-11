@@ -5,22 +5,24 @@ from __future__ import annotations
 from datetime import datetime
 
 from fieldclub.models import Finding, ReputationEvent, User
-from fieldclub.schemas.activity import ActivityFinding
+from fieldclub.schemas.activity import ActivityFindingOut
 from fieldclub.schemas.common import ApiModel, PublicUser
 from fieldclub.services.people import Contribution, ContributionKind, Profile
 
 
-class ProfileCounts(ApiModel):
+class ProfileCountsOut(ApiModel):
     """What the person has done, counting only what this viewer could list."""
 
     findings: int
-    second_looks: int
+    # The findings they took a second look at, for the person themselves.
+    # Null for everyone else (Decisions 0008 and 0010).
+    second_looks: int | None
     evidence: int
     comments: int
     mentions: int
 
 
-class PersonProfile(ApiModel):
+class ProfileOut(ApiModel):
     """A person's public page.
 
     Someone in the 16 to 17 band, or who hasn't chosen a band, shows only
@@ -38,11 +40,11 @@ class PersonProfile(ApiModel):
     reputation: float
     # Every point, for the person themselves. Null for everyone else.
     reputation_total: float | None
-    counts: ProfileCounts
+    counts: ProfileCountsOut
     is_me: bool
 
     @classmethod
-    def build(cls, found: Profile) -> PersonProfile:
+    def build(cls, found: Profile) -> ProfileOut:
         person = found.person
         public = PublicUser.from_user(person)
         return cls(
@@ -54,7 +56,7 @@ class PersonProfile(ApiModel):
             joined_at=person.created_at,
             reputation=found.reputation,
             reputation_total=found.reputation_total,
-            counts=ProfileCounts(**vars(found.counts)),
+            counts=ProfileCountsOut(**vars(found.counts)),
             is_me=found.is_self,
         )
 
@@ -63,13 +65,14 @@ class ContributionOut(ApiModel):
     """One thing the person helped with.
 
     `second_look` says only that they took one: never how, and never when
-    (Decision 0008). Its `id` and `created_at` are null.
+    (Decision 0008). Its `id` and `created_at` are null. Second looks are
+    listed only to the person themselves (Decision 0010).
     """
 
     kind: ContributionKind
     id: int | None
     created_at: datetime | None
-    finding: ActivityFinding
+    finding: ActivityFindingOut
     # The evidence kind, or the mention kind.
     subkind: str | None
 
@@ -79,7 +82,7 @@ class ContributionOut(ApiModel):
             kind=item.kind,
             id=item.id,
             created_at=item.created_at,
-            finding=ActivityFinding.build(item.finding, viewer),
+            finding=ActivityFindingOut.build(item.finding, viewer),
             subkind=item.subkind,
         )
 
@@ -92,7 +95,7 @@ class PointOut(ApiModel):
     reason: str
     created_at: datetime
     # Null when the finding has since been hidden, withdrawn or removed.
-    finding: ActivityFinding | None
+    finding: ActivityFindingOut | None
 
     @classmethod
     def build(cls, event: ReputationEvent, finding: Finding | None, viewer: User) -> PointOut:
@@ -102,5 +105,5 @@ class PointOut(ApiModel):
             delta=event.delta,
             reason=event.reason,
             created_at=event.created_at,
-            finding=ActivityFinding.build(finding, viewer) if finding is not None else None,
+            finding=ActivityFindingOut.build(finding, viewer) if finding is not None else None,
         )

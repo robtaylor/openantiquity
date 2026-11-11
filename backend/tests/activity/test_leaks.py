@@ -19,6 +19,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from shapely.geometry import box
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fieldclub.models import Activity, Finding, User
@@ -128,6 +129,20 @@ def test_profiles_findings_and_contributions(world: World, viewer: str) -> None:
         for helper in ("Helper1", "Helper2"):
             text = get(world, viewer, f"/users/{helper}/contributions", **params)
             check(text, allowed, where=f"{helper}'s contributions ({kind or 'all'})")
+
+
+@pytest.mark.parametrize("helper", ["Helper1", "Helper2"])
+def test_a_persons_own_second_looks(
+    world: World, db: Session, app: FastAPI, client_for: ClientFor, helper: str
+) -> None:
+    """Only the person lists their second looks, so only they can be tried: helpers are trusted."""
+    person = db.scalar(select(User).where(User.handle == helper))
+    assert person is not None
+    response = client_for(app, person).get(
+        f"{API}/users/{helper}/contributions", params={"kind": "second_look"}
+    )
+    assert len(response.json()["items"]) == len(LEVELS)
+    check(response.text, SEES["trusted"], SEES["trusted"], where=f"{helper}'s own second looks")
 
 
 @pytest.mark.parametrize("viewer", [v for v in VIEWERS if v != "signed_out"])

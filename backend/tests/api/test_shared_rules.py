@@ -38,6 +38,7 @@ BOX_ROUTES = [
     f"{API}/findings/export",
     f"{API}/records/search",
     f"{API}/terrain/coverage",
+    f"{API}/activity",
 ]
 BAD_BOXES = [
     "1,2,3",
@@ -94,6 +95,12 @@ def lists(db: Session, make_user: MakeUser, client_as: ClientAs) -> tuple[TestCl
         f"{API}/review/tasks?code=need_observers",
         f"{API}/records/search?q=barrow",
         f"{API}/records/search",
+        f"{API}/activity",
+        f"{API}/notifications",
+        f"{API}/users/{finder.handle}/findings",
+        f"{API}/users/{finder.handle}/contributions",
+        f"{API}/users/{finder.handle}/contributions?kind=second_look",
+        f"{API}/users/{finder.handle}/points",
     ]
     return client_as(finder), paths
 
@@ -147,6 +154,7 @@ def test_no_offset_goes_past_the_shared_limit(lists: tuple[TestClient, list[str]
         (f"{API}/review/next", 51),
         (f"{API}/review/tasks", 201),
         (f"{API}/geo/search?q=avebury", 21),
+        (f"{API}/activity", 201),
     ],
 )
 def test_a_limit_above_the_maximum_is_a_validation_error(client: TestClient, path: str, limit: int) -> None:

@@ -15,7 +15,7 @@ from fieldclub.api.deps import Db, OptionalUser, PageQuery, private
 from fieldclub.auth.handles import HANDLE_MAX_LENGTH
 from fieldclub.schemas.common import Page
 from fieldclub.schemas.findings import FindingSummary
-from fieldclub.schemas.people import ContributionOut, PersonProfile, PointOut
+from fieldclub.schemas.people import ContributionOut, PointOut, ProfileOut
 from fieldclub.services import people
 from fieldclub.services.people import ContributionKind
 
@@ -24,11 +24,14 @@ router = APIRouter(tags=["people"])
 Handle = Annotated[str, Path(min_length=1, max_length=HANDLE_MAX_LENGTH)]
 
 
-@router.get("/users/{handle}", response_model=PersonProfile)
-def get_profile(handle: Handle, db: Db, viewer: OptionalUser, response: Response) -> PersonProfile:
-    """Someone's page: who they are, when they joined, what they have done and their points."""
+@router.get("/users/{handle}", response_model=ProfileOut)
+def get_profile(handle: Handle, db: Db, viewer: OptionalUser, response: Response) -> ProfileOut:
+    """Someone's page: who they are, when they joined, what they have done and their points.
+
+    The count of second looks is for the person themselves, and null for everyone else.
+    """
     private(response)
-    return PersonProfile.build(people.profile(db, people.get_person(db, handle), viewer))
+    return ProfileOut.build(people.profile(db, people.get_person(db, handle), viewer))
 
 
 @router.get("/users/{handle}/findings", response_model=Page[FindingSummary])
@@ -54,10 +57,13 @@ def list_contributions(
     response: Response,
     kind: Annotated[
         ContributionKind | None,
-        Query(description="Left out: evidence, comments and mentions together. second_look on its own."),
+        Query(
+            description="Left out: evidence, comments and mentions together. "
+            "second_look on its own, listed only for your own handle."
+        ),
     ] = None,
 ) -> Page[ContributionOut]:
-    """What they helped with. A second look says only that they took one, never how or when."""
+    """What they helped with. Second looks are listed only to the person, and never say how or when."""
     private(response)
     person = people.get_person(db, handle)
     found = people.list_contributions(db, person, viewer, kind=kind, limit=page.limit, cursor=page.cursor)

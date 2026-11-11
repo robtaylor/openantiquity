@@ -7,7 +7,7 @@ dependency's session would stay open for as long as the stream does.
 
 On the wire:
 
-- `event: activity` with `id:` the activity id and `data:` a `StreamEvent`
+- `event: activity` with `id:` the activity id and `data:` a `StreamEventOut`
   (public ids and a kind, nothing more). Refetch through the API to show it.
 - `event: resync`: events may have been missed. Refetch what is on screen.
 - `event: dropped` or `event: closed`: the stream ends. The browser's
@@ -31,14 +31,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 
-from fieldclub.api.findings import parse_bbox
+from fieldclub.api.deps import BBoxQuery
 from fieldclub.auth.deps import client_ip
 from fieldclub.config import get_settings
 from fieldclub.ratelimit import address_key, enforce_key, get_limiter
-from fieldclub.schemas.activity import StreamEvent
-from fieldclub.services import events, ids
+from fieldclub.schemas.activity import StreamEventOut
+from fieldclub.schemas.common import parse_bbox
+from fieldclub.services import events, findings, ids
 from fieldclub.services.events import ENDING_SIGNALS, Signal, StreamFilter, Subscription, TooManyStreamsError
-from fieldclub.services.findings import FindingNotFoundError
 from fieldclub.vocab import ActivityKind
 
 router = APIRouter(tags=["events"])
@@ -52,22 +52,13 @@ _opens = get_limiter("event_stream_opens", 240, per_seconds=3600)
 
 
 async def stream_filter(
-    bbox: Annotated[
-        str | None,
-        Query(
-            max_length=200,
-            description="west,south,east,north. Matches the centre of each finding's 1 km square",
-        ),
-    ] = None,
+    # Matched against the centre of each finding's 1 km square, never its spot.
+    bbox: BBoxQuery = None,
     finding: Annotated[
         str | None, Query(max_length=ids.LENGTH + 8, description="A finding's public id")
     ] = None,
 ) -> StreamFilter:
-    public_id = None
-    if finding is not None:
-        public_id = ids.normalise(finding)
-        if public_id is None:
-            raise FindingNotFoundError()
+    public_id = findings.normalise_public_id(finding) if finding is not None else None
     return StreamFilter(bbox=parse_bbox(bbox), finding=public_id)
 
 
@@ -94,11 +85,14 @@ async def subscription(
 @router.get(
     "/events/stream",
     response_class=EventSourceResponse,
-    responses={429: {"description": f"`{TooManyStreamsError.code}` or `rate_limited`"}},
+    responses={
+        200: {"content": {"text/event-stream": {}}, "description": "Server-sent events"},
+        429: {"description": f"`{TooManyStreamsError.code}` or `rate_limited`"},
+    },
 )
 async def stream(
     subscribed: Annotated[Subscription, Depends(subscription)],
-) -> AsyncIterator[StreamEvent]:
+) -> AsyncIterator[StreamEventOut]:
     """Live events, optionally only those in a box or on one finding.
 
     Each carries ids and a kind and nothing else: fetch what it is about
@@ -118,7 +112,7 @@ async def stream(
             if item in ENDING_SIGNALS:
                 return
         else:
-            data = StreamEvent(
+            data = StreamEventOut(
                 id=item.id,
                 kind=ActivityKind(item.kind),
                 finding=item.finding,

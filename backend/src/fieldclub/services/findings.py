@@ -258,11 +258,16 @@ def may_see_hidden(finding: Finding, viewer: User | None) -> bool:
     return active is not None and (active.has_id(finding.author_id) or is_moderator(active))
 
 
-def _by_public_id(public_id: str) -> Select[Finding]:
+def normalise_public_id(public_id: str) -> str:
+    """A finding's public id as `services.ids` writes it, or `FindingNotFoundError` for one it can't be."""
     normalised = ids.normalise(public_id)
     if normalised is None:
         raise FindingNotFoundError()
-    return select(Finding).where(Finding.public_id == normalised)
+    return normalised
+
+
+def _by_public_id(public_id: str) -> Select[Finding]:
+    return select(Finding).where(Finding.public_id == normalise_public_id(public_id))
 
 
 def get_finding(db: Session, public_id: str, viewer: User | None) -> Finding:

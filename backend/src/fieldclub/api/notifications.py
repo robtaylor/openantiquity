@@ -9,18 +9,18 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Response
 
 from fieldclub.api.deps import Contributor, CurrentUser, Db, PageQuery, private, rate_limit
-from fieldclub.schemas.activity import MarkRead, MarkReadResult, NotificationOut, NotificationPage
+from fieldclub.schemas.activity import MarkRead, MarkReadOut, NotificationOut, NotificationPageOut
 from fieldclub.services import feed
 
 router = APIRouter(tags=["notifications"])
 
 
-@router.get("/notifications", response_model=NotificationPage)
-def list_notifications(user: CurrentUser, db: Db, page: PageQuery, response: Response) -> NotificationPage:
+@router.get("/notifications", response_model=NotificationPageOut)
+def list_notifications(user: CurrentUser, db: Db, page: PageQuery, response: Response) -> NotificationPageOut:
     """Your notifications, newest first, with how many are unread."""
     private(response)
     found = feed.list_notifications(db, user, limit=page.limit, cursor=page.cursor)
-    return NotificationPage(
+    return NotificationPageOut(
         items=[
             NotificationOut.build(item.notification, item.actor, item.finding, user) for item in found.items
         ],
@@ -31,12 +31,12 @@ def list_notifications(user: CurrentUser, db: Db, page: PageQuery, response: Res
 
 @router.post(
     "/notifications/read",
-    response_model=MarkReadResult,
+    response_model=MarkReadOut,
     dependencies=[Depends(rate_limit("notifications_read", 600, per_seconds=3600))],
 )
-def mark_read(body: MarkRead, user: Contributor, db: Db, response: Response) -> MarkReadResult:
+def mark_read(body: MarkRead, user: Contributor, db: Db, response: Response) -> MarkReadOut:
     """Mark some of your notifications read, or all of them."""
     private(response)
     marked = feed.mark_read(db, user, ids=body.ids, up_to=body.up_to)
     db.commit()
-    return MarkReadResult(marked=marked, unread_count=feed.unread_count(db, user))
+    return MarkReadOut(marked=marked, unread_count=feed.unread_count(db, user))

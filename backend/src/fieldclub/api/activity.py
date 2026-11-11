@@ -10,11 +10,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, Response
 
-from fieldclub.api.deps import Db, OptionalUser, PageQuery, private
-from fieldclub.api.findings import parse_bbox
+from fieldclub.api.deps import BBoxQuery, Db, OptionalUser, PageQuery, private
 from fieldclub.auth.handles import HANDLE_MAX_LENGTH
-from fieldclub.schemas.activity import ActivityItem
-from fieldclub.schemas.common import Page
+from fieldclub.schemas.activity import ActivityOut
+from fieldclub.schemas.common import Page, parse_bbox
 from fieldclub.services import feed, findings, ids, people
 from fieldclub.services.feed import FeedFilters
 from fieldclub.vocab import ActivityKind
@@ -22,19 +21,13 @@ from fieldclub.vocab import ActivityKind
 router = APIRouter(tags=["activity"])
 
 
-@router.get("/activity", response_model=Page[ActivityItem])
+@router.get("/activity", response_model=Page[ActivityOut])
 def list_activity(
     db: Db,
     viewer: OptionalUser,
     response: Response,
     page: PageQuery,
-    bbox: Annotated[
-        str | None,
-        Query(
-            max_length=200,
-            description="west,south,east,north. Matches the centre of each finding's 1 km square",
-        ),
-    ] = None,
+    bbox: BBoxQuery = None,
     kind: Annotated[list[ActivityKind] | None, Query(max_length=len(ActivityKind))] = None,
     finding: Annotated[
         str | None, Query(max_length=ids.LENGTH + 8, description="A finding's public id")
@@ -43,9 +36,10 @@ def list_activity(
         str | None, Query(max_length=ids.LENGTH + 8, description="A public investigation's id")
     ] = None,
     person: Annotated[str | None, Query(max_length=HANDLE_MAX_LENGTH, description="A handle")] = None,
-) -> Page[ActivityItem]:
+) -> Page[ActivityOut]:
     """What has happened, newest first.
 
+    `bbox` matches the centre of each finding's 1 km square, never its spot.
     A second look's events name nobody. Events on hidden or withdrawn
     findings, on investigations that aren't public, and by banned accounts
     are left out.
@@ -61,9 +55,9 @@ def list_activity(
         actor_id=people.get_person(db, person).id if person is not None else None,
     )
     found = feed.list_feed(db, viewer, filters, limit=page.limit, cursor=page.cursor)
-    return Page[ActivityItem](
+    return Page[ActivityOut](
         items=[
-            ActivityItem.build(item.activity, item.actor, item.finding, item.investigation, viewer)
+            ActivityOut.build(item.activity, item.actor, item.finding, item.investigation, viewer)
             for item in found.items
         ],
         next_cursor=found.next_cursor,
