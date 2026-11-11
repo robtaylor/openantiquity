@@ -139,3 +139,6 @@ export const ANSWER_WORDS: Record<Visible, { button: string; given: string; thei
   unsure: { button: "Not sure", given: "You weren't sure", theirs: "Not sure" },
   no: { button: "I can't see it", given: "You can't see it", theirs: "Can't see it" },
 };
+
+/** Said when the reveal is shown without the detail given here, because another tab had already finished the answer. */
+export const ALREADY_FINISHED = "Your answer was already finished in another tab, so what you added here wasn't kept.";

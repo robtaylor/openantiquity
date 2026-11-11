@@ -6,9 +6,16 @@ import { useMapStore } from "../../map/store.js";
 import { toast } from "../../ui/toastStore.js";
 import { accountIdentity, useSession } from "../account/session.js";
 import { useKindDrafts } from "../drafts/savers.js";
-import { giveAnswer, revealAnswer } from "../finding/api.js";
+import { giveAnswer, revealAsAsked } from "../finding/api.js";
 import { toastFailureWithRetry, useSignedInFirst } from "../finding/feedback.js";
-import { type AnswerDraft, answerBody, detailBody, isReveal, newAnswer } from "../finding/secondLook/answer.js";
+import {
+  ALREADY_FINISHED,
+  type AnswerDraft,
+  answerBody,
+  detailBody,
+  isReveal,
+  newAnswer,
+} from "../finding/secondLook/answer.js";
 import { answerDrafts, discardAnswerDrafts, keepAnswerDraft } from "../finding/secondLook/answerDrafts.js";
 import type { Reveal, Visible } from "../finding/types.js";
 import { useApplyFinding } from "../finding/useFinding.js";
@@ -159,7 +166,7 @@ export function useCardAnswers(meta: Meta): CardAnswers {
       }
       useReviewStore.getState().setRevealing(true);
       try {
-        revealed(await revealAnswer(card.public_id, detailBody(meta, given)));
+        revealed(await revealAsAsked(card.public_id, detailBody(meta, given), () => toast(ALREADY_FINISHED)));
       } catch (error) {
         useReviewStore.getState().setRevealing(false);
         toastFailureWithRetry("It couldn't be shown.", error, () => void showComparison(card, visible, detail));

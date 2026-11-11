@@ -298,6 +298,45 @@ describe("a second look on the page", () => {
     expect(await panel.findByText(/2 other people can see it/)).toBeInTheDocument();
   });
 
+  it("puts focus on the section's heading once the reveal replaces the button pressed for it", async () => {
+    const user = userEvent.setup();
+    const finding = pageFixture();
+    const { panel, routes } = await open(finding);
+    twoSteps(routes, finding);
+    await user.click(panel.getByRole("button", { name: "I can't see it" }));
+    await user.click(await panel.findByRole("button", { name: "See how it compares" }));
+    expect(await panel.findByText(/2 other people can see it/)).toBeInTheDocument();
+    expect(panel.getByRole("heading", { name: "Your second look" })).toHaveFocus();
+  });
+
+  it("shows the reveal when another tab finished the answer first, and says the detail here wasn't kept", async () => {
+    const user = userEvent.setup();
+    const finding = pageFixture();
+    const { panel, routes } = await open(finding);
+    twoSteps(routes, finding);
+    const finished = observationFixture({ user: OTHER, feature_class: "enclosure" });
+    routes.on("POST /findings/f-ring/observation/reveal", (call) =>
+      Object.keys(call.body as object).length > 0
+        ? apiError(409, "answer_final", "You've already answered.")
+        : json(
+            revealFixture(finished, finding, {
+              finding: { ...finding, answers_visible: true, my_observation: finished },
+            }),
+          ),
+    );
+    await user.click(panel.getByRole("button", { name: "I can see it" }));
+    await user.click(await panel.findByRole("radio", { name: "Round barrow or mound" }));
+    await user.click(panel.getByRole("button", { name: "Add this and see how it compares" }));
+
+    expect(await panel.findByText(/2 other people can see it/)).toBeInTheDocument();
+    expect(routes.callsTo("POST /findings/f-ring/observation/reveal").map((call) => call.body)).toEqual([
+      { feature_class: "round_barrow" },
+      {},
+    ]);
+    expect(screen.getByText(/already finished in another tab/)).toBeInTheDocument();
+    expect(panel.queryByRole("button", { name: /see how it compares/i })).toBeNull();
+  });
+
   it("offers the detail again to someone who left between the steps, and nothing revealed meanwhile", async () => {
     const user = userEvent.setup();
     const finding = heldFixture("unsure", { answers_visible: false });
@@ -512,6 +551,8 @@ describe("evidence", () => {
     await user.click(visit);
     const form = within(await panel.findByRole("form", { name: "Add site visit" }));
     expect(form.getByRole("note")).toHaveTextContent(/landowner's permission/);
+    // The form's heading takes focus as it opens, so the form is read from its top.
+    await waitFor(() => expect(panel.getByRole("heading", { name: "Add site visit" })).toHaveFocus());
     await user.type(form.getByLabelText("When"), "2026-11-08");
     await user.click(form.getByRole("radio", { name: "Found it" }));
     await user.type(form.getByLabelText("Who did it (optional)"), "Avebury Field Club");
@@ -819,6 +860,8 @@ describe("states of the page", () => {
       await dialog.findByText(/Take the grid reference, coordinates or three-word address out of the note\./),
     ).toBeInTheDocument();
     expect(note).toHaveAttribute("aria-invalid", "true");
+    // Focus goes to the field refused, inside the dialog, so the reason beside it is read next.
+    await waitFor(() => expect(note).toHaveFocus());
     expect(dialog.getByLabelText("Title")).not.toHaveAttribute("aria-invalid");
     await user.type(note, "!");
     expect(note).not.toHaveAttribute("aria-invalid");

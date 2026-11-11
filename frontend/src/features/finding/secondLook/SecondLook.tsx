@@ -3,12 +3,20 @@ import type { Meta } from "../../../api/meta.js";
 import { toast } from "../../../ui/toastStore.js";
 import { useKindDrafts } from "../../drafts/savers.js";
 import { discardDraft } from "../../drafts/store.js";
-import { giveAnswer, revealAnswer } from "../api.js";
+import { giveAnswer, revealAsAsked } from "../api.js";
 import type { ViewerPosition } from "../describe.js";
 import { toastFailureWithRetry, useSignedInFirst } from "../feedback.js";
 import type { FindingDetail, Observation, Reveal, Visible } from "../types.js";
 import { AnswerButtons } from "./AnswerButtons.js";
-import { type AnswerDraft, answerBody, answerFromBody, detailBody, isReveal, newAnswer } from "./answer.js";
+import {
+  ALREADY_FINISHED,
+  type AnswerDraft,
+  answerBody,
+  answerFromBody,
+  detailBody,
+  isReveal,
+  newAnswer,
+} from "./answer.js";
 import {
   answerDrafts,
   discardAnswerDrafts,
@@ -73,11 +81,19 @@ export function SecondLook({ meta, finding, position, ready, onRevealed, onHeld,
   // A draft is shown until it is saved: signed out, or ready and on its way. One that failed is answered afresh.
   const draftVisible = draft && (!ready || draft.state !== "failed") ? draft.data.answer.visible : null;
   const answering = heldVisible ?? draftVisible;
-  const news = useRef<HTMLDivElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   const revealed = shown !== null;
-  // The reveal starts at its top, on a half-open sheet too, whatever the detail before it was scrolled to.
+  // The reveal starts under the section's heading, on a half-open sheet too, whatever the detail before it was
+  // scrolled to. The button pressed for it has gone with the detail, so focus, if it was lost or was in here,
+  // goes to the heading and the next Tab carries on from the reveal.
   useEffect(() => {
-    if (revealed) news.current?.scrollIntoView?.({ block: "start" });
+    const target = heading.current;
+    if (!revealed || !target) return;
+    target.scrollIntoView?.({ block: "start" });
+    const active = document.activeElement;
+    if (active === null || active === document.body || target.parentElement?.contains(active)) {
+      target.focus({ preventScroll: true });
+    }
   }, [revealed]);
   // While the detail is asked, the place stays in sight above the sheet.
   useAnswerInSight(
@@ -127,7 +143,7 @@ export function SecondLook({ meta, finding, position, ready, onRevealed, onHeld,
     }
     setRevealing(true);
     try {
-      done(await revealAnswer(publicId, detailBody(meta, { ...given, visible })));
+      done(await revealAsAsked(publicId, detailBody(meta, { ...given, visible }), () => toast(ALREADY_FINISHED)));
     } catch (error) {
       toastFailureWithRetry("It couldn't be shown.", error, () => void showComparison(visible, given));
     } finally {
@@ -197,9 +213,11 @@ export function SecondLook({ meta, finding, position, ready, onRevealed, onHeld,
       ref={ref}
       tabIndex={-1}
     >
-      <h3 id="fc-second-look-title">Your second look</h3>
+      <h3 id="fc-second-look-title" className="fc-second-look__title" tabIndex={-1} ref={heading}>
+        Your second look
+      </h3>
       {/* There before the answer, so the reveal is read out when it arrives. */}
-      <div className="fc-second-look__news" role="status" ref={news}>
+      <div className="fc-second-look__news" role="status">
         {shown ? <RevealSummary meta={meta} reveal={shown} /> : null}
       </div>
       {body}

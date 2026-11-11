@@ -228,6 +228,11 @@
   outline: none;
 }
 
+/* The reveal is scrolled to under this heading, which takes focus as it arrives. */
+.fc-second-look__title {
+  scroll-margin-top: 16px;
+}
+
 /* The reveal's live region is there, empty, before the answer: it takes no room until it has something to say. */
 .fc-second-look__news:empty {
   margin-bottom: -10px;
@@ -548,8 +553,10 @@
   outline: none;
 }
 
-/* The open form's heading, such as "Add old map": a heading, not a hint. */
+/* The open form's heading, such as "Add old map": a heading, not a hint. It takes focus as the form or chooser
+   opens, and when scrolled to it stands low enough for the frame around it to show (its 14 px padding, and room). */
 .fc-evidence-add > h4 {
+  scroll-margin-top: 30px;
   font-family: var(--font-display);
   font-size: 16px;
   font-weight: 600;
@@ -787,8 +794,9 @@
 
 /* No votes to give: the total, and why, which may need a second line. */
 /* On a phone a finding's title is its claim, and it appears nowhere else on the page, so once the sheet is up
-   from its peek stop the title wraps rather than being cut short. At peek there is room for one line only. */
-.fc-sheet:not([data-stop="peek"]):has(.fc-finding) .fc-panel__title {
+   from its peek stop the title wraps rather than being cut short. At peek there is room for one line only, and
+   while a second look's detail is asked it keeps to one line too, leaving the half-open sheet to the detail. */
+.fc-sheet:not([data-stop="peek"]):has(.fc-finding):not(:has(.fc-detail-step)) .fc-panel__title {
   white-space: normal;
   overflow: visible;
   text-overflow: clip;

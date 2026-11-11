@@ -148,6 +148,24 @@ test("second look", async ({ page }) => {
   await shoot(page, "12-look-revealed");
 });
 
+test("second look with a long title, and focus after the reveal", async ({ page }) => {
+  await fakeSession(page, MEMBER);
+  const finding = pageFixture({
+    title: "Possible ring ditch and outer bank beside the long barrow, faint in the low evening light",
+  });
+  await fakeFindingPage(page, finding);
+  const panel = await open(page, finding);
+  const look = panel.getByRole("region", { name: "Your second look" });
+  await scrollTo(look);
+  await look.getByRole("button", { name: "I can see it" }).click();
+  await look.getByText(/Your answer is in/).waitFor();
+  await shoot(page, "16-look-long-title-detail");
+  await page.keyboard.press("Tab");
+  await look.getByRole("button", { name: "See how it compares" }).click();
+  await look.getByText(/other people can see it/).waitFor();
+  await shoot(page, "17-look-long-title-revealed");
+});
+
 test("second look left between the steps, and signed out", async ({ page }) => {
   const session = await fakeSession(page, MEMBER);
   const held = heldFixture("unsure", { answers_visible: false });

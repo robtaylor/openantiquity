@@ -6,7 +6,7 @@ import { useHiddenFindings } from "../../map/hiddenFindings.js";
 import { RECORD_LAYERS } from "../../map/overlayLayers.js";
 import { useMapStore } from "../../map/store.js";
 import { overlaySourceId } from "../../map/style.js";
-import { type ApiRoutes, routeApi } from "../../test/apiRoutes.js";
+import { type ApiRoutes, apiError, routeApi } from "../../test/apiRoutes.js";
 import { observationFixture, pageFixture, revealFixture } from "../../test/fixtures/findingPage.js";
 import { meFixture } from "../../test/fixtures/me.js";
 import {
@@ -228,6 +228,30 @@ describe("a blind card", () => {
     expect(useReviewStore.getState().current?.public_id).toBe("f-next");
     // The button that was pressed has gone: the next card's question has focus, not the top of the page.
     expect(panel.getByText(/Can you see a feature there\?/)).toHaveFocus();
+  });
+
+  it("shows the reveal when another tab finished the answer first, and says the detail here wasn't kept", async () => {
+    const user = userEvent.setup();
+    const routes = serve([card("f-ring")]);
+    const finished = observationFixture({ visible: "yes", feature_class: "enclosure" });
+    routes.on("POST /findings/f-ring/observation/reveal", (call) =>
+      Object.keys(call.body as object).length > 0
+        ? apiError(409, "answer_final", "You've already answered.")
+        : json(
+            revealFixture(finished, pageFixture({ public_id: "f-ring" }), { moved_up: false, tier_after: "spotted" }),
+          ),
+    );
+    const panel = await openQueue();
+    await user.click(await panel.findByRole("button", { name: "I can see it" }));
+    await user.click(await panel.findByRole("radio", { name: "Round barrow or mound" }));
+    await user.click(panel.getByRole("button", { name: "Add this and see how it compares" }));
+
+    expect(await panel.findByRole("heading", { name: CLAIMED.title })).toBeInTheDocument();
+    expect(routes.callsTo("POST /findings/f-ring/observation/reveal").map((call) => call.body)).toEqual([
+      { feature_class: "round_barrow" },
+      {},
+    ]);
+    expect(screen.getByText(/already finished in another tab/)).toBeInTheDocument();
   });
 
   it("answers by key and shows the comparison with Enter, with nothing added", async () => {

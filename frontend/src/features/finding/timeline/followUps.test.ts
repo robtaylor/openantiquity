@@ -75,6 +75,16 @@ describe("what moved the finding up", () => {
     ).toBe(0);
   });
 
+  it("isn't a move recorded with no one behind it, even after a follow-up that names no one", () => {
+    const later = { tier_from: "probable" as const, tier_to: "ground_checked" as const };
+    expect(
+      ladderMoves(metaFixture, [
+        event({ id: 11, actor: null, details: { evidence_id: 7 } }),
+        event({ id: 12, kind: "tier_changed", actor: null, details: later }),
+      ]).size,
+    ).toBe(0);
+  });
+
   it("puts each move down only to the follow-up just before it", () => {
     const events = [
       event({ id: 1, details: { evidence_id: 7 } }),

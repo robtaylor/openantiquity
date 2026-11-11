@@ -1,11 +1,12 @@
 import { Download, Link2, Pencil, ShieldMinus, ShieldPlus, Undo2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Meta } from "../../api/meta.js";
 import { Button } from "../../ui/Button.js";
 import { ChipGroup } from "../../ui/Chip.js";
 import { Dialog } from "../../ui/Dialog.js";
 import { Field } from "../../ui/Field.js";
 import { toast } from "../../ui/toastStore.js";
+import { useFocusLater } from "../../ui/useFocusLater.js";
 import { findingPath } from "../findings/selection.js";
 import { SENSITIVITIES, type Sensitivity } from "../findings/types.js";
 import { changeSensitivity, exportUrl, lowerSensitivity, updateFinding, withdrawFinding } from "./api.js";
@@ -53,8 +54,12 @@ function EditDialog({
   /** The fields the server refused for saying where it is more closely than its square. */
   const [placed, setPlaced] = useState<ReadonlySet<PositionField>>(new Set());
   const [saving, setSaving] = useState(false);
+  const fields = useRef<HTMLDivElement>(null);
+  const focusLater = useFocusLater();
 
   async function save(): Promise<void> {
+    // The button stays focusable while saving, so focus isn't lost from the dialog: a second press does nothing.
+    if (saving) return;
     if (!title.trim()) {
       setProblem("A finding needs a title.");
       return;
@@ -74,10 +79,14 @@ function EditDialog({
       toast("Your changes are saved.", { kind: "success" });
       onClose();
     } catch (error) {
-      const fields = positionFields(error);
-      setPlaced(fields);
-      // Said beside the field it is about. Anything else is said under the form.
-      setProblem(fields.size > 0 ? null : reasonOf(error));
+      const named = positionFields(error);
+      setPlaced(named);
+      // Said beside the field it is about, which takes focus. Anything else is said under the form.
+      setProblem(named.size > 0 ? null : reasonOf(error));
+      // The first field refused takes focus once it says why, inside the dialog.
+      if (named.size > 0) {
+        focusLater(() => fields.current?.querySelector<HTMLElement>('[aria-invalid="true"]') ?? null, { scroll: true });
+      }
     } finally {
       setSaving(false);
     }
@@ -91,13 +100,13 @@ function EditDialog({
       actions={
         <>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={saving} onClick={() => void save()}>
+          <Button variant="primary" aria-disabled={saving || undefined} onClick={() => void save()}>
             {saving ? "Saving…" : "Save changes"}
           </Button>
         </>
       }
     >
-      <div className="fc-dialog-form">
+      <div className="fc-dialog-form" ref={fields}>
         <Field label="Title" error={placed.has("title") ? positionWords("title") : undefined}>
           {(control) => (
             <input

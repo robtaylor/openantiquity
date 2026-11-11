@@ -69,7 +69,10 @@ test("a member sees the step, what would move it up, and the map goes to the fin
   await expect(form.getByLabel("Source")).toBeVisible();
 });
 
-test("shows each tier and each state with its label and meter", async ({ page }) => {
+// Each reloads the page once per tier or state, so the tiers and the states are separate tests, each with room
+// for a loaded machine.
+test("shows each tier with its label and meter", async ({ page }) => {
+  test.slow();
   await fakeSession(page, MEMBER);
   const fake = await fakeFindingPage(page, pageFixture());
   await openFinding(page, pageFixture());
@@ -86,6 +89,13 @@ test("shows each tier and each state with its label and meter", async ({ page })
       new RegExp(`^${tier.label}\\.`),
     );
   }
+});
+
+test("shows each state with its label", async ({ page }) => {
+  test.slow();
+  await fakeSession(page, MEMBER);
+  const fake = await fakeFindingPage(page, pageFixture());
+  await openFinding(page, pageFixture());
   for (const state of metaFixture.vocab.states.filter((entry) => entry.id !== "open")) {
     const finding = pageFixture({
       assessment: {

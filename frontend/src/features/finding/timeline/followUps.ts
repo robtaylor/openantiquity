@@ -69,7 +69,10 @@ export function ladderMoves(meta: Meta, events: readonly ActivityEvent[]): Map<n
       from != null &&
       to != null &&
       order.indexOf(to) > order.indexOf(from) &&
-      logged.actor?.handle === event.actor?.handle &&
+      // Both by someone named: a step recorded with no actor, as an answer's is, is never put down to a follow-up.
+      logged.actor != null &&
+      event.actor != null &&
+      logged.actor.handle === event.actor.handle &&
       Math.abs(Date.parse(event.created_at) - Date.parse(logged.created_at)) <= SAME_REQUEST_MS
     ) {
       moves.set(evidenceId, to);

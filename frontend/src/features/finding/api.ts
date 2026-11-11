@@ -3,7 +3,7 @@
  * table in docs/ARCHITECTURE.md, typed from the generated schema.
  */
 
-import { API_BASE, apiFetch } from "../../api/client.js";
+import { API_BASE, ApiError, apiFetch } from "../../api/client.js";
 import type { Sensitivity } from "../findings/types.js";
 import type {
   AnswerHeld,
@@ -64,6 +64,28 @@ export function giveAnswer(publicId: string, visible: Visible): Promise<Reveal |
 /** Add the detail to an answer given alone, or nothing to skip it. The reply is the reveal. */
 export function revealAnswer(publicId: string, detail: ObservationDetailIn): Promise<Reveal> {
   return apiFetch<Reveal>(findingUrl(publicId, "/observation/reveal"), { method: "POST", body: detail });
+}
+
+/**
+ * The reveal the person asked for on this screen. When the answer was
+ * already revealed elsewhere with other detail, as from a second tab, the
+ * server refuses the detail (`answer_final`) but still owes the comparison:
+ * it is asked for again with nothing added, which answers with the reveal
+ * as it stands, and `onFinal` says the detail wasn't added.
+ */
+export async function revealAsAsked(
+  publicId: string,
+  detail: ObservationDetailIn,
+  onFinal: () => void,
+): Promise<Reveal> {
+  try {
+    return await revealAnswer(publicId, detail);
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.code !== "answer_final") throw error;
+    const reveal = await revealAnswer(publicId, {});
+    onFinal();
+    return reveal;
+  }
 }
 
 /**

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { BadgeCheck, ExternalLink, ThumbsDown, ThumbsUp, Trash2 } from "lucide-react";
 import { useState } from "react";
 import type { Meta } from "../../../api/meta.js";
+import { safeHref } from "../../../map/attribution.js";
 import { Button } from "../../../ui/Button.js";
 import { fetchRecord, mediaUrl } from "../api.js";
 import { formatDate, labelOf, needsVerifying, outcomeWords, stanceWords } from "../describe.js";
@@ -103,6 +104,7 @@ export function EvidenceItem({
   const external = item.kind === "record_link" && item.record_id === null;
   const official = needsVerifying(meta, item.kind);
   const dated = item.occurred_on !== null || item.outcome !== null;
+  const link = safeHref(item.url);
 
   return (
     <li className="fc-evidence" id={`evidence-${item.id}`} tabIndex={-1} aria-busy={pending || undefined}>
@@ -133,8 +135,8 @@ export function EvidenceItem({
               .join(" · ")}
           </span>
         ) : null}
-        {item.url ? (
-          <a className="fc-evidence__link" href={item.url} target="_blank" rel="noreferrer noopener">
+        {link ? (
+          <a className="fc-evidence__link" href={link} target="_blank" rel="noreferrer noopener">
             <ExternalLink size={14} aria-hidden />
             Open it
           </a>

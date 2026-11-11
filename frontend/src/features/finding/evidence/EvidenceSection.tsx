@@ -14,7 +14,7 @@ import type { Evidence, EvidenceIn, FindingDetail } from "../types.js";
 import { useOptimisticFinding } from "../useFinding.js";
 import { EvidenceForm } from "./EvidenceForm.js";
 import { EvidenceItem } from "./EvidenceItem.js";
-import { KindChooser } from "./KindChooser.js";
+import { KindChooser, useOpener } from "./KindChooser.js";
 import { composeRecordLink, NO_RECORD, RecordLinkForm, type RecordLinkValues } from "./RecordLinkForm.js";
 
 /** Which form is open, and what it holds. Kept here so a failed save can open it again as it was. */
@@ -73,6 +73,8 @@ export interface EvidenceSectionProps {
   youngContributor: boolean;
   form: OpenForm | null;
   setForm: (form: OpenForm | null) => void;
+  /** Open a form for a kind, in sight, with focus on its heading. */
+  onOpen: (form: OpenForm) => void;
   onApplied: (finding: FindingDetail) => void;
 }
 
@@ -90,6 +92,7 @@ export function EvidenceSection({
   youngContributor,
   form,
   setForm,
+  onOpen,
   onApplied,
 }: EvidenceSectionProps) {
   const client = useQueryClient();
@@ -97,6 +100,7 @@ export function EvidenceSection({
   const optimistic = useOptimisticFinding(finding.public_id);
   const [pending, setPending] = useState<Evidence[]>([]);
   const [choosing, setChoosing] = useState(false);
+  const opener = useOpener("fc-evidence-add");
   const mayAdd = position.mayAddEvidence;
   const groups = groupEvidence(meta, [...finding.evidence, ...pending]);
   const refresh = () => void client.invalidateQueries({ queryKey: findingPageKeys.detail(finding.public_id) });
@@ -221,7 +225,7 @@ export function EvidenceSection({
       {mayAdd ? (
         form ? (
           <div className="fc-evidence-add">
-            <h4>
+            <h4 className="fc-evidence-add__title" tabIndex={-1}>
               {isRecordKind(form.kindId)
                 ? "Link a heritage record"
                 : `Add ${lowerFirst(meta.vocab.evidence_kinds.find((kind) => kind.id === form.kindId)?.label ?? "evidence")}`}
@@ -268,12 +272,15 @@ export function EvidenceSection({
             idPrefix="fc-kind-hint"
             onChoose={(kindId) => {
               setChoosing(false);
-              void signedIn(() => setForm(openForm(kindId)));
+              void signedIn(() => onOpen(openForm(kindId)));
             }}
-            onCancel={() => setChoosing(false)}
+            onCancel={() => {
+              setChoosing(false);
+              opener.giveBack();
+            }}
           />
         ) : (
-          <Button icon={<Plus size={16} aria-hidden />} onClick={() => setChoosing(true)}>
+          <Button id={opener.id} icon={<Plus size={16} aria-hidden />} onClick={() => setChoosing(true)}>
             Add evidence
           </Button>
         )

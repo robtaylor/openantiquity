@@ -127,10 +127,10 @@ describe("the follow-up timeline", () => {
     expect(theDig.getByText("Trial trench across the ditch")).toBeVisible();
     expect(theDig.getByText(`By Wessex Archaeology, logged by ${EXPERT.display_name}`)).toBeVisible();
     expect(theDig.getByText("Found it")).toBeVisible();
-    expect(theDig.getByRole("link", { name: /Open the link/ })).toHaveAttribute(
-      "href",
-      "https://reports.example.org/trench",
-    );
+    // Named for its entry, so it stands apart in a list of the page's links.
+    expect(
+      theDig.getByRole("link", { name: "Open the link for Excavation, 1 September 2026 (opens in a new tab)" }),
+    ).toHaveAttribute("href", "https://reports.example.org/trench");
     // The dig moved it up, and the label says so in words as well as colour.
     expect(await theDig.findByText(/It moved the finding up to/)).toHaveTextContent("Checked on the ground");
     expect(theVisit.queryByText(/It moved the finding up/)).toBeNull();
@@ -139,6 +139,16 @@ describe("the follow-up timeline", () => {
     const [call] = routes.callsTo("GET /activity");
     expect(call?.url.searchParams.get("finding")).toBe("f-ring");
     expect(call?.url.searchParams.getAll("kind")).toEqual(["followup_logged", "tier_changed"]);
+  });
+
+  it("links nothing that isn't a web address", async () => {
+    const finding = withFollowUps();
+    const [first, dig, visit] = finding.evidence;
+    if (!first || !dig || !visit) throw new Error("the fixture has three items");
+    const unsafe = { ...finding, evidence: [first, { ...dig, url: "javascript:alert(1)" }, visit] };
+    const { section } = await open(serve(unsafe), unsafe);
+    expect(await section.findByText("Trial trench across the ditch")).toBeVisible();
+    expect(section.queryByRole("link")).toBeNull();
   });
 
   it("says what goes there when nothing has happened yet, and asks the feed nothing", async () => {
@@ -182,6 +192,25 @@ describe("the follow-up timeline", () => {
     const form = within(await panel.findByRole("form", { name: "Add site visit" }));
     expect(form.getByRole("note")).toHaveTextContent(/landowner's permission/);
     expect(section.queryByRole("heading", { name: "What happened?" })).toBeNull();
+    // Focus follows to the form that opened, in the evidence section.
+    await waitFor(() => expect(panel.getByRole("heading", { name: "Add site visit" })).toHaveFocus());
+  });
+
+  it("keeps the person's place: focus goes into the chooser, and back to the button on Cancel or Escape", async () => {
+    const user = userEvent.setup();
+    const finding = withFollowUps();
+    const { section } = await open(serve(finding), finding);
+    await user.click(section.getByRole("button", { name: "Add to the timeline" }));
+    expect(section.getByRole("heading", { name: "What happened?" })).toHaveFocus();
+    await user.click(section.getByRole("button", { name: "Cancel" }));
+    expect(section.getByRole("button", { name: "Add to the timeline" })).toHaveFocus();
+
+    await user.keyboard("{Enter}");
+    expect(section.getByRole("heading", { name: "What happened?" })).toHaveFocus();
+    await user.tab();
+    await user.keyboard("{Escape}");
+    expect(section.queryByRole("heading", { name: "What happened?" })).toBeNull();
+    expect(section.getByRole("button", { name: "Add to the timeline" })).toHaveFocus();
   });
 
   it("isn't offered to add to for someone who sees only the square", async () => {

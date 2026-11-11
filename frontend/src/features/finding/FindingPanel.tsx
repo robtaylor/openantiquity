@@ -121,8 +121,8 @@ function FindingPage({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
 
   function openEvidence(next: OpenForm): void {
     setForm(next);
-    // The evidence section's form, not the timeline's list of kinds, which uses the same frame.
-    reveal(() => document.querySelector<HTMLElement>("#fc-evidence .fc-evidence-add"));
+    // The evidence section's form, by its heading, which takes focus so the form is read next.
+    reveal(() => document.querySelector<HTMLElement>("#fc-evidence .fc-evidence-add__title"));
   }
 
   function act(action: StepAction): void {
@@ -200,6 +200,7 @@ function FindingPage({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
         youngContributor={session.me?.age_band === "16_17"}
         form={form}
         setForm={setForm}
+        onOpen={openEvidence}
         onApplied={apply}
       />
       <Answers meta={meta} finding={finding} />

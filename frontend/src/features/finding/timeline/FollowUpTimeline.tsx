@@ -2,10 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import { BadgeCheck, ExternalLink, Footprints, Plus, TrendingUp } from "lucide-react";
 import { useState } from "react";
 import type { Meta } from "../../../api/meta.js";
+import { safeHref } from "../../../map/attribution.js";
 import { Button } from "../../../ui/Button.js";
 import { TierBadge } from "../../../ui/TierBadge.js";
 import { formatDate, labelOf, needsVerifying, outcomeWords, stanceWords, type ViewerPosition } from "../describe.js";
-import { KindChooser } from "../evidence/KindChooser.js";
+import { KindChooser, useOpener } from "../evidence/KindChooser.js";
 import { useSignedInFirst } from "../feedback.js";
 import { findingPageKeys } from "../keys.js";
 import type { Evidence, FindingDetail } from "../types.js";
@@ -26,6 +27,8 @@ function Entry({ meta, item, movedTo }: { meta: Meta; item: Evidence; movedTo: s
   const kind = labelOf(meta.vocab.evidence_kinds, item.kind);
   const named = item.title ?? item.reference;
   const verified = needsVerifying(meta, item.kind) && item.verified_by !== null;
+  const link = safeHref(item.url);
+  const day = formatDate(item.occurred_on ?? item.created_at);
   return (
     <li className="fc-timeline__entry">
       <span className="fc-timeline__dot" aria-hidden="true" />
@@ -51,11 +54,15 @@ function Entry({ meta, item, movedTo }: { meta: Meta; item: Evidence; movedTo: s
         {foundWords(meta, item)}
       </p>
       {item.note ? <p className="fc-timeline__note">{item.note}</p> : null}
-      {item.url ? (
-        <a className="fc-evidence__link" href={item.url} target="_blank" rel="noreferrer noopener">
+      {link ? (
+        <a className="fc-evidence__link" href={link} target="_blank" rel="noreferrer noopener">
           <ExternalLink size={14} aria-hidden />
           Open the link
-          <span className="fc-visually-hidden"> (opens in a new tab)</span>
+          {/* Each entry's link is told apart in a list of links. */}
+          <span className="fc-visually-hidden">
+            {" "}
+            for {kind}, {day} (opens in a new tab)
+          </span>
         </a>
       ) : null}
       {item.redacted ? (
@@ -91,6 +98,7 @@ export interface FollowUpTimelineProps {
 export function FollowUpTimeline({ meta, finding, position, onAdd }: FollowUpTimelineProps) {
   const signedInFirst = useSignedInFirst();
   const [choosing, setChoosing] = useState(false);
+  const opener = useOpener("fc-timeline-add");
   const entries = timelineEntries(meta, finding.evidence);
   // Asked again whenever the step or the entries change, so a move shows on the entry that made it.
   const as = [finding.assessment.tier, ...entries.map((item) => item.id)].join(",");
@@ -140,10 +148,13 @@ export function FollowUpTimeline({ meta, finding, position, onAdd }: FollowUpTim
                 if (ready) onAdd(kindId);
               });
             }}
-            onCancel={() => setChoosing(false)}
+            onCancel={() => {
+              setChoosing(false);
+              opener.giveBack();
+            }}
           />
         ) : (
-          <Button icon={<Plus size={16} aria-hidden />} onClick={() => setChoosing(true)}>
+          <Button id={opener.id} icon={<Plus size={16} aria-hidden />} onClick={() => setChoosing(true)}>
             Add to the timeline
           </Button>
         )

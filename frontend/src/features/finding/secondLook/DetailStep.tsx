@@ -92,6 +92,13 @@ export function DetailStep({
         {status === "draft" ? <DraftBadge /> : null}
       </p>
       <AnswerDetail meta={meta} answer={detail} onChange={onDetail} />
+      {/* Above the button, not in the bar that stays in sight, so on a half-open sheet the bar is the button alone
+          and the detail has the room. */}
+      <p className="fc-finding__hint">
+        {status === "draft"
+          ? "Signing in saves it all, then shows what the finder and others said."
+          : "Then you'll see what the finder and others said, and what you add is final."}
+      </p>
       <div className="fc-second-look__send" ref={bar}>
         <Button
           variant="primary"
@@ -102,11 +109,6 @@ export function DetailStep({
         >
           {label}
         </Button>
-        <p className="fc-finding__hint">
-          {status === "draft"
-            ? "Signing in saves it all, then shows what the finder and others said."
-            : "Then you'll see what the finder and others said, and what you add is final."}
-        </p>
         {onChangeAnswer ? (
           <Button size="sm" variant="ghost" icon={<Undo2 size={15} aria-hidden />} onClick={onChangeAnswer}>
             Change my answer
