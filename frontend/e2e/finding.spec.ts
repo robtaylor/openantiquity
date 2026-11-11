@@ -319,6 +319,9 @@ test("uploads a ground photo, adds it, and shows it", async ({ page }) => {
   await form.getByRole("button", { name: "Add it" }).click();
   const photo = panel.getByRole("img", { name: "Ground photo added by Mary Anning" });
   await expect(photo).toBeVisible();
+  // The photo loads lazily, so it is fetched once it is in sight. On a phone the sheet at its half
+  // stop can leave the new item below the fold.
+  await photo.scrollIntoViewIfNeeded();
   await expect.poll(() => photo.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(64);
   expect(uploads).toEqual(["image/png"]);
   expect(fake.sent["POST evidence"]).toEqual([{ kind: "photo", stance: "supports", media_id: 77 }]);
