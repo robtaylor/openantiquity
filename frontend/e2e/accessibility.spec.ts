@@ -346,6 +346,28 @@ test.describe("phone", () => {
     expect(credits.height).toBeGreaterThanOrEqual(24);
   });
 
+  test("gives the grid reference's copy button a 44 px target, clear of the credits", async ({ page }) => {
+    await openMap(page);
+    const copy = page.getByRole("button", { name: "Copy the grid reference of the middle of the map" });
+    const box = await boxOf(copy);
+    expect(box.width).toBeGreaterThanOrEqual(24);
+    expect(box.height).toBeGreaterThanOrEqual(24);
+    const middle = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    // A finger landing 20 px above the button, or 20 px to either side of its middle, still lands on it.
+    const hits = await page.evaluate(
+      ({ x, y }) =>
+        [
+          [x, y - 20],
+          [x - 20, y],
+          [x + 20, y],
+        ].map(([px = 0, py = 0]) => document.elementFromPoint(px, py)?.closest("button")?.className ?? ""),
+      middle,
+    );
+    expect(hits).toEqual(["fc-status__copy", "fc-status__copy", "fc-status__copy"]);
+    const credits = await boxOf(page.locator(".fc-status__credits-button"));
+    expect(credits.x).toBeGreaterThan(middle.x + 22);
+  });
+
   test("zooms out with one finger, and shows a compass once the map is turned", async ({ page }) => {
     await openMap(page, "/?panel=none#m=14/51.4286/-1.8542/-46.2/0&v=composite");
     await page.getByRole("button", { name: "Zoom out" }).tap();

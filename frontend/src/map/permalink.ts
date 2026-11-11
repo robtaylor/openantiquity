@@ -72,7 +72,12 @@ export const LIMITS = {
   /** The map is created with these limits too, so a link can never ask for a zoom the map cannot show. */
   zoom: { min: 0, max: 20 },
   pitch: { min: 0, max: 75 },
-  sunAltitude: { min: 5, max: 70 },
+  /**
+   * Below 15 degrees no backdrop keeps level ground mid-grey under the raking
+   * light, and the map turns near-black with white slopes: see
+   * `rakingBaseGrey` in style.ts. Above 48 it drifts lighter, but stays readable.
+   */
+  sunAltitude: { min: 15, max: 70 },
   /**
    * Vertical exaggeration of the raking light relief. 1 is true to life where
    * the elevation tiles are zoom 15 or deeper. MapLibre steepens shallower

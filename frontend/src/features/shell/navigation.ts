@@ -77,3 +77,17 @@ export function isModeActive(mode: Mode, pathname: string): boolean {
 export function activeMode(pathname: string): Mode | undefined {
   return [...MODES, ...REFERENCE].find((mode) => isModeActive(mode, pathname));
 }
+
+/**
+ * The query string `search` with the `panel` parameter set to `panel`, or
+ * taken out when `panel` is null. Everything else in it is kept, so a panel
+ * that keeps its state there, such as a height profile's line, survives the
+ * layer panel opening over it and closing again.
+ */
+export function searchWithPanel(search: string, panel: string | null): string {
+  const params = new URLSearchParams(search);
+  if (panel === null) params.delete("panel");
+  else params.set("panel", panel);
+  const next = params.toString();
+  return next ? `?${next}` : "";
+}

@@ -29,7 +29,7 @@ const BUSY: PermalinkState = {
   camera: { lng: -5.00362, lat: 56.79683, zoom: 15.75, bearing: -32.5, pitch: 60 },
   mainView: "raking",
   compareView: "os-6inch 1888/2",
-  sun: { azimuth: 47, altitude: 12 },
+  sun: { azimuth: 47, altitude: 16 },
   hillshadeExaggeration: 0.85,
   terrain: { enabled: true, exaggeration: 2.25 },
   overlays: {

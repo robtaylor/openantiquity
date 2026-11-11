@@ -21,6 +21,7 @@ import { RakingControl } from "../../map/RakingControl.js";
 import { StatusBar } from "../../map/StatusBar.js";
 import { useMapStore } from "../../map/store.js";
 import { usePermalink } from "../../map/usePermalink.js";
+import { useMapCover } from "../../map/visibleArea.js";
 import { Button } from "../../ui/Button.js";
 import { EmptyState } from "../../ui/EmptyState.js";
 import { IconButton } from "../../ui/IconButton.js";
@@ -52,7 +53,7 @@ import { REVIEW_PATH, ReviewLayer } from "../review/ReviewLayer.js";
 import { ReviewPanel } from "../review/ReviewPanel.js";
 import { SearchBox } from "../search/SearchBox.js";
 import { BrandMark, ModeRail } from "./ModeRail.js";
-import { BARE_MAP_PARAM } from "./navigation.js";
+import { BARE_MAP_PARAM, searchWithPanel } from "./navigation.js";
 import { PanelFrame } from "./PanelFrame.js";
 import { type PanelEnvironment, PanelEnvironmentProvider } from "./panelContext.js";
 import { TabBar } from "./TabBar.js";
@@ -180,6 +181,11 @@ function ReadyShell({ meta }: { meta: Meta }) {
   const coveredBottom = isPhone
     ? LAYOUT.tabBarHeight + (stageCovered ? sheetVisible : sheetClear + LAYOUT.statusHeight)
     : LAYOUT.statusHeight;
+  // The same, for every edge, for map tools that mean "the middle of what shows".
+  const setMapCover = useMapCover((state) => state.setCover);
+  useEffect(() => {
+    setMapCover({ left: insets.left, right: insets.right, top: isPhone ? SHEET_TOP_GAP : 0, bottom: coveredBottom });
+  }, [setMapCover, insets, isPhone, coveredBottom]);
 
   // A panel takes keyboard focus when it opens, with two exceptions. One that
   // is already there when the page loads leaves focus alone, as any page
@@ -226,12 +232,11 @@ function ReadyShell({ meta }: { meta: Meta }) {
   const layersOverBareMap = useRef(false);
   const toggleLayers = useCallback(() => {
     if (!layersOpen) layersOverBareMap.current = bareMap;
-    const params = new URLSearchParams(location.search);
-    if (!layersOpen) params.set("panel", LAYERS_PARAM);
-    else if (layersOverBareMap.current && location.pathname === "/") params.set("panel", BARE_MAP_PARAM);
-    else params.delete("panel");
-    const search = params.toString();
-    navigate({ pathname: location.pathname, search: search ? `?${search}` : "" });
+    const back = layersOverBareMap.current && location.pathname === "/" ? BARE_MAP_PARAM : null;
+    navigate({
+      pathname: location.pathname,
+      search: searchWithPanel(location.search, layersOpen ? back : LAYERS_PARAM),
+    });
   }, [layersOpen, bareMap, location.pathname, location.search, navigate]);
 
   return (

@@ -70,3 +70,13 @@ export function fillTileTemplate(template: string, tile: TileCoord): string {
     return value;
   });
 }
+
+/** As `fillTileTemplate`, but null for a template it can't fill, such as one using `{s}` or `{-y}`. */
+export function tileUrlOrNull(template: string, tile: TileCoord): string | null {
+  try {
+    return fillTileTemplate(template, tile);
+  } catch (error) {
+    if (error instanceof TileTemplateError) return null;
+    throw error;
+  }
+}

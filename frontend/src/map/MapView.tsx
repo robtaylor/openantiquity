@@ -15,6 +15,7 @@ import { type Meta, viewTitle } from "../api/meta.js";
 import { useCoverageOnMap } from "../features/layers/coverage/useCoverageOnMap.js";
 import { ProfileCrosshair } from "../features/layers/MapNotices.js";
 import { useProfileOnMap } from "../features/layers/profile/useProfileOnMap.js";
+import { useTerrainLoadingOnMap } from "../features/layers/terrainLoading.js";
 import { useRecordsOnMap } from "../features/records/useRecordsOnMap.js";
 import { clamp } from "../ui/math.js";
 import { MapFailure } from "./MapFailure.js";
@@ -103,6 +104,7 @@ function MapPanes({ meta, insets }: MapViewProps) {
   useRecordsOnMap(meta, mainMap, shownCompare);
   useCoverageOnMap(meta, mainMap, shownCompare);
   useProfileOnMap(mainMap, shownCompare);
+  useTerrainLoadingOnMap(meta, mainMap);
   useTileRefresh(meta, [mainMap, shownCompare]);
 
   // The handle moves within the part of the map that is not under the rail or the panel.

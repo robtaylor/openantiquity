@@ -28,8 +28,10 @@ export interface Light {
 
 /**
  * Grey levels, 0 to 255, for a grid of heights `cellSize` metres apart, lit
- * from `light`. Level ground comes out mid-grey whatever the sun's height, as
- * on the map, so a lower sun raises contrast without darkening everything.
+ * from `light`. Level ground comes out mid-grey whatever the sun's height, so
+ * a lower sun raises contrast without darkening everything. The map does the
+ * same only between about 15 and 48 degrees (see `rakingBaseGrey` in
+ * style.ts); above that it drifts lighter, which this preview doesn't show.
  * Slopes use Horn's method, and edge cells reuse their neighbours.
  */
 export function hillshade(

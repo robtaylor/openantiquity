@@ -4,6 +4,7 @@ import {
   distanceText,
   framingFor,
   LINE_PARAM,
+  type LngLat,
   lineLengthM,
   MAX_LINE_POINTS,
   nearestIndex,
@@ -106,6 +107,26 @@ describe("framingFor", () => {
     expect(framing?.lat).toBeCloseTo(51.4286, 6);
     // 0.004 degrees is 500 px at zoom log2(500 / (0.004 / 360 * 512)).
     expect(framing?.zoom).toBeCloseTo(Math.log2(500 / ((0.004 / 360) * 512)), 6);
+  });
+
+  it("frames the line in the part of the map the panel leaves showing", () => {
+    const line: LngLat[] = [
+      [-1.853, 51.4286],
+      [-1.849, 51.4286],
+    ];
+    const cover = { left: 56, right: 400, top: 0, bottom: 28 };
+    const framing = framingFor(line, 1440, 900, cover);
+    if (!framing) throw new Error("no framing");
+    // Half of the 984 px left between the rail and the panel.
+    expect(framing.zoom).toBeCloseTo(Math.log2(492 / ((0.004 / 360) * 512)), 6);
+    // The camera points right of the line, so the line sits left of the panel.
+    expect(framing.lng).toBeGreaterThan(-1.851);
+    const worldPx = 512 * 2 ** framing.zoom;
+    const lineMiddleX = 720 + ((-1.851 - framing.lng) / 360) * worldPx;
+    expect(lineMiddleX).toBeCloseTo(56 + 984 / 2, 3);
+    const [first, last] = line.map(([lng]) => 720 + ((lng - framing.lng) / 360) * worldPx);
+    expect(first).toBeGreaterThan(56);
+    expect(last).toBeLessThan(1440 - 400);
   });
 
   it("stops at a sensible zoom for a single point, and gives nothing for no line", () => {

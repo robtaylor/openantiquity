@@ -7,11 +7,12 @@ import { useMapTool } from "../../map/tool.js";
 import { type ApiRoutes, apiError, routeApi } from "../../test/apiRoutes.js";
 import { BORDER_COVERAGE } from "../../test/fixtures/coverage.js";
 import { metaFixture } from "../../test/fixtures/meta.js";
-import { json, mapReady, renderShell, setUpShellTests } from "../../test/shellHarness.js";
+import { json, mapReady, metaResponse, renderShell, setUpShellTests } from "../../test/shellHarness.js";
 import { useToastStore } from "../../ui/toastStore.js";
 import { useCoverageStore } from "./coverage/store.js";
 import { COVERAGE_LAYERS } from "./coverage/useCoverageOnMap.js";
 import type { ProfileOut } from "./profile/api.js";
+import { framingFor } from "./profile/line.js";
 import { useProfileHover } from "./profile/store.js";
 import { PROFILE_LAYERS, PROFILE_SOURCE } from "./profile/useProfileOnMap.js";
 
@@ -78,6 +79,22 @@ describe("the layer panel", () => {
     expect(first.searchParams.get("bbox")?.split(",")).toHaveLength(4);
     // Raking light is drawn in the browser, so its preview is too.
     expect(terrain.querySelector(".fc-view-preview--raking")).not.toBeNull();
+  });
+
+  it("shows a plain preview, and keeps the panel up, for a tile address it can't fill", async () => {
+    const views = metaFixture.layers.views.map((view) =>
+      view.type === "raster" && view.id !== "composite"
+        ? { ...view, tiles: ["https://{s}.tiles.example/{z}/{x}/{-y}.png"] }
+        : view,
+    );
+    api.on("GET /meta", () => metaResponse({ ...metaFixture, layers: { ...metaFixture.layers, views } }));
+    open("/?panel=layers");
+    await mapReady();
+    const terrain = within(screen.getByRole("complementary", { name: "Layers" })).getByRole("group", {
+      name: "Terrain from LIDAR",
+    });
+    expect(terrain.querySelectorAll(".fc-view-preview img")).toHaveLength(1);
+    expect(terrain.querySelectorAll(".fc-view-preview--empty").length).toBeGreaterThan(0);
   });
 
   it("shows the credit and licence of the view that is on, and of each overlay that is on", async () => {
@@ -150,16 +167,19 @@ describe("the height profile", () => {
     const user = userEvent.setup();
     open("/profile?line=-1.853,51.4286#m=16/51.4286/-1.85/0/0&v=composite");
     const map = await mapReady();
+    // The cross is in the middle of the map the rail, the panel and the status bar leave showing.
+    const cross = screen.getByTestId("profile-crosshair");
+    expect(cross.style.left).toBe("calc(50% - 172px)");
+    expect(cross.style.top).toBe("calc(50% - 14px)");
     await user.click(screen.getByRole("button", { name: "Add a point at the cross" }));
     const chart = await screen.findByRole("slider", { name: "Height along the line" });
-    expect(api.callsTo("POST /terrain/profile")[0]?.body).toMatchObject({
-      line: {
-        coordinates: [
-          [-1.853, 51.4286],
-          [-1.85, 51.4286],
-        ],
-      },
-    });
+    // And that is where the point goes, to the five places the address keeps: 172 px left of the map's middle, 14 px above it.
+    const added = map.unproject([512 - 172, 384 - 14]);
+    const body = api.callsTo("POST /terrain/profile")[0]?.body as { line: { coordinates: number[][] } };
+    expect(body.line.coordinates[0]).toEqual([-1.853, 51.4286]);
+    expect(body.line.coordinates[1]?.[0]).toBeCloseTo(added.lng, 4);
+    expect(body.line.coordinates[1]?.[1]).toBeCloseTo(added.lat, 4);
+    expect(added.lng).toBeLessThan(-1.85);
 
     chart.focus();
     await user.keyboard("{ArrowRight}");
@@ -181,6 +201,32 @@ describe("the height profile", () => {
     expect(await screen.findByRole("heading", { name: "Add one more point" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Start again" }));
     expect(screen.getByRole("heading", { name: "Draw a line on the map" })).toBeInTheDocument();
+  });
+
+  it("brings a line from a link out from under the panel", async () => {
+    // The line's east end is on screen, but under the 400 px panel.
+    open("/profile?line=-1.853,51.4286,-1.8455,51.4286#m=16/51.4286/-1.85/0/0&v=composite");
+    await mapReady();
+    await screen.findByRole("slider", { name: "Height along the line" });
+    const { camera } = useMapStore.getState();
+    const framing = framingFor(
+      [
+        [-1.853, 51.4286],
+        [-1.8455, 51.4286],
+      ],
+      window.innerWidth,
+      window.innerHeight,
+      { left: 56, right: 400, top: 0, bottom: 28 },
+    );
+    expect(camera.lng).toBeCloseTo(framing?.lng ?? 0, 6);
+    expect(camera.zoom).toBeCloseTo(framing?.zoom ?? 0, 6);
+  });
+
+  it("leaves the view alone when the whole line is already in sight", async () => {
+    open("/profile?line=-1.853,51.4286,-1.851,51.4286#m=16/51.4286/-1.85/0/0&v=composite");
+    await mapReady();
+    await screen.findByRole("slider", { name: "Height along the line" });
+    expect(useMapStore.getState().camera).toMatchObject({ lng: -1.85, zoom: 16 });
   });
 
   it("follows the pointer along the line on the map", async () => {
@@ -280,6 +326,29 @@ describe("coverage", () => {
     await mapReady();
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(api.callsTo("GET /terrain/coverage")).toHaveLength(0);
+  });
+
+  it("says when the terrain is still being prepared, and stops once it is in", async () => {
+    open("/#m=15/51.4286/-1.8542/0/0&v=composite");
+    const map = await mapReady();
+    // Another source loading says nothing.
+    act(() => map.fire("dataloading", { dataType: "source", sourceId: "overlay-records" }));
+    act(() => map.fire("dataloading", { dataType: "source", sourceId: "view-composite" }));
+    expect(screen.queryByText(/Preparing the terrain/)).toBeNull();
+    expect(await screen.findByText(/Preparing the terrain here/, {}, { timeout: 3000 })).toBeInTheDocument();
+    act(() => map.fire("sourcedata", { dataType: "source", sourceId: "view-composite", isSourceLoaded: true }));
+    expect(screen.queryByText(/Preparing the terrain/)).toBeNull();
+  });
+
+  it("says that a zoomed-out view draws only places looked at closely", async () => {
+    open("/#m=8/52.5/-1.5/0/0&v=composite");
+    await mapReady();
+    expect(await screen.findByTestId("coverage-notice")).toHaveTextContent(
+      "Zoomed out this far, only places someone has looked at closely are drawn.",
+    );
+    // Not over a map that isn't terrain.
+    act(() => useMapStore.getState().setMainView("osm_standard"));
+    expect(screen.queryByTestId("coverage-notice")).toBeNull();
   });
 
   it("says plainly when the whole view has no data", async () => {

@@ -63,14 +63,14 @@ describe("initialise", () => {
 
   it("restores a permalink over the defaults", () => {
     const link = decodePermalink(
-      "#m=16.5/51.1788/-1.8263/-20/45&v=raking&c=osm_standard&s=90/12&x=0.8&t=1/2.5&o=osm:40:h,coverage:70&r=1",
+      "#m=16.5/51.1788/-1.8263/-20/45&v=raking&c=osm_standard&s=90/16&x=0.8&t=1/2.5&o=osm:40:h,coverage:70&r=1",
     );
     store().initialise(metaFixture, link);
     const state = store();
     expect(state.camera).toEqual({ lng: -1.8263, lat: 51.1788, zoom: 16.5, bearing: -20, pitch: 45 });
     expect(state.mainView).toBe("raking");
     expect(state.compareView).toBe("osm_standard");
-    expect(state.sun).toEqual({ azimuth: 90, altitude: 12 });
+    expect(state.sun).toEqual({ azimuth: 90, altitude: 16 });
     expect(state.hillshadeExaggeration).toBe(0.8);
     expect(state.terrain).toEqual({ enabled: true, exaggeration: 2.5 });
     expect(state.overlays.osm).toEqual({ visible: false, opacity: 0.4 });

@@ -4,7 +4,7 @@ import type { DemLayer, Meta, View } from "../../api/meta.js";
 import { useMapStore } from "../../map/store.js";
 import { clamp } from "../../ui/math.js";
 import { hillshade, terrariumHeights } from "./hillshade.js";
-import { fillTileTemplate, tileAt } from "./tiles.js";
+import { tileAt, tileUrlOrNull } from "./tiles.js";
 import "./layers.css";
 
 /**
@@ -30,12 +30,14 @@ function framing(fx: number, fy: number): CSSProperties {
 function RasterPreview({ meta, view }: { meta: Meta; view: Extract<View, { type: "raster" }> }) {
   const [failed, setFailed] = useState(false);
   const template = view.tiles[0];
-  if (!template || failed) return <span className="fc-view-preview fc-view-preview--empty" aria-hidden="true" />;
   const tile = previewTile(meta, view.minzoom, view.maxzoom);
+  // A template this can't fill gets the plain preview, as a tile that fails to load does.
+  const src = template ? tileUrlOrNull(template, tile) : null;
+  if (src === null || failed) return <span className="fc-view-preview fc-view-preview--empty" aria-hidden="true" />;
   return (
     <span className="fc-view-preview" aria-hidden="true">
       <img
-        src={fillTileTemplate(template, tile)}
+        src={src}
         alt=""
         loading="lazy"
         decoding="async"
@@ -60,7 +62,7 @@ function useHeights(meta: Meta, dem: DemLayer): Heights | null | "loading" {
   const [heights, setHeights] = useState<Heights | null | "loading">("loading");
   const template = dem.tiles[0];
   const tile = previewTile(meta, dem.minzoom, dem.maxzoom);
-  const url = template ? fillTileTemplate(template, tile) : null;
+  const url = template ? tileUrlOrNull(template, tile) : null;
   const { fx, fy, z } = tile;
   const lat = meta.layers.initial_view.center[1];
 

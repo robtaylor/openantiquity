@@ -3,11 +3,12 @@ import { useEffect, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { isMapLive } from "../../../map/MapPane.js";
 import { useMapTool } from "../../../map/tool.js";
+import { useMapCover, visibleOffset } from "../../../map/visibleArea.js";
 import { COLOURS } from "../../../ui/tokens.js";
 import { EMPTY_COLLECTION, type Feature, type FeatureCollection } from "../../records/geojson.js";
 import type { ProfileSample } from "./api.js";
 import { type LngLat, MAX_LINE_POINTS, nearestIndex, profilePath } from "./line.js";
-import { useProfileHover } from "./store.js";
+import { useProfileCross, useProfileHover } from "./store.js";
 import { useProfileLine, useProfileQuery } from "./useProfile.js";
 
 export const PROFILE_TOOL = "profile";
@@ -130,6 +131,21 @@ export function useProfileOnMap(main: MapLibreMap | null, compare: MapLibreMap |
       (map.getSource(PROFILE_SOURCE) as GeoJSONSource | undefined)?.setData(data);
     }
   }, [main, compare, data]);
+
+  // The cross sits in the middle of the uncovered map, not of the window, and so does the point it adds.
+  useEffect(() => {
+    if (!open || !main) return;
+    const { setLocate } = useProfileCross.getState();
+    setLocate(() => {
+      if (!isMapLive(main)) return null;
+      const centre = main.getCenter();
+      const middle = main.project([centre.lng, centre.lat]);
+      const offset = visibleOffset(useMapCover.getState().cover);
+      const ground = main.unproject([middle.x + offset.x, middle.y + offset.y]);
+      return [ground.lng, ground.lat];
+    });
+    return () => setLocate(null);
+  }, [open, main]);
 
   // A hover left over from a line that has gone means nothing.
   useEffect(() => {

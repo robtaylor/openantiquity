@@ -154,6 +154,32 @@ test.describe("the height profile", () => {
   });
 });
 
+test.describe("the profile's cross", () => {
+  test("sits in the part of the map that shows, clear of the panel, the sheet and the status bar", async ({ page }) => {
+    await serveProfile(page);
+    await openMap(page, `/profile${AVEBURY}`);
+    const cross = await page.getByTestId("profile-crosshair").boundingBox();
+    if (!cross) throw new Error("No cross on screen");
+    const middle = { x: cross.x + cross.width / 2, y: cross.y + cross.height / 2 };
+    // Nothing lies over the cross but the map.
+    const onMap = await page.evaluate(
+      ({ x, y }) =>
+        Boolean(
+          document
+            .elementsFromPoint(x, y)
+            .find((element) => !element.closest(".fc-map-crosshair"))
+            ?.closest(".fc-map__pane--main"),
+        ),
+      middle,
+    );
+    expect(onMap).toBe(true);
+    const sheetOrPanel = await page.locator(".fc-panel").first().boundingBox();
+    if (!sheetOrPanel) throw new Error("No panel on screen");
+    if (isPhone(page)) expect(middle.y).toBeLessThan(sheetOrPanel.y - 28);
+    else expect(middle.x).toBeLessThan(sheetOrPanel.x);
+  });
+});
+
 test.describe("3D", () => {
   test("tilts in, and goes back to a flat plan view", async ({ page }) => {
     await openMap(page, `/${AVEBURY}`);

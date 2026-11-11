@@ -633,6 +633,15 @@ describe("raking light shading", () => {
     }
   });
 
+  it("lets the sun go no lower than level ground can be held at mid-grey", () => {
+    const lowest = LIMITS.sunAltitude.min;
+    const flat = Math.sin((lowest * Math.PI) / 180);
+    expect(drawn(flat, rakingBaseGrey(lowest))).toBeCloseTo(0.5, 6);
+    // A degree lower and the scene would already be darkening.
+    const below = Math.sin(((lowest - 1) * Math.PI) / 180);
+    expect(drawn(below, rakingBaseGrey(lowest - 1))).toBeLessThan(0.49);
+  });
+
   it("is continuous at 30 degrees, where the shade of level ground crosses a half", () => {
     expect(rakingBaseGrey(30)).toBeCloseTo(0.5, 9);
     expect(rakingBaseGrey(29.999)).toBeCloseTo(rakingBaseGrey(30.001), 3);

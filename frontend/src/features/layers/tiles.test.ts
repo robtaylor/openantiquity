@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fillTileTemplate, TileTemplateError, tileAt } from "./tiles.js";
+import { fillTileTemplate, TileTemplateError, tileAt, tileUrlOrNull } from "./tiles.js";
 
 describe("tileAt", () => {
   it("finds the tile that holds Avebury", () => {
@@ -39,5 +39,13 @@ describe("fillTileTemplate", () => {
 
   it("refuses a part it can't fill", () => {
     expect(() => fillTileTemplate("/{s}/{z}/{x}/{y}.png", { z: 1, x: 0, y: 0 })).toThrow(TileTemplateError);
+  });
+
+  it("gives null, not an error, for a template it can't fill", () => {
+    expect(tileUrlOrNull("https://{s}.t.example/{z}/{x}/{y}.png", { z: 1, x: 0, y: 0 })).toBeNull();
+    expect(tileUrlOrNull("https://t.example/{z}/{x}/{-y}.png", { z: 1, x: 0, y: 0 })).toBeNull();
+    expect(tileUrlOrNull("https://t.example/{z}/{x}/{y}.png", { z: 1, x: 0, y: 1 })).toBe(
+      "https://t.example/1/0/1.png",
+    );
   });
 });

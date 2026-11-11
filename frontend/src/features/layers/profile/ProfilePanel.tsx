@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 import { ApiError } from "../../../api/client.js";
 import { heightText } from "../../../map/StatusBar.js";
 import { useMapStore, useViewAreaStore } from "../../../map/store.js";
+import { uncoveredBounds, useMapCover } from "../../../map/visibleArea.js";
 import { Button } from "../../../ui/Button.js";
 import { copyWithToast } from "../../../ui/clipboard.js";
 import { EmptyState } from "../../../ui/EmptyState.js";
@@ -13,7 +14,7 @@ import { PanelFrame } from "../../shell/PanelFrame.js";
 import type { ProfileOut } from "./api.js";
 import { distanceText, framingFor, lineLengthM, MAX_LINE_POINTS, PROFILE_PATH, profilePath } from "./line.js";
 import { ProfileChart } from "./ProfileChart.js";
-import { useProfileHover } from "./store.js";
+import { useProfileCross, useProfileHover } from "./store.js";
 import { useProfileLine, useProfileQuery } from "./useProfile.js";
 import "./profile.css";
 
@@ -74,20 +75,23 @@ export function ProfilePanel() {
   const profile = useProfileQuery(points);
   const hover = useProfileHover((state) => state.hover);
   const setHover = useProfileHover((state) => state.setHover);
-  const camera = useMapStore((state) => state.camera);
+  const locateCross = useProfileCross((state) => state.locate);
   const length = useMemo(() => lineLengthM(points), [points]);
 
-  // A profile opened from a link may be somewhere else. The map goes to it,
-  // once, so drawing more of it later doesn't move the map under the pointer.
-  // It waits for the map to say what it shows, so a link that also carries the view keeps it.
+  // A profile opened from a link may be somewhere else, or under the panel.
+  // The map goes to it, once, so drawing more of it later doesn't move the
+  // map under the pointer. It waits for the map to say what it shows, so a
+  // link that also carries the view keeps it when the whole line is in sight.
   const framed = useRef(false);
   const viewBounds = useViewAreaStore((state) => state.bounds);
   useEffect(() => {
     if (framed.current || points.length === 0 || viewBounds === null) return;
     framed.current = true;
-    const [west, south, east, north] = viewBounds;
+    const size = { width: window.innerWidth, height: window.innerHeight };
+    const { cover } = useMapCover.getState();
+    const [west, south, east, north] = uncoveredBounds(viewBounds, size, cover);
     if (points.every(([lng, lat]) => lng >= west && lng <= east && lat >= south && lat <= north)) return;
-    const framing = framingFor(points, window.innerWidth, window.innerHeight);
+    const framing = framingFor(points, size.width, size.height, cover);
     if (framing) useMapStore.getState().requestCamera(framing);
   }, [points, viewBounds]);
 
@@ -172,8 +176,11 @@ export function ProfilePanel() {
           <Button
             size="sm"
             icon={<Crosshair size={16} aria-hidden />}
-            disabled={points.length >= MAX_LINE_POINTS}
-            onClick={() => setPoints([...points, [camera.lng, camera.lat]])}
+            disabled={points.length >= MAX_LINE_POINTS || locateCross === null}
+            onClick={() => {
+              const point = locateCross?.();
+              if (point) setPoints([...points, point]);
+            }}
           >
             Add a point at the cross
           </Button>

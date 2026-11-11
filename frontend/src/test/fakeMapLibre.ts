@@ -156,6 +156,18 @@ export class FakeMap {
     };
   }
 
+  /** The inverse of `project`. */
+  unproject(point: { x: number; y: number } | [number, number]): { lng: number; lat: number } {
+    const [x, y] = Array.isArray(point) ? point : [point.x, point.y];
+    const scale = 512 * 2 ** this.camera.zoom;
+    const mercY = (value: number) => Math.log(Math.tan(Math.PI / 4 + (value * Math.PI) / 360)) / (2 * Math.PI);
+    const merc = mercY(this.camera.lat) + (384 - y) / scale;
+    return {
+      lng: this.camera.lng + ((x - 512) / scale) * 360,
+      lat: ((2 * Math.atan(Math.exp(merc * 2 * Math.PI)) - Math.PI / 2) * 180) / Math.PI,
+    };
+  }
+
   /** Called by MapLibre when the style asks for an image the map does not have. */
   missingImageResolver: ((id: string) => void | Promise<void>) | null = null;
   setMissingStyleImageResolver = vi.fn((resolver: ((id: string) => void | Promise<void>) | null) => {

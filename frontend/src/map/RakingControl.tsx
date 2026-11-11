@@ -44,7 +44,7 @@ export const RakingControl = memo(function RakingControl({ meta }: { meta: Meta 
           Light from the {compassPoint(sun.azimuth)}
         </p>
         <p className="fc-raking__hint" id={hintId}>
-          Turn the sun until faint banks catch the light. Lower sun, longer shadows.
+          Turn the sun until faint banks catch the light. Lower sun, longer shadows, down to 15°.
         </p>
         <Slider
           label="Sun height"

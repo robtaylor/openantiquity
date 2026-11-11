@@ -195,8 +195,10 @@ function demSource(dem: DemLayer, origin: string, scale = 1): SourceSpecificatio
  * strongly the further from a half. Level ground has a shade of
  * sin(altitude), so on a fixed backdrop a low sun turns the whole scene dark.
  * Choosing the backdrop by altitude cancels that: a lower sun then raises
- * contrast and leaves the overall brightness alone. Outside roughly 15 to 48
- * degrees no backdrop is light or dark enough, and the scene does drift.
+ * contrast and leaves the overall brightness alone. Below about 14.5
+ * degrees no backdrop is light enough, and above about 48.6 none is dark
+ * enough, so the scene drifts there: dark with burnt-out slopes when low,
+ * which is why `LIMITS.sunAltitude` stops the sun at 15.
  */
 export function rakingBaseGrey(altitudeDegrees: number): number {
   const flat = Math.sin((clamp(altitudeDegrees, 0, 90) * Math.PI) / 180);

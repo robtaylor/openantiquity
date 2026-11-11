@@ -262,11 +262,13 @@
 
 /* A small button inside the status bar, which is shorter than any standard control. */
 .fc-status__copy {
+  position: relative;
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
   width: 24px;
-  height: 22px;
+  height: 24px;
   margin-left: -10px;
   padding: 0;
   border: 0;
@@ -274,6 +276,18 @@
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
+}
+
+/*
+ * On a phone a finger needs more than the bar's height. The target reaches
+ * 10 px to each side, over the grid reference's plain text, and up over the
+ * edge of the map, to 44 by 44 px, without the bar looking any different.
+ * It stops short of the credits button, 16 px away.
+ */
+.fc-shell[data-layout="phone"] .fc-status__copy::after {
+  content: "";
+  position: absolute;
+  inset: -18px -10px -2px;
 }
 
 .fc-status__copy:hover {
