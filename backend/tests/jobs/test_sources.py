@@ -1,4 +1,4 @@
-"""Source refresh: each bulk source runs when its data is older than its connector's `max_age`."""
+"""Source refresh: each bulk source and reference loader runs when its data is older than its `max_age`."""
 
 from __future__ import annotations
 
@@ -7,12 +7,14 @@ from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
 import pytest
-from sqlalchemy import select
+from shapely.geometry import Point
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from fieldclub.ingest.base import SourceInfo
-from fieldclub.jobs.sources import DEFAULT_MAX_AGE, refresh
-from fieldclub.models import IngestRun, Record, Source
+from fieldclub.ingest.reference.base import Loader
+from fieldclub.jobs.sources import DEFAULT_MAX_AGE, everything, refresh
+from fieldclub.models import IngestRun, Place, Record, Source
 from tests.helpers import add_source
 from tests.ingest.fakes import SOURCE, FakeConnector, record
 
@@ -117,3 +119,78 @@ def test_disabled_live_and_unconfigured_sources_are_skipped(db: Session) -> None
 def test_a_bad_max_age_is_a_bug(db: Session) -> None:
     with pytest.raises(AssertionError):
         refresh([connector("odd-source", max_age=3600)], now=NOW)
+
+
+class FakePlaces(Loader):
+    """A loader of two places, which counts its runs and fails when told to."""
+
+    source: ClassVar[SourceInfo] = dataclasses.replace(SOURCE, key="fake-places", category="map_label")
+    model = Place
+    runs: ClassVar[int] = 0
+    broken: ClassVar[bool] = False
+
+    def owned(self):
+        return Place.source == self.source.key
+
+    def fetch(self, *, bbox=None):
+        type(self).runs += 1
+        if type(self).broken:
+            raise RuntimeError("upstream fell over")
+        for n, lon in enumerate((-1.85, -1.84)):
+            self.read += 1
+            yield {
+                "name": f"Place {n}",
+                "kind": "village",
+                "geom": Point(lon, 51.43),
+                "rank": 700,
+                "source": self.source.key,
+            }
+
+
+@pytest.fixture
+def places() -> type[FakePlaces]:
+    FakePlaces.runs = 0
+    FakePlaces.broken = False
+    return FakePlaces
+
+
+def test_reference_loaders_are_refreshed_too(db: Session, places: type[FakePlaces]) -> None:
+    assert refresh([places], now=NOW).ran == ["fake-places"]
+    assert db.scalar(select(func.count()).select_from(Place)) == 2
+    # Its full run counts like a connector's, so it isn't run again until it is due.
+    assert refresh([places], now=NOW + timedelta(hours=1)).current == ["fake-places"]
+    assert places.runs == 1
+
+
+def test_a_loader_that_fails_stops_there_and_keeps_its_rows(db: Session, places: type[FakePlaces]) -> None:
+    refresh([places], now=NOW)
+    places.broken = True
+    # Runs record the real time they finished, so look well past it.
+    stats = refresh([places, connector("after-places")], now=datetime.now(UTC) + 2 * DEFAULT_MAX_AGE)
+    assert (stats.failed, stats.ran) == (["fake-places"], ["after-places"])
+    assert db.scalar(select(func.count()).select_from(Place)) == 2
+
+
+def test_a_disabled_loader_is_skipped(db: Session, places: type[FakePlaces]) -> None:
+    add_source(db, "fake-places", enabled=False)
+    db.commit()
+    assert refresh([places], now=NOW).skipped == ["fake-places"]
+    assert places.runs == 0
+
+
+def test_the_refresh_covers_every_connector_and_loader() -> None:
+    keys = [cls.source.key for cls in everything()]
+    assert {"os-open-names", "ons-countries-2025", "ons-counties-2025"} <= set(keys)
+    assert "wikimedia-wikidata-heritage-items" in keys
+    assert len(keys) == len(set(keys))
+
+
+def test_wikidata_is_skipped_without_a_contact_even_when_enabled(db: Session, env) -> None:
+    from fieldclub.ingest import registry
+
+    env(CONTACT="", USER_AGENT="")
+    wikidata = registry.get("wikimedia-wikidata-heritage-items")
+    # Disabled by default (Decision 0011), so enable it as an operator would.
+    add_source(db, wikidata.source.key, enabled=True)
+    db.commit()
+    assert refresh([wikidata], now=NOW).skipped == [wikidata.source.key]
