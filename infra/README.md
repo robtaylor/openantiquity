@@ -225,7 +225,7 @@ The deployer can read the Terraform state but not write it, so the workflow plan
 4. Put the commit in `image_tag` in `terraform.tfvars` (and in the `TFVARS` variable), then from `infra/terraform` run `terraform apply`.
 5. If the models gained a table, run the schema job (step 7).
 
-Cloud Run starts the new revision, waits for `/healthz` to answer, then moves all traffic to it. New requests go to the new revision. Requests already open on the old one, such as event streams, are not cut off when traffic moves: they run on until they end or reach the 600 s request timeout, which wasn't checked on a real project. When Cloud Run stops an old instance it sends SIGTERM and kills the process ten seconds later; the server closes whatever it still holds after five seconds (`GRACEFUL_SHUTDOWN_SECONDS` in `fieldclub.main`), so it stops before it is killed. Until the old instances stop, they still hold their database connections (see [Sizing](#sizing)).
+Cloud Run starts the new revision, waits for `/healthz` to answer, then moves all traffic to it. New requests go to the new revision. Requests already open on the old one, such as event streams, are not cut off when traffic moves: they run on until they end or reach the 600 s request timeout, which wasn't checked on a real project. When Cloud Run stops an old instance it sends SIGTERM and kills the process ten seconds later; the server ends its event streams at once and closes whatever else it still holds after five seconds (`FIELDCLUB_SHUTDOWN_GRACE_S`), so it stops before it is killed. Until the old instances stop, they still hold their database connections (see [Sizing](#sizing)).
 
 ## Rolling back
 
