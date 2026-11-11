@@ -96,6 +96,8 @@ def lists(db: Session, make_user: MakeUser, client_as: ClientAs) -> tuple[TestCl
         f"{API}/findings/export",
         f"{API}/findings/{finding.public_id}/observations",
         f"{API}/findings/{finding.public_id}/comments",
+        f"{API}/findings/{finding.public_id}/mentions",
+        f"{API}/mentions/recent",
         f"{API}/review/next",
         f"{API}/review/tasks?code=need_observers",
         f"{API}/records/search?q=barrow",
@@ -165,6 +167,7 @@ def test_no_offset_goes_past_the_shared_limit(lists: tuple[TestClient, list[str]
         (f"{API}/geo/search?q=avebury", 21),
         (f"{API}/activity", 201),
         (f"{API}/investigations", 201),
+        (f"{API}/mentions/recent", 201),
     ],
 )
 def test_a_limit_above_the_maximum_is_a_validation_error(client: TestClient, path: str, limit: int) -> None:

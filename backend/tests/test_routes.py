@@ -50,6 +50,7 @@ from tests.investigations.support import make
 
 CONTRIBUTOR = "contributor"
 MUTATING = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+MENTIONS = "tests.mentions.test_recent:"
 
 
 @dataclass(frozen=True)
@@ -154,6 +155,18 @@ ROUTES: dict[tuple[str, str], Expect] = {
     ("GET", "/api/v1/squares/next"): Expect(sample="/api/v1/squares/next?lon=-1.85&lat=51.43"),
     ("PUT", "/api/v1/squares/{ref}"): Expect(writer=CONTRIBUTOR),
     ("GET", "/api/v1/squares/coverage"): Expect(sample="/api/v1/squares/coverage?bbox=-1.9,51.4,-1.8,51.45"),
+    # Mentions
+    ("GET", "/api/v1/findings/{public_id}/mentions"): Expect(
+        MENTIONS + "test_a_findings_own_list_carries_no_position", sample=F + "/mentions"
+    ),
+    ("POST", "/api/v1/findings/{public_id}/mentions"): Expect(writer=CONTRIBUTOR),
+    ("DELETE", "/api/v1/mentions/{mention_id}"): Expect(writer=CONTRIBUTOR),
+    # Stores nothing, but makes the server fetch an address a member typed.
+    ("POST", "/api/v1/mentions/preview"): Expect(writer=CONTRIBUTOR),
+    ("GET", "/api/v1/mentions/recent"): Expect(
+        MENTIONS + "test_the_feed_shows_each_position_as_the_viewer_may_see_it",
+        sample="/api/v1/mentions/recent",
+    ),
     # Records
     ("GET", "/api/v1/records/search"): Expect(sample="/api/v1/records/search?q=barrow"),
     ("GET", "/api/v1/records/nearby"): Expect(sample="/api/v1/records/nearby?lon=-1.85&lat=51.43"),

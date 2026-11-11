@@ -41,7 +41,7 @@ backend/
     auth/                   sessions, the welcome step, magic links, OAuth
     terrain/                elevation sources, visualisations, tile rendering, cache
     ingest/                 connector base, registry, runner, CLI, adapters/, connectors/, reference/ (gazetteer and boundary loaders)
-    jobs/                   scheduled work (channel scan, source refresh), not built yet
+    jobs/                   scheduled work (channel scan, source refresh)
   tests/                    mirrors src layout; conftest.py owns the database fixtures, test_routes.py lists every route
 frontend/
   src/
@@ -246,7 +246,7 @@ Rules every route follows, whichever area it belongs to:
 | Media | `POST /media`, `GET /media/{id}` |
 | Moderation | `POST /reports`, `GET /mod/reports`, `POST /mod/reports/{id}/resolve`, `POST /mod/findings/{public_id}/hide`, `PUT /mod/users/{handle}/role`, `PUT /mod/findings/{public_id}/sensitivity` |
 
-Mentions, Squares, Investigations, Media and Moderation aren't built yet. A finding is looked up the same way everywhere (`services.findings.get_finding`): a hidden one is found only by its finder and moderators, and anything else gets 404 `finding_not_found`. Lists leave hidden findings out, and withdrawn ones too unless `state=withdrawn` is asked for. The search box always leaves both out. Suggested records are served for any finding the viewer can open, withdrawn ones included.
+Media and Moderation aren't built yet. A finding is looked up the same way everywhere (`services.findings.get_finding`): a hidden one is found only by its finder and moderators, and anything else gets 404 `finding_not_found`. Lists leave hidden findings out, and withdrawn ones too unless `state=withdrawn` is asked for. The search box always leaves both out. Suggested records are served for any finding the viewer can open, withdrawn ones included.
 
 Tile endpoints sit outside `/api/v1` so a CDN can cache them by path:
 
@@ -346,7 +346,7 @@ See Decision 0005. A finding's `sensitivity` is `open`, `protected` or `restrict
 
 A generalised finding is returned with `obscured: true`, the square's reference, and no outline. The default level comes from the feature class: round barrow, long barrow, ritual monument and settlement earthworks default to `protected`, everything else to `open`. The finder, a trusted user or a moderator can raise a level. Only a moderator can lower one. A new finding starts at the higher of its class default and the level requested, and a request below the default is honoured only from a moderator (`starting_sensitivity`). Changing the feature class to one with a higher default raises the level to that default. It never lowers a level, and a change between classes with the same default leaves the level alone (`level_after_class_change`, applied when the finding is saved). Experts and admins count as trusted here, and admins as moderators.
 
-One function in `services/sensitivity.py` decides what a viewer sees, and every route that returns a finding goes through it. Queries on behalf of signed-out visitors filter and sort on `location_public` only. Downloads use the generalised position for protected and restricted findings unless the person downloading is the finder or trusted (`sensitivity.downloads_exact`, beside the other viewer rules). Suggested records and the search box start from the position the viewer may see, so for someone who sees only the square, distances, order and the set returned are the same wherever in the square the finding lies. `tests/test_routes.py` lists every route the app serves and names the test in `tests/findings/test_leaks.py` that tries each one carrying a position as every viewer against every level, and fails when a route has no row.
+One function in `services/sensitivity.py` decides what a viewer sees, and every route that returns a finding goes through it. Queries on behalf of signed-out visitors filter and sort on `location_public` only. Downloads use the generalised position for protected and restricted findings unless the person downloading is the finder or trusted (`sensitivity.downloads_exact`, beside the other viewer rules). Suggested records and the search box start from the position the viewer may see, so for someone who sees only the square, distances, order and the set returned are the same wherever in the square the finding lies. `tests/test_routes.py` lists every route the app serves and names the test, in `tests/findings/test_leaks.py` or beside the route's own tests, that tries each one carrying a position as every viewer against every level, and fails when a route has no row.
 
 Findings reach the map through `GET /findings?bbox=&format=geojson`, not through cacheable tiles, because the answer depends on the viewer. The `bbox` matches the position the viewer is allowed to see, so an obscured finding matches by the centre of its square. The frontend widens the box it asks for by 500 m on each side so that a square covering the view is returned even when its centre is off screen.
 
@@ -390,7 +390,7 @@ Every such fetch goes through `safe_fetch.fetch`: http and https only, ports 80 
 
 Adding a mention bumps `mention_count` and records `mention_added`, which tells the finding's followers (the finder and everyone who helped) except whoever added it. A mention never touches the confidence engine. `GET /mentions/recent` lists mentions on findings the viewer may list, newest first, each with its finding's position from `location_out`. Withdrawn findings and removed mentions are left out. Someone removing their own mention blocks nothing, so anyone may add that address again. A moderator removing someone else's mention, or one the scan found, sets `blocks_readding`, and then `mention_removed` (409) refuses it to members and the scan skips it.
 
-`fieldclub-jobs scan-channels` reads each enabled channel's public feed, one at a time with a pause between them and conditional requests, and adds an `auto_detected` mention with no member for every link in a video description to `<FIELDCLUB_PUBLIC_URL>/f/<public id>`. `fieldclub-jobs refresh-sources` runs each enabled bulk source's connector, one at a time, when its last completed full run is older than the connector's `max_age` (a week when it declares none). Both exit non-zero when anything failed, after carrying on with the rest.
+`fieldclub-jobs scan-channels` reads each enabled channel's public feed, one at a time with a pause between them and conditional requests, and adds an `auto_detected` mention with no member for every link in a video description to `<FIELDCLUB_PUBLIC_URL>/f/<public id>`. `fieldclub-jobs refresh-sources` runs each enabled bulk source's connector, one at a time, when its last completed full run is older than the connector's `max_age` (a week when it declares none). It never allows a shrink, so a full run that would remove more than `FIELDCLUB_INGEST_MAX_SHRINK` of a source fails and is counted as failed. Both exit non-zero when anything failed, after carrying on with the rest.
 
 ## Terrain service
 
