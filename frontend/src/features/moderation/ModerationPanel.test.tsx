@@ -237,7 +237,7 @@ describe("photos, members and the log", () => {
     const card = within(cardsOf(list)[0] as HTMLElement);
     expect(card.getByText("54 points · Joined September 2026")).toBeInTheDocument();
     expect(
-      card.getByText("Their finding reached Seen by others, Checked on the ground and Corroborated."),
+      card.getByText("Their finding reached Seen by others, Corroborated and Checked on the ground."),
     ).toBeInTheDocument();
     expect(card.getByText("Second looks, counted together")).toBeInTheDocument();
     expect(card.getByText("Also on it: Sam Hill")).toBeInTheDocument();
@@ -284,8 +284,30 @@ describe("photos, members and the log", () => {
     await user.clear(field);
     await user.type(field, "Gone{Enter}");
     expect(await panel.findByText(/Nobody can be found as/)).toBeInTheDocument();
-    expect(panel.getByRole("button", { name: "Lift the ban on Gone" })).toBeInTheDocument();
+    // Whether they exist, are banned, or may be unbanned by this moderator is unknown, so nothing is offered.
+    expect(panel.queryByRole("button", { name: /ban/i })).toBeNull();
     expect(routes.callsTo("GET /users/Gone")).toHaveLength(1);
+  });
+
+  it("stops offering a change of role once the person looked up is banned", async () => {
+    const user = userEvent.setup();
+    const routes = serve(MODERATOR);
+    routes.on("GET /users/KeenLynchet7", () => json(profileFixture({ reputation: 12 })));
+    routes.on("POST /mod/users/KeenLynchet7/ban", () =>
+      json({ user: { ...eligibleFixture().user, banned: true }, sessions_ended: 1, findings_reassessed: 0 }),
+    );
+    const members = await openMod("/mod/members?handle=KeenLynchet7");
+    const panel = within(
+      (await members.findByRole("heading", { name: "Find a member" })).closest("section") as HTMLElement,
+    );
+    await panel.findByText("Mary Anning");
+    await user.click(panel.getByRole("button", { name: "Ban KeenLynchet7" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "Ban KeenLynchet7?" }));
+    await user.type(dialog.getByLabelText("Why"), "Spam.");
+    await user.click(dialog.getByRole("button", { name: "Ban them" }));
+    expect(await panel.findByRole("button", { name: "Lift the ban on KeenLynchet7" })).toBeInTheDocument();
+    expect(panel.queryByRole("button", { name: "Change role" })).toBeNull();
+    expect(routes.callsTo("POST /mod/users/KeenLynchet7/ban")).toHaveLength(1);
   });
 
   it("writes the log as sentences, and shows something hidden again from it", async () => {

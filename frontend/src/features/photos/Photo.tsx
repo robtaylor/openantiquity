@@ -15,11 +15,16 @@ export interface PhotoProps {
   actions?: ReactNode;
 }
 
-/** Said where a photo would be, when there is none this viewer may see. */
-export const NOT_YET_SHOWN = "This photo shows here once it has been approved.";
+/**
+ * Said where a photo would be, when there is none this viewer may see. The
+ * server gives no reason: the photo may wait for approval, be hidden, belong
+ * to a banned uploader, or simply have failed to load.
+ */
+export const CANT_BE_SHOWN =
+  "This photo can't be shown to you. It may still be waiting for approval, or have been taken down.";
 
 /** The place of a photo this viewer can't be shown, and why. */
-export function PhotoPlaceholder({ children = NOT_YET_SHOWN }: { children?: ReactNode }) {
+export function PhotoPlaceholder({ children = CANT_BE_SHOWN }: { children?: ReactNode }) {
   return (
     <div className="fc-photo fc-photo--missing">
       <ImageOff size={20} aria-hidden />
@@ -34,7 +39,7 @@ export function PhotoPlaceholder({ children = NOT_YET_SHOWN }: { children?: Reac
  * the approvers before it is approved, and then a placeholder says why
  * there is no picture. The uploader's own photo says while it waits.
  */
-export function Photo({ src, alt, mediaId, unavailable = NOT_YET_SHOWN, actions }: PhotoProps) {
+export function Photo({ src, alt, mediaId, unavailable = CANT_BE_SHOWN, actions }: PhotoProps) {
   const [failed, setFailed] = useState<string | null>(null);
   const waiting = useWaitingPhotos((state) => mediaId !== undefined && state.ids.has(mediaId));
   if (failed === src) return <PhotoPlaceholder>{unavailable}</PhotoPlaceholder>;

@@ -609,9 +609,13 @@ describe("evidence", () => {
 
     const photo = new File([new Uint8Array(2048)], "barrow.jpg", { type: "image/jpeg" });
     await user.upload(form.getByLabelText("The photo"), photo);
-    expect(await form.findByText(/barrow\.jpg is uploaded/)).toBeInTheDocument();
     expect(
-      form.getByText(/It's waiting for approval\. Until a moderator or trusted member approves it/),
+      await form.findByText(
+        (_text, element) => element?.tagName === "P" && element.textContent?.trim() === "barrow.jpg is uploaded.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      form.getByText(/It's waiting for approval\. Until a moderator, trusted member or archaeologist approves it/),
     ).toBeInTheDocument();
     const [upload] = uploads.calls;
     expect(upload).toMatchObject({ method: "POST", url: "/api/v1/media", body: photo });
@@ -630,7 +634,9 @@ describe("evidence", () => {
     const item = await panel.findByRole("img", { name: /Ground photo added by/ });
     expect(item).toHaveAttribute("src", "/api/v1/media/77");
     // Its uploader is told it still waits, and who sees it meanwhile.
-    expect(item.closest("figure")).toHaveTextContent(/Waiting for approval\. Until a moderator or trusted member/);
+    expect(item.closest("figure")).toHaveTextContent(
+      /Waiting for approval\. Until a moderator, trusted member or archaeologist/,
+    );
   });
 
   it("opens the form again as it was, with the server's reason, when evidence is refused", async () => {

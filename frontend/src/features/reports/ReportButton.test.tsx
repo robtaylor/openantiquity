@@ -64,6 +64,7 @@ describe("reporting", () => {
     await panel.findByText(COMMENT.body ?? "");
     await user.click(panel.getByRole("button", { name: "Report this comment" }));
     const dialog = within(await screen.findByRole("dialog", { name: "Report this comment" }));
+    expect(dialog.getByRole("group", { name: "What's wrong?" })).toBeInTheDocument();
     expect(dialog.getAllByRole("radio")).toHaveLength(10);
     expect(
       dialog.getByText("It identifies a person, a home or a private garden, or says who owns the land."),
@@ -110,6 +111,19 @@ describe("reporting", () => {
     await user.click(dialog.getByRole("button", { name: "Send report" }));
     expect(await dialog.findByRole("alert")).toHaveTextContent("You've already reported this");
     expect(dialog.getByRole("radio", { name: /Spam/ })).toBeChecked();
+  });
+
+  it("says a moderator has just looked at it when the server is cooling off", async () => {
+    const user = userEvent.setup();
+    const { panel, routes } = await open(seenFixture(), VIEWER);
+    routes.on("POST /reports", () => apiError(409, "recently_dismissed", "Dismissed recently."));
+    await user.click(panel.getByRole("button", { name: "Report this finding" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "Report this finding" }));
+    await user.click(dialog.getByRole("radio", { name: /Spam/ }));
+    await user.click(dialog.getByRole("button", { name: "Send report" }));
+    expect(await dialog.findByRole("alert")).toHaveTextContent(
+      "A moderator has just looked at your report on this. You can report it again tomorrow.",
+    );
   });
 
   it("offers no report on your own work", async () => {

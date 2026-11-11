@@ -43,7 +43,7 @@ export function reportProblem(error: unknown): string {
       case "already_reported":
         return "You've already reported this, and the moderators haven't looked at it yet. There's no need to send it again.";
       case "recently_dismissed":
-        return "You reported this in the last day. You can report it again after that.";
+        return "A moderator has just looked at your report on this. You can report it again tomorrow.";
       case "cannot_report_self":
         return "You can't report yourself.";
       case "target_not_found":

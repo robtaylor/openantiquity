@@ -64,7 +64,9 @@ describe("a person's page", () => {
     const panel = await openProfile("/u/KeenLynchet7", "Mary Anning");
     expect(panel.getByText("@KeenLynchet7")).toBeInTheDocument();
     expect(panel.getByText("Trusted member")).toBeInTheDocument();
-    expect(panel.getByText(/A member a moderator has trusted/)).toBeInTheDocument();
+    expect(
+      panel.getByText("Trusted by a moderator after earning fifty points. Their checks count for more."),
+    ).toBeInTheDocument();
     expect(panel.getByText("Joined October 2026")).toBeInTheDocument();
     expect(panel.getByText("Walks the downs most weekends.")).toBeInTheDocument();
     expect(document.title).toBe("Mary Anning · Field Club");

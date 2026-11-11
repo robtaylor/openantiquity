@@ -4,6 +4,7 @@ import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeUploads } from "../../test/fakeUpload.js";
 import { mediaFixture } from "../../test/fixtures/people.js";
+import { CANT_BE_SHOWN, Photo } from "./Photo.js";
 import { NO_PHOTO, type PhotoState, PhotoUpload } from "./PhotoUpload.js";
 import { useWaitingPhotos } from "./waiting.js";
 
@@ -23,7 +24,11 @@ function Harness() {
   );
 }
 
-const photo = () => new File([new Uint8Array(4096)], "barrow.jpg", { type: "image/jpeg" });
+const photo = (name = "barrow.jpg") => new File([new Uint8Array(4096)], name, { type: "image/jpeg" });
+
+/** The whole sentence a file name sits in, which is split around the isolated name. */
+const sentence = (text: string) => (_content: string, element: Element | null) =>
+  element?.tagName === "P" && element.textContent?.trim() === text;
 
 beforeEach(() => {
   seen.length = 0;
@@ -45,11 +50,13 @@ describe("uploading a photo", () => {
     expect(bar).not.toHaveAttribute("aria-valuenow");
     act(() => uploads.calls[0]?.progress(1024, 4096));
     expect(bar).toHaveAttribute("aria-valuenow", "25");
-    expect(screen.getByText("Sending barrow.jpg, 25%")).toBeInTheDocument();
+    expect(screen.getByText("Sending", { exact: false }).closest("span")).toHaveTextContent("Sending barrow.jpg, 25%");
     act(() => uploads.calls[0]?.answer(201, mediaFixture()));
-    expect(await screen.findByText(/barrow\.jpg is uploaded/)).toBeInTheDocument();
+    expect(await screen.findByText(sentence("barrow.jpg is uploaded."))).toBeInTheDocument();
     expect(
-      screen.getByText(/It.s waiting for approval\. Until a moderator or trusted member approves it, only you/),
+      screen.getByText(
+        /It.s waiting for approval\. Until a moderator, trusted member or archaeologist approves it, only you, moderators, trusted members and archaeologists/,
+      ),
     ).toBeInTheDocument();
     expect(seen.map((state) => state.status)).toEqual(["uploading", "done"]);
     expect(useWaitingPhotos.getState().ids.has(77)).toBe(true);
@@ -81,7 +88,7 @@ describe("uploading a photo", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("The server is busy with other photos.");
     busy = false;
     await user.click(screen.getByRole("button", { name: "Try again" }));
-    expect(await screen.findByText(/barrow\.jpg is uploaded/)).toBeInTheDocument();
+    expect(await screen.findByText(sentence("barrow.jpg is uploaded."))).toBeInTheDocument();
     expect(screen.getByText(/Once approved, everyone who can see this finding's exact place/)).toBeInTheDocument();
     expect(uploads.calls.map((call) => call.body)).toEqual([file, file]);
   });
@@ -111,5 +118,30 @@ describe("uploading a photo", () => {
     await user.upload(screen.getByLabelText("The photo"), new File(["gif"], "map.gif", { type: "image/gif" }));
     expect(screen.getByRole("alert")).toHaveTextContent("The photo needs to be a JPEG, PNG or WebP.");
     expect(uploads.calls).toHaveLength(1);
+  });
+
+  it("keeps a file name's own writing direction from rearranging the words around it", async () => {
+    const user = userEvent.setup();
+    const uploads = fakeUploads();
+    uploads.respond(() => null);
+    const hostile = "long-\u202Egpj.jpg";
+    render(<Harness />);
+    await user.upload(screen.getByLabelText("The photo"), photo(hostile));
+    expect(screen.getByText(hostile).tagName).toBe("BDI");
+    act(() => uploads.calls[0]?.answer(201, mediaFixture()));
+    const done = await screen.findByText(sentence(`${hostile} is uploaded.`));
+    expect(done.querySelector("bdi")).toHaveTextContent(hostile);
+  });
+});
+
+describe("a photo", () => {
+  it("says neutrally that it can't be shown when the image won't load, whatever the reason", () => {
+    render(<Photo src="/api/v1/media/5" alt="Ground photo" mediaId={5} />);
+    const image = screen.getByRole("img", { name: "Ground photo" });
+    act(() => {
+      image.dispatchEvent(new Event("error"));
+    });
+    expect(screen.getByText(CANT_BE_SHOWN)).toBeInTheDocument();
+    expect(screen.queryByText(/once it has been approved/)).toBeNull();
   });
 });

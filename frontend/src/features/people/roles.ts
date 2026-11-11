@@ -13,7 +13,7 @@ export const ROLE_WORDS: Record<Role, { label: string; hint: string }> = {
   member: { label: "Member", hint: "Someone who has joined Field Club." },
   trusted: {
     label: "Trusted member",
-    hint: "A member a moderator has trusted after their work earned fifty points. Their checks count for more.",
+    hint: "Trusted by a moderator after earning fifty points. Their checks count for more.",
   },
   expert: { label: "Archaeologist", hint: "A recognised archaeologist or records officer." },
   moderator: { label: "Moderator", hint: "Looks after reports and protected places." },

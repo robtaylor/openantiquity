@@ -75,7 +75,7 @@ function ReportDialog({ target, onClose }: { target: ReportTarget; onClose: () =
         >
           <fieldset className="fc-report__reasons" aria-labelledby={legendId}>
             <legend id={legendId} className="fc-field__label">
-              What's wrong with it?
+              What's wrong?
             </legend>
             {reasons.map((entry) => (
               <label key={entry.id} className="fc-report__reason">

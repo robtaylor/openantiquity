@@ -139,10 +139,18 @@ function listWords(items: readonly string[]): string {
  * reason. Said of them, not to them.
  */
 export function pointSourceWords(meta: Meta, reasons: readonly string[]): string[] {
-  const steps = reasons.flatMap((reason) => {
-    const tier = /^tier_(.+)$/.exec(reason)?.[1];
-    return tier === undefined ? [] : [labelOf(meta.vocab.tiers, tier)];
-  });
+  // In the ladder's order, whatever order the server lists them in.
+  const rank = (tier: string): number => {
+    const at = meta.vocab.tiers.findIndex((known) => known.id === tier);
+    return at === -1 ? meta.vocab.tiers.length : at;
+  };
+  const steps = reasons
+    .flatMap((reason) => {
+      const tier = /^tier_(.+)$/.exec(reason)?.[1];
+      return tier === undefined ? [] : [tier];
+    })
+    .sort((a, b) => rank(a) - rank(b))
+    .map((tier) => labelOf(meta.vocab.tiers, tier));
   const others = reasons
     .filter((reason) => !reason.startsWith("tier_"))
     .map((reason) => pointWords(meta, reason).replace(/^Your /, "Their "));

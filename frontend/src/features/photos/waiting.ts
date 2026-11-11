@@ -24,5 +24,5 @@ onPersonChanged(() => useWaitingPhotos.getState().clear());
 
 /** Who sees a photo before and after approval, in one sentence each (Decision 0009). */
 export const WHO_SEES_WAITING =
-  "Until a moderator or trusted member approves it, only you, moderators and trusted members can see it.";
+  "Until a moderator, trusted member or archaeologist approves it, only you, moderators, trusted members and archaeologists can see it.";
 export const WHO_SEES_APPROVED = "Once approved, everyone who can see this finding's exact place can see it.";

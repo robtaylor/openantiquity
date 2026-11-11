@@ -252,7 +252,8 @@ function LookUp() {
   const person = profile.data;
   const shownRole = role ?? person?.role ?? "member";
   const mine = person?.is_me ?? false;
-  const choices = person && !mine ? roleChoices(session.role, shownRole, person.reputation) : [];
+  // A banned person's role can't be changed: the server refuses with user_banned.
+  const choices = person && !mine && !banned ? roleChoices(session.role, shownRole, person.reputation) : [];
 
   function submit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -284,7 +285,7 @@ function LookUp() {
     <section className="fc-mod-section" aria-labelledby="fc-mod-lookup">
       <h3 id="fc-mod-lookup">Find a member</h3>
       <form className="fc-mod-lookup" onSubmit={submit}>
-        <Field label="Handle" hint="Change someone's role, ban them, or lift a ban.">
+        <Field label="Handle" hint="Change someone's role, or ban them.">
           {(control) => (
             <input
               {...control}
@@ -345,11 +346,9 @@ function LookUp() {
         <div className="fc-mod-card">
           <p>
             Nobody can be found as <strong>{asked}</strong>. The handle may be mistyped, the account closed, or the
-            person banned, since a banned person's page can't be found.
+            person banned, since a banned person's page can't be found. A ban can't be lifted from here yet, because the
+            site can't yet tell a moderator who is banned.
           </p>
-          <div className="fc-mod-card__actions">
-            <BanButton handle={asked} targetRole="member" banned />
-          </div>
         </div>
       ) : (
         <p className="fc-field__error" role="alert">

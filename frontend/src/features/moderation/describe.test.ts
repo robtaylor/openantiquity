@@ -75,6 +75,10 @@ describe("where a member's points came from", () => {
       "Their finding reached Seen by others and Corroborated",
       "Their finding matched a known record",
     ]);
+    // In the ladder's order, whatever order the server sends.
+    expect(pointSourceWords(metaFixture, ["tier_ground_checked", "tier_seen", "tier_corroborated"])).toEqual([
+      "Their finding reached Seen by others, Corroborated and Checked on the ground",
+    ]);
     expect(pointSourceWords(metaFixture, ["second_looks"])).toEqual([
       "Their second looks agreed with how findings turned out",
     ]);

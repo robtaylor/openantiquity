@@ -119,7 +119,7 @@ export function PhotoUpload({ label, hint, required, value, onChange, error }: P
         {uploading ? (
           <div className="fc-photo-upload__progress">
             <span>
-              Sending {attempt?.file.name}
+              Sending <bdi>{attempt?.file.name}</bdi>
               {progress === null ? "…" : `, ${Math.round(progress * 100)}%`}
             </span>
             <div
@@ -143,7 +143,7 @@ export function PhotoUpload({ label, hint, required, value, onChange, error }: P
             <img className="fc-photo-upload__thumb" src={value.media.url} alt="" />
             <div>
               <p>
-                <ImageUp size={15} aria-hidden /> {value.name} is uploaded.
+                <ImageUp size={15} aria-hidden /> <bdi>{value.name}</bdi> is uploaded.
               </p>
               <p className="fc-photo-upload__who">
                 {value.media.approved ? WHO_SEES_APPROVED : `It's waiting for approval. ${WHO_SEES_WAITING}`}

@@ -279,7 +279,7 @@ test.describe("photos that are refused or not yet approved", () => {
     await expect(form.getByRole("alert")).toHaveText(/The server is busy with other photos/);
     await form.getByRole("button", { name: "Try again" }).click();
     await expect(form.getByText(/barrow\.png is uploaded/)).toBeVisible();
-    await expect(form.getByText(/only you, moderators and trusted members can see it/)).toBeVisible();
+    await expect(form.getByText(/only you, moderators, trusted members and archaeologists can see it/)).toBeVisible();
     await form.getByRole("button", { name: "Add it" }).click();
     const item = panel
       .locator(".fc-evidence")
@@ -308,7 +308,7 @@ test.describe("photos that are refused or not yet approved", () => {
     const panel = page.getByRole("complementary", { name: finding.title });
     // The photo is asked for once it is near the screen.
     await panel.locator(".fc-evidence").last().scrollIntoViewIfNeeded();
-    await expect(panel.getByText("This photo shows here once it has been approved.")).toHaveCount(2);
+    await expect(panel.getByText(/This photo can.t be shown to you/)).toHaveCount(2);
     await expect(panel.getByRole("img", { name: /Ground photo added by/ })).toHaveCount(0);
     // A photo nobody may show this viewer can't be reported by them either.
     await expect(panel.getByRole("button", { name: "Report this photo" })).toHaveCount(0);
