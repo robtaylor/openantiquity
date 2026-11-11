@@ -202,9 +202,13 @@ e. Until then, are you content for users' browsers to query the
 f. Field Club may accept voluntary donations or grants solely to cover
    hosting, with no paywall, advertising or sale of data. Is that within
    "not-for-profit teaching and research"?
-g. Archive and Library pages return a challenge to my server, so I can't
-   check links to them. Is DataCite the supported route, and could one
-   address be allow-listed for occasional HEAD requests?
+g. Your Archive and Library pages check each visitor before they show
+   anything. A person's browser passes the check; a program is refused
+   with "403 Forbidden". So a program can't confirm that Field Club's
+   links to those pages still work. Is linking by DOI, through
+   DataCite, the route you'd rather I used? Or could requests that
+   carry Field Club's name and contact address be let through for
+   that check, a handful a month, asking only for a page's headers?
 
 I'll acknowledge ADS and the depositors on every record, and pass on
 any errors members find. I'd welcome a call.
@@ -302,12 +306,18 @@ and won't copy, frame or embed Gateway content. Could you confirm:
    is the permanent record address;
 2. that the "View on map" address with the initialLatLong filter is
    supported for linking, and whether a radius can be set;
-3. whether a feed or API exists or is planned, and whether a link
-   checker making HEAD requests from one address could be allow-listed;
+3. whether a feed or API exists or is planned;
 4. for the Archive, that
    /images-books/archive/collections/aerial-photos/record/{reference}
    holds for oblique references such as 23786_011, and whether an index
    of references with centre points could be shared.
+
+One more request. Your pages check each visitor before they show
+anything. A person's browser passes the check; a program is refused
+with "403 Forbidden". So a program can't confirm that Field Club's
+links to your records still work. Could requests that carry Field
+Club's name and contact address be let through for that check? It
+would ask only for a page's headers, a handful of times a month.
 
 With thanks,
 [Name]
@@ -537,26 +547,64 @@ On NRHE Areas, the research found the spatialdata.gov.scot download link was a g
 ```text
 To: trove@hes.scot
 Cc: GIEnquiries@hes.scot
-Subject: Scriptable access to NRHE Areas and the Scottish Radiocarbon Index
+Subject: Downloading NRHE Areas and the Scottish Radiocarbon Index for Field Club
 
 Dear HES team,
 
 I run Field Club, a free, non-commercial citizen-science map where
-volunteers look for earthworks in LIDAR. I plan to use
-Canmore_Points.zip from your INSPIRE Atom service, with thanks.
+volunteers look for earthworks in LIDAR and compare what they see with
+existing records. To show your records beside the LIDAR, a program
+downloads each dataset you publish, keeps a copy with your attribution,
+and fetches it again from time to time so the copy stays current. For
+the site index I plan to use Canmore_Points.zip from inspire.hes.scot.
+Thank you for publishing it there.
 
-1. NRHE Areas and the Radiocarbon Index are only on trove.scot, which my
-   server can't reach, and the link in the spatialdata.gov.scot record
-   now returns 404. Could both be added to inspire.hes.scot, or given a
-   stable address?
-2. Which licence and attribution apply? The download pages say OGL v3;
-   the catalogue record quotes OGL v1.0 wording.
-3. Are trove.scot/place/{NRHE ID}, the map search by coordinates and the
-   canmore.org.uk redirects intended to be permanent? Field Club will
-   link only, and won't frame or scrape the site.
-4. Could one address be allow-listed for occasional HEAD requests to
-   check links?
-5. Have user contributions on trove.scot launched?
+Two datasets are published only on trove.scot, and a program can't
+download them from it:
+
+- NRHE Areas ("Defining Scotland's Places"), nrhe_areas.zip
+- the Scottish Radiocarbon Index spreadsheet
+
+trove.scot checks each visitor before it shows a page or sends a file.
+A person's web browser passes the check without the person noticing. A
+program that asks for a file can't pass it, and gets the answer "403
+Forbidden". On 10 and 11 November 2026 I got that answer from every
+address I tried, including both downloads and robots.txt. For whoever
+looks after the site: it is the JavaScript challenge from the Azure
+web application firewall. I haven't tried to get round the check and
+won't. I take it to be deliberate, and clause 7.1 of your terms
+forbids scraping.
+
+The other address I know of for NRHE Areas no longer works. The
+catalogue record on spatialdata.gov.scot links to
+https://www.historicenvironment.scot/media/e04lsbyn/nrhe_areas.zip,
+which answers "404 Not Found".
+
+I'd be grateful for your help with five things.
+
+1. Could NRHE Areas and the Radiocarbon Index be published on
+   inspire.hes.scot beside Canmore_Points.zip, or at any address that
+   sends the file without the browser check? Until then I'll download
+   each by hand in a browser and load that copy. Please tell me if
+   you'd rather I didn't.
+2. Which licence and attribution apply to the two datasets? The
+   trove.scot download page says OGL v3. The catalogue record quotes
+   the attribution wording of OGL v1.0.
+3. Field Club will link to trove.scot pages, and won't frame or copy
+   them. Are these addresses meant to be permanent?
+   - a place, such as https://www.trove.scot/place/100342
+   - the map at a point, such as
+     https://www.trove.scot/search/map?q=*&page_type=Places&coords=228100,640290,5
+   - old Canmore addresses of the form canmore.org.uk/site/[number],
+     which redirect to trove.scot
+4. I'd like a program to check now and then that links like those
+   still lead to a page. It would ask only for a page's headers, a
+   handful of times a month, and the same check refuses it. Could
+   requests that carry Field Club's name and contact address be let
+   through for that, or is there a way you'd prefer?
+5. When a volunteer's finding in Scotland looks worth recording, where
+   should they send it? Does trove.scot take contributions from the
+   public yet?
 
 With thanks,
 [Name]
