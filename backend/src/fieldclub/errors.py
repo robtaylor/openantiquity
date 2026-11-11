@@ -114,6 +114,13 @@ class TileNotFoundError(NotFoundError):
     message = "There is no tile with that address."
 
 
+class MediaNotFoundError(NotFoundError):
+    """A photo that doesn't exist or that this viewer may not see: the two answer alike."""
+
+    code = "media_not_found"
+    message = "There's no photo with that id."
+
+
 class ConflictError(AppError):
     status_code = 409
     code = "conflict"

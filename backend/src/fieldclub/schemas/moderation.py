@@ -1,6 +1,6 @@
 """Request and response shapes for reports, the moderation queue, roles, bans and the log.
 
-Everything here but `ReportIn` and `ReportCreated` is for moderators only.
+Everything here but `ReportIn` and `ReportCreatedOut` is for moderators only.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ class ModSensitivityIn(ReasonIn):
 # --------------------------------------------------------------------------
 
 
-class ReportCreated(ApiModel):
+class ReportCreatedOut(ApiModel):
     """What the reporter is told: that the report was received, and nothing about what happens next."""
 
     id: int

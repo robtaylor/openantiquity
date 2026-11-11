@@ -2,8 +2,9 @@
 
 Moderation routes are for moderators and admins. The photo approval queue is
 shared with trusted members and experts (Decision 0009). Reporting is open to
-every contributor. A banned account and one that hasn't finished the welcome
-step are refused whatever their role.
+every contributor. A banned account is refused whatever its role. One that
+hasn't finished the welcome step reads the queues and the log if its role
+allows, and is refused every write, as on every other route.
 
 The routes, each aimed at something that belongs to someone other than the
 caller, come from the `routes` fixture in `conftest.py`.
@@ -20,6 +21,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from fieldclub.vocab import Role
+from tests.api import test_shared_rules as shared_rules
 from tests.helpers import ClientFor, MakeUser, error_code
 from tests.moderation.support import API, APPROVERS, MODERATORS, Route
 
@@ -47,6 +49,13 @@ REFUSALS = {
 }
 
 
+def admitted(who: str, route: Route) -> bool:
+    # The newcomer is a moderator: only the welcome step stands between them and a write.
+    if who == "newcomer":
+        return route.method == "GET"
+    return who in route.allowed
+
+
 def refusal(who: str, route: Route) -> tuple[int, str]:
     if who in REFUSALS:
         return REFUSALS[who]
@@ -71,7 +80,7 @@ def test_every_route_against_every_caller(
     for route in routes:
         response = call(client, route)
         where = f"{who} {route.method} {route.path}"
-        if who in route.allowed:
+        if admitted(who, route):
             assert response.status_code < 400 or response.status_code in (404, 409), (where, response.text)
             assert response.status_code not in (401, 403), where
         else:
@@ -97,3 +106,26 @@ def test_the_moderation_routes_are_never_cached(
         response = client.get(API + path)
         assert response.status_code == 200
         assert response.headers["cache-control"] == "private, no-cache", path
+
+
+MODERATION_LISTS = {"/mod/reports": 200, "/mod/actions": 200, "/mod/users/eligible": 50, "/mod/media": 200}
+
+
+@pytest.mark.parametrize("cursor", shared_rules.BAD_CURSORS)
+def test_the_moderation_lists_follow_the_shared_cursor_rule(
+    cursor: str, make_user: MakeUser, client_for: ClientFor, app: FastAPI
+) -> None:
+    client = client_for(app, make_user(Role.MODERATOR))
+    for path in MODERATION_LISTS:
+        response = client.get(shared_rules.with_params(API + path, cursor=cursor))
+        assert (response.status_code, error_code(response)) == (400, "invalid_cursor"), path
+
+
+def test_the_moderation_lists_refuse_a_limit_above_their_maximum(
+    make_user: MakeUser, client_for: ClientFor, app: FastAPI
+) -> None:
+    client = client_for(app, make_user(Role.MODERATOR))
+    for path, most in MODERATION_LISTS.items():
+        assert client.get(API + path, params={"limit": most}).status_code == 200, path
+        response = client.get(API + path, params={"limit": most + 1})
+        assert (response.status_code, error_code(response)) == (422, "validation_error"), path

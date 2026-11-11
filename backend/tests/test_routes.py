@@ -11,7 +11,7 @@
   contribution and so needs the welcome step (Decision 0009), or why it
   doesn't. None for a read.
 - `sample`: an address to call it at, for the cache check. `{finding}`,
-  `{record}` and `{investigation}` are filled in with ones the test makes,
+  `{record}`, `{investigation}` and `{photo}` are filled in with ones the test makes,
   the investigation public. A read that says
   nothing about caching is sent private (`main.PrivateByDefaultMiddleware`).
   One sent as publicly cacheable must give a signed-in member exactly what it
@@ -47,6 +47,7 @@ from tests.findings import test_leaks
 from tests.findings.support import create
 from tests.helpers import MakeUser, add_record, add_source
 from tests.investigations.support import make
+from tests.moderation.support import photo
 
 CONTRIBUTOR = "contributor"
 MUTATING = frozenset({"POST", "PUT", "PATCH", "DELETE"})
@@ -57,7 +58,8 @@ MENTIONS = "tests.mentions.test_recent:"
 class Expect:
     leak_test: str | None = None
     writer: str | None = None
-    # `{finding}`, `{record}`, `{person}` and `{investigation}` are filled in with ones the test makes.
+    # `{finding}`, `{record}`, `{person}`, `{investigation}` and `{photo}` are filled in
+    # with ones the test makes.
     sample: str | None = None
     # Why there is no sample, when there isn't one for a read.
     unsampled: str | None = None
@@ -210,6 +212,32 @@ ROUTES: dict[tuple[str, str], Expect] = {
         ACTIVITY_LEAKS + "test_stream_payloads_carry_no_position",
         unsampled="a stream that stays open: tests/activity/test_events.py checks it is sent no-cache",
     ),
+    # Photos
+    ("POST", "/api/v1/media"): Expect(writer=CONTRIBUTOR),
+    ("GET", "/api/v1/media/{media_id}"): Expect(
+        "tests.media.test_leaks:test_a_photo_goes_only_to_those_who_see_its_finding_exactly",
+        sample="/api/v1/media/{photo}",
+    ),
+    ("GET", "/api/v1/mod/media"): Expect(sample="/api/v1/mod/media"),
+    ("POST", "/api/v1/mod/media/{media_id}/approve"): Expect(writer=CONTRIBUTOR),
+    ("POST", "/api/v1/mod/media/{media_id}/reject"): Expect(writer=CONTRIBUTOR),
+    # Reports and moderation
+    ("POST", "/api/v1/reports"): Expect(writer=CONTRIBUTOR),
+    ("GET", "/api/v1/mod/reports"): Expect(sample="/api/v1/mod/reports"),
+    ("POST", "/api/v1/mod/reports/{report_id}/resolve"): Expect(writer=CONTRIBUTOR),
+    **{
+        ("POST", f"/api/v1/mod/{segment}/{{target_id}}/{verb}"): Expect(writer=CONTRIBUTOR)
+        for segment in ("findings", "comments", "evidence", "mentions", "media")
+        for verb in ("hide", "unhide")
+    },
+    ("PUT", "/api/v1/mod/findings/{public_id}/sensitivity"): Expect(
+        "tests.moderation.test_leaks:test_the_moderators_level_route_answers_only_moderators", CONTRIBUTOR
+    ),
+    ("GET", "/api/v1/mod/users/eligible"): Expect(sample="/api/v1/mod/users/eligible"),
+    ("PUT", "/api/v1/mod/users/{handle}/role"): Expect(writer=CONTRIBUTOR),
+    ("POST", "/api/v1/mod/users/{handle}/ban"): Expect(writer=CONTRIBUTOR),
+    ("POST", "/api/v1/mod/users/{handle}/unban"): Expect(writer=CONTRIBUTOR),
+    ("GET", "/api/v1/mod/actions"): Expect(sample="/api/v1/mod/actions"),
     # The app itself
     ("GET", "/healthz"): Expect(sample="/healthz"),
 }
@@ -357,6 +385,8 @@ def samples(db: Session, make_user: MakeUser) -> dict[str, str]:
     finding = create(db, finder)
     record = add_record(db, add_source(db), "Bowl barrow", -1.85, 51.43)
     record_tiles.refresh_counts(db)
+    # Not approved yet, so the cache check holds its address to the strictest case.
+    waiting = photo(db, make_user())
     db.commit()
     investigation = make(db, make_user(), Visibility.PUBLIC)
     return {
@@ -364,6 +394,7 @@ def samples(db: Session, make_user: MakeUser) -> dict[str, str]:
         "record": str(record.id),
         "person": finder.handle,
         "investigation": investigation.public_id,
+        "photo": str(waiting.id),
     }
 
 

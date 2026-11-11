@@ -59,12 +59,16 @@ from PIL import Image, UnidentifiedImageError
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from fieldclub.errors import AppError, ConflictError, ForbiddenError, NotFoundError, ValidationFailedError
+from fieldclub.errors import AppError, ConflictError, ForbiddenError, ValidationFailedError
+
+# Raised here and by `services.moderation`, so it lives in `errors.py`.
+from fieldclub.errors import MediaNotFoundError as MediaNotFoundError
 from fieldclub.models import Evidence, Finding, Media, User
 from fieldclub.schemas.common import int_from_cursor, paginate
+from fieldclub.services.findings import is_moderator
 from fieldclub.services.sensitivity import active_viewer, sees_exact
 from fieldclub.storage import Storage, get_storage
-from fieldclub.vocab import MEDIA_APPROVER_ROLES, MODERATOR_ROLES, Role
+from fieldclub.vocab import MEDIA_APPROVER_ROLES, Role
 
 logger = logging.getLogger(__name__)
 
@@ -114,11 +118,6 @@ class MediaRejectionForbiddenError(ForbiddenError):
     message = "Only a moderator or trusted member can refuse a photo, and not their own."
 
 
-class MediaNotFoundError(NotFoundError):
-    code = "media_not_found"
-    message = "There's no photo with that id."
-
-
 class MediaAlreadyDecidedError(ConflictError):
     code = "media_already_decided"
     message = "This photo has already been approved or refused."
@@ -163,10 +162,6 @@ class MediaBlockedError(ValidationFailedError):
 # --------------------------------------------------------------------------
 
 
-def _is_moderator(viewer: User | None) -> bool:
-    return viewer is not None and Role(viewer.role) in MODERATOR_ROLES
-
-
 def may_see_media(media: Media, viewer: User | None) -> bool:
     """Whether `viewer` may see `media`. `viewer` is None for the public.
 
@@ -177,7 +172,7 @@ def may_see_media(media: Media, viewer: User | None) -> bool:
         return False
     active = active_viewer(viewer)
     if media.hidden_at is not None:
-        return active is not None and (active.has_id(media.user_id) or _is_moderator(active))
+        return active is not None and (active.has_id(media.user_id) or is_moderator(active))
     if media.approved_at is not None:
         return True
     if active is None:
@@ -197,7 +192,7 @@ def may_fetch_media(db: Session, media: Media, viewer: User | None) -> bool:
     if not may_see_media(media, viewer):
         return False
     active = active_viewer(viewer)
-    if active is not None and (active.has_id(media.user_id) or _is_moderator(active)):
+    if active is not None and (active.has_id(media.user_id) or is_moderator(active)):
         return True
     uploader = db.get(User, media.user_id)
     if uploader is None or uploader.is_banned:
@@ -294,14 +289,19 @@ def _fitted(size: tuple[int, int], side: int) -> tuple[int, int]:
     return max(1, round(width * scale)), max(1, round(height * scale))
 
 
+def check_upload_size(size: int) -> None:
+    """`ImageTooLargeError` for an upload of more than `MAX_UPLOAD_BYTES`, counted or declared."""
+    if size > MAX_UPLOAD_BYTES:
+        raise ImageTooLargeError()
+
+
 def _open(raw: bytes) -> Image.Image:
     """Open and fully decode an upload, refusing what isn't a whole, modest image of an accepted kind.
 
     A JPEG is decoded at the smallest of a half, a quarter or an eighth of
     its size that is still `JPEG_DRAFT_SIDE` across.
     """
-    if len(raw) > MAX_UPLOAD_BYTES:
-        raise ImageTooLargeError()
+    check_upload_size(len(raw))
     if not raw:
         raise NotAnImageError()
     with warnings.catch_warnings():

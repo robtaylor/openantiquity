@@ -302,6 +302,10 @@ def test_a_banned_persons_answers_evidence_and_votes_stop_counting_until_the_ban
     page = viewer.get(f"{API}/findings/{finding.public_id}").json()
     assert "Doctored aerial" not in str(page)
     assert all(c["user"]["handle"] != "Ringleader" for c in page["credits"])
+    # The finder is told who answered (Decision 0010), and still not about the banned account.
+    credited = client_as(finder).get(f"{API}/findings/{finding.public_id}").json()["credits"]
+    assert any(c["kind"] == "saw_it" for c in credited)
+    assert all(c["user"]["handle"] != "Ringleader" for c in credited)
     observations = client_as(finder).get(f"{API}/findings/{finding.public_id}/observations").json()["items"]
     assert [o["user"]["handle"] for o in observations if o["user"]["handle"] == "Ringleader"] == []
     export = viewer.get(f"{API}/findings/{finding.public_id}/export?format=csv").text

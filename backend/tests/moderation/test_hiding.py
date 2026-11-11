@@ -29,6 +29,7 @@ def finding_routes(finding: Finding) -> list[str]:
     return [
         f"/findings/{pid}",
         f"/findings/{pid}/comments",
+        f"/findings/{pid}/observations",
         f"/findings/{pid}/export?format=geojson",
         f"/findings/{pid}/export?format=csv",
         "/findings",

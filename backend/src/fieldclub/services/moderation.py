@@ -106,7 +106,13 @@ from sqlalchemy.orm import Session
 
 from fieldclub.auth.sessions import revoke_all_sessions
 from fieldclub.db import is_unique_violation
-from fieldclub.errors import ConflictError, ForbiddenError, NotFoundError, ValidationFailedError
+from fieldclub.errors import (
+    ConflictError,
+    ForbiddenError,
+    MediaNotFoundError,
+    NotFoundError,
+    ValidationFailedError,
+)
 from fieldclub.models import (
     Comment,
     Evidence,
@@ -124,7 +130,6 @@ from fieldclub.schemas.common import int_from_cursor, paginate
 from fieldclub.services import findings, ids, media, sensitivity
 from fieldclub.services.reputation import OBSERVATION_CORROBORATED, OBSERVATION_RULED_OUT, TRUSTED_AT
 from fieldclub.vocab import (
-    MODERATOR_ROLES,
     REPORT_DUE_HOURS,
     ModerationActionKind,
     ReportReason,
@@ -258,9 +263,8 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def is_moderator(user: User | None) -> bool:
-    active = sensitivity.active_viewer(user)
-    return active is not None and Role(active.role) in MODERATOR_ROLES
+# One rule for who counts as a moderator, beside the rule for who sees a hidden finding.
+is_moderator = findings.is_moderator
 
 
 def _require_moderator(user: User) -> User:
@@ -378,7 +382,15 @@ def _visible(db: Session, target: Target, viewer: User | None) -> bool:
 def load_target(db: Session, kind: ReportTarget | str, ref: str, viewer: User | None) -> Target:
     """The target `ref` names, if `viewer` may see it, or `TargetNotFoundError`."""
     kind = ReportTarget(kind)
-    row = _row_by_ref(db, kind, ref)
+    row: TargetRow | None
+    if kind is ReportTarget.FINDING:
+        # The one finding lookup, so a hidden finding is found by exactly those who may see it.
+        try:
+            row = findings.get_finding(db, ref, viewer)
+        except findings.FindingNotFoundError:
+            raise TargetNotFoundError() from None
+    else:
+        row = _row_by_ref(db, kind, ref)
     if row is None:
         raise TargetNotFoundError()
     target = Target(kind, row, _finding_of(db, row))
@@ -857,7 +869,7 @@ def set_sensitivity(db: Session, public_id: str, moderator: User, level: Sensiti
 def _queued_photo(db: Session, media_id: int, approver: User) -> Media:
     photo = db.scalar(select(Media).where(Media.id == media_id).with_for_update())
     if photo is None or not media.may_see_media(photo, approver):
-        raise media.MediaNotFoundError()
+        raise MediaNotFoundError()
     return photo
 
 
