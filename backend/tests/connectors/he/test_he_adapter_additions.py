@@ -73,3 +73,33 @@ def test_require_shape_names_what_is_missing() -> None:
         reader.require_shape(["PROJECT_NA", "Nothing"])
     with pytest.raises(UpstreamFormatError, match="geometry esriGeometryPolygon"):
         reader.require_shape(["PROJECT_NA"], "esriGeometryPoint")
+
+
+def test_a_ring_that_collapsed_to_a_point_is_dropped_not_kept_as_a_part() -> None:
+    from fieldclub.ingest.adapters.arcgis import esri_geometry
+
+    collapsed = [[-1.688685, 55.134636]] * 4
+    square = [[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]
+    geometry = esri_geometry({"rings": [collapsed, square]})
+    assert geometry is not None
+    assert geometry.geom_type == "Polygon"
+    assert geometry.is_valid
+    assert esri_geometry({"rings": [collapsed]}) is None
+
+
+@respx.mock
+def test_a_layer_can_ask_for_a_longer_timeout_than_the_client_has() -> None:
+    layer = RecordedLayer("he-aim-project-areas")
+    timeouts: list[float | None] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        timeouts.append(request.extensions["timeout"]["read"])
+        return layer(request)
+
+    respx.route(host=HOST).mock(side_effect=answer)
+    url = "https://services-eu1.arcgis.com/x/arcgis/rest/services/s/FeatureServer/2"
+    list(ArcGISLayer(url, client=httpx.Client(), polite=NoWait(), timeout_s=90).features())
+    assert set(timeouts) == {90.0}
+    timeouts.clear()
+    list(ArcGISLayer(url, client=httpx.Client(timeout=7), polite=NoWait()).features())
+    assert set(timeouts) == {7.0}
