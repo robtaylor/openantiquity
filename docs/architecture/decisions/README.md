@@ -55,6 +55,7 @@ Write all three in the same present tense and a reader can't tell *why we did it
 | [0015](0015-records-are-hidden-during-a-blind-second-look.md) | Records are hidden during a blind second look | Proposed |
 | [0016](0016-terrain-requests-never-wait-for-elevation-and-tiles-draw-on-threads-of-their-own.md) | Terrain requests never wait for elevation and tiles draw on threads of their own | Proposed |
 | [0017](0017-the-public-name-is-open-antiquity-and-internal-identifiers-stay-fieldclub.md) | The public name is Open Antiquity and internal identifiers stay fieldclub | Proposed |
+| [0018](0018-hosting-moves-to-fly-io-with-managed-postgres-and-tigris.md) | Hosting moves to Fly.io with Managed Postgres and Tigris | Proposed |
 
 (`new decision` appends rows for you. `uv run docs/scripts/doctool.py lint` checks this table against the files.)
 

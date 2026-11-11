@@ -1,6 +1,6 @@
 # Spike — Hosting on Fly.io
 
-**Status:** Open. Time-box: one working day once the owner has made the Fly.io organisation; stop and stay on Google Cloud if Q1 or Q2 fails.
+**Status:** Resolved (2026-11-11) — YES; Fly.io with Managed Postgres 17 over its direct address and Tigris kept every guarantee tested, with machines suspended rather than stopped when idle.
 
 ## Question
 
@@ -68,9 +68,15 @@ Sub-questions, cheapest first. A later one is only attempted if the earlier ones
 - 2026-11-11, Q3 step 3: `max_connections` is 112 on the Basic plan, and sixty connections from one machine were all accepted.
 - 2026-11-11, Q3 step 4: Managed Postgres is offered in London (`lhr`) and Amsterdam, not Paris. Backups and a restore weren't tried.
 - 2026-11-11: one `fly deploy` failed after the image was pushed, with an internal error from Fly's machines API, and worked when run again.
-- 2026-11-11, Q5 step 1: not run. Putting Defra's login into Fly's secret store needs the owner's say-so first.
-- Q4, Q5 steps 2 to 4 and Q6: not yet run.
+- 2026-11-11, Q4 step 1: the application's own image, built on Fly's builder from `infra/Dockerfile`, ran as the app `openantiquity-spike-web` with no public address. Its schema job created the 28 tables on Managed Postgres, with `CREATE EXTENSION IF NOT EXISTS postgis` passing because Fly had already enabled it. Through Fly's proxy on the private address, `/meta` answered in about 30 ms. A stopped machine took 20.8 s to answer its first request, during which the proxy logged refused connections. A suspended machine answered its first request in 0.53 s.
+- 2026-11-11, Q4 step 2: the event stream stayed open through the proxy for the 600 s it was held, with the longest silence 15 s, and the machine was neither stopped nor suspended under it. Whether the database `LISTEN` connection is still alive after a suspend and resume wasn't tested.
+- 2026-11-11, Q4 step 3: not run. To check when the service first has a public address.
+- 2026-11-11, Q4 step 4: about 320 MB of a 1 GB machine was in use at idle. A photo upload during a tile render wasn't tried.
+- 2026-11-11, Q5 step 1: not run. Putting Defra's login into Fly's secret store needs the owner's say-so, which was asked for. It no longer gates the move: the converted elevation being copied into Google Cloud Storage that night can be copied to Tigris without Defra.
+- 2026-11-11, Q5 step 2: Fly lists a machine with 16 GB of memory (`performance-8x`). Not run.
+- 2026-11-11, Q5 steps 3 and 4: design questions, left to the decision and the move.
+- 2026-11-11, Q6: Fly's pricing page gives machine prices for its US east region only and says they vary by region; London's weren't found. Its cost page says "We don't support billing alerts (yet)" and describes no spending cap. Managed Postgres Basic is $38 a month plus $0.28 a GB, a 1 GB shared machine $6.70 a month in US east, data out $0.02 a GB in Europe, and the first ten certificates are free. Tigris's own prices weren't read.
 
 ## Outcome
 
-(Filled in at resolution.)
+Yes. The two things that could have stopped the move both hold: Tigris honours the three conditional writes the elevation mirror depends on, under a race as well, and Managed Postgres runs PostgreSQL 17 with PostGIS and offers a direct address on which `LISTEN` works. Three workarounds go with it: the application uses the direct database address, never the pooled one Fly attaches by default; PostGIS is enabled through Fly before the schema job runs; and idle machines are suspended, not stopped. Left untested and carried into the move: the visitor's address header behind the public proxy, the `LISTEN` connection across a suspend, memory under load, London's prices, and whether Defra's server accepts Fly's addresses. Fly has no billing alert, so the move has to supply its own. Decision 0018 follows from this spike.
