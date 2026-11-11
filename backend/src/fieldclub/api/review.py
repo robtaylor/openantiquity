@@ -15,6 +15,7 @@ from fieldclub.schemas.findings import (
     NextStepOut,
     ReviewCard,
     ReviewPlace,
+    StrandCount,
     TaskFinding,
     TaskGroupOut,
     TaskGroups,
@@ -23,7 +24,7 @@ from fieldclub.schemas.findings import (
     location_out,
 )
 from fieldclub.services import review, sensitivity
-from fieldclub.vocab import FeatureClass, FindingState, NextStepCode, Tier
+from fieldclub.vocab import FeatureClass, FindingState, NextStepCode, Strand, Tier
 
 router = APIRouter(prefix="/review", tags=["review"])
 
@@ -77,15 +78,19 @@ def tasks(
     page: PageQuery,
     response: Response,
     code: NextStepCode | None = None,
+    strand: Strand | None = None,
 ) -> TaskGroups:
     """Open next steps across findings, grouped by code, so people can pick the help they like.
 
     Without `code`, every group with its first `limit` tasks. With `code`, that
-    group alone, paged by `cursor`. Steps met by a second look are blind.
+    group alone, paged by `cursor`. Steps met by a second look are blind. The
+    evidence step, `need_strand`, also counts its findings by each kind of desk
+    evidence they lack (`strands`), and `code=need_strand&strand=` lists only
+    those lacking that kind.
     """
     if page.cursor is not None and code is None:
         raise BadRequestError("A cursor pages one code's tasks. Give the code too.", code="code_required")
-    groups = review.tasks(db, viewer, code=code, limit=page.limit, cursor=page.cursor)
+    groups = review.tasks(db, viewer, code=code, strand=strand, limit=page.limit, cursor=page.cursor)
     private(response)
     return TaskGroups(
         groups=[
@@ -94,6 +99,7 @@ def tasks(
                 total=group.total,
                 items=[_task(task, viewer) for task in group.tasks],
                 next_cursor=group.next_cursor,
+                strands=[StrandCount(strand=kind, total=total) for kind, total in group.strands],
             )
             for group in groups
         ]

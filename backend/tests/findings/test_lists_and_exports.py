@@ -256,6 +256,38 @@ def test_tasks_are_grouped_by_code_and_page_within_one(
     )
 
 
+def test_evidence_tasks_are_counted_and_listed_by_the_kind_that_would_meet_them(
+    db: Session, client, make_user: MakeUser
+) -> None:
+    finder = make_user()
+    found = []
+    for n in range(3):
+        finding = create(db, finder, lon=LON + 0.01 * n)
+        answer(db, finding, make_user(), Visible.YES, feature_class=FeatureClass.ENCLOSURE)
+        answer(db, finding, make_user(), Visible.YES, feature_class=FeatureClass.ENCLOSURE)
+        found.append(finding)
+    # One has an aerial photo already, from someone else, so it needs anything but that.
+    add_desk_evidence(db, found[0], make_user(), EvidenceKind.AERIAL)
+    groups = {g["code"]: g for g in client.get(f"{API}/review/tasks").json()["groups"]}
+    strand = groups["need_strand"]
+    assert strand["total"] == 3
+    by_strand = {part["strand"]: part["total"] for part in strand["strands"]}
+    assert by_strand == {"lidar": 3, "aerial": 2, "historic_map": 3, "records": 3, "literature": 3}
+    # Only evidence steps are split.
+    assert groups["need_observers"]["strands"] == []
+    aerial = client.get(f"{API}/review/tasks", params={"code": "need_strand", "strand": "aerial"}).json()
+    (group,) = aerial["groups"]
+    assert {item["public_id"] for item in group["items"]} == {f.public_id for f in found[1:]}
+    assert group["total"] == 2
+    assert all("aerial" in item["step"]["missing_strands"] for item in group["items"])
+    wrong = client.get(f"{API}/review/tasks", params={"code": "need_ground", "strand": "aerial"})
+    assert error_code(wrong) == "strand_needs_need_strand"
+    assert (
+        error_code(client.get(f"{API}/review/tasks", params={"strand": "aerial"}))
+        == "strand_needs_need_strand"
+    )
+
+
 # --------------------------------------------------------------------------
 # Rate limits
 # --------------------------------------------------------------------------

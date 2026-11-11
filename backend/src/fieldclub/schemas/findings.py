@@ -54,6 +54,7 @@ from fieldclub.vocab import (
     Relation,
     Sensitivity,
     Stance,
+    Strand,
     Tier,
     Visible,
 )
@@ -740,11 +741,21 @@ class TaskItem(ApiModel):
     finding: TaskFinding | None
 
 
+class StrandCount(ApiModel):
+    """How many findings in the evidence step lack one kind of desk evidence."""
+
+    strand: Strand
+    total: int
+
+
 class TaskGroupOut(ApiModel):
     code: NextStepCode
     total: int
     items: list[TaskItem]
     next_cursor: str | None
+    # For `need_strand` only: its findings counted by each kind of desk evidence they lack, in the
+    # order of `Strand`. A finding lacking several counts under each. Empty for every other code.
+    strands: list[StrandCount]
 
 
 class TaskGroups(ApiModel):

@@ -61,10 +61,11 @@ from enum import StrEnum
 from typing import Any
 
 from geoalchemy2 import Geography
-from sqlalchemy import ColumnElement, Select, cast, exists, func, not_, select
+from sqlalchemy import ColumnElement, Select, Text, cast, column, exists, func, not_, select, true
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
-from fieldclub.errors import ConflictError, ForbiddenError, NotFoundError
+from fieldclub.errors import BadRequestError, ConflictError, ForbiddenError, NotFoundError
 from fieldclub.models import Finding, Observation, User
 from fieldclub.models.common import SRID
 from fieldclub.schemas.common import int_from_cursor, offset_from_cursor, offset_page, paginate
@@ -73,6 +74,7 @@ from fieldclub.services.confidence import CHECK_PHRASES, NextStep, load_next_ste
 from fieldclub.services.findings import ANSWER_CODES, Reassessment
 from fieldclub.vocab import (
     CHECK_EXPLANATIONS,
+    DESK_STRANDS,
     ActivityKind,
     Check,
     Explanation,
@@ -80,6 +82,7 @@ from fieldclub.vocab import (
     FindingState,
     NextStepCode,
     Period,
+    Strand,
     Tier,
     Visible,
 )
@@ -508,13 +511,54 @@ class TaskGroup:
     total: int
     tasks: list[Task]
     next_cursor: str | None
+    # For the evidence step, how many of its findings each kind of desk evidence would help,
+    # in `Strand` order. A finding missing several kinds counts under each. Empty for other steps.
+    strands: list[tuple[Strand, int]]
 
 
-def _task_query(code: NextStepCode, viewer: User | None) -> Select[Finding]:
+class StrandNeedsStepError(BadRequestError):
+    code = "strand_needs_need_strand"
+    message = "Only the evidence step, need_strand, is split by strand. Give code=need_strand with it."
+
+
+def _missing(strand: Strand) -> ColumnElement[bool]:
+    """Findings whose stored evidence step lists `strand` among the kinds it lacks."""
+    step = [{"code": NextStepCode.NEED_STRAND.value, "missing_strands": [strand.value]}]
+    return Finding.assessment["next_steps"].contains(step)
+
+
+def _task_query(code: NextStepCode, viewer: User | None, strand: Strand | None = None) -> Select[Finding]:
     query = select(Finding).where(Finding.open_steps.contains([code.value]))
     if code in ANSWER_CODES:
         return query.where(_answerable(viewer)).order_by(*_queue_order(viewer, None))
+    if strand is not None:
+        query = query.where(_missing(strand))
     return query.where(Finding.hidden_at.is_(None)).order_by(Finding.updated_at.desc(), Finding.id.desc())
+
+
+def _strand_counts(db: Session, viewer: User | None) -> list[tuple[Strand, int]]:
+    """How many findings with an open evidence step lack each kind, read from their stored assessments."""
+    listed = _task_query(NextStepCode.NEED_STRAND, viewer).order_by(None).subquery()
+    steps = (
+        func.jsonb_array_elements(listed.c.assessment["next_steps"])
+        .table_valued(column("value", JSONB))
+        .alias("step")
+    )
+    missing = (
+        func.jsonb_array_elements_text(steps.c.value["missing_strands"])
+        .table_valued(column("value", Text))
+        .alias("kind")
+    )
+    rows = db.execute(
+        select(missing.c.value, func.count(func.distinct(listed.c.id)))
+        .select_from(listed)
+        .join(steps, true())
+        .join(missing, true())
+        .where(steps.c.value["code"].astext == NextStepCode.NEED_STRAND.value)
+        .group_by(missing.c.value)
+    ).all()
+    counted = {Strand(kind): count for kind, count in rows}
+    return [(strand, counted.get(strand, 0)) for strand in Strand if strand in DESK_STRANDS]
 
 
 def _step(steps: tuple[NextStep, ...], code: NextStepCode) -> NextStep:
@@ -526,11 +570,17 @@ def tasks(
     viewer: User | None,
     *,
     code: NextStepCode | None = None,
+    strand: Strand | None = None,
     limit: int,
     cursor: str | None = None,
 ) -> list[TaskGroup]:
-    """Open next steps across findings, grouped by code. The cursor pages a single code."""
+    """Open next steps across findings, grouped by code. The cursor pages a single code.
+
+    `strand`, with `code` the evidence step, lists only the findings that lack that kind.
+    """
     assert code is not None or cursor is None, "a cursor pages one code's tasks"
+    if strand is not None and code is not NextStepCode.NEED_STRAND:
+        raise StrandNeedsStepError()
     groups = []
     # Each finding's stored next steps, decoded once even when it has a task in several groups.
     steps: dict[int, tuple[NextStep, ...]] = {}
@@ -543,7 +593,7 @@ def tasks(
         return Task(finding, each, _step(steps[finding.id], each))
 
     for each in [code] if code is not None else list(NextStepCode):
-        query = _task_query(each, viewer)
+        query = _task_query(each, viewer, strand)
         total = db.scalar(select(func.count()).select_from(query.order_by(None).subquery()))
         assert total is not None
         rows, next_cursor = _offset_page(db, query, limit=limit, cursor=cursor)
@@ -553,6 +603,7 @@ def tasks(
                 total=total,
                 tasks=[task(f, each) for f in rows],
                 next_cursor=next_cursor,
+                strands=_strand_counts(db, viewer) if each is NextStepCode.NEED_STRAND else [],
             )
         )
     return groups
