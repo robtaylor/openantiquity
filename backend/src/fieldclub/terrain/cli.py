@@ -16,6 +16,18 @@ bucket, its CRC32C) is checked after. `--concurrency` is how many tiles are in
 hand at once. At most `FIELDCLUB_TERRAIN_FETCH_CONCURRENCY` of them are being
 downloaded, each over its own SFTP connection, kept open from tile to tile.
 
+Ctrl-C or SIGTERM starts no new tile: the tiles in hand finish, the command
+says what was left, and the same command resumes. A second Ctrl-C, or a run
+killed outright, leaves its bucket locks behind, and a rerun waits for them:
+a lock that its holder stops refreshing is taken over after
+`FIELDCLUB_TERRAIN_LOCK_STALE_S` (90 s by default). A tile that `mirror` names is tried even if it failed
+lately; map requests wait before fetching it again (`terrain/mirror.py`).
+
+`national build` needs about 8 GB of local disk in the work directory for all
+of England: 4.2 GB of 50 km chunks, kept between builds, and the 3.5 GB COG,
+staged there before it is uploaded. A build removes what a killed build left
+behind.
+
 The commands that store or show elevation write its `sources` rows first,
 which needs the database. `--skip-sources` leaves that to a later
 `fieldclub-terrain sources` where the database can be reached.
@@ -24,12 +36,16 @@ which needs the database. `--skip-sources` leaves that to a later
 from __future__ import annotations
 
 import argparse
+import contextlib
+import itertools
 import logging
+import os
+import signal
 import sys
 import threading
 import time
-from collections.abc import Callable, Iterable
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections.abc import Callable, Iterable, Iterator
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import TextIO
 
@@ -140,6 +156,43 @@ class Progress:
         logger.info("%s", self.line())
 
 
+class RunInterruptedError(Exception):
+    """A run stopped by Ctrl-C or SIGTERM once the jobs in hand had finished."""
+
+    def __init__(self, done: int, failed: list[str], left: int) -> None:
+        super().__init__(f"interrupted with {left} jobs not started")
+        self.done, self.failed, self.left = done, failed, left
+
+
+@contextlib.contextmanager
+def _stop_on_signals() -> Iterator[threading.Event]:
+    """An event set by the first Ctrl-C or SIGTERM.
+
+    A second Ctrl-C ends the process at once, without waiting for the jobs in
+    hand, which leaves their locks to go stale. Only the main thread can
+    handle signals, so elsewhere the event is never set.
+    """
+    stop = threading.Event()
+    if threading.current_thread() is not threading.main_thread():
+        yield stop
+        return
+
+    def handle(signum: int, frame: object) -> None:
+        if stop.is_set() and signum == signal.SIGINT:
+            sys.stderr.write("\nstopped without waiting; the same command resumes\n")
+            sys.stderr.flush()
+            os._exit(130)
+        stop.set()
+        sys.stderr.write("\nstopping once the jobs in hand finish; Ctrl-C again to stop at once\n")
+
+    previous = {signum: signal.signal(signum, handle) for signum in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        yield stop
+    finally:
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
+
+
 def run_parallel[T](
     items: Iterable[T],
     work: Callable[[T], object],
@@ -153,58 +206,64 @@ def run_parallel[T](
 ) -> list[str]:
     """Run `work` on each item with a pool, showing progress by `name`.
 
-    Stops starting new items after an error of a type in `stop_on`, or after
-    `max_failures_in_a_row` failures with no success between them. Returns the
-    names that failed or were never started.
+    At most `concurrency` jobs are in hand at once. Any exception from one job
+    fails that job only. No new job starts after an error of a type in
+    `stop_on`, or after `max_failures_in_a_row` failures with no success
+    between them. Returns the names that failed or were never started.
+
+    After Ctrl-C or SIGTERM no new job starts either: the ones running finish
+    (and release their locks), the progress line is finished, and
+    `RunInterruptedError` says what was left.
     """
+    assert concurrency >= 1, "a run needs at least one worker"
     assert max_failures_in_a_row is None or max_failures_in_a_row >= 1, "the limit must be at least one"
     jobs = list(items)
     total_bytes = sum(size(job) for job in jobs) if size is not None else None
     progress = Progress(len(jobs), label, total_bytes=total_bytes)
     failed: list[str] = []
-    never_started: list[str] = []
-    stop = threading.Event()
-    counted = threading.Lock()
+    queue = iter(jobs)
+    running: dict[Future[object], T] = {}
     in_a_row = 0
+    # Set once failures say to start nothing more. Only the main thread starts jobs, so none slips past.
+    halted = False
 
-    def guarded(job: T) -> bool:
-        """Run `job` unless the run has been told to stop. Whether it was started.
-
-        The decision to stop is taken here, in the worker, so that no further
-        item starts while the main thread is still catching up.
-        """
-        nonlocal in_a_row
-        if stop.is_set():
-            return False
+    def collect(future: Future[object]) -> None:
+        nonlocal in_a_row, halted
+        job = running.pop(future)
+        job_size = size(job) if size is not None else 0
         try:
-            work(job)
-        except (AppError, OSError) as exc:
-            with counted:
-                in_a_row += 1
-                limit_reached = max_failures_in_a_row is not None and in_a_row >= max_failures_in_a_row
-                if (isinstance(exc, stop_on) or limit_reached) and not stop.is_set():
-                    logger.error("Stopping %s after %s: no further items will be started", label, name(job))
-                    stop.set()
-            raise
-        with counted:
-            in_a_row = 0
-        return True
+            future.result()
+        except Exception as exc:
+            progress.step(name(job), failed=True, size=job_size)
+            failed.append(name(job))
+            # The type and message only: a traceback could carry what the job's libraries chained.
+            logger.error("%s failed: %s: %s", name(job), type(exc).__name__, getattr(exc, "message", exc))
+            in_a_row += 1
+            limit_reached = max_failures_in_a_row is not None and in_a_row >= max_failures_in_a_row
+            if (isinstance(exc, stop_on) or limit_reached) and not halted:
+                logger.error("Stopping %s after %s: no further items will be started", label, name(job))
+                halted = True
+            return
+        progress.step(name(job), size=job_size)
+        in_a_row = 0
 
-    with ThreadPoolExecutor(max_workers=concurrency) as pool:
-        futures = {pool.submit(guarded, job): job for job in jobs}
-        for future in as_completed(futures):
-            job = futures[future]
-            job_size = size(job) if size is not None else 0
-            try:
-                if not future.result():
-                    never_started.append(name(job))
-                    continue
-                progress.step(name(job), size=job_size)
-            except (AppError, OSError) as exc:
-                progress.step(name(job), failed=True, size=job_size)
-                failed.append(name(job))
-                logger.error("%s failed: %s", name(job), exc)
+    with _stop_on_signals() as stop, ThreadPoolExecutor(max_workers=concurrency) as pool:
+
+        def submit(count: int) -> None:
+            for job in itertools.islice(queue, 0 if stop.is_set() or halted else count):
+                running[pool.submit(work, job)] = job
+
+        submit(concurrency)
+        while running:
+            finished, _ = wait(running, return_when=FIRST_COMPLETED)
+            for future in finished:
+                collect(future)
+                submit(1)
     progress.finish()
+    left = len(jobs) - progress.done
+    if stop.is_set() and left:
+        raise RunInterruptedError(progress.done, sorted(failed), left)
+    never_started = [name(job) for job in queue]
     if never_started:
         logger.error("%s: %d of %d items were never started", label, len(never_started), len(jobs))
     return sorted(failed + never_started)
@@ -235,7 +294,8 @@ def cmd_mirror(terrain: Terrain, args: argparse.Namespace) -> int:
     print(f"{len(tiles)} tiles asked for, {len(missing)} to add ({size / 1e9:.1f} GB of source)")
     failed = run_parallel(
         missing,
-        lambda tile: terrain.mirror.ensure(tile.name),
+        # An operator asking for a tile tries it again even if it failed lately.
+        lambda tile: terrain.mirror.ensure(tile.name, retry_failed=True),
         args.concurrency,
         "mirror",
         name=lambda tile: tile.name,
@@ -420,6 +480,13 @@ def main(argv: list[str] | None = None, *, terrain: Terrain | None = None) -> in
     except AppError as exc:
         print(f"error: {exc.message}", file=sys.stderr)
         return 1
+    except RunInterruptedError as stopped:
+        print(
+            f"interrupted after {stopped.done} jobs ({len(stopped.failed)} failed), {stopped.left} not "
+            "started. Run the same command again to resume.",
+            file=sys.stderr,
+        )
+        return 130
 
 
 if __name__ == "__main__":

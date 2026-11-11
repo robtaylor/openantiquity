@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 from pathlib import Path
 
 import numpy as np
@@ -19,6 +20,7 @@ from fieldclub.terrain.national import (
     OVERVIEW_COUNT,
     RESOLUTION_M,
     Builder,
+    BuildRunningError,
     Manifest,
     NationalStore,
     NothingToBuildError,
@@ -163,3 +165,32 @@ def test_a_manifest_of_another_format_is_ignored(tmp_path: Path) -> None:
 def test_an_empty_mirror_has_nothing_to_build(tmp_path: Path, sources: Path) -> None:
     with pytest.raises(NothingToBuildError):
         builder(local_mirror(tmp_path, sources=sources), tmp_path).build()
+
+
+def test_a_build_removes_what_a_killed_build_left_behind(tmp_path: Path, sources: Path) -> None:
+    mirror = mirror_of(tmp_path, sources, NORTH_CHUNK)
+    work = tmp_path / "work" / "national"
+    (work / "chunks").mkdir(parents=True)
+    # A staged COG and VRT of a build whose tile set has since changed, and a half-written chunk.
+    leftovers = [
+        work / "england-4c3b42f570a6.tif.tmp",
+        work / "england-4c3b42f570a6.tif.tmp.vrt",
+        work / "chunks" / ".08-03.tif.1a2b3c4d.tmp.tif",
+    ]
+    for leftover in leftovers:
+        leftover.write_bytes(b"x" * 1000)
+    builder(mirror, tmp_path).build()
+    assert [path for path in leftovers if path.exists()] == []
+    assert list((work / "chunks").glob("*.tif"))
+
+
+def test_a_second_build_in_the_same_work_directory_is_refused(tmp_path: Path, sources: Path) -> None:
+    mirror = mirror_of(tmp_path, sources, NORTH_CHUNK)
+    work = tmp_path / "work" / "national"
+    work.mkdir(parents=True)
+    with (work / "build.lock").open("w") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        with pytest.raises(BuildRunningError) as raised:
+            builder(mirror, tmp_path).build()
+        assert raised.value.status_code == 409
+    assert builder(mirror, tmp_path).build().tiles == 2

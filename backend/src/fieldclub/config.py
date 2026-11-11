@@ -164,9 +164,10 @@ class Settings(BaseSettings):
     terrain_national: str = ""
     # Downloads from the bulk supply that may run at once in one process.
     terrain_fetch_concurrency: int = Field(default=2, ge=1, le=8)
-    # A mirror in a bucket is filled under a lock object per tile. One older
-    # than this is taken to be left by a process that died.
-    terrain_lock_stale_s: float = Field(default=900.0, gt=0)
+    # A mirror in a bucket is filled under a lock object per tile, which its
+    # holder rewrites every quarter of this. One not rewritten for this long is
+    # taken to be left by a process that died. Kept below the wait.
+    terrain_lock_stale_s: float = Field(default=90.0, gt=0)
     # How long a request waits for another server to finish fetching a tile.
     terrain_lock_wait_s: float = Field(default=120.0, ge=0)
     # Where downloads and conversions are staged before they enter the mirror.

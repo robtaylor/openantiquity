@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import io
+import os
+import signal
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -237,3 +240,40 @@ def test_a_success_resets_the_count_of_failures_in_a_row() -> None:
             raise FetchFailedError("failed")
 
     assert len(cli.run_parallel(range(7), work, 1, "test", max_failures_in_a_row=3)) == 5
+
+
+def test_one_job_raising_anything_fails_that_job_and_the_run_carries_on() -> None:
+    def work(job: int) -> None:
+        if job == 3:
+            raise ValueError("a decoder blew up")
+
+    assert cli.run_parallel(range(10), work, 2, "jobs") == ["3"]
+
+
+@pytest.mark.parametrize("signum", [signal.SIGINT, signal.SIGTERM])
+def test_an_interrupt_starts_no_new_job_and_says_what_was_left(
+    signum: int, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    started: list[int] = []
+    lock = threading.Lock()
+
+    def work(job: int) -> None:
+        with lock:
+            started.append(job)
+        if job == 0:
+            os.kill(os.getpid(), signum)
+        time.sleep(0.05)
+
+    def run(terrain: object, args: object) -> int:
+        cli.run_parallel(range(40), work, 2, "test")
+        return 0
+
+    monkeypatch.setitem(cli.COMMANDS, "info", run)
+    handlers = signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM)
+    assert cli.main(["info"], terrain=object()) == 130  # type: ignore[arg-type]
+    # The two in hand, and the one that replaced the first if it was submitted before the signal landed.
+    assert len(started) <= 3
+    err = capsys.readouterr().err
+    assert f"interrupted after {len(started)} jobs (0 failed), {40 - len(started)} not started" in err
+    assert "Run the same command again to resume" in err
+    assert (signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM)) == handlers

@@ -27,10 +27,18 @@ resumes from the last chunk it finished, and a reader never sees a part
 built file. Readers keep the previous build until their next look at
 `national.json`, so the build before it is kept and older ones are removed.
 The overview is replaced as a whole: the COG layout can't be updated in place.
+
+All of England needs about 8 GB of local disk in the work directory: 4.2 GB
+of chunks, kept between builds, and the 3.5 GB COG staged before it is
+uploaded. One build runs at a time per work directory (a file lock) and per
+bucket (`BUILD_LOCK`), and each starts by removing the staged files a killed
+build left behind.
 """
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import hashlib
 import json
 import logging
@@ -38,7 +46,7 @@ import math
 import time
 import uuid
 from collections import defaultdict
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -50,7 +58,7 @@ import rasterio
 import rasterio.shutil
 from rasterio.transform import from_origin
 
-from fieldclub.errors import AppError
+from fieldclub.errors import AppError, ConflictError
 from fieldclub.terrain.blobs import Folder, ObjectLock
 from fieldclub.terrain.catalogue import Catalogue, tile_origin
 from fieldclub.terrain.cog import check_cog, creation_options
@@ -76,6 +84,11 @@ _EDITION_TAG = "FIELDCLUB_EDITION"
 
 assert CHUNK_M % RESOLUTION_M == 0, "a chunk must be a whole number of pixels"
 assert 5_000 % RESOLUTION_M == 0, "a 5 km tile must be a whole number of pixels"
+
+
+class BuildRunningError(ConflictError):
+    code = "overview_build_running"
+    message = "Another overview build is running in this work directory."
 
 
 class NothingToBuildError(AppError):
@@ -305,11 +318,35 @@ class Builder:
         return self.mirror.catalogue
 
     def build(self) -> BuildReport:
-        if not self.store.folder.shared:
-            return self._build()
-        # Two builds into one bucket would each publish over the other.
-        with self._lock.hold(BUILD_LOCK, done=lambda: False):
-            return self._build()
+        with self._local_lock():
+            self._remove_leftovers()
+            if not self.store.folder.shared:
+                return self._build()
+            # Two builds into one bucket would each publish over the other.
+            with self._lock.hold(BUILD_LOCK, done=lambda: False):
+                return self._build()
+
+    @contextlib.contextmanager
+    def _local_lock(self) -> Iterator[None]:
+        """Refuse a second build in the same work directory, which would share its chunks and staged files."""
+        folder = self.work_dir / "national"
+        folder.mkdir(parents=True, exist_ok=True)
+        with (folder / "build.lock").open("w") as handle:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise BuildRunningError() from None
+            try:
+                yield
+            finally:
+                fcntl.flock(handle, fcntl.LOCK_UN)
+
+    def _remove_leftovers(self) -> None:
+        """Remove the staged COG, VRT and chunk files of a build that was killed, which can be gigabytes."""
+        folder = self.work_dir / "national"
+        for leftover in [*folder.glob("england-*.tif.tmp*"), *self.chunks_dir.glob(".*.tmp.tif")]:
+            logger.info("Removing %s, left by a build that didn't finish", leftover)
+            leftover.unlink(missing_ok=True)
 
     def _build(self) -> BuildReport:
         started = time.monotonic()

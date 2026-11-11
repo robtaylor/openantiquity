@@ -9,7 +9,8 @@ through the methods here, so the two kinds of folder behave the same:
 - `create` writes a small object only if nothing is there yet, which is what
   `ObjectLock` is built on;
 - `stat` and `delete_if` let a lock that has been left behind be taken over by
-  exactly one of the processes that find it.
+  exactly one of the processes that find it, and `replace_if` lets its holder
+  refresh it without overwriting a lock someone else has taken since.
 
 `google-cloud-storage` is imported on first use, so development and the tests
 that don't touch a bucket never load it.
@@ -89,6 +90,10 @@ class Folder(Protocol):
 
     def delete_if(self, name: str, token: str) -> bool:
         """Remove the object only if it is still the one `stat` described. True when this call removed it."""
+        ...
+
+    def replace_if(self, name: str, data: bytes, token: str) -> bool:
+        """Replace the object only if it is still the one `stat` described. True when this replaced it."""
         ...
 
 
@@ -185,6 +190,14 @@ class LocalFolder:
         if info is None or info.token != token:
             return False
         self.delete(name)
+        return True
+
+    def replace_if(self, name: str, data: bytes, token: str) -> bool:
+        # Not atomic, which is enough: a local folder isn't shared between machines.
+        info = self.stat(name)
+        if info is None or info.token != token:
+            return False
+        self.write(name, data, "application/json")
         return True
 
     def __repr__(self) -> str:
@@ -297,6 +310,16 @@ class GcsFolder:
             return False
         return True
 
+    def replace_if(self, name: str, data: bytes, token: str) -> bool:
+        from google.api_core.exceptions import NotFound, PreconditionFailed
+
+        blob = self._get_bucket().blob(self._object(name))
+        try:
+            blob.upload_from_string(data, content_type="application/json", if_generation_match=int(token))
+        except (NotFound, PreconditionFailed):
+            return False
+        return True
+
     def __repr__(self) -> str:
         return f"GcsFolder('gs://{self.bucket_name}/{self.prefix}')"
 
@@ -329,17 +352,23 @@ class ObjectLock:
     """A lock that is an object in a folder, so processes on different machines can share it.
 
     `acquire(name)` creates `<name>` only if it doesn't exist. Whoever creates
-    it holds the lock until `release`. A lock older than `stale_after_s` is
+    it holds the lock until `release`. `hold` rewrites the object every
+    `heartbeat_s` (a quarter of `stale_after_s` by default) while the work
+    runs, so the object's age is the time since its holder last showed it was
+    alive, however long the work takes. A lock older than `stale_after_s` is
     treated as abandoned by a process that died: one waiter removes it, by
     generation, and the waiters race to create it again, so exactly one wins.
+    Keep `stale_after_s` below `wait_s`, so a waiter outlasts a lock left by a
+    crash.
 
     `done()` says whether the work the lock guards has been finished by
     someone else, so a waiter can stop waiting as soon as it is.
     """
 
     folder: Folder
-    stale_after_s: float = 900.0
+    stale_after_s: float = 90.0
     wait_s: float = 120.0
+    heartbeat_s: float | None = None
     poll_s: float = 0.5
     max_poll_s: float = 5.0
     sleep: Callable[[float], None] = time.sleep
@@ -352,15 +381,44 @@ class ObjectLock:
         if owner is None:
             yield False
             return
+        stop = threading.Event()
+        beat = threading.Thread(
+            target=self._beat, args=(name, owner, stop), name=f"heartbeat {name}", daemon=True
+        )
+        beat.start()
         try:
             yield True
         finally:
+            stop.set()
+            beat.join()
             self.release(name, owner)
+
+    def _body(self, owner: str) -> bytes:
+        return json.dumps({"owner": owner, "since": self.now().isoformat()}).encode()
+
+    def _beat(self, name: str, owner: str, stop: threading.Event) -> None:
+        interval = self.heartbeat_s if self.heartbeat_s is not None else self.stale_after_s / 4
+        assert 0 < interval < self.stale_after_s, "a heartbeat must come before the lock goes stale"
+        while not stop.wait(interval):
+            try:
+                if not self.refresh(name, owner):
+                    logger.warning("The lock %s is no longer ours; another process may take over", name)
+                    return
+            except Exception:
+                # A bucket that can't be reached this time; the next beat tries again.
+                logger.exception("Couldn't refresh the lock %s", name)
+
+    def refresh(self, name: str, owner: str) -> bool:
+        """Rewrite a held lock so it is young again. False when it is no longer ours."""
+        info = self.folder.stat(name)
+        if info is None or not self._ours(name, owner):
+            return False
+        return self.folder.replace_if(name, self._body(owner), info.token)
 
     def acquire(self, name: str, done: Callable[[], bool]) -> str | None:
         """The owner token once the lock is held, or None when `done()` became true while waiting."""
         owner = _owner_id()
-        body = json.dumps({"owner": owner, "since": self.now().isoformat()}).encode()
+        body = self._body(owner)
         started = time.monotonic()
         wait = self.poll_s
         while True:

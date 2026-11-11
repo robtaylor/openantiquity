@@ -21,13 +21,14 @@ import rasterio
 
 from fieldclub.errors import DataIntegrityError
 from fieldclub.storage import GcsStorage, StorageNotFoundError
-from fieldclub.terrain.blobs import GcsFolder, LockTimeoutError, ObjectLock
+from fieldclub.terrain.blobs import GcsFolder, LocalFolder, LockTimeoutError, ObjectLock
 from fieldclub.terrain.catalogue import SourceTile
 from fieldclub.terrain.grid import tile_at
 from fieldclub.terrain.mirror import Fetched, GcsMirrorStore, LocalSourceFetcher, Mirror
 from fieldclub.terrain.national import Builder, NationalStore
 from fieldclub.terrain.overview import Overview
 from fieldclub.terrain.service import Terrain
+from tests.helpers import settings
 from tests.terrain.fakes import TO_LONLAT, catalogue_of, decode_png, small_cog, write_source_tile
 from tests.terrain.gcs import FakeGcs, serve_for_gdal
 
@@ -177,6 +178,52 @@ def test_a_create_that_succeeded_before_its_retry_failed_is_still_ours(
     monkeypatch.setattr(gcs, "put", stored_then_refused)
     lock = quick_lock(folder, wait_s=1)
     assert lock.acquire("locks/x.lock", done=lambda: False) is not None
+
+
+def test_a_held_lock_is_refreshed_so_long_work_is_not_taken_over(gcs: FakeGcs) -> None:
+    folder = GcsFolder("b", client=gcs.client())
+    holder = quick_lock(folder, stale_after_s=0.3, heartbeat_s=0.05)
+    rival = quick_lock(folder, stale_after_s=0.3, wait_s=0)
+    with holder.hold("locks/build.lock", done=lambda: False) as held:
+        assert held
+        # Twice the stale age: without the heartbeat the rival would take it over here.
+        time.sleep(0.6)
+        with pytest.raises(LockTimeoutError):
+            rival.acquire("locks/build.lock", done=lambda: False)
+    assert not folder.exists("locks/build.lock")
+
+
+def test_a_lock_taken_over_is_not_refreshed_over_its_new_owner(gcs: FakeGcs) -> None:
+    folder = GcsFolder("b", client=gcs.client())
+    lock = quick_lock(folder)
+    owner = lock.acquire("locks/x.lock", done=lambda: False)
+    assert owner is not None
+    assert lock.refresh("locks/x.lock", owner)
+    folder.delete("locks/x.lock")
+    assert folder.create("locks/x.lock", json.dumps({"owner": "another machine"}).encode())
+    assert not lock.refresh("locks/x.lock", owner)
+    data = folder.read("locks/x.lock")
+    assert data is not None
+    assert json.loads(data)["owner"] == "another machine"
+
+
+def test_replace_if_writes_only_over_the_object_that_was_looked_at(gcs: FakeGcs, tmp_path: Path) -> None:
+    for folder in (GcsFolder("b", client=gcs.client()), LocalFolder(tmp_path)):
+        folder.write("x.json", b"1", "application/json")
+        info = folder.stat("x.json")
+        assert info is not None
+        assert folder.replace_if("x.json", b"2", info.token)
+        assert folder.read("x.json") == b"2"
+        assert not folder.replace_if("x.json", b"3", info.token)
+        assert not folder.replace_if("missing.json", b"3", info.token)
+        assert folder.read("x.json") == b"2"
+
+
+def test_a_lock_left_by_a_crash_is_taken_over_within_a_request_s_wait() -> None:
+    defaults = settings()
+    assert defaults.terrain_lock_stale_s < defaults.terrain_lock_wait_s
+    lock = ObjectLock(GcsFolder("b", client=FakeGcs().client()))
+    assert lock.stale_after_s < lock.wait_s
 
 
 # --------------------------------------------------------------------------
