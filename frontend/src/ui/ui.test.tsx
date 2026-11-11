@@ -300,6 +300,11 @@ describe("Avatar", () => {
     render(<Avatar name="Mary Leakey" />);
     expect(screen.getByRole("img", { name: "Mary Leakey" })).toHaveTextContent("ML");
   });
+
+  it("loads a picture from elsewhere without telling its host where it is shown", () => {
+    const { container } = render(<Avatar name="Mary Leakey" src="https://avatars.example.org/u/1" />);
+    expect(container.querySelector("img")).toHaveAttribute("referrerpolicy", "no-referrer");
+  });
 });
 
 describe("Toast", () => {

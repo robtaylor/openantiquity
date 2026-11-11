@@ -26,6 +26,12 @@
   opacity: 0.5;
 }
 
+/* Busy, but kept focusable so focus isn't lost while it works, as a save in a dialog is. */
+.fc-button[aria-disabled="true"] {
+  cursor: progress;
+  opacity: 0.5;
+}
+
 .fc-button svg {
   flex: none;
 }

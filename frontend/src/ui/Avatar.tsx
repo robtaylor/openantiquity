@@ -33,7 +33,8 @@ export function Avatar({ name, handle, src, size = 32 }: AvatarProps) {
   const style = { "--avatar-size": `${size}px`, "--avatar-hue": hueOf(handle ?? name) } as CSSProperties;
   return (
     <span className="fc-avatar" style={style} role="img" aria-label={name}>
-      {src ? <img src={src} alt="" /> : initialsOf(name)}
+      {/* Pictures come from sign-in providers: their hosts aren't told which page shows them. */}
+      {src ? <img src={src} alt="" referrerPolicy="no-referrer" /> : initialsOf(name)}
     </span>
   );
 }
