@@ -33,6 +33,7 @@ from sqlalchemy import (
     ColumnElement,
     Integer,
     Select,
+    case,
     cast,
     func,
     literal,
@@ -56,7 +57,7 @@ from fieldclub.schemas.common import (
     offset_page,
     paginate,
 )
-from fieldclub.services import findings, geo, record_tiles, sensitivity
+from fieldclub.services import findings, geo, name_rank, record_tiles, sensitivity
 from fieldclub.vocab import COVERAGE_RECORD_TYPES, FeatureClass, FindingState
 
 # The search box sends at most this much. The API refuses longer, and the
@@ -154,6 +155,11 @@ def fold(text: str) -> str:
     """
     folded = unicodedata.normalize("NFKC", unicodedata.normalize("NFKC", text).lower())
     return folded.replace("i̇", "i")
+
+
+def name_words(text: str) -> list[str]:
+    """Every word of a name, as `query_words` reads a query's but with no limit on their number or length."""
+    return _WORD.findall(fold(text))
 
 
 def query_words(text: str) -> list[str]:
@@ -328,6 +334,7 @@ def search(
     bbox: tuple[float, float, float, float] | None = None,
     limit: int = 50,
     cursor: str | None = None,
+    by_name: bool = False,
 ) -> tuple[list[RecordResult], str | None]:
     """Records matching the text, filters and box, best match first. Returns a page and the next cursor.
 
@@ -338,6 +345,10 @@ def search(
     with how closely the name is spelt like the query. Without text,
     records come in name order. A search that runs past `SEARCH_TIMEOUT_MS`
     raises `SearchTimeoutError`.
+
+    `by_name` orders the matches as the search box does (`name_rank`): by
+    band, then by how the name fits the query and how much the thing named
+    matters, then by the rank above.
     """
     assert 1 <= limit <= 200, "limit must be between 1 and 200"
     offset = offset_from_cursor(cursor)
@@ -361,7 +372,17 @@ def search(
             # The candidates carry the filters already, so the outer query needs only their ids.
             candidates = _candidates(terms, sources=sources, categories=categories, bbox=bbox)
             statement = _base().where(Record.id.in_(select(candidates.c.id)))
-            statement = statement.order_by(rank.desc(), Record.id)
+            if by_name:
+                fit = name_rank.fit_sql(Record.name, terms.phrase)
+                weight = name_rank.weight_sql(Record.source_key, Record.category)
+                band = name_rank.band_sql(fit, weight)
+                # Loose matches go by the rank, which holds how alike they are, before the weight.
+                fitting_weight = case((band == name_rank.LOOSE, name_rank.NATIONAL), else_=weight)
+                statement = statement.order_by(
+                    band, fit.desc(), fitting_weight, rank.desc(), weight, Record.id
+                )
+            else:
+                statement = statement.order_by(rank.desc(), Record.id)
         else:
             statement = _filters(_base(), sources=sources, categories=categories, bbox=bbox)
             statement = statement.order_by(Record.name, Record.id)

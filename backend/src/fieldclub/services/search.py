@@ -11,7 +11,7 @@
 
 The first four give at most one result each and come first. Places and
 records follow, ranked together by how well their names match the query
-(`by_name`). Each of their queries is cut off at
+and how much the thing named matters (`by_name`, `name_rank`). Each of their queries is cut off at
 `records.SEARCH_TIMEOUT_MS`, and a query that runs out of time leaves the
 names out, not an error. The limit holds for each statement, not for the
 names as a whole. A finding is placed where this viewer may see
@@ -32,13 +32,18 @@ from sqlalchemy.orm import Session
 from fieldclub import gridref
 from fieldclub.models import Place, Source, User
 from fieldclub.schemas.records import GeoResultType
-from fieldclub.services import findings, ids, records, sensitivity
+from fieldclub.services import findings, ids, name_rank, records, sensitivity
 from fieldclub.vocab import FindingState
 
 logger = logging.getLogger(__name__)
 
 PLACE_LIMIT = 5
-RECORD_LIMIT = 5
+# More records than places, because the minor names that fit (listed buildings, reports,
+# radiocarbon dates) would otherwise take every record's place.
+RECORD_LIMIT = 10
+# How many more records than are shown are read, so that one name repeated by a source (73
+# radiocarbon dates called "Stonehenge") is shown once and leaves room for others.
+RECORD_READ_FACTOR = 4
 # How many places like the query, by spelling, are ranked at most. A common
 # word such as "hill" is like tens of thousands of names.
 PLACE_CANDIDATES = 2000
@@ -72,6 +77,8 @@ class GeoHit:
     obscured: bool = False
     # A place's or record's source, so its licence and attribution go with it.
     source: Source | None = None
+    # How much what is named matters in the search box (`name_rank`), lower first.
+    weight: int = name_rank.OTHER
 
 
 def _grid_detail(lon: float, lat: float) -> str | None:
@@ -233,21 +240,32 @@ def places(db: Session, text: str, limit: int = PLACE_LIMIT) -> list[GeoHit]:
                 zoom=PLACE_ZOOM.get(place.kind.lower(), 14),
                 ref=str(place.id),
                 source=source,
+                weight=name_rank.place_weight(),
             )
         )
     return hits
 
 
 def record_hits(db: Session, text: str, limit: int = RECORD_LIMIT) -> list[GeoHit]:
-    """Records named like the query. A record search that runs out of time gives none, not an error."""
+    """Records named like the query, best first as the search box ranks names, each name once a source.
+
+    A record search that runs out of time gives none, not an error.
+    """
     try:
-        found, _ = records.search(db, text, limit=limit)
+        found, _ = records.search(db, text, limit=limit * RECORD_READ_FACTOR, by_name=True)
     except records.SearchTimeoutError:
         logger.warning("Record search for %r ran out of time; the search box shows no records", text)
         return []
-    hits = []
+    hits: list[GeoHit] = []
+    shown: set[tuple[str, str]] = set()
     for result in found:
         record = result.record
+        name = (" ".join(records.name_words(record.name)), record.source_key)
+        if name in shown:
+            continue
+        shown.add(name)
+        if len(hits) == limit:
+            break
         shape = to_shape(record.geom)
         detail = " · ".join(part for part in (record.record_type, result.source.name) if part)
         hits.append(
@@ -261,6 +279,7 @@ def record_hits(db: Session, text: str, limit: int = RECORD_LIMIT) -> list[GeoHi
                 bbox=None if shape.geom_type == "Point" else shape.bounds,
                 ref=str(record.id),
                 source=result.source,
+                weight=name_rank.record_weight(record.source_key, record.category),
             )
         )
     return hits
@@ -287,26 +306,35 @@ def geo_search(db: Session, q: str, viewer: User | None, *, limit: int = 10) -> 
 
 
 def by_name(db: Session, text: str, hits: list[GeoHit]) -> list[GeoHit]:
-    """Places and records in one order, by how well each name matches the whole query.
+    """Places and records in one order, by how well each name fits the query, then what it names.
 
-    A name that is the query comes first, then names that start with it, then
-    the rest by how alike they are. Within the first two, places keep their
-    lead over records, so a town comes before a record named after it. A
-    search for "Stonehenge" gives the monument before Stonehenge Works, and
-    one for "Maiden Castle" the hillfort before Castle Eden.
+    A name that is the query, or whose first part is, comes first, then names
+    that start with it, then names that hold it (`name_rank.name_fit`), each
+    with places and designations of national importance first and other
+    records next. Listed buildings, reports and dates that fit come after
+    all of those, and loose matches last, by how alike they are
+    (`name_rank`). So a search for "Stonehenge" opens with the World Heritage
+    Site and the scheduled monument, not with houses called Stonehenge.
+    Otherwise the order of each list is kept: the sort is stable.
     """
     phrase = " ".join(records.query_words(text))
 
     def fit(hit: GeoHit) -> int:
-        name = " ".join(records.query_words(hit.label))
-        return 2 if name == phrase else 1 if name.startswith(phrase) else 0
+        words = records.name_words(hit.label)
+        return name_rank.name_fit(phrase, words, records.name_words(name_rank.first_part(hit.label)))
 
     scored = [(fit(hit), hit) for hit in hits]
-    # Only the loose matches are ordered by likeness. The sort is stable, so the rest keep their order.
-    loose = list(dict.fromkeys(hit.label for value, hit in scored if value == 0))
+    loose = list(dict.fromkeys(hit.label for value, hit in scored if value == name_rank.FIT_LOOSE))
     likeness = dict(zip(loose, _likeness(db, phrase, loose), strict=True))
-    ranked = sorted(scored, key=lambda pair: (-pair[0], -likeness.get(pair[1].label, 0.0)))
-    return [hit for _, hit in ranked]
+
+    def key(pair: tuple[int, GeoHit]) -> tuple[int, int, float, int]:
+        value, hit = pair
+        band = name_rank.band(value, hit.weight)
+        if band == name_rank.LOOSE:
+            return band, 0, -likeness[hit.label], hit.weight
+        return band, -value, hit.weight, 0
+
+    return [hit for _, hit in sorted(scored, key=key)]
 
 
 def _likeness(db: Session, phrase: str, labels: list[str]) -> list[float]:
