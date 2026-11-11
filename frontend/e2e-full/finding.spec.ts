@@ -1,8 +1,7 @@
-import type { Browser, Locator, Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { openMap } from "../e2e/support/app.js";
-import { stubUpstream, tilesRoute } from "../e2e/support/network.js";
-import { WEB_PORT } from "./support/env.js";
 import { expect, test } from "./support/fixtures.js";
+import { helper, join } from "./support/people.js";
 
 /**
  * The exit test for findings (docs/plans): three accounts take one finding
@@ -15,36 +14,6 @@ import { expect, test } from "./support/fixtures.js";
 
 const AVEBURY = { lon: -1.8542, lat: 51.4286 };
 const VIEW = "#m=16/51.4286/-1.8542/0/0&v=composite";
-
-/** The same stubs the fixture gives `page`, for a page in another browser context. */
-async function stub(page: Page): Promise<void> {
-  await stubUpstream(page);
-  await page.route(tilesRoute(), (route) => route.fulfill({ status: 204 }));
-}
-
-/** Sign `page`'s browser in as a new member who has been through the welcome step. */
-async function join(page: Page, handle: string): Promise<void> {
-  const headers = { "X-FieldClub-Client": "web" };
-  const login = await page.request.post("/api/v1/auth/dev-login", { headers, data: { handle } });
-  expect(login.status(), await login.text()).toBe(200);
-  const welcome = await page.request.post("/api/v1/auth/welcome", {
-    headers,
-    data: { age_band: "18_plus", accept_terms: true },
-  });
-  expect(welcome.status(), await welcome.text()).toBe(200);
-}
-
-async function helper(browser: Browser, viewport: { width: number; height: number } | null, handle: string) {
-  const context = await browser.newContext({
-    baseURL: `http://localhost:${WEB_PORT}`,
-    viewport,
-    locale: "en-GB",
-  });
-  const page = await context.newPage();
-  await stub(page);
-  await join(page, handle);
-  return { context, page };
-}
 
 function panelFor(page: Page, title: string): Locator {
   return page.getByRole("complementary", { name: title });
