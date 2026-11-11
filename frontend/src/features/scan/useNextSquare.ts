@@ -15,7 +15,7 @@ export type NextSquareStatus =
   | { kind: "square"; square: Square }
   /** No square left to scan within reach of where the map is. */
   | { kind: "none" }
-  /** The server is turning people away for now, or isn't answering. */
+  /** The server is turning people away for now. */
   | { kind: "busy"; retry: () => void }
   | { kind: "error"; error: Error; retry: () => void };
 
@@ -32,18 +32,42 @@ export function askForSquare(): void {
 /**
  * Squares the server shouldn't offer: those done or passed in this visit,
  * and those waiting as drafts in this browser, which the server hasn't heard
- * of. Read when the request goes, so it is as fresh as can be.
+ * of. Read when the request goes, so it is as fresh as can be. The drafts
+ * come last, because the request keeps the last `MAX_EXCLUDE` and the server
+ * knows nothing else about them.
  */
 export function squaresToLeaveOut(): string[] {
   const drafted = listDrafts().flatMap((draft) => {
     const data = squareDrafts.read(draft);
     return data ? [data.square] : [];
   });
-  return [...new Set([...drafted, ...useScanStore.getState().passed])];
+  const kept = new Set(drafted);
+  const passed = useScanStore.getState().passed.filter((square) => !kept.has(square));
+  return [...new Set(passed), ...kept];
 }
 
+/** How many times a square already done in this browser is passed over before it is shown anyway. */
+export const MAX_REPEATS = 3;
+
+/**
+ * `GET /squares/next`, passing over a square this browser has already done:
+ * past the newest `MAX_EXCLUDE`, the server can't be told about them all.
+ * Each one offered is left out of the next ask, up to `MAX_REPEATS` times.
+ */
+export async function nextSquareNotDone(near: [number, number] | null, signal?: AbortSignal): Promise<Square> {
+  const leaveOut = squaresToLeaveOut();
+  const done = new Set(leaveOut);
+  const offeredAgain: string[] = [];
+  for (let attempt = 0; ; attempt++) {
+    const square = await fetchNextSquare({ near, exclude: [...leaveOut, ...offeredAgain] }, signal);
+    if (!done.has(square.square) || attempt >= MAX_REPEATS) return square;
+    offeredAgain.push(square.square);
+  }
+}
+
+/** Turned away for now: too many asking (429), or the server says it can't answer yet (503). */
 function isBusy(error: unknown): boolean {
-  return error instanceof ApiError && (error.status === 429 || isTransient(error));
+  return error instanceof ApiError && (error.status === 429 || error.status === 503);
 }
 
 /**
@@ -63,7 +87,7 @@ export function useNextSquare(): NextSquareStatus {
 
   const query = useQuery({
     queryKey: scanKeys.next(ticket),
-    queryFn: ({ signal }) => fetchNextSquare({ near, exclude: squaresToLeaveOut() }, signal),
+    queryFn: ({ signal }) => nextSquareNotDone(near, signal),
     enabled: ticket > 0 && current === null,
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: 60_000,

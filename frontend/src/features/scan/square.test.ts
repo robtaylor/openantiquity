@@ -4,13 +4,16 @@ import { visibleCentre } from "../../map/visibleArea.js";
 import { coverageOf, SQUARE_SPOT, squareAt, squareEastOf } from "../../test/fixtures/squares.js";
 import {
   areaKm2,
+  cameraBox,
   coverageBox,
   coverageFeatures,
   frameSquare,
   inSquare,
   keepMiddle,
   SQUARE_FILL,
+  samePlace,
   squareFeatures,
+  visibleShare,
 } from "./square.js";
 
 const SQUARE = squareAt(...SQUARE_SPOT);
@@ -118,18 +121,45 @@ describe("keeping the middle of the map when the sheet moves", () => {
   const peek = { left: 0, right: 0, top: 68, bottom: 200 };
 
   it("points the camera so the ground in the middle of what showed is in the middle of what shows now", () => {
-    const before = visibleCentre(camera, half);
-    const moved = keepMiddle(camera, half, peek);
+    const middle = visibleCentre(camera, half);
+    const moved = keepMiddle(middle, camera, peek);
     if (!moved) throw new Error("A north-up map should be moved");
     const after = visibleCentre({ ...camera, ...moved }, peek);
-    expect(after.lng).toBeCloseTo(before.lng, 9);
-    expect(after.lat).toBeCloseTo(before.lat, 9);
+    expect(after.lng).toBeCloseTo(middle.lng, 9);
+    expect(after.lat).toBeCloseTo(middle.lat, 9);
     // A shorter sheet leaves more map below, so the camera goes north to keep the middle where it was.
     expect(moved.lat).toBeGreaterThan(camera.lat);
   });
 
-  it("leaves the map be when nothing moved, or when it is turned from north", () => {
-    expect(keepMiddle(camera, half, half)).toBeNull();
-    expect(keepMiddle({ ...camera, bearing: 30 }, half, peek)).toBeNull();
+  it("leaves the map be when the ground is in the middle already, or when it is turned from north", () => {
+    expect(keepMiddle(visibleCentre(camera, half), camera, half)).toBeNull();
+    expect(keepMiddle(visibleCentre(camera, half), { ...camera, bearing: 30 }, peek)).toBeNull();
+  });
+
+  it("counts places a pixel apart as the same, and ten apart as not", () => {
+    const pixel = 360 / (512 * 2 ** camera.zoom);
+    expect(samePlace(camera, { ...camera, lng: camera.lng + pixel }, camera.zoom)).toBe(true);
+    expect(samePlace(camera, { ...camera, lng: camera.lng + 10 * pixel }, camera.zoom)).toBe(false);
+  });
+});
+
+describe("visibleShare", () => {
+  it("says how much of a box is in view", () => {
+    const box = [0, 0, 2, 2] as const;
+    expect(visibleShare(box, [-1, -1, 3, 3])).toBe(1);
+    expect(visibleShare(box, [1, 0, 3, 2])).toBe(0.5);
+    expect(visibleShare(box, [5, 5, 6, 6])).toBe(0);
+  });
+});
+
+describe("cameraBox", () => {
+  it("is the ground a north-up camera shows, round its centre", () => {
+    const camera = { lng: -1.85, lat: 51.43, zoom: 14 };
+    const [west, south, east, north] = cameraBox(camera, 1024, 768);
+    expect((west + east) / 2).toBeCloseTo(camera.lng, 9);
+    // 1024 px at zoom 14 is 1024 / (512 * 2^14) of the world's 360 degrees.
+    expect(east - west).toBeCloseTo((1024 / (512 * 2 ** 14)) * 360, 9);
+    expect(south).toBeLessThan(camera.lat);
+    expect(north).toBeGreaterThan(camera.lat);
   });
 });

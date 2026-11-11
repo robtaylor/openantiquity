@@ -58,6 +58,8 @@ export async function fakeFindings(
   let hold: Promise<void> | null = null;
   let made = 0;
   const details = new Map<string, FindingDetail>();
+  /** When each finding made here was made, so a list by its author shows it as theirs and new. */
+  const madeAt = new Map<string, string>();
 
   await page.route(FINDING_PAGE_ROUTE, (route) => {
     const match = FINDING_PAGE_ROUTE.exec(route.request().url());
@@ -83,6 +85,7 @@ export async function fakeFindings(
       made += 1;
       const finding = createdFinding(body, `new-${made}`);
       details.set(finding.public_id, finding);
+      madeAt.set(finding.public_id, new Date().toISOString());
       features.unshift({
         type: "Feature",
         geometry: { type: "Point", coordinates: [finding.location.lon, finding.location.lat] },
@@ -107,8 +110,21 @@ export async function fakeFindings(
     log.lists.push(url);
     const limit = Number(url.searchParams.get("limit") ?? 50);
     const offset = Number(url.searchParams.get("cursor") ?? 0);
-    const items = found.slice(offset, offset + limit).map((feature) => findingSummary(feature));
-    const next = offset + limit < found.length ? String(offset + limit) : null;
+    // `author=` lists the findings made here, as the one asking made them, and any seeded under that handle.
+    const author = url.searchParams.get("author");
+    const listed = author
+      ? found.filter(
+          (feature) => madeAt.has(feature.properties.public_id) || findingSummary(feature).author.handle === author,
+        )
+      : found;
+    const items = listed.slice(offset, offset + limit).map((feature) => {
+      const when = madeAt.get(feature.properties.public_id);
+      const summary = findingSummary(feature);
+      return when && author
+        ? { ...summary, author: { ...summary.author, handle: author }, created_at: when, updated_at: when }
+        : summary;
+    });
+    const next = offset + limit < listed.length ? String(offset + limit) : null;
     return json(route, { items, next_cursor: next });
   });
   return log;

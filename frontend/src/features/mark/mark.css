@@ -298,3 +298,8 @@ textarea.fc-input {
   padding-top: 8px;
   resize: vertical;
 }
+
+/* The way back to the mode marking was opened from, such as a scan. */
+.fc-mark-back {
+  margin-top: 16px;
+}

@@ -15,18 +15,30 @@ import { findingPath, useSelectedFinding } from "../findings/selection.js";
 import type { FindingDetail } from "../findings/types.js";
 import { composeFinding, saveProblem } from "./compose.js";
 import { createBody, type FindingDraft, findingDrafts } from "./findingDrafts.js";
+import { useMarkReturn } from "./markReturn.js";
 import { useMarkStore } from "./markStore.js";
 import { usePendingFindings } from "./pending.js";
 
 /**
  * Leave the form for the page of the finding it became: the page has the
- * finding at once from the cache, and the map marks it.
+ * finding at once from the cache, and the map marks it. Marking opened over
+ * a mode that carries on, such as a scan, goes back to it instead, with the
+ * finding's page a press away in the toast.
  */
 export function openSavedFinding(client: QueryClient, navigate: NavigateFunction, finding: FindingDetail): void {
   client.setQueryData(findingKeys.detail(finding.public_id), finding);
+  useMarkStore.getState().start();
+  const back = useMarkReturn.getState().to;
+  if (back) {
+    navigate(back.path, { replace: true });
+    toast("Your finding is saved.", {
+      kind: "success",
+      action: { label: "Open it", onClick: () => navigate(findingPath(finding.public_id)) },
+    });
+    return;
+  }
   const { lon, lat, obscured } = finding.location;
   useSelectedFinding.getState().select(finding.public_id, [lon, lat], obscured);
-  useMarkStore.getState().start();
   navigate(findingPath(finding.public_id), { replace: true });
 }
 
@@ -84,6 +96,8 @@ export function useSaveMark(meta: Meta): () => Promise<void> {
       } catch (error) {
         if (!(error instanceof AccountRequiredError)) throw error;
         toast("Kept in this browser as a draft until you sign in.");
+        const back = useMarkReturn.getState().to;
+        if (back) navigate(back.path, { replace: true });
       }
     },
     [navigate, ready, requireAccount],

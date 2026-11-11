@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router";
 import type { Meta } from "../../api/meta.js";
@@ -11,6 +12,7 @@ import { BARE_MAP_PATH } from "../shell/navigation.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { findingDrafts, useSavedDrafts } from "./findingDrafts.js";
 import { MarkForm } from "./MarkForm.js";
+import { useMarkReturn } from "./markReturn.js";
 import { useMarkStore } from "./markStore.js";
 import { openSavedFinding } from "./useSaveMark.js";
 import "./mark.css";
@@ -46,6 +48,7 @@ export function MarkPanel({ meta }: { meta: Meta }) {
   const draft = draftId === undefined ? null : (drafts.find((candidate) => candidate.id === draftId) ?? null);
   const loaded = useMarkStore((state) => state.draftId);
   const opening = useOpenSavedDraft(draftId);
+  const back = useMarkReturn((state) => state.to);
   useDocumentTitle("Mark a finding");
 
   // A new mark starts afresh. A draft is taken up once, so changes made to it here are kept.
@@ -66,7 +69,8 @@ export function MarkPanel({ meta }: { meta: Meta }) {
       mark.stopDrawing();
       return;
     }
-    navigate(BARE_MAP_PATH);
+    // Marking opened over a mode, such as a scan, closes back to it.
+    navigate(useMarkReturn.getState().to?.path ?? BARE_MAP_PATH);
   }
   const leaveRef = useRef(leave);
   leaveRef.current = leave;
@@ -109,6 +113,18 @@ export function MarkPanel({ meta }: { meta: Meta }) {
       ) : draftId !== undefined && loaded !== draftId ? null : (
         <MarkForm meta={meta} draft={draft} />
       )}
+      {back ? (
+        <div className="fc-mark-back">
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<ArrowLeft size={15} aria-hidden />}
+            onClick={() => navigate(back.path)}
+          >
+            {back.label}
+          </Button>
+        </div>
+      ) : null}
     </PanelFrame>
   );
 }

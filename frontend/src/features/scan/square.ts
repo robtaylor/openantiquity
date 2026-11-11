@@ -5,7 +5,7 @@
  */
 
 import { kmSquareAt } from "../../map/gridref.js";
-import { centreForVisible, type MapCover, NO_COVER, visibleCentre } from "../../map/visibleArea.js";
+import { centreForVisible, type MapCover, NO_COVER } from "../../map/visibleArea.js";
 import type { GeoJSONGeometry } from "../findings/types.js";
 import { EMPTY_COLLECTION, type FeatureCollection } from "../records/geojson.js";
 import { type CoverageCollection, MAX_COVERAGE_KM2, type Square } from "./api.js";
@@ -52,28 +52,54 @@ export function frameSquare(
   return { ...centreForVisible((west + east) / 2, lat, zoom, cover), zoom };
 }
 
+/** How near, in pixels, two places are to count as the same on screen. */
+const SAME_PLACE_PX = 2;
+
+/** True when two places are within a couple of pixels of each other at `zoom`, near enough the middle of the map. */
+export function samePlace(a: { lng: number; lat: number }, b: { lng: number; lat: number }, zoom: number): boolean {
+  // MapLibre draws 512 px a tile, and Mercator stretches latitude by 1 / cos(latitude).
+  const perDegree = (512 * 2 ** zoom) / 360;
+  const across = Math.abs(a.lng - b.lng) * perDegree;
+  const up = (Math.abs(a.lat - b.lat) * perDegree) / Math.cos((a.lat * Math.PI) / 180);
+  return Math.hypot(across, up) <= SAME_PLACE_PX;
+}
+
 /**
- * Where to point the camera so the ground in the middle of the uncovered map
- * stays in the middle when the cover changes from `before` to `after`, as
- * when the phone's sheet drops from half-way to peek for marking. Null when
- * nothing moved, or when the map is turned from north, which
- * `centreForVisible` doesn't handle.
+ * Where to point the camera so `middle`, a place on the ground, is in the
+ * middle of the part of the map `cover` leaves, as when the phone's sheet
+ * drops from half-way to peek for marking. Null when it is there already, or
+ * when the map is turned from north, which `centreForVisible` doesn't handle.
  */
 export function keepMiddle(
+  middle: { lng: number; lat: number },
   camera: { lng: number; lat: number; zoom: number; bearing?: number },
-  before: MapCover,
-  after: MapCover,
+  cover: MapCover,
 ): { lng: number; lat: number } | null {
   if ((camera.bearing ?? 0) !== 0) return null;
-  if (
-    before.left === after.left &&
-    before.right === after.right &&
-    before.top === after.top &&
-    before.bottom === after.bottom
-  )
-    return null;
-  const middle = visibleCentre(camera, before);
-  return centreForVisible(middle.lng, middle.lat, camera.zoom, after);
+  const target = centreForVisible(middle.lng, middle.lat, camera.zoom, cover);
+  return samePlace(target, camera, camera.zoom) ? null : target;
+}
+
+/**
+ * The ground a north-up camera shows on a `width` by `height` map, west,
+ * south, east, north. From the camera, so it holds where a requested move
+ * is going before the map has got there.
+ */
+export function cameraBox(camera: { lng: number; lat: number; zoom: number }, width: number, height: number): Box {
+  const worldPx = 512 * 2 ** camera.zoom;
+  const halfAcross = ((width / 2) * 360) / worldPx;
+  const y = Math.log(Math.tan(Math.PI / 4 + (camera.lat * Math.PI) / 360));
+  const halfUp = ((height / 2) * 2 * Math.PI) / worldPx;
+  const lat = (value: number) => ((2 * Math.atan(Math.exp(value)) - Math.PI / 2) * 180) / Math.PI;
+  return [camera.lng - halfAcross, lat(y - halfUp), camera.lng + halfAcross, lat(y + halfUp)];
+}
+
+/** How much of a box, from 0 to 1, lies inside `view`, both as west, south, east, north in degrees. */
+export function visibleShare([west, south, east, north]: Box, view: Box): number {
+  const across = Math.max(0, Math.min(east, view[2]) - Math.max(west, view[0]));
+  const up = Math.max(0, Math.min(north, view[3]) - Math.max(south, view[1]));
+  const area = (east - west) * (north - south);
+  return area > 0 ? (across * up) / area : 0;
 }
 
 /** The square's outer ring, as the server drew it. */

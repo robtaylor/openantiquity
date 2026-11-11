@@ -23,10 +23,6 @@ const FIRST = squareAt(...SQUARE_SPOT, 2);
 const SECOND = squareEastOf(1);
 const THIRD = squareEastOf(2);
 
-function isPhone(page: Page): boolean {
-  return (page.viewportSize()?.width ?? 0) < 720;
-}
-
 function panel(page: Page): Locator {
   return page.getByRole("complementary", { name: "Scan a square" });
 }
@@ -41,12 +37,6 @@ function camera(page: Page): { zoom: number; lat: number; lon: number } {
   const match = /#m=([\d.]+)\/(-?[\d.]+)\/(-?[\d.]+)/.exec(page.url());
   if (!match) throw new Error(`No camera in ${page.url()}`);
   return { zoom: Number(match[1]), lat: Number(match[2]), lon: Number(match[3]) };
-}
-
-/** Go back to the scan from another mode, by the rail or the phone's tab bar. */
-async function backToScan(page: Page): Promise<void> {
-  const name = isPhone(page) ? "Scan" : "Scan a square";
-  await page.getByRole("navigation", { name: "Modes" }).getByRole("link", { name, exact: true }).click();
 }
 
 function storedDrafts(page: Page): Promise<Array<{ kind: string; data: unknown }>> {
@@ -116,8 +106,8 @@ test("a signed-out scan, with a finding marked in the square, is kept as drafts 
   const sheet = page.getByRole("dialog", { name: "Sign in" });
   await sheet.getByRole("button", { name: "Close" }).click();
 
-  // Back to the square: the finding counts towards it.
-  await backToScan(page);
+  // Closing the sign-in sheet over the draft goes back to the square, where the finding counts towards it.
+  await expect(page).toHaveURL(/\/scan/);
   await expect(place(page, FIRST)).toBeVisible();
   await expect(panel(page).getByText("You've marked 1 finding in this square.")).toBeVisible();
   await panel(page).getByRole("button", { name: "I marked something" }).click();
@@ -142,9 +132,36 @@ test("a signed-out scan, with a finding marked in the square, is kept as drafts 
   await expect(place(page, SECOND)).toBeVisible();
   await expect.poll(() => squares.results[FIRST.square]?.length ?? 0).toBe(1);
   expect(squares.results[FIRST.square]?.[0]).toMatchObject({ result: "marked", findings_count: 1 });
-  expect(findings.created.map((body) => body.feature_class)).toEqual(["hillfort"]);
   await expect.poll(async () => (await storedDrafts(page)).length).toBe(0);
   await expect(panel(page).getByText(/1 square\s*looked over this visit/)).toBeVisible();
+  // A moment later, still saved once each: a second save that came after the first would show here.
+  await page.waitForTimeout(1500);
+  expect(squares.results[FIRST.square]).toHaveLength(1);
+  expect(findings.created.map((body) => body.feature_class)).toEqual(["hillfort"]);
+});
+
+test("a finding marked from the square and saved goes back to the square, which counts it", async ({ page }) => {
+  await fakeSession(page, MEMBER);
+  await fakeSquares(page, [FIRST, SECOND]);
+  await fakeFindings(page);
+  await openMap(page, `/scan${VIEW}`);
+  await expect(place(page, FIRST)).toBeVisible();
+  await expect.poll(() => camera(page).zoom).toBeGreaterThan(13.2);
+  await expect(page.locator(".fc-map__pane--main")).toHaveAttribute("data-map-idle", "true");
+
+  await page.getByRole("button", { name: "Mark a finding" }).click();
+  const mark = page.getByRole("complementary", { name: "Mark a finding" });
+  await expect(mark.getByRole("button", { name: "Back to the square" })).toBeVisible();
+  await page.getByRole("button", { name: "Place it here" }).click();
+  await mark.getByRole("radio", { name: "Hillfort" }).click();
+  await mark.getByRole("button", { name: "Save finding" }).click();
+
+  await expect(page).toHaveURL(/\/scan/);
+  await expect(page.getByText("Your finding is saved.")).toBeVisible();
+  await expect(panel(page).getByText("You've marked 1 finding in this square.")).toBeVisible();
+  const marked = panel(page).getByRole("button", { name: "I marked something" });
+  await expect(marked).toBeEnabled();
+  await expect(marked).toHaveClass(/fc-button--primary/);
 });
 
 test("the coverage layer is offered while scanning and in the layer panel, and refuses a view too wide", async ({

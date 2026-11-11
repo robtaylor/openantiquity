@@ -3,8 +3,9 @@ import { userEvent } from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useMapStore, useViewAreaStore } from "../../map/store.js";
 import { overlaySourceId } from "../../map/style.js";
+import { useMapCover, visibleCentre } from "../../map/visibleArea.js";
 import { type ApiRoutes, apiError, routeApi } from "../../test/apiRoutes.js";
-import { findingCollection, findingPage } from "../../test/fixtures/findings.js";
+import { createdFinding, findingCollection, findingPage } from "../../test/fixtures/findings.js";
 import { meFixture } from "../../test/fixtures/me.js";
 import { coverageOf, SQUARE_SPOT, squareAt, squareEastOf } from "../../test/fixtures/squares.js";
 import { json, mapReady, renderShell, setUpShellTests, signedOutResponse } from "../../test/shellHarness.js";
@@ -12,9 +13,13 @@ import { useToastStore } from "../../ui/toastStore.js";
 import type { Me } from "../account/api.js";
 import { useAccountUi } from "../account/requireAccount.js";
 import { DRAFTS_STORAGE_KEY, listDrafts, resetDraftsForTests } from "../drafts/store.js";
+import type { FindingCreate } from "../findings/types.js";
+import { useTerrainLoading } from "../layers/terrainLoading.js";
 import { findingDrafts } from "../mark/findingDrafts.js";
-import type { Square } from "./api.js";
+import { useMarkStore } from "../mark/markStore.js";
+import { MAX_EXCLUDE, type Square } from "./api.js";
 import { useScanStore } from "./scanStore.js";
+import { squareDrafts } from "./squareDrafts.js";
 import { SQUARE_LAYERS, SQUARE_SOURCES, useScanCoverage } from "./useScanOnMap.js";
 
 vi.mock("maplibre-gl", async () => {
@@ -30,7 +35,13 @@ const SECOND = squareEastOf(1);
 const THIRD = squareEastOf(2);
 const AT_CENTRE = { lon: FIRST.centre[0], lat: FIRST.centre[1] };
 
+/** A result kept as a draft for `square`, as a signed-out scan leaves one. */
+function squareDraftFor(square: string): void {
+  squareDrafts.put({ square, survey: { result: "nothing", findings_count: 0, seconds: 30 } });
+}
+
 beforeEach(() => {
+  useTerrainLoading.getState().setPreparing(false);
   useAccountUi.setState({ sheet: null, waiting: [] });
   useScanStore.getState().reset();
   useScanCoverage.setState({ summary: { status: "off", scanned: 0 } });
@@ -49,6 +60,15 @@ function serve(squares: Square[], me: Me | null = null): ApiRoutes {
       return square ? json(square) : apiError(404, "no_square_available", "There's no square left to scan.");
     },
     "GET /squares/coverage": () => json(coverageOf([{ square: FIRST, scans: 2 }])),
+  });
+}
+
+/** Wait until the square has been framed: its middle is the middle of what the panel leaves of the map. */
+async function framed(square: Square): Promise<void> {
+  await waitFor(() => {
+    const middle = visibleCentre(useMapStore.getState().camera, useMapCover.getState().cover);
+    expect(Math.abs(middle.lng - square.centre[0])).toBeLessThan(0.002);
+    expect(Math.abs(middle.lat - square.centre[1])).toBeLessThan(0.002);
   });
 }
 
@@ -118,6 +138,71 @@ describe("marking a finding during a scan", () => {
   });
 });
 
+describe("coming back to the square from marking", () => {
+  it("keeps the ground in the middle however late the cover changes, and puts the cross's mark there", async () => {
+    const user = userEvent.setup();
+    serve([FIRST]);
+    const { panel } = await openScan();
+    await panel.findByText(FIRST.grid_ref, { selector: ".fc-mono" });
+    await framed(FIRST);
+    // As on a phone: the sheet half-way up while scanning.
+    const half = { left: 0, right: 0, top: 68, bottom: 470 };
+    act(() => useMapCover.getState().setCover(half));
+    const middle = visibleCentre(useMapStore.getState().camera, half);
+
+    await user.click(screen.getByRole("button", { name: "Mark a finding" }));
+    await screen.findByRole("complementary", { name: "Mark a finding" });
+    // The sheet's drop to peek reaches the map well after the stage has settled.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const peek = { ...half, bottom: 200 };
+    act(() => useMapCover.getState().setCover(peek));
+    const now = visibleCentre(useMapStore.getState().camera, peek);
+    expect(now.lng).toBeCloseTo(middle.lng, 6);
+    expect(now.lat).toBeCloseTo(middle.lat, 6);
+
+    // "Place it here" pressed while the map is still on its way puts the mark on that ground.
+    act(() => useMarkStore.getState().placeFromButton([middle.lng, middle.lat - 0.01]));
+    expect(useMarkStore.getState().point).toEqual([middle.lng, middle.lat]);
+  });
+
+  it("goes back to the square, not to the finding's page, once a finding marked from it is saved", async () => {
+    const user = userEvent.setup();
+    const routes = serve([FIRST], MEMBER);
+    routes.on("POST /findings", (call) => json(createdFinding(call.body as FindingCreate, "abc123"), 201));
+    const { map, panel } = await openScan();
+    await panel.findByText(FIRST.grid_ref, { selector: ".fc-mono" });
+    await user.click(screen.getByRole("button", { name: "Mark a finding" }));
+    const mark = within(await screen.findByRole("complementary", { name: "Mark a finding" }));
+    expect(mark.getByRole("button", { name: "Back to the square" })).toBeInTheDocument();
+    act(() => map.click(400, 300));
+    await user.click(mark.getByRole("radio", { name: "Enclosure" }));
+    await user.click(mark.getByRole("button", { name: "Save finding" }));
+    expect(await screen.findByRole("complementary", { name: "Scan a square" })).toBeInTheDocument();
+    await waitFor(() => expect(useToastStore.getState().toasts.at(-1)?.message).toBe("Your finding is saved."));
+    expect(useToastStore.getState().toasts.at(-1)?.action?.label).toBe("Open it");
+  });
+
+  it("goes back to the square when the sign-in sheet is closed over a draft, and when marking is closed", async () => {
+    const user = userEvent.setup();
+    serve([FIRST]);
+    const { map, panel } = await openScan();
+    await panel.findByText(FIRST.grid_ref, { selector: ".fc-mono" });
+    await user.click(screen.getByRole("button", { name: "Mark a finding" }));
+    let mark = within(await screen.findByRole("complementary", { name: "Mark a finding" }));
+    act(() => map.click(400, 300));
+    await user.click(mark.getByRole("radio", { name: "Enclosure" }));
+    await user.click(mark.getByRole("button", { name: "Save finding" }));
+    const sheet = within(await screen.findByRole("dialog", { name: "Sign in" }));
+    await user.click(sheet.getByRole("button", { name: "Close" }));
+    expect(await screen.findByRole("complementary", { name: "Scan a square" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Mark a finding" }));
+    mark = within(await screen.findByRole("complementary", { name: "Mark a finding" }));
+    await user.click(mark.getByRole("button", { name: "Close panel" }));
+    expect(await screen.findByRole("complementary", { name: "Scan a square" })).toBeInTheDocument();
+  });
+});
+
 describe("ending a square signed out", () => {
   it("keeps “nothing obvious” as a draft, counts it, and leaves it out of the next request", async () => {
     const user = userEvent.setup();
@@ -156,7 +241,13 @@ describe("ending a square signed out", () => {
       view_state: { layer: "composite", zoom: 15 },
     });
     expect(await panel.findByText("You've marked 1 finding in this square.")).toBeInTheDocument();
-    await user.click(panel.getByRole("button", { name: "I marked something" }));
+    // Now "I marked something" is the main ending, and comes before "Nothing obvious".
+    const marked = panel.getByRole("button", { name: "I marked something" });
+    const nothing = panel.getByRole("button", { name: "Nothing obvious" });
+    expect(marked).toHaveClass("fc-button--primary");
+    expect(nothing).not.toHaveClass("fc-button--primary");
+    expect(marked.compareDocumentPosition(nothing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await user.click(marked);
     expect(await panel.findByText(/is recorded: you marked something/)).toBeInTheDocument();
     const square = listDrafts().find((draft) => draft.kind === "square");
     expect(square?.data).toMatchObject({ square: FIRST.square, survey: { result: "marked", findings_count: 1 } });
@@ -239,6 +330,25 @@ describe("when there is no square to give", () => {
     expect(await panel.findByText(FIRST.grid_ref, { selector: ".fc-mono" })).toBeInTheDocument();
   });
 
+  it("says an ordinary server error happened, rather than that the server is busy", async () => {
+    const routes = serve([FIRST]);
+    routes.on("GET /squares/next", () => apiError(500, "internal_error", "Something went wrong on our side."));
+    const { panel } = await openScan();
+    // A server error is asked once more first.
+    expect(
+      await panel.findByRole("heading", { name: "The next square couldn't be fetched" }, { timeout: 4000 }),
+    ).toBeInTheDocument();
+    expect(panel.queryByRole("heading", { name: "The server is busy" })).toBeNull();
+    expect(panel.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+  });
+
+  it("says busy for a 503", async () => {
+    const routes = serve([FIRST]);
+    routes.on("GET /squares/next", () => apiError(503, "unavailable", "Try again soon."));
+    const { panel } = await openScan();
+    expect(await panel.findByRole("heading", { name: "The server is busy" }, { timeout: 4000 })).toBeInTheDocument();
+  });
+
   it("says when the square has no elevation, records nothing, and finds another", async () => {
     const user = userEvent.setup();
     const routes = serve([FIRST, SECOND, THIRD]);
@@ -301,6 +411,41 @@ describe("the coverage layer", () => {
     await waitFor(() => expect(routes.callsTo("GET /squares/coverage")).toHaveLength(1));
     await user.click(panel.getByRole("button", { name: "Nothing obvious" }));
     await waitFor(() => expect(routes.callsTo("GET /squares/coverage")).toHaveLength(2));
+  });
+});
+
+describe("squares already done in this browser", () => {
+  it("leaves out its drafts first of all, and passes over a square the server offers again", async () => {
+    // More squares passed than the server takes, and one drafted before all of them.
+    useScanStore.setState({ passed: Array.from({ length: 120 }, (_, n) => `SU${String(n).padStart(4, "0")}`) });
+    squareDraftFor(FIRST.square);
+    const routes = serve([FIRST, SECOND]);
+    let asked = 0;
+    // A server that hasn't heard of the draft offers it first.
+    routes.on("GET /squares/next", (call) => {
+      asked++;
+      const left = new Set(call.url.searchParams.getAll("exclude"));
+      return json(asked === 1 ? FIRST : left.has(SECOND.square) ? THIRD : SECOND);
+    });
+    const { panel } = await openScan();
+    expect(await panel.findByText(SECOND.grid_ref, { selector: ".fc-mono" })).toBeInTheDocument();
+    const first = routes.callsTo("GET /squares/next")[0]?.url.searchParams.getAll("exclude") ?? [];
+    expect(first).toHaveLength(MAX_EXCLUDE);
+    expect(first.at(-1)).toBe(FIRST.square);
+  });
+});
+
+describe("waiting for the terrain", () => {
+  it("holds the endings that say something about the ground until it has been drawn", async () => {
+    serve([FIRST]);
+    const { panel } = await openScan();
+    await panel.findByText(FIRST.grid_ref, { selector: ".fc-mono" });
+    act(() => useTerrainLoading.getState().setPreparing(true));
+    expect(panel.getByRole("button", { name: "Nothing obvious" })).toBeDisabled();
+    expect(panel.getByText(/Waiting for the terrain to be drawn/)).toBeInTheDocument();
+    expect(panel.getByRole("button", { name: "Skip this square" })).toBeEnabled();
+    act(() => useTerrainLoading.getState().setPreparing(false));
+    expect(panel.getByRole("button", { name: "Nothing obvious" })).toBeEnabled();
   });
 });
 

@@ -12,6 +12,7 @@ import { useSession } from "../account/session.js";
 import { DraftBadge } from "../drafts/DraftBadge.js";
 import { useKindDrafts } from "../drafts/savers.js";
 import { reasonOf, useSignedInFirst } from "../finding/feedback.js";
+import { useTerrainLoading } from "../layers/terrainLoading.js";
 import { useDocumentTitle } from "../placeholders.js";
 import { REVIEW_PATH } from "../review/ReviewLayer.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
@@ -129,6 +130,49 @@ function Looking({ meta, square, first }: { meta: Meta; square: Square; first: b
   useFocusOnChange(() => intro.current, square.square, !first);
   const nothingHint = useId();
   const markedHint = useId();
+  // Nothing is said about ground that hasn't been drawn yet. A skip says nothing, so it stays.
+  const waiting = useTerrainLoading((state) => state.preparing);
+  // Once something is marked here, saying so is the likely ending, so it comes first and stands out.
+  const markedFirst = marked.count > 0;
+
+  const nothing = (
+    <>
+      <Button
+        variant={markedFirst ? "secondary" : "primary"}
+        block
+        icon={<CircleSlash size={16} aria-hidden />}
+        disabled={waiting}
+        onClick={() => finish(square, "nothing", 0)}
+        aria-describedby={nothingHint}
+      >
+        {RESULT_WORDS.nothing.button}
+      </Button>
+      <p className="fc-finding__hint" id={nothingHint}>
+        {markedFirst
+          ? "Only if what you marked turned out not to be in this square."
+          : "An empty square is worth recording: it shows the ground was checked, not missed."}
+      </p>
+    </>
+  );
+  const markedSomething = (
+    <>
+      <Button
+        variant={markedFirst ? "primary" : "secondary"}
+        block
+        icon={<MapPinned size={16} aria-hidden />}
+        disabled={marked.count === 0 || waiting}
+        onClick={() => finish(square, "marked", marked.count)}
+        aria-describedby={markedHint}
+      >
+        {RESULT_WORDS.marked.button}
+      </Button>
+      <p className="fc-finding__hint" id={markedHint}>
+        {marked.count === 0
+          ? "Mark what you see in the square with “Mark a finding”, then come back to this square."
+          : "Each finding you marked here counts towards it."}
+      </p>
+    </>
+  );
 
   return (
     <div className="fc-scan__looking">
@@ -163,32 +207,22 @@ function Looking({ meta, square, first }: { meta: Meta; square: Square; first: b
             ) : null}
           </p>
           <div className="fc-scan__actions">
-            <Button
-              variant="primary"
-              block
-              icon={<CircleSlash size={16} aria-hidden />}
-              onClick={() => finish(square, "nothing", 0)}
-              aria-describedby={nothingHint}
-            >
-              {RESULT_WORDS.nothing.button}
-            </Button>
-            <p className="fc-finding__hint" id={nothingHint}>
-              An empty square is worth recording: it shows the ground was checked, not missed.
-            </p>
-            <Button
-              block
-              icon={<MapPinned size={16} aria-hidden />}
-              disabled={marked.count === 0}
-              onClick={() => finish(square, "marked", marked.count)}
-              aria-describedby={markedHint}
-            >
-              {RESULT_WORDS.marked.button}
-            </Button>
-            <p className="fc-finding__hint" id={markedHint}>
-              {marked.count === 0
-                ? "Mark what you see in the square with “Mark a finding”, then come back to this square."
-                : "Each finding you marked here counts towards it."}
-            </p>
+            {waiting ? (
+              <p className="fc-scan__waiting" role="status">
+                Waiting for the terrain to be drawn, so you can look it over first.
+              </p>
+            ) : null}
+            {markedFirst ? (
+              <>
+                {markedSomething}
+                {nothing}
+              </>
+            ) : (
+              <>
+                {nothing}
+                {markedSomething}
+              </>
+            )}
             <div className="fc-scan__skip">
               <Button
                 size="sm"
