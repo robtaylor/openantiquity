@@ -710,6 +710,8 @@ With thanks,
 
 **Meanwhile.** Hot-link only the sets NLS lists for reuse, at modest volume.
 
+**Where the code stands (2026-11-11).** The England hillshade set is offered as the comparison layer. Seven NLS layers are defined and held back in `backend/src/fieldclub/layers.py` (`AWAITING_NLS`): the air photo mosaics of 1944 to 1950, the six-inch of 1888 to 1913, the 1:25,000 of 1945 to 1965, the one-inch of the 1920s to 1940s, both Bartholomew half-inch sets and the ten-mile general map. The historic maps group in the layer panel is empty until NLS answers. To release a layer, take it out of `AWAITING_NLS` and mark it `clean` in `docs/sources/worklists/map-layers.json` with the reason. Until then a finding's "open elsewhere" links lead to the NLS viewer for the same place.
+
 **Draft:**
 
 ```text
