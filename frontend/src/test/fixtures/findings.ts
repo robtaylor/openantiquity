@@ -1,4 +1,12 @@
-import type { FindingCollection, FindingFeature, Sensitivity } from "../../features/findings/types.js";
+import type {
+  FindingCollection,
+  FindingCreate,
+  FindingDetail,
+  FindingFeature,
+  FindingPage,
+  FindingSummary,
+  Sensitivity,
+} from "../../features/findings/types.js";
 import { kmSquareAt } from "../../map/gridref.js";
 
 /**
@@ -79,3 +87,121 @@ export const FINDING_SPECS: readonly FindingSpec[] = [
 ];
 
 export const findingsData: FindingCollection = findingCollection(FINDING_SPECS);
+
+/**
+ * A finding as `GET /findings` lists it (the JSON page, not the map's
+ * GeoJSON), from a map feature: the same place, tier and state, with the
+ * rest filled in plainly. An obscured one keeps its square and has no
+ * exact grid reference.
+ */
+export function findingSummary(feature: FindingFeature, overrides: Partial<FindingSummary> = {}): FindingSummary {
+  const { properties } = feature;
+  const [lon, lat] = feature.geometry.coordinates;
+  return {
+    public_id: properties.public_id,
+    title: properties.title ?? `Finding ${properties.public_id}`,
+    feature_class: (properties.feature_class ?? "enclosure") as FindingSummary["feature_class"],
+    period: "unknown",
+    tier: properties.tier as FindingSummary["tier"],
+    state: properties.state as FindingSummary["state"],
+    state_reason: null,
+    confidence: 10,
+    sensitivity: properties.sensitivity ?? "open",
+    location: {
+      lon,
+      lat,
+      obscured: properties.obscured,
+      grid_ref: properties.obscured ? null : "SU 1025 6996",
+      square: properties.obscured ? (properties.square ?? null) : null,
+      outline: null,
+    },
+    author: { handle: "QuietBarrow42", display_name: "QuietBarrow42", avatar_url: null, role: "member" },
+    created_at: "2026-11-01T10:00:00Z",
+    updated_at: "2026-11-01T10:00:00Z",
+    evidence_count: 0,
+    comment_count: 0,
+    mention_count: 0,
+    ...overrides,
+  };
+}
+
+/** A page of the list, as `GET /findings` sends it, holding `collection`'s findings. */
+export function findingPage(collection: FindingCollection, nextCursor: string | null = null): FindingPage {
+  return { items: collection.features.map((feature) => findingSummary(feature)), next_cursor: nextCursor };
+}
+
+/** A finding's page, as `GET /findings/{id}` and `POST /findings` send it, built on a summary. */
+export function findingDetail(summary: FindingSummary, overrides: Partial<FindingDetail> = {}): FindingDetail {
+  return {
+    ...summary,
+    description: null,
+    nation: "england",
+    view_state: {},
+    assessment: {
+      tier: summary.tier,
+      state: summary.state,
+      state_reason: null,
+      score: summary.confidence,
+      next_tier: "seen",
+      next_steps: [],
+      tallies: null,
+    },
+    evidence: [],
+    credits: [],
+    answers_visible: true,
+    my_observation: null,
+    following: true,
+    ...overrides,
+  };
+}
+
+/**
+ * What the server answers to `POST /findings` with this body: a new spotted
+ * finding at the point sent, kept exact for its finder, titled after its
+ * class when no title was sent.
+ */
+export function createdFinding(body: FindingCreate, publicId: string): FindingDetail {
+  const [lon, lat] = (body.location.coordinates ?? []) as [number, number];
+  const summary = findingSummary(
+    {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [lon, lat] },
+      properties: { public_id: publicId, tier: "spotted", state: "open", obscured: false },
+    },
+    {
+      title: body.title ?? "Finding",
+      feature_class: body.feature_class,
+      period: body.period,
+      sensitivity: body.sensitivity ?? "open",
+    },
+  );
+  return findingDetail(summary, {
+    description: body.description ?? null,
+    view_state: body.view_state ?? {},
+    location: { ...summary.location, outline: body.outline ?? null },
+  });
+}
+
+/**
+ * The features of `features` that `GET /findings` would answer `url` with:
+ * inside its `bbox`, with its `tier`, `state` and `feature_class` filters
+ * applied, and withdrawn findings left out unless asked for, as the server
+ * does. A finding with no class counts as an enclosure, as `findingSummary` lists it.
+ */
+export function findingsMatching(features: readonly FindingFeature[], url: URL): FindingFeature[] {
+  const box = (url.searchParams.get("bbox") ?? "").split(",").map(Number);
+  const tiers = url.searchParams.getAll("tier");
+  const states = url.searchParams.getAll("state");
+  const classes = url.searchParams.getAll("feature_class");
+  return features.filter((feature) => {
+    if (box.length === 4 && box.every(Number.isFinite)) {
+      const [west, south, east, north] = box as [number, number, number, number];
+      const [lon, lat] = feature.geometry.coordinates;
+      if (lon < west || lon > east || lat < south || lat > north) return false;
+    }
+    const { tier, state, feature_class: featureClass = "enclosure" } = feature.properties;
+    if (tiers.length > 0 && !tiers.includes(tier)) return false;
+    if (states.length > 0 ? !states.includes(state) : state === "withdrawn") return false;
+    return classes.length === 0 || classes.includes(featureClass);
+  });
+}

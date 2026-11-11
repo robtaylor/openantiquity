@@ -64,10 +64,12 @@ export function onForbidden(listener: ForbiddenListener): () => void {
 }
 
 export type QueryValue = string | number | boolean | null | undefined;
+/** A list is sent as the same parameter once per item, such as `tier=seen&tier=probable`. */
+export type QueryParam = QueryValue | readonly QueryValue[];
 
 export interface ApiRequest {
   method?: "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE";
-  query?: Record<string, QueryValue>;
+  query?: Record<string, QueryParam>;
   /** Sent as JSON. */
   body?: unknown;
   signal?: AbortSignal;
@@ -77,11 +79,14 @@ const SAFE_METHODS = new Set(["GET", "HEAD"]);
 /** Statuses that come from a proxy in front of a backend that is down. */
 const GATEWAY_STATUSES = new Set([502, 503, 504]);
 
-export function apiUrl(path: string, query: Record<string, QueryValue> = {}): string {
+export function apiUrl(path: string, query: Record<string, QueryParam> = {}): string {
   if (!path.startsWith("/")) throw new ApiError(0, "bad_request", `API path "${path}" must start with "/"`);
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
-    if (value !== null && value !== undefined) params.set(key, String(value));
+    const items: readonly QueryValue[] = Array.isArray(value) ? value : [value];
+    for (const item of items) {
+      if (item !== null && item !== undefined) params.append(key, String(item));
+    }
   }
   const search = params.toString();
   return `${API_BASE}${path}${search ? `?${search}` : ""}`;

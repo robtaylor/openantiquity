@@ -2,7 +2,9 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { isEndpointMissing, isTransient } from "../../api/client.js";
 import { useOptionalEndpointQuery } from "../../api/useOptionalEndpointQuery.js";
 import { useDebounced } from "../../ui/useDebounced.js";
-import { type Bbox, bboxParam, fetchFindingsInBox, snapBbox } from "./api.js";
+import { type Bbox, bboxParam, fetchFindingsInBox, parseBboxParam, snapBbox } from "./api.js";
+import { filtersKey, useEffectiveFilters } from "./filters.js";
+import { findingKeys } from "./keys.js";
 import { type FindingCollection, NO_FINDINGS } from "./types.js";
 
 /** How long the map must hold still before the findings in view are asked for. */
@@ -30,6 +32,9 @@ export interface FindingsInBox {
  * when the box changes or the caller unmounts. Pass null to ask for nothing,
  * for example while the overlay is off.
  *
+ * The Explore panel's filters (`useEffectiveFilters`) go with the box, so the
+ * map shows what the list lists.
+ *
  * `attempt` is part of the cache key. Raising it asks for the same box
  * afresh, which is how a person's "Try again" gets past a failure.
  *
@@ -40,14 +45,16 @@ export interface FindingsInBox {
 export function useFindingsInBox(bbox: Bbox | null, attempt = 0): FindingsInBox {
   // Debounced as text, because a caller hands over a new array on every render.
   const settled = useDebounced(bbox === null ? null : bboxParam(snapBbox(bbox)), FINDINGS_DEBOUNCE_MS);
+  const filters = useEffectiveFilters({ forMap: true });
+  const asking = settled !== null && !filters.empty;
 
   const { query, missing } = useOptionalEndpointQuery({
-    queryKey: ["findings", "bbox", settled, attempt],
+    queryKey: findingKeys.box(settled, filtersKey(filters), attempt),
     queryFn: async ({ signal }) => {
       if (settled === null) throw new Error("useFindingsInBox ran with no box");
-      return fetchFindingsInBox(settled.split(",").map(Number) as Bbox, signal);
+      return fetchFindingsInBox(parseBboxParam(settled), signal, filters);
     },
-    enabled: settled !== null,
+    enabled: asking,
     staleTime: FINDINGS_STALE_MS,
     placeholderData: keepPreviousData,
     retry: (failureCount, error) => failureCount < 1 && isTransient(error),
@@ -55,7 +62,7 @@ export function useFindingsInBox(bbox: Bbox | null, attempt = 0): FindingsInBox 
 
   const failed = query.isError && !isEndpointMissing(query.error);
   return {
-    findings: missing || bbox === null ? NO_FINDINGS : (query.data ?? NO_FINDINGS),
+    findings: missing || bbox === null || !asking ? NO_FINDINGS : (query.data ?? NO_FINDINGS),
     missing,
     error: failed ? query.error : null,
     errorAt: failed ? query.errorUpdatedAt : 0,

@@ -1,5 +1,13 @@
 import { apiFetch } from "../../api/client.js";
-import { type FindingCollection, parseFindingCollection } from "./types.js";
+import { type FindingFilters, filterParams, NO_FILTERS } from "./filters.js";
+import {
+  type FindingCollection,
+  type FindingCreate,
+  type FindingDetail,
+  type FindingPage,
+  parseFindingCollection,
+  parseFindingPage,
+} from "./types.js";
 
 /** West, south, east, north, in degrees. */
 export type Bbox = [number, number, number, number];
@@ -40,13 +48,53 @@ export function bboxParam(bbox: Bbox): string {
   return bbox.map((value) => String(value)).join(",");
 }
 
-/** `GET /findings?bbox=&format=geojson`: the findings in a box, as this viewer may see them. */
-export async function fetchFindingsInBox(bbox: Bbox, signal?: AbortSignal): Promise<FindingCollection> {
-  const [west, south, east, north] = bbox;
+/** The box a `bboxParam` string stands for. */
+export function parseBboxParam(text: string): Bbox {
+  const parts = text.split(",").map(Number);
+  const [west, south, east, north] = parts;
+  if (parts.length !== 4 || west === undefined || south === undefined || east === undefined || north === undefined) {
+    throw new RangeError(`"${text}" is not a box`);
+  }
+  return [west, south, east, north];
+}
+
+function checkBox([west, south, east, north]: Bbox): void {
   if (!(west < east && south < north)) throw new RangeError(`A findings box must run west to east and south to north`);
+}
+
+/** `GET /findings?bbox=&format=geojson`: the findings in a box, as this viewer may see them. */
+export async function fetchFindingsInBox(
+  bbox: Bbox,
+  signal?: AbortSignal,
+  filters: FindingFilters = NO_FILTERS,
+): Promise<FindingCollection> {
+  checkBox(bbox);
   const body = await apiFetch<unknown>(FINDINGS_PATH, {
-    query: { bbox: bboxParam(bbox), format: "geojson" },
+    query: { bbox: bboxParam(bbox), format: "geojson", ...filterParams(filters) },
     signal,
   });
   return parseFindingCollection(body);
+}
+
+/** How many findings the Explore list asks for at a time. */
+export const FINDINGS_PAGE_SIZE = 30;
+
+/** `GET /findings?bbox=`: one page of the findings in a box, newest first. */
+export async function fetchFindingsPage(
+  bbox: Bbox,
+  filters: FindingFilters,
+  cursor: string | null,
+  signal?: AbortSignal,
+): Promise<FindingPage> {
+  checkBox(bbox);
+  const body = await apiFetch<unknown>(FINDINGS_PATH, {
+    query: { bbox: bboxParam(bbox), limit: FINDINGS_PAGE_SIZE, cursor, ...filterParams(filters) },
+    signal,
+  });
+  return parseFindingPage(body);
+}
+
+/** `POST /findings`. The server answers with the new finding's page. */
+export function createFinding(body: FindingCreate): Promise<FindingDetail> {
+  return apiFetch<FindingDetail>(FINDINGS_PATH, { method: "POST", body });
 }

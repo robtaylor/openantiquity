@@ -2,9 +2,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
+import { useMapStore } from "../../map/store.js";
 import { findingsData } from "../../test/fixtures/findings.js";
 import { json } from "../../test/http.js";
 import { type Bbox, bboxParam, snapBbox } from "./api.js";
+import { NO_FILTERS, useFindingFilters } from "./filters.js";
 import { parseFindingCollection } from "./types.js";
 import { FINDINGS_DEBOUNCE_MS, useFindingsInBox } from "./useFindingsInBox.js";
 
@@ -20,6 +22,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
+  useFindingFilters.getState().clear();
+  useMapStore.setState({ showRuledOut: false });
 });
 
 function wrapper() {
@@ -168,5 +172,21 @@ describe("useFindingsInBox", () => {
     await waitFor(() => expect(result.current.error).not.toBeNull());
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.current.error?.message).toContain("not a GeoJSON FeatureCollection");
+  });
+
+  it("asks with the Explore panel's filters, so the map shows what the list lists", async () => {
+    useFindingFilters.getState().setFilter("tier", ["seen", "probable"]);
+    useMapStore.setState({ showRuledOut: true });
+    const { result } = render(AVEBURY);
+    await waitFor(() => expect(result.current.findings.features.length).toBeGreaterThan(0));
+    expect(requestedUrls()[0]?.searchParams.getAll("tier")).toEqual(["probable", "seen"]);
+    expect(requestedUrls()[0]?.searchParams.getAll("state")).toEqual([]);
+  });
+
+  it("asks for ruled-out findings even while they are hidden, and leaves the hiding to the map", async () => {
+    useFindingFilters.setState({ filters: { ...NO_FILTERS, state: ["ruled_out"] } });
+    const { result } = render(AVEBURY);
+    await waitFor(() => expect(result.current.findings.features.length).toBeGreaterThan(0));
+    expect(requestedUrls()[0]?.searchParams.getAll("state")).toEqual(["ruled_out"]);
   });
 });

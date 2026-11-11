@@ -98,6 +98,12 @@ describe("apiUrl", () => {
     expect(() => apiUrl("meta")).toThrow(ApiError);
     expect(apiUrl("/meta")).toBe("/api/v1/meta");
   });
+
+  it("sends a list as one parameter per item, and leaves out empty values", () => {
+    expect(apiUrl("/findings", { tier: ["seen", "probable"], state: [], q: null, limit: 5 })).toBe(
+      "/api/v1/findings?tier=seen&tier=probable&limit=5",
+    );
+  });
 });
 
 describe("error details and signed-out answers", () => {
