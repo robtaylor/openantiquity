@@ -1,8 +1,6 @@
 import {
   Activity,
   BookOpen,
-  Eye,
-  HandHelping,
   Info,
   Landmark,
   type LucideIcon,
@@ -44,22 +42,10 @@ export const PLACEHOLDER_ROUTES: PlaceholderRoute[] = [
     body: "A record's page will show where it comes from, its licence, and a link to the original.",
   },
   {
-    path: "/review",
-    title: "Second look",
-    icon: Eye,
-    body: "Findings that need another pair of eyes will come up here one at a time, in the view the finder used. You'll say whether you can see it too.",
-  },
-  {
     path: "/scan",
     title: "Scan a square",
     icon: ScanSearch,
     body: "You'll be sent to a one-kilometre square that few people have looked at, to mark what you see or to say there's nothing obvious.",
-  },
-  {
-    path: "/help",
-    title: "Help wanted",
-    icon: HandHelping,
-    body: "Open steps on other people's findings will be listed here by kind: checking old maps, looking for cropmarks, matching heritage records.",
   },
   {
     path: "/investigations",

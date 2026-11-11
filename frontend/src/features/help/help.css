@@ -1,0 +1,100 @@
+/* Help wanted. A finding in a list uses Explore's rows, so the two read alike. */
+.fc-help {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fc-help__intro,
+.fc-help__quiet {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.fc-help__kinds {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fc-help__kind {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--raised);
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color var(--duration) var(--ease);
+}
+
+.fc-help__kind:hover {
+  border-color: #4a505b;
+}
+
+.fc-help__kind-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.fc-help__kind-name {
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.fc-help__kind-line {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-help__kind-count {
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fc-help__chevron {
+  flex: none;
+  align-self: center;
+  color: var(--text-muted);
+}
+
+.fc-help__step {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-help__back {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-help__back:hover {
+  color: var(--text);
+}
+
+.fc-help__other {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.fc-help__loading {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}

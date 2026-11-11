@@ -36,10 +36,13 @@ import { DraftsBar } from "../drafts/DraftsBar.js";
 import { ExploreLayer } from "../explore/ExploreLayer.js";
 import { ExplorePanel } from "../explore/ExplorePanel.js";
 import { FindingPanel } from "../finding/FindingPanel.js";
+import { HELP_PATH, HelpKindPanel, HelpPanel } from "../help/HelpPanel.js";
 import { MarkButton } from "../mark/MarkButton.js";
 import { isMarkPath, MarkLayer } from "../mark/MarkLayer.js";
 import { MARK_PATH, MarkPanel } from "../mark/MarkPanel.js";
 import { APP_NAME, NotFoundPanel, PLACEHOLDER_ROUTES, PlaceholderPanel } from "../placeholders.js";
+import { REVIEW_PATH, ReviewLayer } from "../review/ReviewLayer.js";
+import { ReviewPanel } from "../review/ReviewPanel.js";
 import { BrandMark, ModeRail } from "./ModeRail.js";
 import { BARE_MAP_PARAM } from "./navigation.js";
 import { PanelFrame } from "./PanelFrame.js";
@@ -235,6 +238,7 @@ function ReadyShell({ meta }: { meta: Meta }) {
         <MapView meta={meta} insets={insets} />
         <ExploreLayer meta={meta} />
         <MarkLayer />
+        <ReviewLayer meta={meta} />
 
         <div className="fc-stage">
           <div className="fc-stage__search">
@@ -288,6 +292,9 @@ function ReadyShell({ meta }: { meta: Meta }) {
             <Route path="/" element={bareMap ? null : <ExplorePanel meta={meta} />} />
             <Route path="/mark/:draftId?" element={<MarkPanel meta={meta} />} />
             <Route path="/f/:id" element={<FindingPanel meta={meta} />} />
+            <Route path={REVIEW_PATH} element={<ReviewPanel meta={meta} />} />
+            <Route path={HELP_PATH} element={<HelpPanel meta={meta} />} />
+            <Route path={`${HELP_PATH}/:kind`} element={<HelpKindPanel meta={meta} />} />
             <Route path="/account" element={<AccountPage />} />
             <Route path={EMAIL_LINK_PATH} element={<EmailLinkPage />} />
             {PLACEHOLDER_ROUTES.map((route) => (

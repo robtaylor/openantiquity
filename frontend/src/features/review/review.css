@@ -1,0 +1,134 @@
+/* Second look, the blind queue. Everything uses the tokens; the answer
+   buttons, detail and reveal keep the styles of a finding's page. */
+.fc-review {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fc-review__ask,
+.fc-review__reveal,
+.fc-review__finding,
+.fc-review__loading {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fc-review__intro {
+  color: var(--text);
+}
+
+.fc-review__place {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-review__place .fc-mono {
+  color: var(--text);
+}
+
+.fc-review__skip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.fc-review__eyebrow {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.fc-review__title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.fc-review__finding .fc-tier-badge {
+  align-self: flex-start;
+}
+
+.fc-review__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fc-review__empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* The reward: the line saying the answer moved the finding up arrives with a small lift
+   (base.css turns it off for reduced motion). */
+.fc-review .fc-reveal__moved {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  font-weight: 600;
+  animation: fc-review-reward var(--duration) var(--ease) both;
+}
+
+@keyframes fc-review-reward {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Where to look: four corners round the place, open in the middle so nothing there is covered. */
+.fc-look-here {
+  position: absolute;
+  top: -48px;
+  left: -48px;
+  width: 96px;
+  height: 96px;
+}
+
+.fc-look-here__corner {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 0 solid var(--accent-strong);
+  filter: drop-shadow(0 0 1px var(--bg)) drop-shadow(0 0 1px var(--bg));
+}
+
+.fc-look-here__corner--nw {
+  top: 0;
+  left: 0;
+  border-top-width: 3px;
+  border-left-width: 3px;
+}
+
+.fc-look-here__corner--ne {
+  top: 0;
+  right: 0;
+  border-top-width: 3px;
+  border-right-width: 3px;
+}
+
+.fc-look-here__corner--sw {
+  bottom: 0;
+  left: 0;
+  border-bottom-width: 3px;
+  border-left-width: 3px;
+}
+
+.fc-look-here__corner--se {
+  right: 0;
+  bottom: 0;
+  border-right-width: 3px;
+  border-bottom-width: 3px;
+}

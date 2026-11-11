@@ -8,8 +8,8 @@ import { solidPng } from "./png.js";
  * neither a backend nor the internet. Tiles are recorded stand-ins: flat
  * colours for imagery, sea level for elevation, and nothing for vector data.
  * The API calls the app makes in fixture mode get stand-in answers too: no
- * findings (for the map and for the list), a fixed height for any spot, and
- * nobody signed in. A test can
+ * findings (for the map and for the list), a fixed height for any spot,
+ * nobody signed in, nothing waiting for a second look and no help wanted. A test can
  * answer any of them differently with a route of its own, which Playwright
  * tries first.
  */
@@ -146,6 +146,12 @@ export async function stubBackend(page: Page, log: NetworkLog = newLog()): Promi
       count("auth-me");
       const body = { error: { code: "unauthorised", message: "Sign in first." } };
       return route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify(body) });
+    }
+    if (path === "/api/v1/review/next" || path === "/api/v1/review/tasks") {
+      // Nothing waiting for a second look, and no help wanted.
+      count("review");
+      const body = path === "/api/v1/review/next" ? { items: [], next_cursor: null } : { groups: [] };
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
     }
     if (path === "/api/v1/geo/point") {
       count("geo-point");
