@@ -47,6 +47,7 @@ test("starts an investigation, adds a finding and a note, reorders them, publish
   // Start it from the list: a title and nothing else.
   await openMap(page, `/investigations${VIEW}`);
   const list = panel(page, "Investigations");
+  await list.getByRole("button", { name: "Start an investigation" }).click();
   await list.getByLabel("Start an investigation").fill(title);
   await list.getByRole("button", { name: "Start" }).click();
   const notebook = panel(page, title);
