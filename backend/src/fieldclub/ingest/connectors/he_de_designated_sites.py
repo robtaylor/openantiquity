@@ -16,6 +16,7 @@ from typing import ClassVar
 from fieldclub.ingest.adapters.arcgis import ArcGISLayer, esri_date
 from fieldclub.ingest.adapters.common import Feature, UpstreamFormatError, json_ready
 from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo
+from fieldclub.ingest.connectors.he_nhle_hub import HUB_HOMEPAGE, OGL_URL
 from fieldclub.ingest.registry import register
 from fieldclub.vocab import RecordCategory, SourceAccess, SourceReuse
 
@@ -38,20 +39,20 @@ class DeDesignatedSites(Connector):
         name="Sites removed from the National Heritage List since April 2011",
         publisher="Historic England",
         licence="Open Government Licence v3.0 (HE Open Data Hub Terms and Conditions)",
-        licence_url="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+        licence_url=OGL_URL,
         attribution=(
             "© Crown Copyright 2026. Contains Ordnance Survey data © Crown copyright and database right 2026."
         ),
         category=RecordCategory.DESIGNATION,
         access=SourceAccess.BULK,
         reuse=SourceReuse.OPEN,
-        homepage="https://opendata-historicengland.hub.arcgis.com/",
+        homepage=HUB_HOMEPAGE,
         coverage="England",
     )
 
     def fetch(self, *, bbox: BBox | None = None, limit: int | None = None) -> Iterator[RecordIn]:
         layer = ArcGISLayer(LAYER_URL, client=self.http, geometry_precision=6)
-        layer.require_shape(FIELDS, "esriGeometryPolygon")
+        layer.require(FIELDS, geometry_type="esriGeometryPolygon")
         seen: set[int] = set()
         for feature in layer.features(bbox=bbox):
             record = to_record(feature)

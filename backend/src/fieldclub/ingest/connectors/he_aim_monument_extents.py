@@ -30,6 +30,7 @@ from fieldclub.ingest.adapters.arcgis import ArcGISLayer
 from fieldclub.ingest.adapters.common import Feature, FeatureKeys, json_ready
 from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo
 from fieldclub.ingest.connectors.he_aim_detailed_mapping import EMPTY
+from fieldclub.ingest.connectors.he_nhle_hub import HUB_HOMEPAGE, OGL_URL
 from fieldclub.ingest.registry import register
 from fieldclub.vocab import RecordCategory, SourceAccess, SourceReuse
 
@@ -52,18 +53,18 @@ class MonumentExtents(Connector):
         name="Aerial Investigation and Mapping: monument extents",
         publisher="Historic England",
         licence="Open Government Licence v3.0 (HE Open Data Hub Terms and Conditions)",
-        licence_url="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+        licence_url=OGL_URL,
         attribution="© Historic England [year]",
         category=RecordCategory.MONUMENT,
         access=SourceAccess.BULK,
         reuse=SourceReuse.OPEN,
-        homepage="https://opendata-historicengland.hub.arcgis.com/",
+        homepage=HUB_HOMEPAGE,
         coverage="England, where the mapping projects have been done",
     )
 
     def fetch(self, *, bbox: BBox | None = None, limit: int | None = None) -> Iterator[RecordIn]:
         layer = ArcGISLayer(LAYER_URL, client=self.http, out_sr=27700, geometry_precision=GEOMETRY_PRECISION)
-        layer.require_shape(FIELDS, "esriGeometryPolygon")
+        layer.require(FIELDS, geometry_type="esriGeometryPolygon")
         keys = FeatureKeys()
         collapsed = 0
         for feature in layer.features(bbox=bbox):

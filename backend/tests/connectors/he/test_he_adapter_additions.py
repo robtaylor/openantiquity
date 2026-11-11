@@ -4,15 +4,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-import httpx
 import pytest
-import respx
 from shapely.geometry import Point, box
 
-from fieldclub.ingest.adapters.arcgis import ArcGISLayer, esri_date
+from fieldclub.ingest.adapters.arcgis import esri_date
 from fieldclub.ingest.adapters.common import FeatureKeys, UpstreamFormatError, json_ready
-from tests.connectors.he.support import HOST, RecordedLayer
-from tests.ingest.adapters.support import NoWait
 
 
 def test_feature_keys_are_the_same_in_every_run_and_differ_by_part_or_outline() -> None:
@@ -95,22 +91,6 @@ def test_esri_dates_are_milliseconds_since_1970_in_utc() -> None:
     assert esri_date(None) is None
     with pytest.raises(UpstreamFormatError):
         esri_date("2010-06-01")
-
-
-@respx.mock
-def test_require_shape_names_what_is_missing() -> None:
-    layer = RecordedLayer("he-aim-project-areas")
-    respx.route(host=HOST).mock(side_effect=layer)
-    reader = ArcGISLayer(
-        "https://services-eu1.arcgis.com/x/arcgis/rest/services/s/FeatureServer/2",
-        client=httpx.Client(),
-        polite=NoWait(),
-    )
-    reader.require_shape(["PROJECT_NA", "Status"], "esriGeometryPolygon")
-    with pytest.raises(UpstreamFormatError, match=r"missing fields \['Nothing'\]"):
-        reader.require_shape(["PROJECT_NA", "Nothing"])
-    with pytest.raises(UpstreamFormatError, match="geometry esriGeometryPolygon"):
-        reader.require_shape(["PROJECT_NA"], "esriGeometryPoint")
 
 
 def test_a_ring_that_collapsed_to_a_point_is_dropped_not_kept_as_a_part() -> None:

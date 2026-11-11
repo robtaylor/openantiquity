@@ -25,6 +25,7 @@ from typing import ClassVar
 from fieldclub.ingest.adapters.arcgis import ArcGISLayer
 from fieldclub.ingest.adapters.common import Feature, UpstreamFormatError, json_ready
 from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo
+from fieldclub.ingest.connectors.he_nhle_hub import OGL_URL
 from fieldclub.ingest.registry import register
 from fieldclub.vocab import RecordCategory, SourceAccess, SourceReuse
 
@@ -43,7 +44,7 @@ class HeritageAtRisk2026(Connector):
             "Open Government Licence v3.0 "
             "('Contains public sector information licensed under the Open Government Licence v3.0')"
         ),
-        licence_url="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+        licence_url=OGL_URL,
         attribution=(
             "© Historic England 2026. Contains Ordnance Survey data © Crown copyright and "
             "database right 2026. Released under OGL."
@@ -57,7 +58,7 @@ class HeritageAtRisk2026(Connector):
 
     def fetch(self, *, bbox: BBox | None = None, limit: int | None = None) -> Iterator[RecordIn]:
         layer = ArcGISLayer(LAYER_URL, client=self.http, geometry_precision=6)
-        layer.require_shape(FIELDS, "esriGeometryPolygon")
+        layer.require(FIELDS, geometry_type="esriGeometryPolygon")
         for feature in layer.features(bbox=bbox):
             yield to_record(feature)
 

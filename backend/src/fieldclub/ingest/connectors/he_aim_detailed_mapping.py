@@ -46,6 +46,7 @@ from fieldclub.ingest.adapters.common import Feature, FeatureKeys, UpstreamForma
 from fieldclub.ingest.adapters.download import download
 from fieldclub.ingest.adapters.files import read_vector, vector_info
 from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo
+from fieldclub.ingest.connectors.he_nhle_hub import HUB_HOMEPAGE, OGL_URL, hub_export_url
 from fieldclub.ingest.registry import register
 from fieldclub.vocab import Period, RecordCategory, SourceAccess, SourceReuse
 
@@ -55,10 +56,7 @@ LAYER_URL = (
     "https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/0"
 )
 FIELDS = ("LAYER", "project", "PERIOD", "MONUMENT_TYPE", "EVIDENCE_1", "EVIDENCE_2", "HE_UID")
-HUB_EXPORT = (
-    "https://opendata-historicengland.hub.arcgis.com/api/download/v1/items/"
-    "e08a1ca270ac4caa8ba5efcb74f86a74/geoPackage?layers=0"
-)
+HUB_EXPORT = hub_export_url("e08a1ca270ac4caa8ba5efcb74f86a74", 0)
 # The export is 4.7 GB and the Hub builds it on request, then serves it at about half a megabyte a
 # second, so a copy is kept for a week. The layer was last edited in June 2026.
 MAX_AGE = timedelta(days=7)
@@ -107,12 +105,12 @@ class DetailedMapping(Connector):
         name="Aerial Investigation and Mapping: detailed mapping",
         publisher="Historic England",
         licence="Open Government Licence v3.0 (HE Open Data Hub Terms and Conditions)",
-        licence_url="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+        licence_url=OGL_URL,
         attribution="© Historic England [year]",
         category=RecordCategory.MONUMENT,
         access=SourceAccess.BULK,
         reuse=SourceReuse.OPEN,
-        homepage="https://opendata-historicengland.hub.arcgis.com/",
+        homepage=HUB_HOMEPAGE,
         coverage="England, where the mapping projects have been done",
     )
 
