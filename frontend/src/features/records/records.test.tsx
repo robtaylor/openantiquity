@@ -1,5 +1,6 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
+import { useLocation } from "react-router";
 import type { Mock } from "vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RECORD_LAYERS } from "../../map/overlayLayers.js";
@@ -7,11 +8,14 @@ import { useMapStore } from "../../map/store.js";
 import { overlaySourceId } from "../../map/style.js";
 import { type ApiRoutes, apiError, routeApi } from "../../test/apiRoutes.js";
 import type { FakeMap } from "../../test/fakeMapLibre.js";
+import { metaFixture } from "../../test/fixtures/meta.js";
 import {
+  ABERDEENSHIRE_LIVE,
   ADS_LIVE,
   AVENUE_RECORD,
   BRISTOL_LIVE,
   CONTEXT_LINKS,
+  DARTMOOR_LIVE,
   FIND_RECORD,
   HOSTILE_LIVE_ANSWER,
   HOSTILE_RECORD,
@@ -22,7 +26,7 @@ import {
   WILTSHIRE_LIVE,
   WILTSHIRE_RECORDED_ANSWER,
 } from "../../test/fixtures/records.js";
-import { json, mapReady, renderShell, setUpShellTests } from "../../test/shellHarness.js";
+import { json, mapReady, metaResponse, renderShell, setUpShellTests } from "../../test/shellHarness.js";
 import { useRecordFilters } from "./filters.js";
 import type { FeatureCollection } from "./geojson.js";
 import { useLiveStore } from "./live/store.js";
@@ -70,6 +74,12 @@ beforeEach(() => {
     return viaApi?.(input, init);
   });
 });
+
+/** The router's address, for a test to read. */
+function Address() {
+  const { pathname, search } = useLocation();
+  return <output data-testid="address">{`${pathname}${search}`}</output>;
+}
 
 function outsideCalls(host: string): string[] {
   return (harness.fetchMock() as Mock).mock.calls
@@ -197,11 +207,13 @@ describe("records on the map", () => {
     await user.click(designations);
     expect(designations).toHaveAttribute("aria-pressed", "false");
     expect(map.filters.get(RECORD_LAYERS.squares)).toEqual([
-      "!",
-      ["in", ["get", "category"], ["literal", ["designation"]]],
+      "all",
+      ["in", ["geometry-type"], ["literal", ["Point", "MultiPoint"]]],
+      ["!", ["in", ["get", "category"], ["literal", ["designation"]]]],
     ]);
+    await user.click(screen.getByText("Sources", { exact: true }));
     await user.click(
-      within(screen.getByRole("group", { name: "Sources of records to show" })).getByRole("button", {
+      within(screen.getByRole("group", { name: "Sources of designations to show" })).getByRole("button", {
         name: "Scheduled monuments in England",
       }),
     );
@@ -210,6 +222,41 @@ describe("records on the map", () => {
       ["!", ["in", ["get", "category"], ["literal", ["designation"]]]],
       ["==", 1, 0],
     ]);
+  });
+
+  it("lists only the sources the records layer draws, by kind, folded away, with all and none", async () => {
+    const [scheduled] = metaFixture.sources;
+    if (!scheduled) throw new Error("The meta fixture has no source");
+    const sources = [
+      scheduled,
+      { ...scheduled, key: "aim", name: "Aerial mapping", category: "monument" },
+      { ...scheduled, key: "her", name: "County HER", category: "monument" },
+      { ...scheduled, key: "ons-counties", name: "County boundaries", category: "boundary" },
+      { ...scheduled, key: "os-names", name: "OS Open Names", category: "place" },
+    ];
+    api.on("GET /meta", () => metaResponse({ ...metaFixture, sources }));
+    const user = userEvent.setup();
+    renderShell("/?panel=layers");
+    await mapReady();
+    const folded = screen.getByText("Sources", { exact: true });
+    expect(screen.queryByRole("group", { name: "Sources of monument records to show" })).not.toBeVisible();
+    await user.click(folded);
+    const monuments = screen.getByRole("group", { name: "Sources of monument records to show" });
+    expect(
+      within(monuments)
+        .getAllByRole("button")
+        .map((chip) => chip.textContent),
+    ).toEqual(["Aerial mapping", "County HER"]);
+    expect(screen.queryByText("County boundaries")).toBeNull();
+    expect(screen.queryByText("OS Open Names")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Hide every source of monument records" }));
+    expect(useRecordFilters.getState().hiddenSources).toEqual(["aim", "her"]);
+    expect(screen.getByText("Sources (2 of 3 off)")).toBeInTheDocument();
+    await user.click(within(monuments).getByRole("button", { name: "County HER" }));
+    expect(useRecordFilters.getState().hiddenSources).toEqual(["aim"]);
+    await user.click(screen.getByRole("button", { name: "Show every source of monument records" }));
+    expect(useRecordFilters.getState().hiddenSources).toEqual([]);
   });
 
   it("opens other viewers for the spot that was right-clicked", async () => {
@@ -227,10 +274,28 @@ describe("records on the map", () => {
     expect(link).toHaveAttribute("target", "_blank");
     expect(link.getAttribute("rel")?.split(" ")).toEqual(expect.arrayContaining(["noopener", "noreferrer"]));
     expect(api.callsTo("GET /context/links")[0]?.url.searchParams.get("lon")).toBe("-1.85421");
-    // Links nobody has checked say so. A link that isn't a web address isn't shown at all.
-    expect(within(panel).getAllByText(/Not checked/)).toHaveLength(2);
+    // Links nobody has checked carry a tag, explained once. A link that isn't a web address isn't shown at all.
+    expect(within(panel).getAllByText("unchecked", { exact: true })).toHaveLength(2);
+    expect(within(panel).getAllByText(/haven't been able to check/)).toHaveLength(1);
+    expect(
+      within(panel).getByRole("link", { name: /^Historic England Aerial Photo Explorer unchecked/ }),
+    ).toBeVisible();
+    expect(within(panel).queryByText(/at a point/)).toBeNull();
     expect(within(panel).queryByText(/A link that isn't one/)).toBeNull();
     expect(within(panel).getByRole("heading", { name: "England" })).toBeInTheDocument();
+  });
+});
+
+describe("open elsewhere", () => {
+  it("says once that no link could be checked, with no tag on each", async () => {
+    api.on("GET /context/links", () =>
+      json({ ...CONTEXT_LINKS, items: CONTEXT_LINKS.items.map((link) => ({ ...link, verified: "not_tested" })) }),
+    );
+    renderShell("/elsewhere?lon=-1.8542&lat=51.4286");
+    const panel = await screen.findByRole("complementary", { name: "Open elsewhere" });
+    await within(panel).findByRole("link", { name: /NLS georeferenced maps viewer/ });
+    expect(within(panel).queryByText("unchecked", { exact: true })).toBeNull();
+    expect(within(panel).getByText(/haven't been able to check these links/)).toBeInTheDocument();
   });
 });
 
@@ -294,8 +359,10 @@ describe("live sources", () => {
     outside.set("maps.wiltshire.gov.uk", () => json(WILTSHIRE_RECORDED_ANSWER));
     const { user, map } = await openLive();
     const toggle = await screen.findByRole("switch", { name: WILTSHIRE_LIVE.name });
-    // The catalogue entry that wants a record id isn't offered.
+    // The catalogue entry that wants a record id isn't offered, nor are ones credited differently for each record.
     expect(screen.queryByRole("switch", { name: "ADS Data Catalogue single record" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: ADS_LIVE.name })).toBeNull();
+    expect(screen.queryByRole("switch", { name: BRISTOL_LIVE.name })).toBeNull();
     expect(outsideCalls("maps.wiltshire.gov.uk")).toEqual([]);
 
     await user.click(toggle);
@@ -308,34 +375,50 @@ describe("live sources", () => {
     expect(outsideCalls("maps.wiltshire.gov.uk")).toHaveLength(1);
     const live = map.sourceData(`${RECORDS_SOURCE}-live`) as { features: unknown[] };
     expect(live.features).toHaveLength(4);
-    // Credited while its records are on the map.
+    // Credited while its records are on the map, with the publisher's credit and not the catalogue's notes.
     expect(screen.getAllByText(new RegExp(WILTSHIRE_LIVE.attribution.replace(/[()]/g, "\\$&"))).length).toBeGreaterThan(
       0,
     );
+    expect(screen.getByText(/Each record links to its page at Wiltshire Council\./)).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(WILTSHIRE_LIVE.licence.slice(0, 20)))).toBeNull();
     // Nothing the source sent went to our server.
     for (const call of api.calls) expect(JSON.stringify([call.url.href, call.body])).not.toContain("MWI");
   });
 
   it("turns off quietly, and stays off, when a source refuses this browser or fails", async () => {
-    outside.set("archaeologydataservice.ac.uk", () => Promise.reject(new TypeError("Failed to fetch")));
-    outside.set("maps2.bristol.gov.uk", () => new Response("Server error", { status: 500 }));
+    outside.set("services2.arcgis.com", () => Promise.reject(new TypeError("Failed to fetch")));
+    outside.set("services-eu1.arcgis.com", () => new Response("Server error", { status: 500 }));
     const { user } = await openLive();
-    const ads = await screen.findByRole("switch", { name: ADS_LIVE.name });
-    await user.click(ads);
-    await waitFor(() => expect(ads).not.toBeChecked());
+    const refusing = await screen.findByRole("switch", { name: ABERDEENSHIRE_LIVE.name });
+    await user.click(refusing);
+    await waitFor(() => expect(refusing).not.toBeChecked());
     expect(
       screen.getByText(/didn't answer this browser.*Some services don't let other websites ask them/),
     ).toBeInTheDocument();
-    expect(outsideCalls("archaeologydataservice.ac.uk")).toHaveLength(1);
+    expect(outsideCalls("services2.arcgis.com")).toHaveLength(1);
 
-    const bristol = screen.getByRole("switch", { name: BRISTOL_LIVE.name });
-    await user.click(bristol);
-    await waitFor(() => expect(bristol).not.toBeChecked());
+    const failing = screen.getByRole("switch", { name: DARTMOOR_LIVE.name });
+    await user.click(failing);
+    await waitFor(() => expect(failing).not.toBeChecked());
     expect(screen.getByText(/answered with an error \(500\).*off for now/)).toBeInTheDocument();
     // Never asked again on its own.
     await new Promise((resolve) => setTimeout(resolve, 800));
-    expect(outsideCalls("maps2.bristol.gov.uk")).toHaveLength(1);
-    expect(outsideCalls("archaeologydataservice.ac.uk")).toHaveLength(1);
+    expect(outsideCalls("services-eu1.arcgis.com")).toHaveLength(1);
+    expect(outsideCalls("services2.arcgis.com")).toHaveLength(1);
+  });
+
+  it("shows a clicked live record in the layer panel without losing the rest of the address", async () => {
+    const line = "line=-1.853,51.4286,-1.849,51.4286";
+    renderShell(`/profile?${line}&panel=layers`, <Address />);
+    const map = await mapReady();
+    useLiveStore.getState().setOn(WILTSHIRE_LIVE.key, true);
+    map.rendered = [{ properties: { source: WILTSHIRE_LIVE.key, id: "20841088" }, layer: { id: RECORD_LAYERS.live } }];
+    act(() => map.fire("click", { point: { x: 10, y: 10 }, lngLat: { lng: -1.85, lat: 51.43 } }));
+    expect(useLiveStore.getState().picked).toBe(`${WILTSHIRE_LIVE.key}/20841088`);
+    const address = new URL(screen.getByTestId("address").textContent ?? "", "http://localhost");
+    expect(address.pathname).toBe("/profile");
+    expect(address.searchParams.get("line")).toBe("-1.853,51.4286,-1.849,51.4286");
+    expect(address.searchParams.get("panel")).toBe("layers");
   });
 
   it("asks nothing while zoomed out", async () => {

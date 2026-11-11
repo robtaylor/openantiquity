@@ -236,7 +236,13 @@ export const CONTEXT_LINKS: ContextLinks = {
   ],
 };
 
-/** Three entries of the live catalogue as the backend serves them, plus one this browser can't use. */
+/**
+ * Entries of the live catalogue as the backend serves them. Wiltshire,
+ * Aberdeenshire and Dartmoor credit the whole source in one line and link
+ * each record, so they are offered. The others are not: the Archaeology Data
+ * Service and Bristol credit each record differently, and one asks for a
+ * single record rather than an area.
+ */
 export const WILTSHIRE_LIVE: LiveSourceOut = {
   key: "wiltshire-her-monuments",
   name: "Wiltshire and Swindon HER monuments (daily extract)",
@@ -261,8 +267,9 @@ export const ADS_LIVE: LiveSourceOut = {
   query_pattern:
     "https://archaeologydataservice.ac.uk/data-catalogue-api/api/search?q=&size=50&page=1&bbox={north},{west},{south},{east}",
   response_fields: "hits[].id; hits[].data.title.text; data.spatial[].geopoint {lat,lon}",
-  licence: "Per record (accessRights).",
-  attribution: "Archaeology Data Service (distributor)",
+  licence: "Per record (accessRights). ADS-published records: ADS Terms of Use and Access.",
+  attribution:
+    "Original depositor, funder if different, and 'Archaeology Data Service (distributor)' with DOI or record link",
   link_template: "https://archaeologydataservice.ac.uk/data-catalogue/resource/{id}",
   limits: null,
 };
@@ -282,6 +289,39 @@ export const BRISTOL_LIVE: LiveSourceOut = {
   limits: null,
 };
 
+export const ABERDEENSHIRE_LIVE: LiveSourceOut = {
+  key: "aberdeenshire-her",
+  name: "Aberdeenshire Council HER (Aberdeenshire, Moray, Angus, Aberdeen City)",
+  publisher: "Aberdeenshire Council",
+  coverage: "scotland",
+  endpoint:
+    "https://services2.arcgis.com/VIguPNrHLCWUHr2B/arcgis/rest/services/Historic_Environment_Records/FeatureServer/1",
+  query_pattern:
+    "https://services2.arcgis.com/VIguPNrHLCWUHr2B/arcgis/rest/services/Historic_Environment_Records/FeatureServer/1/query?where=1%3D1&geometry={west},{south},{east},{north}&geometryType=esriGeometryEnvelope&inSR=4326&outFields=*&outSR=4326&f=geojson",
+  response_fields: "GeoJSON FeatureCollection; HER_Refere, Name, Summary, Monument_U",
+  licence: "'Copyright is reserved... intended to be used for personal research only'",
+  attribution: "Aberdeenshire Council",
+  link_template: "{Monument_U}",
+  limits: "maxRecordCount 1000-2000",
+};
+
+export const DARTMOOR_LIVE: LiveSourceOut = {
+  key: "dnpa-dartmoor-her",
+  name: "Dartmoor National Park HER",
+  publisher: "Dartmoor National Park Authority",
+  coverage: "england",
+  endpoint:
+    "https://services-eu1.arcgis.com/ygaMbwTQr2O0LMlb/arcgis/rest/services/Heritage_Environment_Record/FeatureServer/0",
+  query_pattern:
+    "https://services-eu1.arcgis.com/ygaMbwTQr2O0LMlb/arcgis/rest/services/Heritage_Environment_Record/FeatureServer/0/query?where=1%3D1&geometry={west},{south},{east},{north}&geometryType=esriGeometryEnvelope&inSR=4326&outFields=*&outSR=4326&f=geojson",
+  response_fields: "GeoJSON FeatureCollection; monuid, name, montype",
+  licence: "Unstated. Item credits: '© Crown copyright and database rights 2026 OS AC0000823576'.",
+  attribution: "Dartmoor National Park Authority; © Crown copyright and database rights 2026 OS AC0000823576",
+  link_template:
+    "https://historicengland.org.uk/listing/heritage-gateway/results/record/c39bc47e-3b72-4a06-9863-681629e456a2/{monuid}",
+  limits: "maxRecordCount 2000",
+};
+
 /** Asks for one record by id, so it can't be asked about an area and is left out. */
 export const SINGLE_RECORD_LIVE: LiveSourceOut = {
   ...ADS_LIVE,
@@ -290,7 +330,14 @@ export const SINGLE_RECORD_LIVE: LiveSourceOut = {
   query_pattern: "https://archaeologydataservice.ac.uk/data-catalogue-api/api/getRecord/{id}",
 };
 
-export const LIVE_SOURCES: LiveSourceOut[] = [WILTSHIRE_LIVE, ADS_LIVE, BRISTOL_LIVE, SINGLE_RECORD_LIVE];
+export const LIVE_SOURCES: LiveSourceOut[] = [
+  WILTSHIRE_LIVE,
+  ADS_LIVE,
+  BRISTOL_LIVE,
+  ABERDEENSHIRE_LIVE,
+  DARTMOOR_LIVE,
+  SINGLE_RECORD_LIVE,
+];
 
 /**
  * Wiltshire's map service, asked for a small box at Avebury on 11 November

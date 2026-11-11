@@ -1,15 +1,23 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  ABERDEENSHIRE_LIVE,
   ADS_LIVE,
   BRISTOL_LIVE,
+  DARTMOOR_LIVE,
   HOSTILE_LIVE_ANSWER,
   LIVE_SOURCES,
   SINGLE_RECORD_LIVE,
   WILTSHIRE_LIVE,
   WILTSHIRE_RECORDED_ANSWER,
 } from "../../../test/fixtures/records.js";
-import { LiveCatalogueError, liveRequestUrl, liveSourceFrom, liveSourcesFrom } from "./catalogue.js";
-import { fetchLiveRecords, LiveSourceError } from "./client.js";
+import {
+  creditableOnScreen,
+  LiveCatalogueError,
+  liveRequestUrl,
+  liveSourceFrom,
+  liveSourcesFrom,
+} from "./catalogue.js";
+import { fetchLiveRecords, LIVE_TIMEOUT_MS, LiveSourceError, MAX_ANSWER_BYTES } from "./client.js";
 import { fillLinkTemplate, LiveResponseError, parseLiveAnswer } from "./parse.js";
 
 const AREA = { west: -1.86, south: 51.426, east: -1.848, north: 51.431 };
@@ -24,16 +32,34 @@ describe("the live catalogue", () => {
   it("keeps the sources that can be asked about an area or a point, and drops one that wants a record id", () => {
     expect(liveSourcesFrom(LIVE_SOURCES).map((item) => item.key)).toEqual([
       WILTSHIRE_LIVE.key,
-      ADS_LIVE.key,
-      BRISTOL_LIVE.key,
+      ABERDEENSHIRE_LIVE.key,
+      DARTMOOR_LIVE.key,
     ]);
     expect(liveSourceFrom(SINGLE_RECORD_LIVE)).toBeNull();
     const point = liveSourceFrom({
-      ...ADS_LIVE,
+      ...WILTSHIRE_LIVE,
       key: "wiki",
       query_pattern: "https://commons.wikimedia.org/w/api.php?ggscoord={lat}|{lon}&origin=*",
     });
     expect(point?.query).toBe("point");
+  });
+
+  it("leaves out a source it can't credit as its publisher asks: a credit per record, or no link to its records", () => {
+    // The Archaeology Data Service's terms and credit are per record, and Bristol's per contributing HER.
+    expect(liveSourceFrom(ADS_LIVE)).toBeNull();
+    expect(liveSourceFrom(BRISTOL_LIVE)).toBeNull();
+    expect(creditableOnScreen({ ...WILTSHIRE_LIVE, attribution: "Use the per-record Copyright field" })).toBe(false);
+    expect(creditableOnScreen({ ...WILTSHIRE_LIVE, attribution: "Per file, from extmetadata Artist" })).toBe(false);
+    expect(
+      creditableOnScreen({
+        ...WILTSHIRE_LIVE,
+        attribution: "© Exmoor National Park Authority; records containing NRHE data: 'This record includes ...'",
+      }),
+    ).toBe(false);
+    expect(creditableOnScreen({ ...WILTSHIRE_LIVE, link_template: null })).toBe(false);
+    expect(creditableOnScreen({ ...WILTSHIRE_LIVE, link_template: " " })).toBe(false);
+    expect(creditableOnScreen(WILTSHIRE_LIVE)).toBe(true);
+    expect(liveSourceFrom(DARTMOOR_LIVE)?.attribution).toBe(DARTMOOR_LIVE.attribution);
   });
 
   it("refuses an address that isn't https, or that points at this site", () => {
@@ -49,7 +75,9 @@ describe("the live catalogue", () => {
   it("fills the area into the pattern, in the order the pattern asks for", () => {
     const url = new URL(liveRequestUrl(source(), AREA, "http://localhost"));
     expect(url.searchParams.get("geometry")).toBe("-1.86000,51.42600,-1.84800,51.43100");
-    const ads = new URL(liveRequestUrl(source(ADS_LIVE), AREA, "http://localhost"));
+    const ads = new URL(
+      liveRequestUrl({ key: ADS_LIVE.key, query: "area", pattern: ADS_LIVE.query_pattern }, AREA, "http://localhost"),
+    );
     expect(ads.searchParams.get("bbox")).toBe("51.43100,-1.86000,51.42600,-1.84800");
   });
 });
@@ -95,7 +123,7 @@ describe("reading a live answer", () => {
           },
         ],
       },
-      source(ADS_LIVE),
+      { linkTemplate: ADS_LIVE.link_template },
     );
     expect(ads.records).toEqual([
       {
@@ -217,6 +245,48 @@ describe("fetchLiveRecords", () => {
       vi.fn(async () => new Response(JSON.stringify({ error: { message: "no" } }), { status: 200 })),
     );
     await expect(fetchLiveRecords(source(), AREA)).rejects.toMatchObject({ kind: "failed" });
+  });
+
+  it("gives up on a source that sends its headers and then never finishes", async () => {
+    vi.useFakeTimers();
+    try {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"type":"FeatureCollection","features":['));
+        },
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => new Response(body, { status: 200 })),
+      );
+      const pending = fetchLiveRecords(source(), AREA);
+      const settled = expect(pending).rejects.toMatchObject({ kind: "failed", message: "It didn't answer in time." });
+      await vi.advanceTimersByTimeAsync(LIVE_TIMEOUT_MS + 1);
+      await settled;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops reading an answer past the size limit, whether or not it says how long it is", async () => {
+    const chunk = new Uint8Array(1_000_000).fill(32);
+    let sent = 0;
+    const endless = () =>
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          sent += chunk.byteLength;
+          controller.enqueue(chunk);
+        },
+      });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(endless(), { status: 200 })),
+    );
+    await expect(fetchLiveRecords(source(), AREA)).rejects.toMatchObject({
+      kind: "failed",
+      message: "Its answer was too big to show.",
+    });
+    expect(sent).toBeLessThanOrEqual(MAX_ANSWER_BYTES + 2 * chunk.byteLength);
   });
 
   it("passes a cancellation on as it is, not as a failure", async () => {

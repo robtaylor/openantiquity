@@ -95,12 +95,11 @@ export async function serveRecordsApi(page: Page): Promise<RecordsLog> {
 
 /**
  * The live sources' own hosts. Wiltshire replays its recorded answer and
- * allows this site to read it. The Archaeology Data Service's request is
- * refused. A browser tells a page about a cross-origin refusal only as a
+ * allows this site to read it. Aberdeenshire's request is refused. A browser tells a page about a cross-origin refusal only as a
  * failed fetch with no response, the same as a dropped connection, and an
  * answer Playwright fulfils is not checked for CORS headers, so the request
  * is failed outright: from the page that is exactly what a refusal looks
- * like. Bristol answers with a server error. Set `wiltshire` to answer
+ * like. Dartmoor answers with a server error. Set `wiltshire` to answer
  * something else.
  */
 export async function serveLiveHosts(
@@ -118,11 +117,11 @@ export async function serveLiveHosts(
   await page.route(/^https:\/\/maps\.wiltshire\.gov\.uk\//, (route) =>
     json(route, wiltshire, 200, { "Access-Control-Allow-Origin": note(route) }),
   );
-  await page.route(/^https:\/\/archaeologydataservice\.ac\.uk\//, (route) => {
+  await page.route(/^https:\/\/services2\.arcgis\.com\//, (route) => {
     note(route);
     return route.abort("accessdenied");
   });
-  await page.route(/^https:\/\/maps2\.bristol\.gov\.uk\//, (route) =>
+  await page.route(/^https:\/\/services-eu1\.arcgis\.com\//, (route) =>
     route.fulfill({ status: 500, headers: { "Access-Control-Allow-Origin": note(route) }, body: "Server error" }),
   );
 }

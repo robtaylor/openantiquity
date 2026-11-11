@@ -128,6 +128,33 @@ describe("the search box", () => {
     expect(await screen.findByText(/Search isn't working right now/)).toBeInTheDocument();
   });
 
+  it("asks nothing more once a result is chosen, until the text changes", async () => {
+    const { user, box } = await openSearch();
+    await user.type(box, "su");
+    await user.click(await screen.findByRole("option", { name: new RegExp(GRIDREF_RESULT.label) }));
+    expect(box).toHaveValue(GRIDREF_RESULT.label);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(searches()).toEqual(["su"]);
+    await user.type(box, "1");
+    await waitFor(() => expect(searches()).toEqual(["su", `${GRIDREF_RESULT.label}1`]));
+  });
+
+  it("offers another try, as an option, when search is down", async () => {
+    let down = true;
+    api.on("GET /geo/search", () => (down ? apiError(500, "internal_error", "Oops") : json({ items: GEO_RESULTS })));
+    const { user, box } = await openSearch();
+    await user.type(box, "ave");
+    const retry = await screen.findByRole("option", { name: "Try again" });
+    expect(screen.getByText(/Search isn't working right now/)).toBeInTheDocument();
+    down = false;
+    await user.keyboard("{ArrowDown}");
+    expect(retry).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{Enter}");
+    expect(await screen.findByRole("option", { name: /West Kennet Avenue/ })).toBeInTheDocument();
+    expect(box).toHaveFocus();
+    expect(searches()).toEqual(["ave", "ave"]);
+  });
+
   it("offers the record search for the same words, last in the list", async () => {
     const { user, box } = await openSearch();
     await user.type(box, "barrow");

@@ -8,10 +8,10 @@ import { type LiveAnswer, LiveResponseError, parseLiveAnswer } from "./parse.js"
  * page: nothing from it is sent to Field Club's server (Decision 0007).
  */
 
-/** How long a live source has to answer. */
+/** How long a live source has to send its whole answer, from asking to the last byte. */
 export const LIVE_TIMEOUT_MS = 12_000;
-/** An answer bigger than this, by its stated length, is not read. */
-const MAX_ANSWER_BYTES = 5_000_000;
+/** An answer bigger than this is not read past this many bytes, whatever length it states. */
+export const MAX_ANSWER_BYTES = 5_000_000;
 
 /**
  * Why a live source gave nothing. "refused": the browser got no answer it
@@ -43,37 +43,93 @@ function either(signal: AbortSignal | undefined, timeout: AbortController): Abor
   return timeout.signal;
 }
 
+class AnswerTooBig extends Error {
+  constructor() {
+    super("The answer was too big to read");
+    this.name = "AnswerTooBig";
+  }
+}
+
+/**
+ * The body as text, read as it arrives and given up once it passes `limit`
+ * bytes, so a source that sends without stating a length can't fill the
+ * page's memory. Reading stops when `signal` aborts, even where the body
+ * isn't tied to the request's own signal.
+ */
+async function readCapped(response: Response, limit: number, signal: AbortSignal): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const text = await response.text();
+    if (new TextEncoder().encode(text).length > limit) throw new AnswerTooBig();
+    return text;
+  }
+  const stop = () => void reader.cancel().catch(() => undefined);
+  signal.addEventListener("abort", stop, { once: true });
+  const decoder = new TextDecoder();
+  let size = 0;
+  let text = "";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (signal.aborted) throw new DOMException("The answer took too long", "AbortError");
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) {
+        await reader.cancel().catch(() => undefined);
+        throw new AnswerTooBig();
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    signal.removeEventListener("abort", stop);
+  }
+  return text + decoder.decode();
+}
+
 export async function fetchLiveRecords(source: LiveSource, area: LiveArea, signal?: AbortSignal): Promise<LiveAnswer> {
   const url = liveRequestUrl(source, area);
+  // One deadline for the whole answer: a source that sends its headers and then dawdles is stopped too.
   const timeout = new AbortController();
   const timer = setTimeout(() => timeout.abort(), LIVE_TIMEOUT_MS);
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method: "GET",
-      mode: "cors",
-      credentials: "omit",
-      referrerPolicy: "strict-origin-when-cross-origin",
-      headers: { Accept: "application/json, application/geo+json" },
-      signal: either(signal, timeout),
-    });
-  } catch (cause) {
-    // Cancelled by the page: the view moved on, and nothing went wrong.
-    if (signal?.aborted) throw cause;
-    if (isAbort(cause)) throw new LiveSourceError("failed", "It didn't answer in time.", { cause });
-    throw new LiveSourceError("refused", "It didn't answer this browser.", { cause });
-  } finally {
-    clearTimeout(timer);
-  }
-  if (!response.ok) throw new LiveSourceError("failed", `It answered with an error (${response.status}).`);
-  const length = Number(response.headers.get("Content-Length") ?? 0);
-  if (length > MAX_ANSWER_BYTES) throw new LiveSourceError("failed", "Its answer was too big to show.");
+  const late = (cause: unknown) => new LiveSourceError("failed", "It didn't answer in time.", { cause });
   let body: unknown;
   try {
-    body = await response.json();
-  } catch (cause) {
-    if (signal?.aborted) throw cause;
-    throw new LiveSourceError("failed", "Its answer couldn't be read.", { cause });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "GET",
+        mode: "cors",
+        credentials: "omit",
+        referrerPolicy: "strict-origin-when-cross-origin",
+        headers: { Accept: "application/json, application/geo+json" },
+        signal: either(signal, timeout),
+      });
+    } catch (cause) {
+      // Cancelled by the page: the view moved on, and nothing went wrong.
+      if (signal?.aborted) throw cause;
+      if (isAbort(cause)) throw late(cause);
+      throw new LiveSourceError("refused", "It didn't answer this browser.", { cause });
+    }
+    if (!response.ok) throw new LiveSourceError("failed", `It answered with an error (${response.status}).`);
+    const length = Number(response.headers.get("Content-Length") ?? 0);
+    if (length > MAX_ANSWER_BYTES) throw new LiveSourceError("failed", "Its answer was too big to show.");
+    let text: string;
+    try {
+      text = await readCapped(response, MAX_ANSWER_BYTES, timeout.signal);
+    } catch (cause) {
+      if (signal?.aborted) throw cause;
+      if (cause instanceof AnswerTooBig)
+        throw new LiveSourceError("failed", "Its answer was too big to show.", { cause });
+      if (timeout.signal.aborted) throw late(cause);
+      throw new LiveSourceError("failed", "Its answer couldn't be read.", { cause });
+    }
+    try {
+      body = JSON.parse(text);
+    } catch (cause) {
+      throw new LiveSourceError("failed", "Its answer couldn't be read.", { cause });
+    }
+  } finally {
+    clearTimeout(timer);
   }
   try {
     return parseLiveAnswer(body, source);

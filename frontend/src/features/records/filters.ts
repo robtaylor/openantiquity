@@ -23,8 +23,8 @@ export const useRecordFilters = create<RecordFilterState>()((set) => ({
 }));
 
 /** The records layers drawn from vector tiles, which the filters apply to. */
-const TILE_RECORD_LAYERS = [RECORD_LAYERS.outlines, RECORD_LAYERS.squares] as const;
-const COUNT_LAYERS = [RECORD_LAYERS.counts, RECORD_LAYERS.countLabels] as const;
+const TILE_RECORD_LAYERS = [RECORD_LAYERS.fills, RECORD_LAYERS.outlines, RECORD_LAYERS.squares] as const;
+const COUNT_LAYERS = [RECORD_LAYERS.counts] as const;
 export const FILTERED_RECORD_LAYERS: readonly string[] = [...TILE_RECORD_LAYERS, ...COUNT_LAYERS];
 
 /** True when the comma-separated `sources` of a count names `key`. */

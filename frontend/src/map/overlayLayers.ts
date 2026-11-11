@@ -197,10 +197,10 @@ export const RECORD_COUNTS_SOURCE_LAYER = "record_counts";
 
 /** Ids of the records overlay's style layers, for the code that filters them and listens to clicks. */
 export const RECORD_LAYERS = {
+  fills: "records-fills",
   outlines: "records-outlines",
   squares: "records-squares",
   counts: "records-counts",
-  countLabels: "records-count-labels",
   live: "records-live",
   liveCentres: "records-live-centres",
   selectionLine: "records-selection-line",
@@ -224,19 +224,31 @@ export function recordsSelectionSourceId(source: string): string {
  * and never replace them.
  */
 export const RECORD_BASE_FILTERS: Readonly<Record<string, FilterSpecification>> = {
+  // A record with an outline is drawn as its outline alone, so the ground inside it stays in sight.
+  [RECORD_LAYERS.fills]: ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]],
   [RECORD_LAYERS.outlines]: ["!=", ["geometry-type"], "Point"],
-  // A cell holding one record needs no number on it.
-  [RECORD_LAYERS.countLabels]: [">", ["coalesce", ["get", "count"], 1], 1],
+  [RECORD_LAYERS.squares]: ["in", ["geometry-type"], ["literal", ["Point", "MultiPoint"]]],
 };
+
+/**
+ * Outlines are a hairline when zoomed out, where most of the ones in view
+ * are only a few pixels across, and thicken as their shapes become
+ * readable.
+ */
+const OUTLINE_WIDTH_BY_ZOOM: ExpressionSpecification = ["interpolate", ["linear"], ["zoom"], 13, 0.3, 15, 0.6, 17, 1.2];
 
 /** The counts' glyphs. They must exist on the glyph server named by the street-map overlay. */
 const COUNT_FONT = ["Noto Sans Bold"];
 
 /**
  * Heritage records: small squares coloured by category, so they can never be
- * mistaken for findings, which are round. A record with an outline has it
- * drawn as a thin line in the same colour. Where a tile carries counts, each
- * count is a larger, softer square, numbered when the map has glyphs.
+ * mistaken for findings, which are round. Only a record that is a point
+ * gets a square. One with an outline is that outline alone, a thin line in
+ * its category's colour over the faintest fill, so it can still be clicked
+ * without hiding the bank or ditch it marks. Where a tile carries counts,
+ * each is a square numbered when the map has glyphs. Counts never overlap:
+ * where two would touch, the bigger one is drawn, so a zoomed-out view
+ * shows a scatter of counts over terrain, not a carpet.
  *
  * Records from a live source are the same squares, hollow, because they
  * have no category and were never stored here. The record whose page is
@@ -257,14 +269,25 @@ export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
   const layers: OverlayLayer[] = [
     {
       layer: {
+        id: RECORD_LAYERS.fills,
+        type: "fill",
+        source,
+        "source-layer": RECORDS_SOURCE_LAYER,
+        filter: RECORD_BASE_FILTERS[RECORD_LAYERS.fills],
+        paint: { "fill-color": colour, "fill-antialias": false },
+      } as LayerSpecification,
+      opacity: { "fill-opacity": 0.02 },
+    },
+    {
+      layer: {
         id: RECORD_LAYERS.outlines,
         type: "line",
         source,
         "source-layer": RECORDS_SOURCE_LAYER,
         filter: RECORD_BASE_FILTERS[RECORD_LAYERS.outlines],
-        paint: { "line-color": colour, "line-width": 1.25 },
+        paint: { "line-color": colour, "line-width": OUTLINE_WIDTH_BY_ZOOM },
       } as LayerSpecification,
-      opacity: { "line-opacity": 0.85 },
+      opacity: { "line-opacity": 0.6 },
     },
     {
       layer: {
@@ -274,46 +297,40 @@ export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
         "source-layer": RECORD_COUNTS_SOURCE_LAYER,
         layout: {
           "icon-image": SQUARE_IMAGE,
-          // From about 14 px across for a handful to 26 px for thousands, so the number fits inside.
-          "icon-size": ["interpolate", ["linear"], ["log10", count], 0, 1.8, 1, 2.2, 2, 2.8, 3, 3.6],
-          "icon-allow-overlap": true,
-          "icon-ignore-placement": true,
-          // Bigger counts underneath, so a small one sharing the cell still shows.
+          // From about 11 px across for a handful to 20 px for thousands, so the number fits inside.
+          "icon-size": ["interpolate", ["linear"], ["log10", count], 0, 1.4, 1, 1.7, 2, 2.1, 3, 2.7],
+          // Counts keep apart, with room between them. Where two would touch, the bigger is placed first.
+          "icon-allow-overlap": false,
+          "icon-padding": 6,
           "symbol-sort-key": ["-", 0, count],
+          ...(hasGlyphs
+            ? {
+                // A cell holding one record needs no number on it.
+                "text-field": [
+                  "case",
+                  ["<=", count, 1],
+                  "",
+                  [">=", count, 1000],
+                  ["concat", ["to-string", ["/", ["round", ["/", count, 100]], 10]], "k"],
+                  ["to-string", count],
+                ],
+                "text-font": COUNT_FONT,
+                "text-size": 11,
+                "text-allow-overlap": true,
+                "text-ignore-placement": true,
+              }
+            : {}),
         },
         paint: {
           "icon-color": colour,
           "icon-halo-color": OUTLINE,
           "icon-halo-width": OUTLINE_WIDTH,
+          ...(hasGlyphs ? { "text-color": COLOURS.text, "text-halo-color": OUTLINE, "text-halo-width": 1.5 } : {}),
         },
       } as LayerSpecification,
-      opacity: { "icon-opacity": 0.9 },
+      opacity: hasGlyphs ? { "icon-opacity": 0.7, "text-opacity": 1 } : { "icon-opacity": 0.7 },
     },
   ];
-  if (hasGlyphs) {
-    layers.push({
-      layer: {
-        id: RECORD_LAYERS.countLabels,
-        type: "symbol",
-        source,
-        "source-layer": RECORD_COUNTS_SOURCE_LAYER,
-        filter: RECORD_BASE_FILTERS[RECORD_LAYERS.countLabels],
-        layout: {
-          "text-field": [
-            "case",
-            [">=", count, 1000],
-            ["concat", ["to-string", ["/", ["round", ["/", count, 100]], 10]], "k"],
-            ["to-string", count],
-          ],
-          "text-font": COUNT_FONT,
-          "text-size": 11,
-          "text-allow-overlap": false,
-        },
-        paint: { "text-color": COLOURS.text, "text-halo-color": OUTLINE, "text-halo-width": 1.5 },
-      } as LayerSpecification,
-      opacity: { "text-opacity": 1 },
-    });
-  }
   layers.push(
     {
       layer: {
@@ -321,6 +338,7 @@ export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
         type: "symbol",
         source,
         "source-layer": RECORDS_SOURCE_LAYER,
+        filter: RECORD_BASE_FILTERS[RECORD_LAYERS.squares],
         layout: {
           "icon-image": SQUARE_IMAGE,
           "icon-size": ["interpolate", ["linear"], ["zoom"], 8, 0.6, 14, 1, 18, 1.3],

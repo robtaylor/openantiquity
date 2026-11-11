@@ -34,11 +34,25 @@ const COVERAGE_ORDER = Object.keys(COVERAGE_LABELS);
 /** How long the map must hold still before the links for its middle are asked for. */
 const LINKS_SETTLE_MS = 500;
 
-/** What the catalogue's `verified` says, for a link that wasn't checked to open the right place. */
-function unverifiedNote(verified: string): string | null {
-  if (verified === "yes") return null;
-  if (verified === "redirect_only") return "Not checked: we could only see that it redirects.";
-  return "Not checked: we couldn't test this link, so it may not open at the right place.";
+/** True for a link the catalogue says was checked to open at the right place. */
+function isChecked(link: Pick<ContextLink, "verified">): boolean {
+  return link.verified === "yes";
+}
+
+/**
+ * A viewer's name as a person would say it. The catalogue names each link by
+ * what it does, "… at a point", which every link here does, so that is left off.
+ */
+export function linkTitle(name: string): string {
+  return name.replace(/\s+at (a|the) (point|spot)\s*$/i, "").trim() || name;
+}
+
+/** One sentence about the links nobody could check, or nothing when every one was checked. */
+function uncheckedNote(unchecked: number, total: number): string {
+  if (unchecked === 0) return "";
+  if (unchecked === total)
+    return " We haven't been able to check these links, so a few may not open at the exact spot.";
+  return " We haven't been able to check the ones marked “unchecked”, so they may not open at the exact spot.";
 }
 
 export interface LinkGroup {
@@ -73,18 +87,17 @@ function readPoint(params: URLSearchParams): { lon: number; lat: number } | null
   return { lon: Number(lon.toFixed(5)), lat: Number(lat.toFixed(5)) };
 }
 
-function LinkItem({ link }: { link: ContextLink }) {
+function LinkItem({ link, tagged }: { link: ContextLink; tagged: boolean }) {
   const href = safeHref(link.url);
   if (!href) return null;
-  const note = unverifiedNote(link.verified);
   return (
     <li className="fc-elsewhere__link">
       <a href={href} target="_blank" rel="noopener noreferrer external">
         <ExternalLink size={16} aria-hidden />
-        <span>{link.name}</span>
+        <span className="fc-elsewhere__name">{linkTitle(link.name)}</span>
+        {tagged && !isChecked(link) ? <span className="fc-elsewhere__tag">unchecked</span> : null}
         <span className="fc-visually-hidden"> (opens in a new tab)</span>
       </a>
-      {note ? <p className="fc-elsewhere__note">{note}</p> : null}
     </li>
   );
 }
@@ -128,6 +141,10 @@ export function OpenElsewherePanel() {
   }, [ringed]);
 
   const groups = query.data ? groupLinks(query.data.items) : [];
+  const shownLinks = groups.flatMap((group) => group.links);
+  const unchecked = shownLinks.filter((link) => !isChecked(link)).length;
+  // Tags pick out the unchecked links among checked ones. When none was checked, one sentence says so.
+  const tagged = unchecked > 0 && unchecked < shownLinks.length;
   let body: ReactNode;
   if (query.isError) {
     body = (
@@ -165,7 +182,7 @@ export function OpenElsewherePanel() {
         </h3>
         <ul className="fc-elsewhere__links">
           {group.links.map((link) => (
-            <LinkItem key={link.key} link={link} />
+            <LinkItem key={link.key} link={link} tagged={tagged} />
           ))}
         </ul>
       </section>
@@ -191,7 +208,10 @@ export function OpenElsewherePanel() {
             <p className="fc-field__hint">Right-click the map to choose another spot.</p>
           )}
         </div>
-        <p className="fc-field__hint">Each opens in a new tab, on the publisher's own site.</p>
+        <p className="fc-field__hint">
+          Each opens in a new tab, on the publisher's own site.
+          {uncheckedNote(unchecked, shownLinks.length)}
+        </p>
         {body}
       </div>
     </PanelFrame>

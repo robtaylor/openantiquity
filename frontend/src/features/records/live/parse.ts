@@ -1,6 +1,5 @@
 import { isFiniteNumber, isRecord } from "../../../api/guards.js";
 import { safeHref } from "../../../map/attribution.js";
-import type { LiveSource } from "./catalogue.js";
 
 /**
  * Reading what a live source answered. The catalogue describes each
@@ -198,7 +197,7 @@ function candidatesOf(body: unknown): Candidate[] {
 /** Turn a live source's answer into records the map can draw, at most `cap` of them. */
 export function parseLiveAnswer(
   body: unknown,
-  source: Pick<LiveSource, "linkTemplate">,
+  source: { linkTemplate: string | null },
   cap = MAX_LIVE_RECORDS,
 ): LiveAnswer {
   const records: LiveRecord[] = [];

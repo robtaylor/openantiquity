@@ -7,6 +7,7 @@ import { RECORD_LAYERS, recordsLiveSourceId, recordsSelectionSourceId } from "..
 import { useMapStore } from "../../map/store.js";
 import { overlayShown, overlaySourceId } from "../../map/style.js";
 import { mapToolActive } from "../../map/tool.js";
+import { searchWithPanel } from "../shell/navigation.js";
 import { FILTERED_RECORD_LAYERS, recordLayerFilter, useRecordFilters } from "./filters.js";
 import { EMPTY_COLLECTION, type FeatureCollection } from "./geojson.js";
 import { pickedKey, useLiveStore } from "./live/store.js";
@@ -22,10 +23,10 @@ const CLICKABLE = [
   RECORD_LAYERS.squares,
   RECORD_LAYERS.outlines,
   RECORD_LAYERS.counts,
-  RECORD_LAYERS.countLabels,
+  RECORD_LAYERS.fills,
 ];
 /** The layers whose features say which stored sources are on screen. */
-const CREDITED = [RECORD_LAYERS.squares, RECORD_LAYERS.outlines, RECORD_LAYERS.counts];
+const CREDITED = [RECORD_LAYERS.squares, RECORD_LAYERS.outlines, RECORD_LAYERS.fills, RECORD_LAYERS.counts];
 /** A count is zoomed into by this many levels when clicked. */
 const COUNT_ZOOM_STEP = 2;
 
@@ -45,10 +46,10 @@ export function recordTarget(hits: readonly Hit[], at: { lng: number; lat: numbe
       if (typeof props.source === "string" && typeof props.id === "string") {
         return { kind: "live", source: props.source, id: props.id };
       }
-    } else if (layer === RECORD_LAYERS.squares || layer === RECORD_LAYERS.outlines) {
+    } else if (layer === RECORD_LAYERS.squares || layer === RECORD_LAYERS.outlines || layer === RECORD_LAYERS.fills) {
       const id = Number(props.id ?? hit.id);
       if (Number.isSafeInteger(id) && id > 0) return { kind: "record", id };
-    } else if (layer === RECORD_LAYERS.counts || layer === RECORD_LAYERS.countLabels) {
+    } else if (layer === RECORD_LAYERS.counts) {
       return { kind: "count", ...at };
     }
   }
@@ -104,8 +105,8 @@ export function useRecordsOnMap(meta: Meta, main: MapLibreMap | null, compare: M
 
   const navigate = useNavigate();
   const location = useLocation();
-  const latest = useRef({ navigate, pathname: location.pathname });
-  latest.current = { navigate, pathname: location.pathname };
+  const latest = useRef({ navigate, location });
+  latest.current = { navigate, location };
 
   const source = overlay ? overlaySourceId(overlay.id) : null;
 
@@ -138,14 +139,15 @@ export function useRecordsOnMap(meta: Meta, main: MapLibreMap | null, compare: M
         if (!isMapLive(map) || mapToolActive()) return;
         const target = recordTarget(query(map, CLICKABLE, event.point), event.lngLat);
         if (target === null) return;
-        const { navigate: go, pathname } = latest.current;
+        const { navigate: go, location: here } = latest.current;
         if (target.kind === "record") go(recordPath(target.id));
         else if (target.kind === "count") {
           const zoom = useMapStore.getState().camera.zoom + COUNT_ZOOM_STEP;
           useMapStore.getState().requestCamera({ lng: target.lng, lat: target.lat, zoom });
         } else {
           useLiveStore.getState().pick(pickedKey(target.source, target.id));
-          go({ pathname, search: "?panel=layers" });
+          // Whatever else the address holds, such as a profile's line, stays.
+          go({ pathname: here.pathname, search: searchWithPanel(here.search, "layers") });
         }
       };
       // The pointer is checked at most once a frame, however often it moves.

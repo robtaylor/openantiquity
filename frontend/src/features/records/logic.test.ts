@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { RECORD_LAYERS, recordsLiveSourceId, recordsSelectionSourceId } from "../../map/overlayLayers.js";
+import {
+  RECORD_LAYERS,
+  recordsLayers,
+  recordsLiveSourceId,
+  recordsSelectionSourceId,
+} from "../../map/overlayLayers.js";
 import { DEFAULT_SUN, DEFAULT_TERRAIN } from "../../map/store.js";
 import { buildStyle, overlaySourceId } from "../../map/style.js";
 import { metaFixture } from "../../test/fixtures/meta.js";
 import { AVENUE_RECORD, CONTEXT_LINKS, FIND_RECORD } from "../../test/fixtures/records.js";
 import { parseRecordId, recordsDownloadUrl } from "./api.js";
 import { recordLayerFilter } from "./filters.js";
-import { groupLinks } from "./OpenElsewherePanel.js";
+import { groupLinks, linkTitle } from "./OpenElsewherePanel.js";
 import { elsewherePath } from "./paths.js";
 import { precisionText, recordShape } from "./shape.js";
 import { recordTarget, sourcesOf } from "./useRecordsOnMap.js";
@@ -47,13 +52,14 @@ describe("recordLayerFilter", () => {
   const known = ["nhle", "pas", "her"];
 
   it("leaves a layer without a base filter unfiltered while everything shows", () => {
-    expect(recordLayerFilter(RECORD_LAYERS.squares, [], [], known)).toBeNull();
+    expect(recordLayerFilter(RECORD_LAYERS.counts, [], [], known)).toBeNull();
     expect(recordLayerFilter(RECORD_LAYERS.outlines, [], [], known)).toEqual(["!=", ["geometry-type"], "Point"]);
   });
 
   it("hides a record by its category and its one source", () => {
     expect(recordLayerFilter(RECORD_LAYERS.squares, ["find"], ["pas"], known)).toEqual([
       "all",
+      ["in", ["geometry-type"], ["literal", ["Point", "MultiPoint"]]],
       ["!", ["in", ["get", "category"], ["literal", ["find"]]]],
       ["!", ["in", ["get", "source"], ["literal", ["pas"]]]],
     ]);
@@ -186,6 +192,15 @@ describe("groupLinks", () => {
   });
 });
 
+describe("linkTitle", () => {
+  it('leaves off the catalogue\'s "at a point", and nothing else', () => {
+    expect(linkTitle("NCAP Air Photo Finder at a point")).toBe("NCAP Air Photo Finder");
+    expect(linkTitle("Canmore map at the spot")).toBe("Canmore map");
+    expect(linkTitle("A point of view")).toBe("A point of view");
+    expect(linkTitle("at a point")).toBe("at a point");
+  });
+});
+
 describe("elsewherePath", () => {
   it("rounds the spot to about a metre", () => {
     expect(elsewherePath(-1.854213456, 51.428612345)).toBe("/elsewhere?lon=-1.85421&lat=51.42861");
@@ -219,5 +234,21 @@ describe("the records overlay's style", () => {
     // The open record is drawn above the records, and findings above everything.
     expect(ids.indexOf(RECORD_LAYERS.selectionPoint)).toBeGreaterThan(ids.indexOf(RECORD_LAYERS.squares));
     expect(ids.indexOf("findings-points")).toBeGreaterThan(ids.indexOf(RECORD_LAYERS.selectionPoint));
+  });
+
+  it("keeps the terrain in sight: squares only for points, outlines thin, and counts that never overlap", () => {
+    const layers = recordsLayers(metaFixture, overlaySourceId("records"));
+    const byId = (id: string) => layers.find((entry) => entry.layer.id === id);
+    const squares = byId(RECORD_LAYERS.squares)?.layer as { filter?: unknown };
+    // A record with an outline is not also given a square at its middle.
+    expect(squares.filter).toEqual(["in", ["geometry-type"], ["literal", ["Point", "MultiPoint"]]]);
+    const fills = byId(RECORD_LAYERS.fills);
+    expect(fills?.opacity["fill-opacity"]).toBeLessThanOrEqual(0.1);
+    const outlines = byId(RECORD_LAYERS.outlines);
+    expect(outlines?.opacity["line-opacity"]).toBeLessThanOrEqual(0.6);
+    const counts = byId(RECORD_LAYERS.counts)?.layer as { layout: Record<string, unknown> };
+    expect(counts.layout["icon-allow-overlap"]).toBe(false);
+    expect(counts.layout["icon-ignore-placement"]).toBeUndefined();
+    expect(byId(RECORD_LAYERS.counts)?.opacity["icon-opacity"]).toBeLessThanOrEqual(0.75);
   });
 });

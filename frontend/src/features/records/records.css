@@ -140,6 +140,16 @@
   align-self: flex-start;
 }
 
+.fc-record-sources__head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fc-record-sources__head .fc-record-controls__label {
+  flex: 1;
+}
+
 .fc-record-controls .fc-chip {
   white-space: normal;
   text-align: left;
@@ -376,10 +386,19 @@
   color: var(--accent-strong);
 }
 
-.fc-elsewhere__note {
-  margin: 4px 0 0 10px;
+.fc-elsewhere__name {
+  flex: 1;
+  min-width: 0;
+}
+
+/* A link nobody could check: words, not only a colour. */
+.fc-elsewhere__tag {
+  flex: none;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 11.5px;
 }
 
 .fc-record-search__more {

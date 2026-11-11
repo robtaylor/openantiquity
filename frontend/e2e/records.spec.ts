@@ -1,6 +1,9 @@
 import type { Locator, Page } from "@playwright/test";
 import {
+  ABERDEENSHIRE_LIVE,
+  ADS_LIVE,
   AVENUE_RECORD,
+  DARTMOOR_LIVE,
   FIND_RECORD,
   HOSTILE_LIVE_ANSWER,
   HOSTILE_RECORD,
@@ -257,7 +260,8 @@ test.describe("open elsewhere", () => {
       await expect(link).toHaveAttribute("rel", /noopener noreferrer/);
     }
     await expectOnlyWebLinks(elsewhere);
-    await expect(elsewhere.getByText(/^Not checked/)).toHaveCount(2);
+    await expect(elsewhere.getByText("unchecked", { exact: true })).toHaveCount(2);
+    await expect(elsewhere.getByText(/haven't been able to check/)).toHaveCount(1);
   });
 });
 
@@ -287,6 +291,9 @@ test.describe("live sources", () => {
     await expect(list.getByText("Stone hole 41, Avebury henge", { exact: true })).toBeVisible();
     await expect(live.getByText(/4 records in view/)).toBeVisible();
     await expect(live.getByText(new RegExp(`^${WILTSHIRE_LIVE.attribution.replace(/[()]/g, "\\$&")}`))).toBeVisible();
+    // The catalogue's notes on the licence aren't shown, and a source credited per record isn't offered.
+    await expect(live.getByText(/Website' folder/)).toHaveCount(0);
+    await expect(live.getByRole("switch", { name: ADS_LIVE.name })).toHaveCount(0);
     expect(log.live["maps.wiltshire.gov.uk"]).toHaveLength(1);
     expect(ours.filter((line) => line.includes("MWI") || line.includes("Avebury Vicarage"))).toEqual([]);
   });
@@ -297,18 +304,18 @@ test.describe("live sources", () => {
     test("turns off quietly when a source refuses this browser, or answers with an error", async ({ page }) => {
       await serveLiveHosts(page, log);
       const live = await openLiveSources(page);
-      const ads = live.getByRole("switch", { name: "ADS Data Catalogue search (bbox)" });
-      await ads.check();
+      const refusing = live.getByRole("switch", { name: ABERDEENSHIRE_LIVE.name });
+      await refusing.check();
       await expect(live.getByText(/didn't answer this browser/)).toBeVisible();
-      await expect(ads).not.toBeChecked();
+      await expect(refusing).not.toBeChecked();
 
-      const bristol = live.getByRole("switch", { name: "Know Your Place HER layer: Bristol" });
-      await bristol.check();
+      const failing = live.getByRole("switch", { name: DARTMOOR_LIVE.name });
+      await failing.check();
       await expect(live.getByText(/answered with an error \(500\)/)).toBeVisible();
-      await expect(bristol).not.toBeChecked();
+      await expect(failing).not.toBeChecked();
       await page.waitForTimeout(1500);
-      expect(log.live["archaeologydataservice.ac.uk"]).toHaveLength(1);
-      expect(log.live["maps2.bristol.gov.uk"]).toHaveLength(1);
+      expect(log.live["services2.arcgis.com"]).toHaveLength(1);
+      expect(log.live["services-eu1.arcgis.com"]).toHaveLength(1);
     });
   });
 

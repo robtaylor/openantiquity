@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { safeHref } from "../../map/attribution.js";
 import { useViewAreaStore } from "../../map/store.js";
+import { Button } from "../../ui/Button.js";
 import { ChipGroup } from "../../ui/Chip.js";
 import { Switch } from "../../ui/Switch.js";
 import { CategorySwatch } from "./CategoryMark.js";
@@ -17,6 +18,21 @@ import "./records.css";
 /** How many of a live source's records are listed in the panel before the rest are left to the map. */
 const LISTED_LIVE_RECORDS = 30;
 
+/**
+ * The stored sources the records layer draws, under the category each fills.
+ * A source of some other kind in the catalogue, such as boundaries or place
+ * names, has no records on this layer, so it isn't offered.
+ */
+export function sourcesByCategory(meta: Meta): Array<{ id: string; label: string; sources: Meta["sources"] }> {
+  return meta.vocab.record_categories
+    .map((category) => ({
+      id: category.id,
+      label: category.label,
+      sources: meta.sources.filter((source) => source.category === category.id),
+    }))
+    .filter((group) => group.sources.length > 0);
+}
+
 /** The categories and sources of the heritage records layer, each turned on and off by a chip. */
 export function RecordFilterControls({ meta }: { meta: Meta }) {
   const hiddenCategories = useRecordFilters((state) => state.hiddenCategories);
@@ -25,10 +41,15 @@ export function RecordFilterControls({ meta }: { meta: Meta }) {
   const setHiddenSources = useRecordFilters((state) => state.setHiddenSources);
 
   const categories = meta.vocab.record_categories.map((category) => category.id);
-  const sources = meta.sources.map((source) => source.key);
+  const groups = sourcesByCategory(meta);
+  const offered = groups.flatMap((group) => group.sources.map((source) => source.key));
+  const offCount = offered.filter((key) => hiddenSources.includes(key)).length;
   // The chips show what is on. The store keeps what is off, so anything the catalogue gains later shows.
   const shown = (all: string[], hidden: readonly string[]) => all.filter((id) => !hidden.includes(id));
   const hiddenOf = (all: string[], on: string[]) => all.filter((id) => !on.includes(id));
+  // Within one category's sources: the others stay as they are.
+  const setGroup = (keys: string[], on: string[]) =>
+    setHiddenSources([...hiddenSources.filter((key) => !keys.includes(key)), ...hiddenOf(keys, on)]);
 
   return (
     <div className="fc-record-controls">
@@ -46,17 +67,48 @@ export function RecordFilterControls({ meta }: { meta: Meta }) {
           onChange={(next) => setHiddenCategories(hiddenOf(categories, next))}
         />
       </div>
-      {meta.sources.length > 0 ? (
-        <div className="fc-record-controls__group">
-          <p className="fc-record-controls__label">Sources</p>
-          <ChipGroup
-            multiple
-            label="Sources of records to show"
-            value={shown(sources, hiddenSources)}
-            options={meta.sources.map((source) => ({ id: source.key, label: source.name }))}
-            onChange={(next) => setHiddenSources(hiddenOf(sources, next))}
-          />
-        </div>
+      {groups.length > 0 ? (
+        <details className="fc-live fc-record-sources">
+          <summary className="fc-live__summary">
+            Sources{offCount > 0 ? ` (${offCount} of ${offered.length} off)` : ""}
+          </summary>
+          <p className="fc-live__hint">Turn a source off to leave its records off the map.</p>
+          {groups.map((group) => {
+            const keys = group.sources.map((source) => source.key);
+            return (
+              <div className="fc-record-controls__group" key={group.id}>
+                <div className="fc-record-sources__head">
+                  <p className="fc-record-controls__label">{group.label}</p>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Show every source of ${group.label.toLowerCase()}`}
+                    disabled={keys.every((key) => !hiddenSources.includes(key))}
+                    onClick={() => setGroup(keys, keys)}
+                  >
+                    All
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Hide every source of ${group.label.toLowerCase()}`}
+                    disabled={keys.every((key) => hiddenSources.includes(key))}
+                    onClick={() => setGroup(keys, [])}
+                  >
+                    None
+                  </Button>
+                </div>
+                <ChipGroup
+                  multiple
+                  label={`Sources of ${group.label.toLowerCase()} to show`}
+                  value={shown(keys, hiddenSources)}
+                  options={group.sources.map((source) => ({ id: source.key, label: source.name }))}
+                  onChange={(next) => setGroup(keys, next)}
+                />
+              </div>
+            );
+          })}
+        </details>
       ) : null}
       <Link className="fc-button fc-button--ghost fc-button--sm fc-record-controls__search" to={RECORD_SEARCH_PATH}>
         <Search size={16} aria-hidden />
@@ -108,10 +160,9 @@ function LiveSourceRow({ source }: { source: LiveSource }) {
         onChange={(next) => setOn(source.key, next)}
       />
       {on ? (
-        <div className="fc-live-source__credit">
-          <p>{source.attribution}</p>
-          <p>Licence: {source.licence}</p>
-        </div>
+        <p className="fc-live-source__credit">
+          {source.attribution.replace(/\.\s*$/, "")}. Each record links to its page at {source.publisher}.
+        </p>
       ) : null}
       {records.length > 0 ? (
         <ul className="fc-live-source__records" ref={list} aria-label={`Records from ${source.name}`}>

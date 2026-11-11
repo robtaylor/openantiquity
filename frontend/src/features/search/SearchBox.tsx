@@ -38,12 +38,17 @@ export function SearchBox() {
   const [settled, setSettled] = useState("");
   /** A search Enter was pressed for before its results had come: its first result is taken when they do. */
   const [pendingPick, setPendingPick] = useState<string | null>(null);
+  /** The label of the result just chosen. Nothing is asked for it until the text changes or the field is entered again. */
+  const [picked, setPicked] = useState<string | null>(null);
   const id = useId();
   const listId = `${id}-list`;
 
   useEffect(() => {
     if (term === settled) return;
-    const timer = setTimeout(() => setSettled(term), SEARCH_DEBOUNCE_MS);
+    const timer = setTimeout(() => {
+      setSettled(term);
+      setPicked(null);
+    }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [term, settled]);
 
@@ -51,7 +56,7 @@ export function SearchBox() {
   const query = useQuery({
     queryKey: searchKeys.geo(settled),
     queryFn: ({ signal }) => fetchGeoSearch(settled, signal),
-    enabled: settled !== "",
+    enabled: settled !== "" && settled !== picked,
     staleTime: 60_000,
     retry: false,
   });
@@ -65,6 +70,7 @@ export function SearchBox() {
     useMapStore.getState().requestCamera(cameraFor(result));
     setText(result.label);
     setSettled(result.label.trim());
+    setPicked(result.label.trim());
     setOpen(false);
     setActive(-1);
     setPendingPick(null);
@@ -84,8 +90,12 @@ export function SearchBox() {
   function onSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     if (term === "") return;
-    if (active === ordered.length) {
+    if (active === moreIndex) {
       searchRecords();
+      return;
+    }
+    if (failed && active === retryIndex) {
+      retry();
       return;
     }
     const picked = ordered[active] ?? (current && !query.isFetching ? ordered[0] : undefined);
@@ -105,8 +115,7 @@ export function SearchBox() {
         setOpen(true);
         return;
       }
-      // The options are the results and, last, searching the records for the text.
-      const count = ordered.length + 1;
+      const count = moreIndex + 1;
       const step = event.key === "ArrowDown" ? 1 : -1;
       setActive((index) => {
         const next = index + step;
@@ -140,11 +149,19 @@ export function SearchBox() {
 
   const expanded = open && term !== "";
   const optionId = (index: number) => `${id}-option-${index}`;
-  const moreIndex = ordered.length;
+  const failed = current && query.isError;
+  // The options are the results, "Try again" when the search failed, and last, searching the records for the text.
+  const retryIndex = failed ? ordered.length : -1;
+  const moreIndex = ordered.length + (failed ? 1 : 0);
+
+  function retry(): void {
+    setActive(-1);
+    void query.refetch();
+  }
 
   let message: string | null = null;
   if (expanded) {
-    if (current && query.isError) {
+    if (failed) {
       message = isSearchTimeout(query.error)
         ? "That search took too long. Add another word, or search for somewhere smaller."
         : "Search isn't working right now. Please try again in a moment.";
@@ -184,7 +201,10 @@ export function SearchBox() {
             setActive(-1);
             setPendingPick(null);
           }}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            setOpen(true);
+            setPicked(null);
+          }}
           onBlur={() => setOpen(false)}
           onKeyDown={onKeyDown}
         />
@@ -239,6 +259,20 @@ export function SearchBox() {
                 </div>
               ))
             : null}
+          {expanded && failed ? (
+            // biome-ignore lint/a11y/useFocusableInteractive: focus stays in the field, as a combobox's does
+            // biome-ignore lint/a11y/useKeyWithClickEvents: the field handles the keys for every option
+            <div
+              id={optionId(retryIndex)}
+              role="option"
+              aria-selected={active === retryIndex}
+              className="fc-search__option fc-search__retry"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={retry}
+            >
+              <span className="fc-search__label">Try again</span>
+            </div>
+          ) : null}
           {expanded ? (
             // biome-ignore lint/a11y/useFocusableInteractive: focus stays in the field, as a combobox's does
             // biome-ignore lint/a11y/useKeyWithClickEvents: the field handles the keys for every option
