@@ -21,8 +21,10 @@
   `{record}`, `{investigation}` and `{photo}` are filled in with ones the test makes,
   the investigation public. A read that says
   nothing about caching is sent private (`main.PrivateByDefaultMiddleware`).
-  One sent as publicly cacheable must give a signed-in member exactly what it
-  gives a signed-out visitor.
+- `public`: true for a read that is the same for every viewer and says so, by
+  being sent as publicly cacheable. The cache check holds every sampled read
+  to its claim: a public one must be sent public and give a signed-in member
+  exactly what it gives a signed-out visitor, and any other must be private.
 
 The tests fail when the app has a route this table doesn't list, so a new
 route has to come with its expectations. Add its row here, and its leak test
@@ -75,6 +77,8 @@ class Expect:
     nothing_hidden: str | None = None
     # A read that needs the welcome step, as the moderation routes do.
     welcome: bool = False
+    # A read that is the same for everyone and is sent as publicly cacheable.
+    public: bool = False
 
 
 F = "/api/v1/findings/{finding}"
@@ -96,6 +100,11 @@ REDIRECT_ONLY = "a sign-in redirect that carries no content"
 ROUTES: dict[tuple[str, str], Expect] = {
     # Accounts
     ("GET", "/api/v1/auth/me"): Expect(sample="/api/v1/auth/me", hidden_test=HIDDEN),
+    ("GET", "/api/v1/auth/session"): Expect(sample="/api/v1/auth/session", hidden_test=HIDDEN),
+    ("GET", "/api/v1/auth/dev-outbox"): Expect(
+        sample="/api/v1/auth/dev-outbox?to=walker@example.org",
+        nothing_hidden="sign-in emails the log mailer sent, development and test only",
+    ),
     ("PATCH", "/api/v1/auth/me"): Expect(writer=OWN_ACCOUNT + "; a bio checks it itself"),
     ("DELETE", "/api/v1/auth/me"): Expect(writer=OWN_ACCOUNT),
     ("POST", "/api/v1/auth/welcome"): Expect(writer="is the welcome step"),
@@ -196,6 +205,7 @@ ROUTES: dict[tuple[str, str], Expect] = {
     ("GET", "/api/v1/squares/coverage"): Expect(
         sample="/api/v1/squares/coverage?bbox=-1.9,51.4,-1.8,51.45",
         nothing_hidden="counts of surveys per square, which keep no finding and are never hidden",
+        public=True,
     ),
     # Mentions
     ("GET", "/api/v1/findings/{public_id}/mentions"): Expect(
@@ -212,27 +222,32 @@ ROUTES: dict[tuple[str, str], Expect] = {
     ),
     # Records
     ("GET", "/api/v1/records/search"): Expect(
-        sample="/api/v1/records/search?q=barrow", nothing_hidden=NO_CONTRIBUTIONS
+        sample="/api/v1/records/search?q=barrow", nothing_hidden=NO_CONTRIBUTIONS, public=True
     ),
     ("GET", "/api/v1/records/nearby"): Expect(
-        sample="/api/v1/records/nearby?lon=-1.85&lat=51.43", nothing_hidden=NO_CONTRIBUTIONS
+        sample="/api/v1/records/nearby?lon=-1.85&lat=51.43", nothing_hidden=NO_CONTRIBUTIONS, public=True
     ),
     ("GET", "/api/v1/records/{record_id}"): Expect(
-        sample="/api/v1/records/{record}", nothing_hidden=NO_CONTRIBUTIONS
+        sample="/api/v1/records/{record}", nothing_hidden=NO_CONTRIBUTIONS, public=True
     ),
-    ("GET", "/api/v1/sources"): Expect(sample="/api/v1/sources", nothing_hidden=NO_CONTRIBUTIONS),
+    ("GET", "/api/v1/records/{record_id}/findings"): Expect(
+        "test_a_records_linked_findings", sample="/api/v1/records/{record}/findings", hidden_test=HIDDEN
+    ),
+    ("GET", "/api/v1/sources"): Expect(
+        sample="/api/v1/sources", nothing_hidden=NO_CONTRIBUTIONS, public=True
+    ),
     ("GET", "/api/v1/findings/{public_id}/suggested-records"): Expect(
         "test_suggested_records", sample=F + "/suggested-records", hidden_test=HIDDEN
     ),
     ("GET", "/tiles/records/{z}/{x}/{y}.mvt"): Expect(
-        sample="/tiles/records/0/0/0.mvt", nothing_hidden=NO_CONTRIBUTIONS
+        sample="/tiles/records/0/0/0.mvt", nothing_hidden=NO_CONTRIBUTIONS, public=True
     ),
     # Context and geography
     ("GET", "/api/v1/context/live-sources"): Expect(
-        sample="/api/v1/context/live-sources", nothing_hidden=NO_CONTRIBUTIONS
+        sample="/api/v1/context/live-sources", nothing_hidden=NO_CONTRIBUTIONS, public=True
     ),
     ("GET", "/api/v1/context/links"): Expect(
-        sample="/api/v1/context/links?lon=-1.85&lat=51.43", nothing_hidden=NO_CONTRIBUTIONS
+        sample="/api/v1/context/links?lon=-1.85&lat=51.43", nothing_hidden=NO_CONTRIBUTIONS, public=True
     ),
     ("GET", "/api/v1/geo/search"): Expect(
         "test_the_search_box_flies_to_what_the_viewer_may_see",
@@ -242,11 +257,13 @@ ROUTES: dict[tuple[str, str], Expect] = {
     ("GET", "/api/v1/geo/point"): Expect(
         sample="/api/v1/geo/point?lon=-1.85&lat=51.43", nothing_hidden=NO_CONTRIBUTIONS
     ),
-    ("GET", "/api/v1/meta"): Expect(sample="/api/v1/meta", nothing_hidden=NO_CONTRIBUTIONS),
+    ("GET", "/api/v1/meta"): Expect(sample="/api/v1/meta", nothing_hidden=NO_CONTRIBUTIONS, public=True),
     # Terrain
     ("POST", "/api/v1/terrain/profile"): Expect(writer=NOT_STORED),
     ("GET", "/api/v1/terrain/coverage"): Expect(
-        sample="/api/v1/terrain/coverage?bbox=-1.9,51.4,-1.8,51.45", nothing_hidden=NO_CONTRIBUTIONS
+        sample="/api/v1/terrain/coverage?bbox=-1.9,51.4,-1.8,51.45",
+        nothing_hidden=NO_CONTRIBUTIONS,
+        public=True,
     ),
     ("GET", "/tiles/lidar/{style}/{z}/{x}/{y}.png"): Expect(
         unsampled=NEEDS_MIRROR, nothing_hidden=NO_CONTRIBUTIONS
@@ -514,6 +531,7 @@ def test_nothing_that_depends_on_the_viewer_is_publicly_cacheable(
     member = client_as(make_user("moderator")).get(path)
     assert member.status_code in (200, 403), f"{path}: {member.text}"
     policy = signed_out.headers["cache-control"]
+    assert policy.startswith("public") is ROUTES[key].public, f"{path}: {policy}"
     if policy.startswith("public"):
         assert member.headers["cache-control"] == policy
         assert member.content == signed_out.content, f"{path} is public but depends on the viewer"

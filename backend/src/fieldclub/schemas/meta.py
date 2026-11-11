@@ -10,7 +10,7 @@ from fieldclub.schemas.common import ApiModel
 
 # One shape for a source, in `/meta` as in `GET /sources`.
 from fieldclub.schemas.records import SourceOut
-from fieldclub.vocab import SourceReuse
+from fieldclub.vocab import AgeBand, Sensitivity, SourceReuse
 
 # --------------------------------------------------------------------------
 # Vocabularies
@@ -22,6 +22,8 @@ class FeatureClassOut(ApiModel):
     label: str
     hint: str
     fish_term: str
+    # The level a new finding of this class starts at (`services.sensitivity.default_sensitivity`).
+    sensitivity: Sensitivity
 
 
 class PeriodOut(ApiModel):
@@ -45,7 +47,7 @@ class TierOut(ApiModel):
     base_score: int
 
 
-class StateOut(ApiModel):
+class State(ApiModel):
     id: str
     label: str
     description: str
@@ -87,7 +89,7 @@ class Vocab(BaseModel):
     periods: list[PeriodOut]
     evidence_kinds: list[EvidenceKindOut]
     tiers: list[TierOut]
-    states: list[StateOut]
+    states: list[State]
     checks: list[CheckOut]
     explanations: list[ExplanationOut]
     mention_kinds: list[MentionKindOut]
@@ -221,7 +223,7 @@ class AppInfo(BaseModel):
     contribution_licence: str
 
 
-class ProviderOut(BaseModel):
+class Provider(BaseModel):
     id: str
     label: str
     # True only when the provider's sign-in flow is built and its credentials
@@ -229,9 +231,22 @@ class ProviderOut(BaseModel):
     enabled: bool
 
 
+class Terms(BaseModel):
+    """The contributor terms the welcome step asks people to accept, from settings."""
+
+    summary: str
+    # A path on this site or a full https address.
+    url: str
+
+
 class AuthInfo(BaseModel):
     # Every sign-in provider, in the order the sign-in sheet shows them.
-    providers: list[ProviderOut]
+    providers: list[Provider]
+    # True where `POST /auth/dev-login` exists: development and test, when asked for.
+    dev_login: bool
+    # The age bands `POST /auth/welcome` accepts, youngest first (`FIELDCLUB_MIN_AGE`).
+    age_bands: list[AgeBand]
+    terms: Terms
 
 
 class FieldVisitNotices(BaseModel):
@@ -241,11 +256,29 @@ class FieldVisitNotices(BaseModel):
     northern_ireland: list[str]
 
 
+class FindReporting(BaseModel):
+    """Where to report an object found in one nation. Field Club stores nothing about finds."""
+
+    scheme: str
+    # The scheme's own site, or null where none is known.
+    url: str | None
+    text: str
+
+
+class FindReportingNotices(BaseModel):
+    england: FindReporting
+    scotland: FindReporting
+    wales: FindReporting
+    northern_ireland: FindReporting
+
+
 class Notices(BaseModel):
     field_visit: FieldVisitNotices
     # Shown with the nation's lines to an account in the 16 to 17 band.
     field_visit_16_17: str
     sensitivity: str
+    # The route for reporting a find, per nation (Decision 0005, item 9).
+    find_reporting: FindReportingNotices
 
 
 class Meta(BaseModel):

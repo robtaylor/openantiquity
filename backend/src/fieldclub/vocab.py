@@ -1096,6 +1096,76 @@ FIELD_VISIT_NOTICE_16_17 = (
     "You're 16 or 17, so go with an adult you know, and tell someone at home where you're going."
 )
 
+
+@dataclass(frozen=True)
+class FindReportingInfo:
+    """Where someone in a nation reports an object they found (Decision 0005, item 9)."""
+
+    scheme: str
+    # The scheme's own site, or None where the research recorded no address for it.
+    url: str | None
+    text: str
+
+
+# Field Club stores nothing about a find. Where someone mentions one, the tool
+# shows this. The Portable Antiquities Scheme covers England and Wales, and its
+# site terms allow links to its home page only. Northern Ireland has no
+# Portable Antiquities Scheme: the 1995 Order sends finds to the Ulster Museum,
+# the police or the Department for Communities. Checked against the same
+# legislation as FIELD_VISIT_NOTICES.
+FIND_REPORTING: dict[Nation, FindReportingInfo] = {
+    Nation.ENGLAND: FindReportingInfo(
+        "Portable Antiquities Scheme",
+        "https://finds.org.uk/",
+        f"Report anything you find to the Portable Antiquities Scheme. {_TREASURE}",
+    ),
+    Nation.SCOTLAND: FindReportingInfo(
+        "Treasure Trove Scotland",
+        "https://treasuretrovescotland.co.uk/",
+        "Every archaeological object you find, whatever it's made of, must be reported to Treasure Trove.",
+    ),
+    Nation.WALES: FindReportingInfo(
+        "Portable Antiquities Scheme in Wales",
+        "https://finds.org.uk/",
+        f"Report anything you find to the Portable Antiquities Scheme in Wales. {_TREASURE}",
+    ),
+    Nation.NORTHERN_IRELAND: FindReportingInfo(
+        "Department for Communities",
+        None,
+        (
+            "Report any archaeological object you find within 14 days, to the Ulster Museum, the police "
+            f"or the Department for Communities. {_TREASURE}"
+        ),
+    ),
+}
+
+
+class LinkShows(StrEnum):
+    """What an external viewer in `GET /context/links` shows at a place."""
+
+    RECORDS = "records"
+    HISTORIC_MAPS = "historic_maps"
+    AERIAL_PHOTOGRAPHS = "aerial_photographs"
+    LIDAR = "lidar"
+    PHOTOGRAPHS = "photographs"
+    OTHER = "other"
+
+
+class LiveFormat(StrEnum):
+    """The shape of a live source's answer, so the browser reads it without guessing (Decision 0007)."""
+
+    # A GeoJSON FeatureCollection: names and ids are in each feature's `properties`.
+    GEOJSON = "geojson"
+    # The Archaeology Data Service catalogue search: `hits[]`, with `total.value`.
+    ADS_SEARCH = "ads_search"
+    # The catalogue's map search: up to 500 `hits[]`, otherwise a geohash grid in `aggregations`.
+    ADS_MAP = "ads_map"
+    # One catalogue record, shaped as a search hit.
+    ADS_RECORD = "ads_record"
+    # A MediaWiki `action=query` answer: the items are the values of `query.pages`.
+    MEDIAWIKI_QUERY = "mediawiki_query"
+
+
 SENSITIVITY_NOTICE = (
     "Some findings have their position hidden to protect the site, and are shown as a one-kilometre "
     "square. Signed-in members see protected findings exactly. Only the finder, trusted members, "
@@ -1124,6 +1194,7 @@ def _check_complete() -> None:
         ids = [getattr(row, "id") for row in rows]  # noqa: B009 - rows are heterogeneous dataclasses
         assert ids == list(enum_cls), f"{enum_cls.__name__} and its descriptive table disagree: {ids}"
     assert set(FIELD_VISIT_NOTICES) == set(Nation), "every nation needs field visit notices"
+    assert set(FIND_REPORTING) == set(Nation), "every nation needs a route for reporting a find"
     assert set(AGE_BAND_YOUNGEST) == set(AgeBand), "every age band needs its youngest age"
     assert SENSITIVITY_ORDER[0] is Sensitivity.OPEN
     assert [info.base_score for info in TIERS] == sorted(info.base_score for info in TIERS)

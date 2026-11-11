@@ -97,6 +97,18 @@ class Settings(BaseSettings):
     # age bands. 17 or 18 admits only 18 and over, because the 16 to 17 band
     # can't tell a 16 year old from a 17 year old.
     min_age: int = Field(default=16, ge=16, le=18)
+    # The contributor terms the welcome step asks people to accept, as `/meta`
+    # gives them: a short summary for the sheet, and where the full terms are.
+    # The address is a path on this site or a full https address.
+    terms_summary: str = Field(
+        default=(
+            "You're 16 or over. What you add is public and published under CC BY 4.0, so anyone may "
+            "reuse it with credit. If you leave, it stays on the map, credited to “Former member”."
+        ),
+        min_length=1,
+        max_length=1000,
+    )
+    terms_url: str = Field(default="/about#terms", pattern=r"^(/[^/\\]|https://)")
 
     # Sign-in providers and the emailed link.
     # A provider is offered only when all of its settings are present. See

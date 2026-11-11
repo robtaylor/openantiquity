@@ -37,6 +37,8 @@ class Message:
     to: str
     subject: str
     body: str
+    # The sign-in link the body carries, kept apart for the development outbox.
+    link: str | None = None
 
 
 class Mailer(Protocol):
@@ -46,8 +48,15 @@ class Mailer(Protocol):
 class LogMailer:
     """Writes each message to the log. Never used in production."""
 
-    # Shared by every instance, so a test can read what the app sent.
+    # Shared by every instance, so a test can read what the app sent, and so
+    # can the full-stack browser tests through `GET /auth/dev-outbox`.
     outbox: ClassVar[deque[Message]] = deque(maxlen=50)
+
+    @classmethod
+    def sent_to(cls, address: str) -> list[Message]:
+        """What was sent to `address`, newest first. Addresses match whatever their case."""
+        wanted = address.casefold()
+        return [message for message in reversed(cls.outbox) if message.to.casefold() == wanted]
 
     def send(self, message: Message) -> None:
         LogMailer.outbox.append(message)

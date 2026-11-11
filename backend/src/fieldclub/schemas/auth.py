@@ -25,6 +25,9 @@ class Me(ApiModel):
     only ever goes to the account's owner.
     """
 
+    # The account's own id, which never changes, so a browser can tell whose
+    # drafts are whose after a change of handle. Never part of `PublicUser`.
+    id: int
     handle: str
     display_name: str
     role: str
@@ -43,6 +46,7 @@ class Me(ApiModel):
     @classmethod
     def from_user(cls, user: User) -> Me:
         return cls(
+            id=user.id,
             handle=user.handle,
             display_name=user.display_name,
             role=user.role,
@@ -69,6 +73,9 @@ class MeUpdate(RequestModel):
     # Merged into the stored settings one top-level key at a time. A key set
     # to null is removed.
     settings: dict[str, Any] | None = None
+    # Null removes the picture a sign-in provider gave. Nothing else is
+    # accepted, because Field Club stores no picture of its own.
+    avatar_url: None = None
 
 
 class Welcome(RequestModel):
@@ -95,6 +102,20 @@ class DevLogin(RequestModel):
     # and an existing one keeps the role they have.
     role: Role | None = None
     display_name: str | None = Field(default=None, min_length=1, max_length=MAX_DISPLAY_NAME)
+
+
+class DevEmail(ApiModel):
+    """One message the log mailer sent. Development and test only."""
+
+    to: str
+    subject: str
+    body: str
+    link: str | None
+
+
+class DevOutbox(ApiModel):
+    # Newest first.
+    items: list[DevEmail]
 
 
 class EmailStart(RequestModel):

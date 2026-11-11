@@ -16,9 +16,11 @@ from fieldclub.auth.tokens import hash_token
 from fieldclub.config import SESSION_COOKIE, get_settings
 from fieldclub.main import create_app
 from fieldclub.models import AuthIdentity, User, UserSession
+from tests.findings.support import create
 from tests.helpers import WEB, ClientAs, ClientFor, MakeFinding, MakeUser, count, error_code, nested
 
 ME_KEYS = {
+    "id",
     "handle",
     "display_name",
     "role",
@@ -232,6 +234,7 @@ def test_me_shows_private_fields_to_their_owner(client_as: ClientAs, make_user: 
     body = client_as(user).get("/api/v1/auth/me").json()
     assert set(body) == ME_KEYS
     assert body | {"created_at": None} == {
+        "id": user.id,
         "handle": "RidgewayRob",
         "display_name": "Rob",
         "role": "trusted",
@@ -618,6 +621,7 @@ def test_auth_routes_are_in_the_openapi_schema(client: TestClient) -> None:
     auth = {path: sorted(methods) for path, methods in paths.items() if path.startswith("/api/v1/auth/")}
     assert auth == {
         "/api/v1/auth/dev-login": ["post"],
+        "/api/v1/auth/dev-outbox": ["get"],
         "/api/v1/auth/email/start": ["post"],
         "/api/v1/auth/email/verify": ["post"],
         "/api/v1/auth/handle-suggestion": ["get"],
@@ -625,6 +629,7 @@ def test_auth_routes_are_in_the_openapi_schema(client: TestClient) -> None:
         "/api/v1/auth/me": ["delete", "get", "patch"],
         "/api/v1/auth/oauth/{provider}/callback": ["get", "post"],
         "/api/v1/auth/oauth/{provider}/start": ["get"],
+        "/api/v1/auth/session": ["get"],
         "/api/v1/auth/welcome": ["post"],
     }
     assert paths["/api/v1/auth/welcome"]["post"]["operationId"] == "auth_welcome"
@@ -761,3 +766,93 @@ def test_the_account_routes_stay_open_before_the_welcome_step(client_as: ClientA
     assert client.get("/api/v1/auth/me").status_code == 200
     assert client.patch("/api/v1/auth/me", json={"display_name": "Rob"}).status_code == 200
     assert client.post("/api/v1/auth/logout").status_code == 204
+
+
+# --------------------------------------------------------------------------
+# The id, the provider's picture, and asking who is signed in without an error
+# --------------------------------------------------------------------------
+
+
+def test_me_carries_an_id_that_stays_when_the_handle_changes(
+    client_as: ClientAs, make_user: MakeUser
+) -> None:
+    user = make_user(handle="FirstName")
+    browser = client_as(user)
+    before = browser.get("/api/v1/auth/me").json()["id"]
+    assert before == user.id
+    assert browser.patch("/api/v1/auth/me", json={"handle": "SecondName"}).json()["id"] == before
+    assert browser.get("/api/v1/auth/me").json()["id"] == before
+
+
+def test_the_id_is_never_part_of_the_public_face_of_a_person(
+    client: TestClient, make_user: MakeUser, db: Session
+) -> None:
+    user = make_user(handle="PublicFace")
+    finding = create(db, user)
+    profile = client.get("/api/v1/users/PublicFace")
+    assert profile.status_code == 200
+    assert "id" not in profile.json()
+    author = client.get(f"/api/v1/findings/{finding.public_id}").json()["author"]
+    assert "id" not in author
+    schema = client.get("/api/openapi.json").json()["components"]["schemas"]
+    assert "id" not in schema["PublicUser"]["properties"]
+
+
+def test_patch_me_clears_the_picture_a_provider_gave(
+    client_as: ClientAs, make_user: MakeUser, db: Session
+) -> None:
+    user = make_user(avatar_url="https://example.org/face.png")
+    browser = client_as(user)
+    response = browser.patch("/api/v1/auth/me", json={"avatar_url": None})
+    assert response.status_code == 200
+    assert response.json()["avatar_url"] is None
+    db.refresh(user)
+    assert user.avatar_url is None
+    # Leaving it out leaves it alone, and nothing but null is accepted: we store no picture of our own.
+    user.avatar_url = "https://example.org/face.png"
+    db.commit()
+    assert (
+        browser.patch("/api/v1/auth/me", json={"bio": ""}).json()["avatar_url"]
+        == "https://example.org/face.png"
+    )
+    refused = browser.patch("/api/v1/auth/me", json={"avatar_url": "https://example.org/other.png"})
+    assert refused.status_code == 422
+    db.refresh(user)
+    assert user.avatar_url == "https://example.org/face.png"
+
+
+def test_clearing_the_picture_needs_no_welcome_step(client_as: ClientAs, newcomer: User, db: Session) -> None:
+    newcomer.avatar_url = "https://example.org/new.png"
+    db.commit()
+    response = client_as(newcomer).patch("/api/v1/auth/me", json={"avatar_url": None})
+    assert response.status_code == 200
+    assert response.json()["avatar_url"] is None
+
+
+def test_session_answers_null_when_signed_out_and_the_person_when_signed_in(
+    client: TestClient, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    signed_out = client.get("/api/v1/auth/session")
+    assert signed_out.status_code == 200
+    assert signed_out.json() is None
+    user = make_user(handle="SessionSam")
+    browser = client_as(user)
+    signed_in = browser.get("/api/v1/auth/session")
+    assert signed_in.status_code == 200
+    assert signed_in.json() == browser.get("/api/v1/auth/me").json()
+    assert signed_in.headers["cache-control"].startswith("private")
+
+
+def test_session_answers_null_for_a_stale_cookie_or_a_banned_account(
+    client: TestClient, client_as: ClientAs, make_user: MakeUser, db: Session
+) -> None:
+    client.cookies.set(SESSION_COOKIE, "junk")
+    assert client.get("/api/v1/auth/session").json() is None
+    user = make_user()
+    browser = client_as(user)
+    user.banned_at = datetime.now(UTC)
+    db.commit()
+    response = browser.get("/api/v1/auth/session")
+    assert (response.status_code, response.json()) == (200, None)
+    # /auth/me keeps its errors.
+    assert browser.get("/api/v1/auth/me").status_code == 403

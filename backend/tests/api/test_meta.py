@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -9,6 +11,7 @@ from sqlalchemy.orm import Session
 from fieldclub import vocab
 from fieldclub.auth import providers
 from fieldclub.models import Source
+from fieldclub.services import sensitivity
 
 
 @pytest.fixture
@@ -38,9 +41,10 @@ SIGN_IN_ORDER = [
 
 
 def test_auth_lists_every_provider_in_order_and_none_enabled_until_configured(meta: dict) -> None:
-    assert meta["auth"] == {
-        "providers": [{"id": id_, "label": label, "enabled": False} for id_, label in SIGN_IN_ORDER]
-    }
+    assert list(meta["auth"]) == ["providers", "dev_login", "age_bands", "terms"]
+    assert meta["auth"]["providers"] == [
+        {"id": id_, "label": label, "enabled": False} for id_, label in SIGN_IN_ORDER
+    ]
     assert all("guest" not in item["id"] for item in meta["auth"]["providers"])
 
 
@@ -85,7 +89,7 @@ def test_vocab_has_exactly_the_documented_vocabularies(meta: dict) -> None:
 @pytest.mark.parametrize(
     ("name", "keys", "count"),
     [
-        ("feature_classes", ["id", "label", "hint", "fish_term"], len(vocab.FeatureClass)),
+        ("feature_classes", ["id", "label", "hint", "fish_term", "sensitivity"], len(vocab.FeatureClass)),
         ("periods", ["id", "label", "hint"], len(vocab.Period)),
         ("evidence_kinds", ["id", "label", "strand", "group", "hint"], len(vocab.EvidenceKind)),
         ("tiers", ["id", "label", "description", "base_score"], len(vocab.Tier)),
@@ -249,7 +253,7 @@ def test_meta_and_the_sources_list_describe_a_source_the_same_way(sources: None,
 
 def test_notices(meta: dict) -> None:
     notices = meta["notices"]
-    assert list(notices) == ["field_visit", "field_visit_16_17", "sensitivity"]
+    assert list(notices) == ["field_visit", "field_visit_16_17", "sensitivity", "find_reporting"]
     assert list(notices["field_visit"]) == ["england", "scotland", "wales", "northern_ireland"]
     for nation, lines in notices["field_visit"].items():
         assert lines == list(vocab.FIELD_VISIT_NOTICES[vocab.Nation(nation)])
@@ -274,10 +278,76 @@ def test_meta_is_described_in_the_openapi_schema(client: TestClient) -> None:
         "$ref": "#/components/schemas/Meta"
     }
     auth = schema["components"]["schemas"]["AuthInfo"]
-    assert list(auth["properties"]) == ["providers"]
-    assert auth["properties"]["providers"]["items"] == {"$ref": "#/components/schemas/ProviderOut"}
-    assert list(schema["components"]["schemas"]["ProviderOut"]["properties"]) == ["id", "label", "enabled"]
+    assert list(auth["properties"]) == ["providers", "dev_login", "age_bands", "terms"]
+    assert auth["properties"]["providers"]["items"] == {"$ref": "#/components/schemas/Provider"}
+    assert list(schema["components"]["schemas"]["Provider"]["properties"]) == ["id", "label", "enabled"]
     assert "tiles" not in schema["components"]["schemas"]["FindingsOverlay"]["properties"]
     views = schema["components"]["schemas"]["Layers"]["properties"]["views"]["items"]
     assert {ref["$ref"].rsplit("/", 1)[-1] for ref in views["oneOf"]} == {"RasterView", "RakingView"}
     assert views["discriminator"]["propertyName"] == "type"
+
+
+# --------------------------------------------------------------------------
+# What the welcome step, the map and the find notice need from the server
+# --------------------------------------------------------------------------
+
+
+def test_meta_says_whether_the_development_sign_in_is_on(
+    client: TestClient, app, env: Callable[..., None]
+) -> None:
+    # The tests run with it on (conftest.py), as `POST /auth/dev-login` is.
+    assert client.get("/api/v1/meta").json()["auth"]["dev_login"] is True
+    env(DEV_LOGIN="false")
+    assert client.get("/api/v1/meta").json()["auth"]["dev_login"] is False
+    env(DEV_LOGIN="true", ENV="dev")
+    assert client.get("/api/v1/meta").json()["auth"]["dev_login"] is True
+
+
+@pytest.mark.parametrize(
+    ("min_age", "bands"), [("16", ["16_17", "18_plus"]), ("17", ["18_plus"]), ("18", ["18_plus"])]
+)
+def test_meta_lists_the_age_bands_the_welcome_step_accepts(
+    client: TestClient, env: Callable[..., None], min_age: str, bands: list[str]
+) -> None:
+    env(MIN_AGE=min_age)
+    assert client.get("/api/v1/meta").json()["auth"]["age_bands"] == bands
+
+
+def test_meta_gives_the_contributor_terms_from_settings(client: TestClient, env: Callable[..., None]) -> None:
+    terms = client.get("/api/v1/meta").json()["auth"]["terms"]
+    assert terms["url"] == "/about#terms"
+    assert vocab.CONTRIBUTION_LICENCE in terms["summary"]
+    assert "16" in terms["summary"]
+    env(TERMS_SUMMARY="Be kind.", TERMS_URL="https://example.org/terms")
+    assert client.get("/api/v1/meta").json()["auth"]["terms"] == {
+        "summary": "Be kind.",
+        "url": "https://example.org/terms",
+    }
+
+
+def test_each_feature_class_carries_the_level_a_new_finding_starts_at(meta: dict) -> None:
+    levels = {item["id"]: item["sensitivity"] for item in meta["vocab"]["feature_classes"]}
+    assert levels == {
+        item.id.value: sensitivity.default_sensitivity(item.id).value for item in vocab.FEATURE_CLASSES
+    }
+    assert levels["round_barrow"] == "protected"
+    assert levels["enclosure"] == "open"
+
+
+def test_each_nation_has_its_route_for_reporting_a_find(meta: dict) -> None:
+    routes = meta["notices"]["find_reporting"]
+    assert list(routes) == ["england", "scotland", "wales", "northern_ireland"]
+    assert routes["england"]["scheme"] == "Portable Antiquities Scheme"
+    assert routes["wales"]["scheme"] == "Portable Antiquities Scheme in Wales"
+    assert routes["scotland"]["scheme"] == "Treasure Trove Scotland"
+    # Northern Ireland has no Portable Antiquities Scheme.
+    assert "Portable Antiquities" not in routes["northern_ireland"]["text"]
+    for nation, route in routes.items():
+        info = vocab.FIND_REPORTING[vocab.Nation(nation)]
+        assert route == {"scheme": info.scheme, "url": info.url, "text": info.text}
+        assert route["url"] is None or route["url"].startswith("https://")
+        assert route["text"].endswith(".")
+
+
+def test_meta_may_be_cached_by_anyone_for_a_short_while(client: TestClient) -> None:
+    assert client.get("/api/v1/meta").headers["cache-control"] == "public, max-age=300"

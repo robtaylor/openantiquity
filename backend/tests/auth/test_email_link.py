@@ -20,8 +20,9 @@ from fieldclub.auth import email_link
 from fieldclub.auth.failures import LinkConfirmationRequiredError, LinkInvalidError
 from fieldclub.auth.mailer import LogMailer, MailNotSentError, Message, SmtpMailer, get_mailer
 from fieldclub.auth.tokens import hash_token
-from fieldclub.config import SESSION_COOKIE
+from fieldclub.config import SESSION_COOKIE, get_settings
 from fieldclub.errors import ConfigError
+from fieldclub.main import create_app
 from fieldclub.models import MagicLink, User, UserSession
 from fieldclub.schemas.auth import EmailStarted
 from tests.auth.fakes import PUBLIC_URL
@@ -550,3 +551,53 @@ def test_the_email_start_route_sends_through_smtp(
     (server,) = fake_smtp.instances
     assert [name for name, _ in server.calls] == ["send", "quit"]
     assert "#token=" in server.calls[0][1].get_content()
+
+
+# --------------------------------------------------------------------------
+# The development outbox, for the full-stack browser tests
+# --------------------------------------------------------------------------
+
+OUTBOX = "/api/v1/auth/dev-outbox"
+
+
+def test_the_outbox_gives_the_links_sent_to_an_address_newest_first(browser: TestClient) -> None:
+    first = request_link(browser, "walker@example.org")
+    request_link(browser, "someone.else@example.org")
+    second = request_link(browser, "walker@example.org", next="/f/ABC123")
+    response = browser.get(OUTBOX, params={"to": "walker@example.org"})
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert [item["to"] for item in items] == ["walker@example.org", "walker@example.org"]
+    assert [token_from(Message(item["to"], item["subject"], item["body"])) for item in items] == [
+        second,
+        first,
+    ]
+    assert items[0]["link"].endswith(f"#token={second}")
+    assert items[0]["link"] in items[0]["body"]
+    assert "next=%2Ff%2FABC123" in items[0]["link"]
+
+
+def test_the_outbox_matches_an_address_whatever_its_case(browser: TestClient) -> None:
+    request_link(browser, "Walker@Example.org")
+    items = browser.get(OUTBOX, params={"to": "walker@example.ORG"}).json()["items"]
+    assert len(items) == 1
+
+
+def test_the_outbox_needs_an_address(browser: TestClient) -> None:
+    assert browser.get(OUTBOX).status_code == 422
+
+
+def test_the_outbox_exists_only_where_the_development_sign_in_does(
+    db: Session, env: Callable[..., None], client_for: ClientFor, mail_on: None
+) -> None:
+    off = get_settings().model_copy(update={"dev_login": False})
+    browser = client_for(create_app(off))
+    assert browser.get(OUTBOX, params={"to": "a@example.org"}).status_code == 404
+    assert OUTBOX not in browser.get("/api/openapi.json").json()["paths"]
+    # Mounted by mistake, it still says nothing.
+    env(DEV_LOGIN="false")
+    mounted = client_for(create_app(include_dev_routes=True))
+    LogMailer.outbox.append(Message("a@example.org", "Your Field Club sign-in link", "https://x/#token=abc"))
+    response = mounted.get(OUTBOX, params={"to": "a@example.org"})
+    assert response.status_code == 404
+    assert "abc" not in response.text

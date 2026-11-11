@@ -34,8 +34,12 @@ def update_profile(
     display_name: str = UNSET,
     bio: str | None = UNSET,
     settings: dict[str, Any] = UNSET,
+    avatar_url: None = UNSET,
 ) -> User:
     """Change the fields that were passed. The caller commits.
+
+    `avatar_url` can only be cleared: passing None removes the picture a
+    sign-in provider gave.
 
     `settings` is merged into what is stored, one top-level key at a time. A
     key set to `None` is removed.
@@ -44,6 +48,9 @@ def update_profile(
     leaves the user exactly as they were.
     """
     changes: dict[str, Any] = {}
+    if avatar_url is not UNSET:
+        assert avatar_url is None, "a picture can only be cleared"
+        changes["avatar_url"] = None
     if display_name is not UNSET:
         changes["display_name"] = validate_display_name(display_name or "")
     if bio is not UNSET:

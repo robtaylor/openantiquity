@@ -7,8 +7,9 @@ app, carrying `?signin_error=<code>` when something went wrong. The emailed
 link is two JSON calls, `/auth/email/start` and `/auth/email/verify`. The
 logic is in `fieldclub.auth.oauth`, `signin` and `email_link`.
 
-`dev_router` holds `POST /auth/dev-login`. `create_app()` mounts it only when
-`FIELDCLUB_DEV_LOGIN` is on and the environment is dev or test.
+`dev_router` holds `POST /auth/dev-login` and `GET /auth/dev-outbox`.
+`create_app()` mounts it only when `FIELDCLUB_DEV_LOGIN` is on and the
+environment is dev or test.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from fastapi import APIRouter, Depends, Form, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 
 from fieldclub import ratelimit
-from fieldclub.api.deps import AppSettings, CurrentUser, Db, rate_limit
+from fieldclub.api.deps import AppSettings, CurrentUser, Db, OptionalUser, rate_limit
 from fieldclub.auth import (
     accounts,
     cookies,
@@ -35,14 +36,16 @@ from fieldclub.auth import (
 from fieldclub.auth.deps import client_ip
 from fieldclub.auth.failures import FlowStateError, ProviderUnavailableError, SignInFailedError
 from fieldclub.auth.flow import FLOW_COOKIE, new_flow, seal, state_matches, unseal
-from fieldclub.auth.mailer import get_mailer
+from fieldclub.auth.mailer import LogMailer, get_mailer
 from fieldclub.auth.redirects import DEFAULT_NEXT, app_url, safe_next
 from fieldclub.auth.tokens import hash_token, new_token
 from fieldclub.config import SESSION_COOKIE, Settings
 from fieldclub.errors import AppError, NotFoundError
 from fieldclub.models import User
 from fieldclub.schemas.auth import (
+    DevEmail,
     DevLogin,
+    DevOutbox,
     EmailStart,
     EmailStarted,
     EmailVerify,
@@ -89,16 +92,26 @@ def get_me(user: CurrentUser) -> Me:
     return Me.from_user(user)
 
 
+@router.get("/session", response_model=Me | None)
+def get_session(user: OptionalUser) -> Me | None:
+    """The signed-in user, or null when nobody is, so a signed-out page load is no error.
+
+    A stale cookie and a banned account answer null too. `GET /auth/me` keeps its 401 and 403.
+    """
+    return Me.from_user(user) if user is not None else None
+
+
 @router.patch(
     "/me",
     response_model=Me,
     dependencies=[Depends(rate_limit("auth_me_update", 120, per_seconds=3600))],
 )
 def update_me(body: MeUpdate, request: Request, user: CurrentUser, db: Db, settings: AppSettings) -> Me:
-    """Change your handle, display name, bio or settings.
+    """Change your handle, display name, bio or settings, or remove your provider's picture.
 
     A bio is free text on a public profile, so it is a contribution: writing
-    one needs a finished welcome step, like any other. Clearing it doesn't.
+    one needs a finished welcome step, like any other. Clearing it doesn't,
+    nor does removing the picture (`avatar_url: null`).
     """
     changes = body.model_dump(exclude_unset=True)
     if changes.get("bio"):
@@ -382,3 +395,23 @@ def dev_login(body: DevLogin, request: Request, response: Response, db: Db, sett
     db.commit()
     cookies.set_session_cookie(response, token)
     return Me.from_user(user)
+
+
+@dev_router.get("/dev-outbox", response_model=DevOutbox)
+def dev_outbox(
+    settings: AppSettings, to: Annotated[str, Query(min_length=3, max_length=oauth.MAX_EMAIL)]
+) -> DevOutbox:
+    """The sign-in emails the log mailer sent to `to`, newest first. Development and test only.
+
+    The full-stack browser tests read emailed links here instead of from the
+    server's log. Like the development sign-in it gives a session to whoever
+    asks, so it exists only where that does.
+    """
+    if not settings.dev_login_enabled:
+        raise NotFoundError()
+    return DevOutbox(
+        items=[
+            DevEmail(to=message.to, subject=message.subject, body=message.body, link=message.link)
+            for message in LogMailer.sent_to(to)
+        ]
+    )

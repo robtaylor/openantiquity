@@ -5,20 +5,30 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from fieldclub import APP_NAME, __version__, vocab
+from fieldclub.auth.onboarding import allowed_age_bands
 from fieldclub.auth.providers import provider_statuses
 from fieldclub.config import Settings
 from fieldclub.layers import TileVersion, build_layers, default_tile_version
 from fieldclub.schemas import meta as schema
-from fieldclub.services import record_tiles, records
+from fieldclub.services import record_tiles, records, sensitivity
 
 
 def build_vocab() -> schema.Vocab:
     return schema.Vocab(
-        feature_classes=[schema.FeatureClassOut.model_validate(item) for item in vocab.FEATURE_CLASSES],
+        feature_classes=[
+            schema.FeatureClassOut(
+                id=item.id,
+                label=item.label,
+                hint=item.hint,
+                fish_term=item.fish_term,
+                sensitivity=sensitivity.default_sensitivity(item.id),
+            )
+            for item in vocab.FEATURE_CLASSES
+        ],
         periods=[schema.PeriodOut.model_validate(item) for item in vocab.PERIODS],
         evidence_kinds=[schema.EvidenceKindOut.model_validate(item) for item in vocab.EVIDENCE_KINDS],
         tiers=[schema.TierOut.model_validate(item) for item in vocab.TIERS],
-        states=[schema.StateOut.model_validate(item) for item in vocab.STATES],
+        states=[schema.State.model_validate(item) for item in vocab.STATES],
         checks=[schema.CheckOut.model_validate(item) for item in vocab.CHECKS],
         explanations=[schema.ExplanationOut.model_validate(item) for item in vocab.EXPLANATIONS],
         mention_kinds=[schema.MentionKindOut.model_validate(item) for item in vocab.MENTION_KINDS],
@@ -34,10 +44,15 @@ def list_sources(db: Session) -> list[schema.SourceOut]:
 
 def build_notices() -> schema.Notices:
     notices = {nation.value: list(lines) for nation, lines in vocab.FIELD_VISIT_NOTICES.items()}
+    reporting = {
+        nation.value: schema.FindReporting(scheme=info.scheme, url=info.url, text=info.text)
+        for nation, info in vocab.FIND_REPORTING.items()
+    }
     return schema.Notices(
         field_visit=schema.FieldVisitNotices(**notices),
         field_visit_16_17=vocab.FIELD_VISIT_NOTICE_16_17,
         sensitivity=vocab.SENSITIVITY_NOTICE,
+        find_reporting=schema.FindReportingNotices(**reporting),
     )
 
 
@@ -67,9 +82,12 @@ def build_meta(
         ),
         auth=schema.AuthInfo(
             providers=[
-                schema.ProviderOut(id=info.id.value, label=info.label, enabled=enabled)
+                schema.Provider(id=info.id.value, label=info.label, enabled=enabled)
                 for info, enabled in provider_statuses(settings)
-            ]
+            ],
+            dev_login=settings.dev_login_enabled,
+            age_bands=list(allowed_age_bands(settings)),
+            terms=schema.Terms(summary=settings.terms_summary, url=settings.terms_url),
         ),
         vocab=build_vocab(),
         layers=build_layers_for(db, tile_version),

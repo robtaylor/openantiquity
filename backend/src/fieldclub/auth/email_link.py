@@ -106,7 +106,7 @@ def link_message(settings: Settings, email: str, token: str, next_path: str) -> 
         f"It works once, for the next {minutes} minutes. If you didn't ask for it, ignore this email "
         "and nothing will happen.\n"
     )
-    return Message(to=email, subject="Your Field Club sign-in link", body=body)
+    return Message(to=email, subject="Your Field Club sign-in link", body=body, link=url)
 
 
 def _from_this_browser(link: MagicLink, browser: str | None) -> bool:

@@ -28,10 +28,18 @@ from sqlalchemy.orm import Session
 
 from fieldclub.models import Activity, Finding, Investigation, User
 from fieldclub.services import feed, findings, investigations, mentions, moderation
+from fieldclub.services.findings import EvidenceFields
 from fieldclub.services.investigations import Need
-from fieldclub.vocab import InvestigationItemKind, InvestigationRole, ReportTarget, Role
+from fieldclub.vocab import (
+    EvidenceKind,
+    InvestigationItemKind,
+    InvestigationRole,
+    Relation,
+    ReportTarget,
+    Role,
+)
 from tests.findings.support import add_desk_evidence, create
-from tests.helpers import ClientFor, MakeUser
+from tests.helpers import ClientFor, MakeUser, add_record, add_source
 from tests.investigations.support import add, make
 from tests.moderation.support import API, comment, photo
 
@@ -57,13 +65,14 @@ STILL_SEEN_BY = {
 assert set(STILL_SEEN_BY) == moderation.HIDEABLE, "every hideable kind is walked"
 
 # The paths read for each read route. `{pid}` is a finding with everything on it, `{gid}` the
-# finding that is hidden, `{inv}` the investigation, `{photo}` the photo, `{author}` and
-# `{finder}` handles.
+# finding that is hidden, `{inv}` the investigation, `{photo}` the photo, `{record}` a record
+# both findings link, `{author}` and `{finder}` handles.
 F = "/findings/{pid}"
 G = "/findings/{gid}"
 INV = "/investigations/{inv}"
 WALKED: dict[tuple[str, str], list[str]] = {
     ("GET", "/api/v1/auth/me"): ["/auth/me"],
+    ("GET", "/api/v1/auth/session"): ["/auth/session"],
     ("GET", "/api/v1/findings"): ["/findings", "/findings?format=geojson", "/findings?author={finder}"],
     ("GET", "/api/v1/findings/export"): ["/findings/export?format=geojson", "/findings/export?format=csv"],
     ("GET", "/api/v1/findings/{public_id}"): [F, G],
@@ -76,6 +85,7 @@ WALKED: dict[tuple[str, str], list[str]] = {
     ("GET", "/api/v1/findings/{public_id}/comments"): [F + "/comments", G + "/comments"],
     ("GET", "/api/v1/findings/{public_id}/mentions"): [F + "/mentions", G + "/mentions"],
     ("GET", "/api/v1/findings/{public_id}/suggested-records"): [G + "/suggested-records"],
+    ("GET", "/api/v1/records/{record_id}/findings"): ["/records/{record}/findings"],
     ("GET", "/api/v1/mentions/recent"): ["/mentions/recent"],
     ("GET", "/api/v1/review/next"): ["/review/next"],
     ("GET", "/api/v1/review/tasks"): ["/review/tasks"],
@@ -130,6 +140,7 @@ class World:
     texts: dict[ReportTarget, list[str]]
     ids: dict[ReportTarget, list[tuple[str, int]]]
     photo_id: int
+    record_id: int
     client: Callable[[str], TestClient]
 
     def paths(self) -> Iterator[str]:
@@ -138,6 +149,7 @@ class World:
             "gid": self.hidden_finding.public_id,
             "inv": self.investigation.public_id,
             "photo": str(self.photo_id),
+            "record": str(self.record_id),
             "author": self.people["author"].handle,
             "finder": self.people["finder"].handle,
         }
@@ -170,6 +182,14 @@ def world(db: Session, make_user: MakeUser, app: FastAPI, client_for: ClientFor)
         db, finding, author, "https://www.wiltshire-gazette.example:8443/story", note=SECRET_MENTION
     )
     shown = photo(db, author, approved_by=people["trusted"])
+    record = add_record(db, add_source(db), "Enclosure on the down", -1.85, 51.43)
+    for found in (finding, hidden_finding):
+        findings.add_evidence(
+            db,
+            findings.lock(db, found),
+            finder,
+            EvidenceFields(kind=EvidenceKind.RECORD_LINK, record_id=record.id, relation=Relation.RELATED),
+        )
     notebook = make(
         db,
         author,
@@ -213,6 +233,7 @@ def world(db: Session, make_user: MakeUser, app: FastAPI, client_for: ClientFor)
             ReportTarget.INVESTIGATION: [],
         },
         photo_id=shown.id,
+        record_id=record.id,
         client=lambda name: clients[name],
     )
 

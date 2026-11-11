@@ -47,6 +47,16 @@ IfNoneMatch = Annotated[str | None, Header()]
 PRIVATE_CACHE = "private, no-cache"
 
 
+# What a read that is the same for every viewer is sent with, when a few
+# minutes' delay in what it shows does no harm.
+SHARED_CACHE = "public, max-age=300"
+
+
+def shared(response: Response) -> None:
+    """This response is the same for every viewer, so any cache may keep it for a few minutes."""
+    response.headers["Cache-Control"] = SHARED_CACHE
+
+
 def private(response: Response) -> None:
     """What this response holds depends on the viewer, so no shared cache may keep it."""
     response.headers["Cache-Control"] = PRIVATE_CACHE
@@ -82,6 +92,7 @@ def split_list(value: str | None) -> list[str] | None:
 
 __all__ = [
     "PRIVATE_CACHE",
+    "SHARED_CACHE",
     "AppSettings",
     "BBoxQuery",
     "Contributor",
@@ -100,5 +111,6 @@ __all__ = [
     "private",
     "rate_limit",
     "require_role",
+    "shared",
     "split_list",
 ]
