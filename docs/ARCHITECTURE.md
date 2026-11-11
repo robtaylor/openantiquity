@@ -13,7 +13,7 @@ The product is called "Open Antiquity". The Python package, database and cookie 
 | Terrain | numpy, scipy, rasterio. Tiles are rendered on demand and cached |
 | Frontend | TypeScript (strict), React 19, Vite, MapLibre GL JS 6, TanStack Query, Zustand |
 | Tests | pytest against a real PostGIS, Vitest, Playwright for end-to-end |
-| Deploy | One container, PostgreSQL and a bucket with the S3 interface. Moving from Cloud Run, Cloud SQL and Cloud Storage (Terraform in `infra/terraform`) to Fly Machines, Fly Managed Postgres and Tigris (Decision 0018). The application speaks S3 only, not Cloud Storage |
+| Deploy | One container, PostgreSQL and a bucket with the S3 interface: Fly Machines in London, Fly Managed Postgres 17 and Tigris, described by `fly.toml`, `infra/fly/` and tested scripts in `infra/` (Decision 0018, `infra/README.md`). The Google Cloud deployment in `infra/terraform` stays until the cut-over. The application speaks S3 only, not Cloud Storage |
 
 Endpoints are plain `def` functions. FastAPI runs them in its thread pool, which suits a workload of SQL, upstream HTTP and numpy. Only the event stream and the terrain tiles are `async`: the tiles are drawn on threads of their own (`terrain/workers.py`), so a flood of them can't take the pool everything else runs on. See Decisions 0001 and 0015 in `docs/architecture/decisions/`.
 
@@ -27,6 +27,7 @@ backend/
     db.py                   engine, SessionLocal, get_db dependency, Base
     errors.py               AppError hierarchy and the JSON error handler
     main.py                 create_app(): routers auto-registered from fieldclub.api, the middleware
+    redirects.py            the site's other names answered with a redirect to FIELDCLUB_PUBLIC_URL
     vocab.py                feature classes, periods, evidence kinds, tiers, checks
     layers.py               map layer catalogue served by /meta
     credits.py              each source's short licence name and the credit line a visitor is shown
@@ -42,7 +43,7 @@ backend/
     auth/                   sessions, the welcome step, magic links, OAuth
     terrain/                elevation sources, visualisations, tile rendering, cache
     ingest/                 connector base, registry, runner, CLI, adapters/, connectors/, reference/ (gazetteer and boundary loaders)
-    jobs/                   scheduled work (channel scan, source refresh)
+    jobs/                   scheduled work (channel scan, source refresh, and `due`, which an hourly start runs)
   tests/                    mirrors src layout; conftest.py owns the database fixtures, test_routes.py lists every route;
                             tests/infra/ covers the scripts in the repository's infra/ folder
 frontend/
@@ -51,16 +52,20 @@ frontend/
     map/                    MapLibre setup, layer control, compare, terrain controls
     features/               explore, mark, findings, finding, mentions, review, help, squares, records, layers (terrain tools), investigations, account, activity, notifications, people, reports, moderation, photos, guide, about
     ui/                     shared components and design tokens
+fly.toml                    the web app on Fly.io; at the root because `fly deploy` builds from where it runs
 infra/
   README.md                 the deployment runbook, with sizing and cost
   docker-compose.yml        local PostGIS on port 54329
   Dockerfile                multi-stage build: frontend, then backend serving it; one image for the service and every job
-  bootstrap.sh              makes a project's Terraform state bucket
-  add-defra-secrets.sh      puts the Defra supply login into Secret Manager from .env
+  fly/jobs.toml             the jobs app's settings, read by fly_jobs.py (not a fly.toml)
+  fly_jobs.py               starts each job as a Fly machine, and keeps the hourly one up to date
+  fly-secrets.sh            sets an app's secrets on Fly from .env, var/ and files, without showing them
   dns.py, dns.toml          the DNS record sets managed at Gandi, and the tool that applies them
-  jobs/                     deployment glue run inside the image, such as the sharded elevation copy
-  terraform/                Cloud Run, Cloud SQL, buckets, secrets, scheduler
-.github/workflows/          ci.yml on pushes to main and pull requests; deploy.yml by hand builds, pushes and plans
+  jobs/                     glue run inside the image: the sharded elevation copy, the tile cache's expiry rule
+  bootstrap.sh              Google Cloud, until the cut-over: makes a project's Terraform state bucket
+  add-defra-secrets.sh      Google Cloud, until the cut-over: puts the Defra login into Secret Manager
+  terraform/                Google Cloud, until the cut-over: Cloud Run, Cloud SQL, buckets, secrets, scheduler
+.github/workflows/          ci.yml on pushes to main and pull requests; deploy.yml by hand deploys the web app to Fly
 docs/
   DESIGN.md  ARCHITECTURE.md  UI.md  prose-style.md
   architecture/             area docs, and decision records in decisions/
@@ -226,6 +231,7 @@ All paths are under `/api/v1`. Bodies are JSON. The session is a `openantiquity_
 Rules every route follows, whichever area it belongs to:
 
 - Rate limits, bans and the hashed address kept with a session use the caller's address, from `auth.deps.client_ip`. When `FIELDCLUB_CLIENT_IP_HEADER` is set, the address is read from that header alone, and a request without exactly one address in it gets the socket's. On Fly the header is `Fly-Client-IP`, which Fly's proxy overwrites. Otherwise the address is the `FIELDCLUB_TRUSTED_PROXY_HOPS`th entry of `X-Forwarded-For` from the right, or the socket's when that is 0. Production refuses to start with neither set, and a Fly machine refuses to start without the header.
+- A request whose `Host` is one of `FIELDCLUB_REDIRECT_HOSTS`, the site's other names, is answered 308 with the same path and query on `FIELDCLUB_PUBLIC_URL`, before any route or other middleware sees it (`redirects.py`). Any other name is served, so the platform's own address and its health checks still answer. The settings refuse a list that names the public address's own host.
 - Every write is rate-limited. One that stores a contribution needs a signed-in account that has finished the welcome step, or answers `onboarding_required`. Every route has a response model, so the generated client covers it.
 - Lists are paged with `limit` and an opaque `cursor`. Each list keeps its own cursor: a key for a list whose order is fixed, an offset for one whose order moves as people answer. No offset goes past 2,000. A cursor that is wrong in any way is 400 `invalid_cursor`, and a `limit` above the list's maximum is 422 `validation_error`.
 - A `bbox` is `west,south,east,north` in degrees, four finite numbers with west < east and south < north. Anything else is 400 `invalid_bbox`, and `fieldclub-ingest --bbox` takes the same boxes.
@@ -438,7 +444,7 @@ Every such fetch goes through `safe_fetch.fetch`: http and https only, ports 80 
 
 Adding a mention bumps `mention_count` and records `mention_added`, which tells the finding's followers (the finder and everyone who helped) except whoever added it. A mention never touches the confidence engine. `GET /mentions/recent` lists mentions on findings the viewer may list, newest first, each with its finding's position from `location_out`. Withdrawn findings and removed mentions are left out, and hidden ones for everyone but their adder and moderators. Only the person who added a mention removes it, and that blocks nothing, so anyone may add that address again. A moderator hides one instead, the scan's included, through `/mod/mentions/{id}/hide` (see Moderation).
 
-`fieldclub-jobs scan-channels` reads each enabled channel's public feed, one at a time with a pause between them and conditional requests, and adds an `auto_detected` mention with no member for every link in a video description to `<FIELDCLUB_PUBLIC_URL>/f/<public id>`. `fieldclub-jobs refresh-sources` runs each enabled bulk source's connector, and each reference loader, one at a time, when its last completed full run is older than its `max_age` (a week when it declares none). A source that lacks a setting it needs, such as the contact address Wikidata asks for, is skipped, and one that fails stops there until the next refresh. It never allows a shrink, so a full run that would remove more than `FIELDCLUB_INGEST_MAX_SHRINK` of a source fails and is counted as failed. Both exit non-zero when anything failed, after carrying on with the rest.
+`fieldclub-jobs scan-channels` reads each enabled channel's public feed, one at a time with a pause between them and conditional requests, and adds an `auto_detected` mention with no member for every link in a video description to `<FIELDCLUB_PUBLIC_URL>/f/<public id>`. `fieldclub-jobs refresh-sources` runs each enabled bulk source's connector, and each reference loader, one at a time, when its last completed full run is older than its `max_age` (a week when it declares none). A source that lacks a setting it needs, such as the contact address Wikidata asks for, is skipped, and one that fails stops there until the next refresh. It never allows a shrink, so a full run that would remove more than `FIELDCLUB_INGEST_MAX_SHRINK` of a source fails and is counted as failed. Both exit non-zero when anything failed, after carrying on with the rest. `fieldclub-jobs due` is for a scheduler that starts it every hour, as Fly's does (`jobs/due.py`). It runs the scan when some channel is watched and none has been checked for five hours, which with the hour Fly takes to start it keeps scans about six hours apart, and the refresh when the hour is 03 UTC, the scan first. It exits non-zero when either failed.
 
 ## Terrain service
 

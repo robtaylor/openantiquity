@@ -43,6 +43,10 @@ For whoever runs the service, as it moves to Fly.io (Decision 0018):
 - The image listens on 8080 unless the platform sends another `PORT`, and no longer sets `CPL_MACHINE_IS_GCE`.
 - The live event stream finds a database connection that went silent, as one may while Fly has a machine suspended, within about ten seconds of the next visitor, and tells browsers to refresh what they show.
 - A full ingest run whose lock went with its database connection fails with `ingest_lock_lost` instead of deleting records.
+- The deployment is now Fly.io: `fly.toml` for the web app, a second app for the jobs that alone holds Defra's login, `infra/fly_jobs.py` to start each job as a machine, `infra/fly-secrets.sh` to set secrets without showing them, and `deploy.yml` deploying with a deploy token from main. `infra/README.md` is the new runbook. The Google Cloud deployment stays in `infra/terraform` until the cut-over, and an image built from main no longer runs there.
+- `FIELDCLUB_REDIRECT_HOSTS` lists the site's other names. A request for one is answered 308 with the same path on `FIELDCLUB_PUBLIC_URL`.
+- `fieldclub-jobs due` runs whichever of the channel scan and the source refresh is due, for a scheduler that can only start it every hour.
+- `infra/jobs/mirror_shard.py` takes the shares to run as `--shares 4 --share N`, one or more, in place of Cloud Run's task variables.
 
 ### Added
 

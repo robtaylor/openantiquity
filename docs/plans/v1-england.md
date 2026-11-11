@@ -168,17 +168,27 @@ Every screen over the map. See `UI.md`.
 
 ### WS8 — Deployment
 
-**Status:** In progress. The owner gave standing permission for the deployment on 2026-11-11, and steps 1 to 7 of the runbook (`infra/README.md`) were carried out that day in the project `fieldclub-uk`. Billing is linked, the database login and the six required secrets have values, the schema job created the 28 tables, and the image built from the renamed code runs as the service and the jobs. The service is held back from the public with `service_public = false`: an anonymous request gets 403, and the owner's gets the API and the interface. The elevation copy (step 8) was started at 19:23 on 2026-11-11 and takes about six and a half hours. The domains are registered and their DNS is managed from `infra/dns.toml`; nothing points at the service yet. Left: the national overview (step 9) and the first ingests (step 10) once the copy has finished; the sign-in providers' credentials (`owner-actions.md`, WS3); the choice of how the domain reaches the service, the load balancer or a cheaper front, which is the owner's; redirects from `www`, `.com` and `.co.uk`; and opening the site, which waits on WS9's security review. A plan shows the volumes of two jobs changing order on every run, which changes nothing but should be tidied in `jobs.tf`.
+**Status:** In progress, moving from Google Cloud to Fly.io.
+
+On Google Cloud: the owner gave standing permission for the deployment on 2026-11-11, and steps 1 to 7 of the Google runbook (now `git show 28488dd:infra/README.md`) were carried out that day in the project `fieldclub-uk`. Billing is linked, the database login and the six required secrets have values, the schema job created the 28 tables, and the image built from the renamed code runs as the service and the jobs. The service is held back from the public with `service_public = false`: an anonymous request gets 403, and the owner's gets the API and the interface. The elevation copy (step 8) was started at 19:23 on 2026-11-11 and takes about six and a half hours. The domains are registered and their DNS is managed from `infra/dns.toml`; nothing points at the service yet. The exit criterion of that deployment, `terraform plan` succeeding against the named project with nothing applied without the owner's go-ahead, was met for the first stage that day. A plan shows the volumes of two jobs changing order on every run, which changes nothing and goes with the Terraform.
+
+The move: later on 2026-11-11 the owner chose Fly.io, with Managed Postgres and Tigris, and no Terraform (Decision 0018, after the spike `hosting-on-fly-io`). The application now speaks only S3 and reads Fly's database address and visitor header, so an image built from main can no longer run on the Google deployment, which keeps the image it has. The deployment for Fly is written and tested offline: `fly.toml` for the web app, `infra/fly/jobs.toml` and `infra/fly_jobs.py` for the jobs app, `infra/fly-secrets.sh`, the tile cache's expiry rule, the redirects from the other names, `deploy.yml` deploying with a token, and the runbook in `infra/README.md`. Nothing has been created on Fly beyond the spike's resources.
+
+Left: the owner carries out the Fly runbook, from making the apps to the deploy workflow, checking each command against the real platform; the copy of the converted elevation from Google's bucket to Tigris once Google's copy has finished; the national overview and the first ingests on Fly; the sign-in providers' credentials (`owner-actions.md`, WS3), registered with the openantiquity.org redirect address; pointing the domains at Fly, with the records commented in `infra/dns.toml`; taking the Google project down with `infra/terraform` once the site on Fly has passed its checks; and opening the site, which waits on WS9's security review.
 
 **Deliverables:**
 
-- A container image, Terraform for Cloud Run, Cloud SQL, buckets, secrets and scheduled jobs, and a CI workflow.
-- The job that copies England's LIDAR from Defra's bulk supply into a bucket, run from a temporary machine in the project.
+- A container image, run as Fly Machines in London: the web app, and a jobs app that alone holds Defra's login.
+- Fly's configuration files and small tested scripts for the apps, the jobs, the secrets and the bucket rules, and a CI workflow that deploys by hand from main.
+- England's converted elevation in a Tigris bucket, copied from Google Cloud Storage once.
+- The runbook, with sizing, cost and the manual spend check Fly's missing billing alert needs.
 
 **Exit criteria:**
 
-- `terraform plan` succeeds against the named project. Nothing is applied without the owner's go-ahead. Met for the first stage on 2026-11-11.
+- The web app answers `/healthz` on openantiquity.org, and the other names redirect to it.
+- The mirror in Tigris holds all 5,877 tiles and the national overview is built from it.
 - CI runs both check suites and the docs lint on every push.
+- The Google project is taken down, with nothing of the application left running there.
 
 ### WS9 — Verification
 

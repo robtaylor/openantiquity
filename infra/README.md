@@ -1,299 +1,293 @@
-# Running Open Antiquity on Google Cloud
+# Running Open Antiquity on Fly.io
 
-This is the runbook for the deployment in this folder: what the owner does once, what a deploy is afterwards, how to roll back, and what to watch. It also records the sizing and cost reasoning behind the defaults.
+This is the runbook for the deployment on Fly.io: what the owner does once, what a deploy is afterwards, how to roll back, and what to watch. It also records the sizing and cost reasoning behind the defaults. Decision 0018 chose Fly.io, and the spike `docs/architecture/decisions/spikes/hosting-on-fly-io.md` measured what it rests on.
 
-What has been applied so far, and to which project, is recorded in `docs/plans/v1-england.md`, WS8. Every command that touches Google Cloud names its project with `--project`, so the gcloud configuration's own default project is never used. Set `P` to the Open Antiquity project id first, in every shell:
+Everything lives in the Fly organisation `openantiquity`, in London (`lhr`). Every command names its app with `--app`, so the directory a command runs in never chooses the app. Commands run from the main checkout, at the repository root, because the secrets script reads the untracked `.env` and `var/` there. What has been done so far is recorded in `docs/plans/v1-england.md`, WS8.
 
-```
-export P=<project-id>
-```
+Nothing in this folder has been run against Fly. Each command below was written from Fly's and Tigris's documentation, cited beside it, or from the spike. Check each one with `--help` before running it, and correct this file where the platform differs.
 
 ## What is in this folder
 
 | Path | What it is |
 |---|---|
+| `../fly.toml` | The web app `openantiquity`: the image, the release command, every non-secret setting, the HTTP service, its health check and machine size. At the repository root because `fly deploy` builds from the directory it runs in, and the image is built from the root |
 | `Dockerfile` | One image for the service and every job, built from the repository root |
-| `docker-compose.yml` | The local PostGIS for development and tests |
-| `bootstrap.sh` | Makes the bucket that holds Terraform's state |
-| `add-defra-secrets.sh` | Puts the Defra supply login into Secret Manager from the untracked `.env`, without showing it |
+| `fly/jobs.toml` | The jobs app `openantiquity-jobs`: its non-secret settings and the hourly machine's volume. Read by `fly_jobs.py`. It is not a `fly.toml` and must never be given to `fly deploy` |
+| `fly_jobs.py` | Starts each job as a machine in the jobs app, and keeps the hourly machine on the current image |
+| `fly-secrets.sh` | Sets an app's secrets from `.env`, `var/` and a file of other secrets, without showing them |
+| `jobs/mirror_shard.py` | Shares of the whole-country elevation copy, run inside the image |
+| `jobs/cache_lifecycle.py` | The tile cache bucket's expiry rule, set through the S3 lifecycle interface, run inside the image |
 | `dns.py`, `dns.toml` | The DNS record sets the project manages at Gandi, and the tool that applies them |
-| `jobs/mirror_shard.py` | One task's share of the whole-country elevation copy |
-| `terraform/` | The project's resources. `example.tfvars` lists the inputs |
-| `terraform/modules/cdn/` | The optional load balancer and CDN, off by default |
-| `terraform/tests/` | Offline checks with the Google provider mocked |
-| `../.github/workflows/ci.yml` | Checks on pushes to main and on pull requests |
-| `../.github/workflows/deploy.yml` | Run by hand: build, push and plan. It doesn't apply |
+| `docker-compose.yml` | The local PostGIS for development and tests |
+| `terraform/`, `bootstrap.sh`, `add-defra-secrets.sh` | The Google Cloud deployment, kept until the cut-over (see [Google Cloud until the cut-over](#google-cloud-until-the-cut-over)) |
+| `../.github/workflows/ci.yml` | Checks on pushes to main and on pull requests, the scripts' tests and shellcheck among them |
+| `../.github/workflows/deploy.yml` | Run by hand on main: deploys the web app to Fly with a deploy token |
+
+The scripts' tests are in `backend/tests/infra/`. Each runs its script against a stand-in for the command it drives, so they never reach Fly. `test_fly_config.py` starts the application's settings from each configuration file as a Fly machine would see them.
 
 ## What gets built
 
-- **Cloud Run service `fieldclub`** serves the API, the tiles and the built frontend from one image. It scales to zero.
-- **Cloud Run jobs** run the same image with another command: `fieldclub-schema`, `fieldclub-ingest`, `fieldclub-scan-channels`, `fieldclub-refresh-sources`, `fieldclub-elevation-copy` and `fieldclub-national-build`.
-- **Cloud Scheduler** runs the channel scan every six hours and the source refresh daily at 04:30 (`schedules`; an empty string leaves one unscheduled), and starts any ingest listed in `ingest_schedules`. The source refresh runs every bulk connector and reference loader that is due, one after another, so its job has an ingest's six hours, 2 GiB and downloads kept in the cache bucket.
-- **Cloud SQL** for PostgreSQL 17, Enterprise edition, `db-g1-small`, 20 GB SSD that grows by itself, seven daily backups.
-- **Three private buckets**: `<project>-elevation` (the mirror), `<project>-cache` (rendered tiles, cached elevation and ingest downloads, with deletion rules) and `<project>-photos` (uploads, kept). Terraform refuses to destroy the elevation bucket (`prevent_destroy`), no workload may delete or replace a file in the mirror, and anything deleted by hand is kept for seven days by soft delete. Tearing the project down means removing the `prevent_destroy` line first.
-- **Secret Manager** holds twelve secrets, all created empty.
-- **One service account per workload**, a scheduler account, and a deployer account that GitHub's `deploy.yml` reaches through workload identity federation.
-- **Artifact Registry** repository `fieldclub`, keeping the five newest images and anything younger than 30 days.
-- **A monthly budget alert**, by default £40.
+- **The web app `openantiquity`** serves the API, the tiles and the built frontend from one image. Three machines, `shared-cpu-2x` with 2 GB, suspended when idle and resumed by Fly's proxy when a request comes. Its release command creates the schema once per deploy.
+- **The jobs app `openantiquity-jobs`** runs the same image with other commands. Each job is a machine that runs once, exits and is removed. One machine named `due` is started by Fly every hour and runs `fieldclub-jobs due`, which runs the channel scan every six hours and the source refresh at 03:00 UTC. A 10 GB volume on it keeps ingest downloads between runs. This app alone holds Defra's login: the web app must never have it (Decision 0018). Fly keeps secrets per app, so a second app is the only way to keep a secret from the service.
+- **Managed Postgres** cluster `openantiquity`, PostgreSQL 17 with PostGIS, Basic plan, in London, attached to both apps. The application connects to its direct address, never the pooled one Fly attaches (`config.database_address`).
+- **Three private Tigris buckets.** `openantiquity-elevation` holds the mirror under `england/mirror/` and the national overview under `england/national/`. `openantiquity-cache` holds rendered tiles under `tiles/`, deleted 180 days after they were written. `openantiquity-photos` holds uploads, kept.
+- **One Tigris access key per app.** Fly gives an app one key, in `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, so each app reaches all its buckets with that one key, given a role on each bucket. The web app's key is Editor on the cache and the photos and ReadOnly on the elevation. The jobs app's key is Editor on the elevation only.
+- **Certificates** for the six names, from Let's Encrypt through Fly. The first ten are free.
 
-The database is reachable only by the service and the jobs. It has a public address but no authorised networks, and `connector_enforcement = REQUIRED` refuses anything that doesn't come through the Cloud SQL connector, which checks the caller holds `roles/cloudsql.client`. Only the five workloads that use the database hold it. A public address with no networks saves the VPC, Private Service Access and VPC egress a private address would need.
+## Once: setting up
 
-## Once: setting up the project
+Each step says where its values come from. The owner runs every step, with flyctl signed in as an account in the organisation `openantiquity`.
 
-Each step says where its values come from. Steps 1 to 3 need the owner's own Google account with Owner on the project and Billing Account Administrator, or Billing Account User plus budget permissions, on the billing account.
-
-Steps 2 and 5 run from the repository root. Step 3 moves into `infra/terraform`, and the Terraform and gcloud commands of the other steps run from there. Step 4 reads a file kept only in the main checkout, so also set `MAIN` to that checkout's absolute path:
+### 1. Sign in and make the two apps
 
 ```
-export MAIN=<absolute path of the main checkout>
+fly auth login
+fly apps create openantiquity --org openantiquity
+fly apps create openantiquity-jobs --org openantiquity
 ```
 
-### 1. Make the project and turn on billing
-
-Create a project in the console. Note its id, then link it to a billing account under Billing, Account management, and note the billing account id, which looks like `012345-6789AB-CDEF01`. Record both in the deployment workstream of `docs/plans/v1-england.md`, as WS2 of `docs/plans/owner-actions.md` asks.
-
-### 2. Sign in and make the state bucket
-
-gcloud needs the owner signed in, and Terraform's state backend and Google provider need application default credentials as well:
+### 2. The database
 
 ```
-gcloud auth login
-gcloud auth application-default login
-bash infra/bootstrap.sh "$P"
+fly mpg create --name openantiquity --org openantiquity --region lhr --plan basic
 ```
 
-It checks the project and its billing, enables the three APIs Terraform needs to begin, and makes `gs://$P-tfstate` with versioning. It is safe to run again. A second argument puts the bucket in another region than `europe-west2`; keep it the same as `region` in `terraform.tfvars`.
+`--name`, `--org`, `--region` and `--plan` are on Fly's [Managed Postgres page](https://docs.fly.io/mpg/create-and-connect/). It doesn't name a flag for the PostgreSQL version. During the spike the command offered 16 and 17: choose 17. The cluster starts with 10 GB and grows by itself.
 
-### 3. First apply: everything except the workloads
-
-```
-cd infra/terraform
-cp example.tfvars terraform.tfvars        # fill in project_id, billing_account, contact, terms_url
-terraform init -backend-config="bucket=$P-tfstate"
-terraform apply
-```
-
-With `run_workloads = false` this makes the registry, buckets, database, empty secrets, service accounts and budget. It takes about ten minutes, most of it the database.
-
-`terms_url` is the address of the contributor terms that the welcome step asks everyone to accept: a path on the site or an https address. The workloads aren't created without it (step 6), and the backend refuses to start in production without it. `terms_summary` replaces the short summary shown beside it; empty keeps the backend's own. The site's `/about` page has no terms yet, so the default `/about#terms` would link to nothing.
-
-Leave `github_repository` empty for now: the federation is set up in step 12. `budget.currency` must be the billing account's own currency, shown on its overview page, or the budget is refused.
-
-When the APIs are first turned on, Google creates the project's default Compute Engine service account and gives it the Editor role on the whole project. No Open Antiquity workload uses that account: each has its own, with narrow roles. Take the grant away once the apply has finished:
+PostGIS has to be enabled through Fly, because the app's login can't create it (the spike, Q3 step 1). The spike enabled it with the command below. Fly's page says the dashboard's Extensions page does the same.
 
 ```
-number=$(gcloud projects describe "$P" --format="value(projectNumber)")
-gcloud projects remove-iam-policy-binding "$P" --condition=None \
-  --member="serviceAccount:$number-compute@developer.gserviceaccount.com" --role=roles/editor
+fly mpg list                                   # note the cluster's id
+fly mpg databases extensions enable postgis    # the spike's command; check --help for how it names the cluster
+fly mpg attach <cluster-id> --app openantiquity
+fly mpg attach <cluster-id> --app openantiquity-jobs
 ```
 
-This apply turns on the APIs it then uses at once, and Google takes a minute or two to make a newly enabled API usable. If it stops with an error saying an API is not enabled or has not been used in the project, wait a few minutes and run `terraform apply` again. It carries on from where it stopped.
+Each attach sets the secret `DATABASE_URL` on its app, with the pooled address. The application turns it into the direct one. The schema command creates `pg_trgm` and `citext` itself.
 
-### 4. Make the database login and add each secret
+### 3. The buckets and their keys
 
-The database login is made with gcloud, so its password never passes through Terraform. The whole database URL goes into one secret:
-
-```
-password=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')
-gcloud sql users create fieldclub --instance=fieldclub --project="$P" --password="$password"
-printf 'postgresql+psycopg://fieldclub:%s@/fieldclub?host=/cloudsql/%s' \
-  "$password" "$(terraform output -raw sql_connection_name)" |
-  gcloud secrets versions add fieldclub-database-url --project="$P" --data-file=-
-unset password
-```
-
-The session key is any long random value:
+`fly storage create`, run with an app, makes a bucket and sets four secrets on that app: `BUCKET_NAME`, `AWS_ENDPOINT_URL_S3`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` ([Fly's Tigris page](https://docs.fly.io/tigris)). Run it three times. The secrets never pass through the terminal.
 
 ```
-python3 -c 'import secrets; print(secrets.token_urlsafe(48), end="")' |
-  gcloud secrets versions add fieldclub-secret-key --project="$P" --data-file=-
+fly storage create --app openantiquity-jobs --name openantiquity-elevation
+fly storage create --app openantiquity --name openantiquity-photos
+fly storage create --app openantiquity --name openantiquity-cache
 ```
 
-Every other secret is added the same way, with `--data-file=-` reading the value from standard input so it never appears in the shell history:
+The third replaces the web app's secrets from the second, so the web app ends up with the cache bucket's key. Give that key its two other buckets. Open Tigris's dashboard with `fly storage dashboard openantiquity-cache`, find the key under Access Keys, and give it Editor on `openantiquity-cache` and `openantiquity-photos` and ReadOnly on `openantiquity-elevation`. With Tigris's own CLI the same is
 
 ```
-printf '%s' "$VALUE" | gcloud secrets versions add fieldclub-<id> --project="$P" --data-file=-
+tigris access-keys assign <tid_ key id> --bucket openantiquity-cache,openantiquity-photos,openantiquity-elevation \
+  --role Editor,Editor,ReadOnly
 ```
 
-| Secret id | Where the value comes from | Needed |
-|---|---|---|
-| `database-url` | Built above | Always |
-| `secret-key` | Generated above | Always |
-| `defra-sftp-host`, `defra-sftp-user`, `defra-sftp-password` | Defra's email under ticket DSP3-11967, also in the untracked `.env` as `DEFRA_SFTP_*`. `bash "$MAIN/infra/add-defra-secrets.sh" "$P"` adds all four Defra secrets from there | Always, before step 6: the elevation copy job is always given them |
-| `defra-sftp-known-hosts` | The pinned host key, `var/defra_known_hosts` in the main checkout. The same script adds it | Always, with the three above |
-| `google-client-secret` | Google Cloud console, APIs & Services, Credentials, the OAuth client of type Web application | When `google_client_id` is set |
-| `microsoft-client-secret` | Microsoft Entra admin centre, App registrations, Certificates & secrets | When `microsoft_client_id` is set |
-| `apple-private-key` | Apple Developer, Keys, the Sign in with Apple key's `.p8` file: `--data-file=AuthKey_XXXX.p8` | When the three Apple ids are set |
-| `facebook-app-secret` | Meta for Developers, the app's Settings, Basic | When `facebook_app_id` is set |
-| `osm-client-secret` | openstreetmap.org/oauth2/applications, shown once at registration | When `osm_client_id` is set |
-| `smtp-password` | The mail provider's SMTP credentials | When `mail.host` and `mail.username` are set |
+([`tigris access-keys assign`](https://www.tigrisdata.com/docs/cli/access-keys/assign/)). Tigris's page doesn't say whether this adds to a key's roles or replaces them, so name all three. Then, in the same dashboard:
 
-Register each sign-in provider with the redirect address `<public_url>/api/v1/auth/oauth/<provider>/callback`, where `<provider>` is `google`, `microsoft`, `apple`, `facebook` or `osm`. `terraform output public_url` gives the address. OpenStreetMap only accepts https, which the run.app address is.
+- delete the key the second command made, which nothing uses now;
+- check that the jobs app's key is Editor on `openantiquity-elevation` and has no other bucket;
+- check that neither key is Admin, which bypasses the per-bucket roles ([Tigris access control](https://www.tigrisdata.com/docs/partner-integrations/access-control/)).
 
-Each secret named in `extra_secrets` needs a value before step 6 too.
+The application ignores `BUCKET_NAME`: the buckets are named in `fly.toml` and `fly/jobs.toml`. Making a bucket accepts Tigris's terms of service for the organisation, which the spike already did.
 
-A provider is offered only when its id is in `terraform.tfvars` and its secret has a value. Add the secret first, then the id, then apply. Cloud Run refuses to deploy a revision that names a secret with no version, so Terraform only wires a secret once its provider is configured.
-
-### 5. Push the first image
-
-From a machine with Docker, at the repository root (`cd "$(git rev-parse --show-toplevel)"`). The deploy workflow can't do this yet, because its federation comes in step 12.
+### 4. Secrets
 
 ```
-repository=$(terraform -chdir=infra/terraform output -raw image_repository)
-gcloud auth configure-docker "${repository%%/*}"
-tag=$(git rev-parse --short=12 HEAD)
-docker buildx build -f infra/Dockerfile --platform linux/amd64 \
-  -t "$repository:$tag" --push .
+bash infra/fly-secrets.sh web --session-key
+bash infra/fly-secrets.sh jobs --session-key --defra
 ```
 
-### 6. Second apply: the service and jobs
+Each app gets its own session key; the jobs never sign anyone in, but production refuses to start without one. `--defra` reads `DEFRA_SFTP_HOST`, `DEFRA_SFTP_USER` and `DEFRA_SFTP_PASSWORD` from `.env` and the pinned host key from `var/defra_known_hosts`, and is refused for the web app. The host key is stored base64-encoded as `DEFRA_KNOWN_HOSTS_B64`, and `fly_jobs.py` has Fly write it as a file into each copy machine (`fly machine run --file-secret`, [flags](https://docs.fly.io/flyctl/machine-run/)).
 
-First check that every secret Cloud Run will be given has a value: the database URL, the session key, all four `defra-sftp-*` secrets and any in `extra_secrets`. Cloud Run refuses a revision that names a secret with no version, and the apply fails part-way. This lists the secrets still empty:
-
-```
-for secret in $(terraform output -json secrets | python3 -c 'import json,sys; print(*json.load(sys.stdin))'); do
-  gcloud secrets versions list "$secret" --project="$P" --filter=state:ENABLED --limit=1 \
-    --format='value(name)' | grep -q . || echo "$secret"
-done
-```
-
-A provider's or the mail relay's secret may stay empty while its id is unset. Then set `run_workloads = true`, `image_tag` to the tag just pushed and `schedules = { scan_channels = "", refresh_sources = "" }`, and `terraform apply`. The schedules stay off until step 10: a scheduled job could otherwise start before the tables exist, and the first nightly refresh would ingest every source while the elevation copy is running. The service starts on `terraform output service_url`.
-
-The service is public from this moment, but the tables don't exist until step 7, so until then the API answers with errors. Nobody has the address yet; run step 7 straight away.
-
-To try the deployment out before anyone can reach it, add `service_public = false` to this apply. Cloud Run then answers only callers the project's IAM allows, and the owner reaches the site on their own machine with:
+The sign-in providers' secrets and the mail password go in an untracked file, one `NAME=VALUE` a line, such as `var/web-secrets.env`, and are set from it once they exist:
 
 ```
-gcloud run services proxy fieldclub --region=europe-west2 --project="$P" --port=8090
+bash infra/fly-secrets.sh web --from var/web-secrets.env
 ```
 
-Steps 7 to 10 work the same while it is held back. Signing in doesn't: every sign-in redirect and emailed link is built from the site's public address, which a browser can't reach without Google's check. Remove the line and apply to open the site.
+It reads only `FIELDCLUB_GOOGLE_CLIENT_SECRET`, `FIELDCLUB_MICROSOFT_CLIENT_SECRET`, `FIELDCLUB_FACEBOOK_APP_SECRET`, `FIELDCLUB_OSM_CLIENT_SECRET`, `FIELDCLUB_APPLE_PRIVATE_KEY`, `FIELDCLUB_SMTP_PASSWORD`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` from it, and ignores every other line. Add the provider's client id to `fly.toml` at the same time, then deploy. A provider is offered only when both are there.
 
-### 7. Create the schema
+The script sends everything in one `fly secrets import --stage`, which reads `NAME=VALUE` lines from standard input ([`fly secrets import`](https://docs.fly.io/flyctl/secrets-import/)). Fly's page says nothing of quoting or values over several lines, so the script refuses a value that spans lines or starts or ends with a space rather than risk it arriving changed. Apple's private key is a PEM file over several lines, so it can't be set this way yet: find how `fly secrets import` reads such a value first. `--stage` means a secret takes effect at the next deploy of the web app, and on each jobs machine started afterwards. A secret already set is left alone; `--replace` sends it again.
 
-```
-gcloud run jobs execute fieldclub-schema --region=europe-west2 --project="$P" --wait
-```
+Register each sign-in provider with the redirect address `https://openantiquity.org/api/v1/auth/oauth/<provider>/callback`, where `<provider>` is `google`, `microsoft`, `apple`, `facebook` or `osm`.
 
-It runs `python -m fieldclub.db`, which creates the extensions, the tables and the extras, and is safe to run again. Until the first release there is no migration history (`docs/ARCHITECTURE.md`, Conventions), so a change to an existing table needs the database rebuilt or Alembic, which starts at the first deploy.
+### 5. The first deploy
 
-Then write the `sources` rows of the elevation, which must exist before any of it is stored or shown. The elevation jobs have no database, so they pass `--skip-sources` and leave this to the same job, which runs another module when asked:
+From the repository root:
 
 ```
-gcloud run jobs execute fieldclub-schema --region=europe-west2 --project="$P" --wait \
-  --args=-m,fieldclub.terrain.cli,sources
+fly deploy --image-label "$(git rev-parse HEAD)"
+fly scale count 3 --region lhr --app openantiquity
 ```
 
-It is safe to run again.
+`fly deploy` reads `fly.toml`, builds the image on Fly's builder (`--remote-only` is the default), pushes it as `registry.fly.io/openantiquity:<commit>`, runs the release command `python -m fieldclub.db` on a machine of its own and then starts the service ([`fly deploy`](https://docs.fly.io/flyctl/deploy/), [`[deploy]`](https://docs.fly.io/reference/configuration)). The schema command creates the extensions, the tables and the extras, and is safe to run again. Until the first release there is no migration history (`docs/ARCHITECTURE.md`, Conventions), so a change to an existing table needs the database rebuilt or Alembic, which starts at the first public release.
 
-### 8. Copy England's elevation into the bucket
+The first deploy makes two machines (`--ha` is on by default) and `fly scale count` makes the third. One deploy during the spike failed after the image was pushed, with an internal error from Fly's API, and worked when run again.
 
-```
-gcloud run jobs execute fieldclub-elevation-copy --region=europe-west2 --project="$P"
-```
+An app with an HTTP service is given a shared IPv4 and an IPv6 address at its first deploy ([public network services](https://docs.fly.io/networking/services/)), so the site answers at `https://openantiquity.fly.dev` from then on. Nobody has that address. Sign-in won't work there, because every sign-in redirect and emailed link is built from `https://openantiquity.org`, which doesn't point at Fly until step 11. To keep the app private until then, release its public addresses (`fly ips list --app openantiquity`, then `fly ips release <address> --app openantiquity`) and give it a private Flycast address with `fly ips allocate-v6 --private --app openantiquity` ([Flycast](https://docs.fly.io/networking/flycast/)), which goes through Fly's proxy and so wakes a suspended machine. Step 11 allocates the public addresses again.
 
-The job splits the 5,877 tiles into four shares of 88.4 GB each, by size, and runs two shares at a time, one SFTP connection each. At the 8 MB/s per connection measured on 2026-11-10 a share takes about 3.1 hours to download and 0.8 hours to convert, so the copy takes about eight hours. See [The elevation copy](#the-elevation-copy) for why it runs like this.
-
-While `service_fetches_elevation` is true, every service instance can open a connection of its own for a tile someone is looking at, so Defra may see the job's two plus up to `service_max_instances` more. The job and the instances share a lock object per tile under `england/mirror/locks/`, so only one of them fetches a given tile; were two ever to upload it, the second upload would be dropped. To keep Defra at two connections during the copy, set `service_fetches_elevation = false` and apply before starting the job, and set it back afterwards if the copy is incomplete.
-
-Progress is the number of files in the mirror:
+Check it answers:
 
 ```
-gcloud storage ls "gs://$P-elevation/england/mirror/" | wc -l
+curl --fail https://openantiquity.fly.dev/healthz
 ```
 
-A task that fails is retried twice. A task stops at once if Defra refuses the login or shows a host key other than the pinned one, and after five tiles fail in a row, so a broken supply costs a handful of attempts rather than one per tile. Running the job again fetches only what is still missing. When all 5,877 are there, set `service_fetches_elevation = false` and apply, so the service no longer holds Defra's credentials.
+### 6. The tile cache's expiry rule
+
+Tiles in `openantiquity-cache` are deleted 180 days after they were written, the rule the Google bucket had. A tile's key carries its style and data version, so a tile not rewritten for half a year is almost certainly one nobody asks for. Tigris takes an expiry by prefix through the S3 lifecycle interface, up to ten rules a bucket ([object lifecycle rules](https://www.tigrisdata.com/docs/buckets/object-lifecycle-rules/)). The script runs on a web machine, which holds the cache bucket's key:
+
+```
+fly ssh console --app openantiquity -C "python /app/jobs/cache_lifecycle.py"
+```
+
+It replaces the bucket's whole lifecycle configuration, so it is safe to run again, and prints the rule read back. `--check` only reads it. A suspended machine may need waking first: load the site once.
+
+### 7. The elevation's sources rows
+
+```
+uv run infra/fly_jobs.py sources
+```
+
+The LIDAR `sources` rows must exist before any elevation is stored or shown. The copy and the overview build leave them to this job (`--skip-sources`). It is safe to run again.
+
+`fly_jobs.py` runs the image of the commit at `HEAD`, `registry.fly.io/openantiquity:<commit>`, which step 5 pushed. `--commit <sha>` names another and `--image <reference>` gives a whole one. `--dry-run` prints the `fly machine run` command without running it. Each one-off job is `fly machine run` with `--rm` and `--restart no`: it runs once, exits and is removed, and is never restarted, so a failed one is seen in `fly logs --app openantiquity-jobs` and run again by hand.
+
+### 8. England's elevation in the bucket
+
+The converted elevation already in Google's bucket is copied across once, after Google's copy has finished (Decision 0018, point 8). Defra's server isn't asked for the country a second time. See [Copying the elevation from Google](#copying-the-elevation-from-google). The Fly copy below is for anything Google's copy lacks, or for a fresh start if the Google bucket is gone.
+
+```
+uv run infra/fly_jobs.py mirror 1 3
+uv run infra/fly_jobs.py mirror 2 4
+```
+
+The 5,877 tiles are split into four shares of about 88 GB each, by size. Each command starts one machine that runs its two shares one after the other, each with one SFTP connection, so the two machines hold two connections to Defra's server at once, as the Google job did. A share that stops, because the supply refused the login, showed another host key or failed five tiles in a row, stops its machine, and the machine's last log lines name the share. Run a failed share again by naming it, for example `uv run infra/fly_jobs.py mirror 3`. A tile already in the mirror is skipped, so a rerun fetches only what is still missing. The spike didn't try Defra's server from Fly's addresses: start with one machine and watch its log before starting the second.
+
+The web app doesn't fetch missing elevation, because it doesn't hold Defra's login. A tile that isn't mirrored answers its failure, as Decision 0016 describes, until a copy adds it.
+
+Progress is what `fieldclub-terrain info` reports:
+
+```
+uv run infra/fly_jobs.py run fieldclub-terrain info
+fly logs --app openantiquity-jobs
+```
 
 ### 9. Build the national overview
 
 ```
-gcloud run jobs execute fieldclub-national-build --region=europe-west2 --project="$P" --wait
+uv run infra/fly_jobs.py national
 ```
 
-It runs `fieldclub-terrain national build --skip-sources` (`national_build_args`), which mosaics the 8 m copies inside the mirrored tiles into one cloud-optimised file under `england/national/`, uploads it and points `england/national/national.json` at it (Decision 0012). The service reads `national.json`, so nothing needs applying afterwards. Until the first build, zooms below 13 are drawn from the mirrored tiles' own overviews, uncached. Run it again whenever tiles have been added: a build that already holds every mirrored tile stops at once. It exits 0 when the overview is current and 1 on an error, including when another build holds the overview's lock. Its work folder, about 8 GB for all of England, is in the instance's memory, so the job has 16 GiB.
+It runs `fieldclub-terrain national build --skip-sources` on a `performance-8x` machine, the size Fly lists with 16 GB, with a 20 GB root file system (`--rootfs-size`). The build mosaics the 8 m copies inside the mirrored tiles into one cloud-optimised file under `england/national/`, uploads it and points `england/national/national.json` at it (Decision 0012). The service reads `national.json`, so nothing needs deploying afterwards. Its work folder, about 8 GB for all of England, is on the machine's disk here, where on Cloud Run it was in memory. Run it again whenever tiles have been added. It exits 0 when the overview is current and 1 on an error.
 
-### 10. Run the first ingests
+### 10. The first ingests and the hourly machine
 
 ```
-gcloud run jobs execute fieldclub-ingest --region=europe-west2 --project="$P" --wait --args=list
-gcloud run jobs execute fieldclub-ingest --region=europe-west2 --project="$P" --wait \
-  --args=run,he-nhle-scheduled-monuments
+uv run infra/fly_jobs.py run fieldclub-ingest list
+uv run infra/fly_jobs.py ingest he-nhle-scheduled-monuments
 ```
 
-One execution runs one source. Downloads are kept in the cache bucket under `ingest/` for 90 days, so the next run can ask the publisher whether a file changed.
+Then make the volume and the hourly machine:
 
-Once the first ingests are in, remove the `schedules` line from `terraform.tfvars` and apply, which turns the channel scan and the nightly source refresh on. The refresh runs every enabled bulk connector and reference loader with no completed full run, or whose last one is older than its `max_age`, so it already covers every bulk source. `ingest_schedules` is only for a source that needs a different cadence, for example `{ "he-nhle-scheduled-monuments" = "0 3 1 * *" }`.
+```
+fly volumes create jobs_var --app openantiquity-jobs --region lhr --size 10 --yes
+uv run infra/fly_jobs.py schedule
+```
+
+`schedule` makes a machine named `due` with `--schedule hourly`, the volume mounted at `/data` and `FIELDCLUB_VAR_DIR=/data/var`, running `fieldclub-jobs due`. Fly starts it once an hour at a time of its own choosing in the hour. `fieldclub-jobs due` decides from the database and the clock what is due (`backend/src/fieldclub/jobs/due.py`): the channel scan when some channel is watched and none has been checked for five hours, which keeps scans about six hours apart, and the source refresh when the hour is 03 UTC. The refresh runs every enabled bulk connector and reference loader whose last full run is older than its `max_age`, so it covers every bulk source, and a second start in the same hour finds them current. Ingest downloads stay on the volume, so the next run can ask the publisher whether a file changed. An ingest started by hand in step 10 downloads afresh, because the volume belongs to the hourly machine.
+
+Fly's schedules run hourly, daily, weekly or monthly, at no fixed time ([`fly machine run --schedule`](https://docs.fly.io/flyctl/machine-run/)). One hourly machine that asks what is due needs nothing left running between starts.
 
 ### 11. Point the domain
 
-Cloud Run's own domain mapping isn't offered in europe-west2. On 2026-11-10 Google listed it for ten regions, none of them London. There are two ways to use a custom domain:
+The site is `openantiquity.org`. `www.openantiquity.org`, `openantiquity.com`, `openantiquity.co.uk` and their `www` names are answered by the application with a 308 to the same path on `openantiquity.org` (`FIELDCLUB_REDIRECT_HOSTS` in `fly.toml`, `backend/src/fieldclub/redirects.py`). Fly's proxy has no redirect setting of its own, so the application does it. `force_https` sends plain HTTP to HTTPS first, so every name needs a certificate: six, inside the ten free ones.
 
-- **The load balancer module.** Set `cdn = { enabled = true, domain = "openantiquity.org" }` and apply. Put the address `terraform output site_address` prints into an `A` record for `@` in `infra/dns.toml`, then run `uv run infra/dns.py plan` and `uv run infra/dns.py apply`. The managed certificate is issued once the record resolves, which can take an hour. This also closes the run.app address and tells the app it is behind two proxies. It costs about $18 a month before traffic.
-- **Firebase Hosting** in front of Cloud Run is free at this size, but it strips every cookie except one named `__session`, so the `openantiquity_session` cookie would never arrive. It doesn't work without renaming the cookie.
+```
+fly ips allocate-v4 --shared --app openantiquity      # if step 5 released them
+fly ips allocate-v6 --app openantiquity
+fly ips list --app openantiquity
+for name in openantiquity.org www.openantiquity.org openantiquity.com www.openantiquity.com \
+            openantiquity.co.uk www.openantiquity.co.uk; do
+  fly certs add "$name" --app openantiquity
+done
+```
 
-The domains `openantiquity.org`, `openantiquity.com` and `openantiquity.co.uk` are registered at Gandi, which also serves their DNS. `infra/dns.toml` lists the record sets this project manages there and `infra/dns.py` makes the zones match it. It touches nothing the file doesn't list, so Gandi's own mail records stay as they are. Its token is `GANDI_DNS_SSL` in the untracked `.env`, a Gandi personal access token limited to these three domains; the tool never prints it. Today the file holds the `CAA` records that let only Google Trust Services and Let's Encrypt issue certificates for the names, the two authorities a Google-managed certificate can come from.
+An apex name can't be a CNAME, so each domain's `@` gets an `A` record for the shared IPv4 address and an `AAAA` record for the IPv6 address, and each `www` a `CNAME` to `openantiquity.fly.dev.` ([custom domains](https://docs.fly.io/networking/custom-domain/)). The `AAAA` record is also one of the ways Fly checks that the domain is ours before it issues a certificate. `infra/dns.toml` holds these records commented out. Put the two addresses `fly ips list` printed into them, uncomment them, then:
 
-Until the site is opened, the run.app address is stable and on https, and every provider accepts it. After moving to a domain, change each provider's redirect address and set `public_url`.
+```
+uv run infra/dns.py plan
+uv run infra/dns.py apply
+fly certs check openantiquity.org --app openantiquity
+```
 
-### 12. Set up the deploy workflow
+`infra/dns.py` touches only what `dns.toml` lists, so Gandi's mail records stay as they are. Its token is `GANDI_DNS_SSL` in `.env`. The `CAA` records already allow Let's Encrypt, which Fly uses. A certificate is issued once its records resolve, which can take an hour.
 
-Set `github_repository = "<owner>/<name>"` and `github_repository_id` to the number `gh api repos/<owner>/<name> --jq .id` prints, then `terraform apply` to make the federation. It trusts only `deploy.yml` started by hand on `main` in the repository with that id, so another workflow, another branch, or a new repository given the same name later gets nothing. Then, in the repository's Settings, Secrets and variables, Actions, Variables, set:
+### 12. The deploy workflow
 
-| Variable | Value |
-|---|---|
-| `GCP_PROJECT_ID` | The project id |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | `terraform output -raw workload_identity_provider` |
-| `GCP_DEPLOYER_SERVICE_ACCOUNT` | `terraform output -raw deployer_service_account` |
-| `TFVARS` | The contents of `terraform.tfvars`, which hold no secret |
+In the repository's Settings, Environments, make an environment named `production` with deployment branches limited to `main`. Then make a deploy token for the web app alone and put it there, without it passing through the terminal:
 
-The plan reads the budget, which lives on the billing account, not the project. Grant the deployer Billing Account Viewer on the billing account in the console, or the plan stops there.
+```
+fly tokens create deploy --app openantiquity --name github-deploy --expiry 2160h |
+  gh secret set FLY_API_TOKEN --env production
+```
 
-The deployer can read the Terraform state but not write it, so the workflow plans with `-lock=false`. A plan run while the owner is applying may show a state that is about to change; plan again afterwards.
+A deploy token is limited to one app ([access tokens](https://docs.fly.io/security/tokens/)). The token above lasts 90 days; renew it the same way. `fly tokens list` and `fly tokens revoke <id>` take one away. GitHub never holds a token for the jobs app, so Defra's login is out of its reach.
 
 ## A deploy
 
-1. Merge to `main`. CI runs both check suites, the docs lint, the Terraform checks and an image build.
-2. In GitHub, Actions, "Build and plan", run the workflow on `main`. It pushes the image tagged with the commit and lists in the run's summary which resources the plan would change, without their values: if the repository is public, anyone can read a run's summary and log.
-3. Read the list. A deploy that changes only code shows the service and each job being updated and nothing else. `terraform apply` in step 4 prints the whole plan before it asks to go ahead.
-4. Put the commit in `image_tag` in `terraform.tfvars` (and in the `TFVARS` variable), then from `infra/terraform` run `terraform apply`.
-5. If the models gained a table, run the schema job (step 7).
+1. Merge to `main`. CI runs both check suites, the docs lint, the scripts' tests and shellcheck, the Terraform checks while it stays, and an image build that is started and stopped as a Fly machine would be.
+2. In GitHub, Actions, "Deploy", run the workflow on `main`. It runs `flyctl deploy --remote-only --image-label <commit>`, which builds the image, runs the schema command once and moves the three machines onto the new image one at a time (`strategy = "rolling"`).
+3. Move the hourly machine to the same image, from the main checkout, with the command the run's summary prints:
 
-Cloud Run starts the new revision, waits for `/healthz` to answer, then moves all traffic to it. New requests go to the new revision. Requests already open on the old one, such as event streams, are not cut off when traffic moves: they run on until they end or reach the 600 s request timeout, which wasn't checked on a real project. When Cloud Run stops an old instance it sends SIGTERM and kills the process ten seconds later; the server ends its event streams at once and closes whatever else it still holds after five seconds (`FIELDCLUB_SHUTDOWN_GRACE_S`), so it stops before it is killed. Until the old instances stop, they still hold their database connections (see [Sizing](#sizing)).
+   ```
+   uv run infra/fly_jobs.py --commit <commit> schedule
+   ```
+
+   It updates the machine named `due` in place (`fly machine update --image`, [flags](https://docs.fly.io/flyctl/machine-update/)) without starting it. Until it is run, the hourly jobs run the image before, which still works against the schema, because the schema command only adds what is missing.
+
+A deploy by hand is the same command as the workflow's, from the repository root: `fly deploy --image-label "$(git rev-parse HEAD)"`.
+
+Fly sends the old machine `SIGTERM` (`kill_signal`) and kills it ten seconds later (`kill_timeout`). The server ends its event streams at once and closes whatever else it still holds after five seconds (`FIELDCLUB_SHUTDOWN_GRACE_S`), so it stops before it is killed, and the browser opens a new stream on another machine.
 
 ## Rolling back
 
-The quick way moves traffic back to the revision before, without building anything:
+Deploy the image before, which needs no build:
 
 ```
-gcloud run revisions list --service=fieldclub --region=europe-west2 --project="$P"
-gcloud run services update-traffic fieldclub --region=europe-west2 --project="$P" \
-  --to-revisions=<previous-revision>=100
+fly releases --app openantiquity --image
+fly deploy --image registry.fly.io/openantiquity:<previous commit>
+uv run infra/fly_jobs.py --commit <previous commit> schedule
 ```
 
-Then set `image_tag` back to that revision's commit and apply, so Terraform agrees with what is running. Otherwise the next apply moves traffic forward again.
+A schema change can't be rolled back this way. The schema command only adds what is missing, so an older image runs against a newer schema as long as nothing it uses was removed.
 
-A schema change can't be rolled back this way. `create_schema` only adds what is missing, so an older image runs against a newer schema as long as nothing it uses was removed.
-
-The database has seven daily backups. Restoring one replaces the whole instance's data with that day's:
-
-```
-gcloud sql backups list --instance=fieldclub --project="$P"
-gcloud sql backups restore <backup-id> --restore-instance=fieldclub --project="$P"
-```
+Managed Postgres keeps backups. `fly mpg backup list` lists them and `fly mpg restore <cluster-id> --backup-id <id>`, or `--pitr-time <RFC 3339 time>`, restores one into a new cluster ([`fly mpg restore`](https://docs.fly.io/flyctl/mpg-restore/)). The original is left alone. Attach the new cluster to both apps and deploy. How long Fly keeps them wasn't found; check before relying on them.
 
 ## What to watch
 
-- **The budget emails.** At 50%, 90% and 100% of the month's amount, and when the forecast passes it.
-- **Cloud Run, the service's Metrics tab.** Request latency, instance count and billable instance time. Billable time that stays high with few requests means event streams are holding instances open (see [Cost](#estimated-monthly-cost)).
-- **Cloud SQL, the instance's overview.** CPU, memory and disk. Sustained CPU above 80% or memory near 1.7 GB is the sign to move up a tier (`db_tier = "db-custom-1-3840"`).
-- **Job executions.** Cloud Run, Jobs shows each run's outcome. A scheduled job that fails twice in a row is worth a look in its logs.
-- **Errors.** Logs Explorer with `severity>=ERROR` and the resource set to the service or a job.
+- **The month's spend.** Fly has no billing alert and no spending cap (see [Spend](#spend)). Look at the dashboard's current month to date bill once a week.
+- **The web app's machines.** `fly status --app openantiquity` and the dashboard's metrics: memory, CPU and how often machines are running. A machine that stays running with few requests is held by open event streams. Steady CPU at the shared baseline means Fly is throttling it (see [Sizing](#sizing)).
+- **The database.** The cluster's page in the dashboard: CPU, memory, disk and connections. The Basic plan allows 112 connections.
+- **The jobs.** `fly logs --app openantiquity-jobs`. Every job logs a one-line summary and exits non-zero when anything failed. Check the hourly machine's last runs after each deploy.
+- **The tile cache's rule.** `fly ssh console --app openantiquity -C "python /app/jobs/cache_lifecycle.py --check"` exits 1 if the rule has gone.
+- **Errors.** `fly logs --app openantiquity`, for lines at `ERROR`.
+
+## Spend
+
+Fly can't be asked what the month has cost. Its cost page says "We don't support billing alerts (yet)" and "there's no soft ceiling. If you go over, we'll bill you", and the only place it names for the month so far is the dashboard's "current month to date bill" ([cost management](https://docs.fly.io/about/cost-management/)). Its billing page describes no API or command for usage either ([billing](https://docs.fly.io/about/billing)). Prepaid credit is no cap: the billing page says usage "is subtracted from the credit balance each month" and says nothing of what happens when the credit runs out. So there is no scheduled spend check here, because there is nothing honest for one to read.
+
+The guard is a manual check and limits that bound what the configuration can spend.
+
+- **The check.** Once a week, read the current month to date bill in the dashboard's Billing section for the organisation. The alert on Google was £75 a month. At the prices below that is about twice the expected bill at light use, so a bill on course to pass £75 means something has changed.
+- **Machines.** Fly's proxy starts and suspends machines but never creates one ([autostop and autostart](https://docs.fly.io/launch/autostop-autostart/)). The web app has three, so at most three run: $40.17 a month if all three ran all month, at US east prices. A fourth exists only if someone runs `fly scale count`.
+- **Machine sizes.** `fly.toml` fixes the web machines at `shared-cpu-2x`, 2 GB, and `test_fly_config.py` fails if the memory changes. `fly_jobs.py` fixes each job's size, and every job but the hourly one is started by a person and removed when it ends.
+- **What isn't bounded.** Data sent to visitors at $0.02 a GB, Tigris storage and requests, and the database's disk, which grows by itself. Those three are what the weekly check is for.
 
 ## Sizing
 
-### The service: 1 vCPU, 1.5 GiB, 20 requests per instance, 0 to 3 instances
+### The web service: three `shared-cpu-2x` machines with 2 GB, 20 to 30 requests each
 
-Endpoints are synchronous and run on FastAPI's thread pool (Decision 0001). A terrain tile is CPU work: ARCHITECTURE.md's terrain section has the combined blend at about 75 ms of numpy per 512 px tile, and about 100 ms with encoding.
+Endpoints are synchronous and run on FastAPI's thread pool (Decision 0001), and terrain tiles are drawn on threads of their own (Decision 0016). A terrain tile is CPU work: about 75 ms of numpy per 512 px tile for the combined blend, and about 100 ms with encoding.
 
 The image was measured on 2026-11-10 on the arm64 build with Docker limiting the CPUs, rendering 144 uncached zoom-15 tiles over Avebury from the local mirror:
 
@@ -306,102 +300,144 @@ The image was measured on 2026-11-10 on the arm64 build with Docker limiting the
 | 2 | 4 | 15.5 | 268 ms | 303 ms |
 | 2 | 16 | 11.5 | 1,369 ms | 1,610 ms |
 
-The process peaked at about 370 MiB. A cached tile is a read from the cache bucket and costs almost no CPU.
+One CPU renders about 8 new tiles a second at best, so a fresh screen of 12 to 20 tiles takes 2 to 3 seconds; two halve it. On Cloud Run a second vCPU was billed for as long as any request was open, and an event stream holds one open while the page is, so one vCPU was chosen there. A Fly machine is billed by the second while it runs, whatever its load, and at US east prices `shared-cpu-2x` with 2 GB is $13.39 a month against $9.70 for `shared-cpu-1x` with 1.5 GB, which is 1 GB at $6.70 and half a GB more at $6.00 a GB. Two CPUs cost about $3.70 more a month for a machine that runs all month.
 
-One vCPU renders about 8 new tiles a second at best, so a fresh screen of 12 to 20 tiles takes 2 to 3 seconds on one instance. Two vCPUs halve that for the same CPU-seconds per tile. They were not chosen because request-based billing charges for every vCPU for as long as any request is open, and the event stream (`GET /events/stream`) holds a request open for as long as someone has the page open. An instance held open by one idle stream costs twice as much at 2 vCPUs. `service_cpu = "2"` is the first change to make if tile latency matters more than that.
+Fly's shared CPUs are guaranteed 6.25% of a core each, may run at 100% while they have burst balance, and start with 5 seconds of it and keep up to 500 ([CPU performance](https://docs.fly.io/machines/cpu-performance/)). A screen of tiles is a burst of a few CPU-seconds, well inside that. Rendering many uncached areas for minutes on end would run the balance down and be throttled. If the metrics show that, move to `performance-1x`, $33.00 a month at US east prices.
 
-Concurrency is 20, not 4, because most requests wait rather than compute: cached tiles, JSON, and open event streams that each take a slot. At 4, three open streams would leave one slot and force a new instance for every visitor. Cloud Run also adds instances when CPU passes 60%, so a burst of renders spreads out anyway.
+2 GB holds the 320 MB in use at idle that the spike measured, a photo decode of up to about 400 MB (`services/media.py`) and renders at once. On Cloud Run 1.5 GiB was needed for a source tile fetched from Defra at the same time, about 1.1 GiB in all; the Fly service doesn't fetch. 2 GB is also the most a machine may have and still be suspended, with no swap ([suspend and resume](https://docs.fly.io/reference/suspend-resume/)), and the spike measured a suspended machine answering in 0.53 s against 20.8 s from stopped. A memory peak during a real upload hasn't been measured on Fly.
 
-That sets a ceiling. Three instances of 20 slots are 60 requests at once, and each open tab holds one slot with its event stream, so about 60 open tabs fill the service and further requests wait or are refused. Raise `service_max_instances` or `service_concurrency` before that, minding the database connections below.
+Concurrency counts requests (`type = "requests"`): past the soft limit of 20 the proxy prefers another machine and starts it if it is suspended, and it never sends one machine more than the hard limit of 30 ([configuration](https://docs.fly.io/reference/configuration)). Most requests wait rather than compute: cached tiles, JSON, and open event streams that each hold one. An event stream ends itself after 540 s (`FIELDCLUB_EVENTS_MAX_STREAM_S`); the spike held one open through the proxy for 600 s. A machine takes at most 26 streams (`FIELDCLUB_EVENTS_MAX_STREAMS`, the hard limit less four), so tiles and JSON always have four slots; a stream refused with `too_many_streams` makes the web client poll instead. Three machines of 30 are 90 requests at once, about 78 open tabs. Raise the count before that, minding the database connections below.
 
-1.5 GiB holds the 370 MiB measured, a source tile fetched from Defra while the copy is incomplete, and a photo upload at the same time. A fetch stages up to 90 MB on the in-memory disk and its 1.8 s conversion peaked at 236 MiB. A photo is decoded one at a time in a process, and the largest accepted, a 50 million pixel PNG, peaks at about 400 MB (`services/media.py`), so the three together come to about 1.1 GiB, more than 1 GiB holds. The extra half GiB adds about $1.10 a month at the 900,000 s of the cost table below.
+Each machine holds up to 8 database connections, so 24 at most, and the jobs up to 4 each. The Basic plan's `max_connections` is 112, and sixty from one machine were all accepted during the spike.
 
-An event stream holds its request slot until it ends. Each one ends itself after 540 s (`FIELDCLUB_EVENTS_MAX_STREAM_S`), before the 600 s request timeout would cut it off, and the browser opens the next. An instance takes at most `service_concurrency` less four streams (`FIELDCLUB_EVENTS_MAX_STREAMS`), so tiles and JSON always have four slots; a stream refused with `too_many_streams` makes the web client poll instead.
+Fly's proxy suspends a machine after the app has been idle for several minutes and stops at most one machine per region on each pass ([autostop and autostart](https://docs.fly.io/launch/autostop-autostart/)). An open event stream kept the spike's machine running, so a machine runs for as long as anyone has the page open.
 
-Three instances at most caps cost and connections: each instance holds up to 8 database connections, so 24 at most, inside the 50 that `db-g1-small` allows. The four jobs that use the database hold up to 4 each, 16 more, so 40 with everything busy. During a deploy the old revision's instances keep their connections until they stop, so for a short while the service can hold up to 48 and, with the jobs, pass 50. A connection refused then is an error for that request. Avoid starting jobs during a deploy, or move up a tier before raising `service_max_instances`.
+### The database: Managed Postgres Basic
 
-Startup took 2.1 s to the first `/healthz` answer natively on arm64, and 5.6 s for the amd64 image under emulation on the same machine. Cloud Run adds the image fetch, about 280 MB compressed, and startup CPU boost is on. Expect a cold start of several seconds; with scale to zero, the first visitor after a quiet spell waits for it.
+The Basic plan is $38 a month plus $0.28 a GB ([pricing](https://docs.fly.io/about/pricing)). The development database holds 20,006 scheduled monuments in 137 MB, 6.8 KB a record, the heaviest kind. Most of the ten million records expected are points, so the estimate is 2 to 3 KB each, 20 to 30 GB in all, and up to 70 GB if every record were like a scheduled monument. The cluster starts at 10 GB and grows by itself. The Basic plan's memory wasn't found on the pages read; searches over ten million records will read their indexes from disk, which is fast enough for a few people at once. A larger plan is the first change if search slows.
 
-### The database: db-g1-small
+### The jobs
 
-`db-g1-small` is the smallest shared-core tier with a usable amount of memory, 1.7 GB, at $0.035 an hour in the published table ($25.55 a month).
-
-The development database holds 20,006 scheduled monuments in 137 MB: 76 MB of rows, 29 MB of indexes and the rest outlines kept out of line. That is 6.8 KB a record, and scheduled monuments are the heaviest kind because each has a polygon. Most of the ten million records expected are points, so the estimate is 2 to 3 KB each, 20 to 30 GB in all, and up to 70 GB if every record were like a scheduled monument. The disk starts at 20 GB and grows by itself up to 100 GB.
-
-Ten million records won't fit in 1.7 GB of memory, so searches and nearby queries read their indexes from SSD. For a few people at once that is fast enough. `db-f1-micro` at 0.6 GB is too small to build a trigram index over ten million names, and allows 25 connections. The next step up is `db-custom-1-3840`, one dedicated vCPU and 3.75 GB, at $0.0676 an hour ($49 a month). Shared-core tiers aren't covered by the Cloud SQL SLA.
-
-A Cloud SQL instance can't scale to zero. It is most of the bill at rest.
+| Job | Machine | Why |
+|---|---|---|
+| `sources` | `shared-cpu-1x`, 1 GB | Writes a handful of rows |
+| `ingest <key>`, the hourly `due` | `shared-cpu-1x`, 2 GB | An ingest took 2 GiB on Cloud Run, and the refresh runs every due source in turn |
+| `mirror <shares>` | `shared-cpu-1x`, 2 GB | Converting a tile peaked at 236 MiB; the work is waiting on the network |
+| `national` | `performance-8x`, 16 GB, 20 GB disk | The Google job had 16 GiB of memory with its 8 GB work folder in it. On Fly the work folder is on disk; the build's own peak hasn't been measured, so the memory is kept |
 
 ### The elevation copy
 
-The copy has 5,877 files, 353.6 GB, from one SFTP server that Defra offered freely, at about 8 MB/s per connection. Defra's server dropped whole-file reads at 52 MiB, which the SFTP client already handles by reading in 8 MiB windows. Whether it tolerates several connections at once wasn't tested. One connection would take about 12.3 hours.
+The copy has 5,877 files, 353.6 GB, from one SFTP server that Defra offered freely, at about 8 MB/s per connection, so one connection would take about 12.3 hours and two about six. Defra's server dropped whole-file reads at 52 MiB, which the SFTP client handles by reading in 8 MiB windows. The copy is two machines of two shares each, rather than one machine:
 
-It runs as a Cloud Run job with four tasks, two at a time, rather than on a temporary machine:
-
-- **It is polite by construction.** Each task holds one connection, so the job's parallelism is the number of connections the job opens: 2, which can be lowered to 1 or raised in `elevation_copy`. The service adds its own while it fetches missing tiles (step 8). A read that hears nothing for 60 seconds gives up, a failed attempt waits 2 seconds before the next, doubling each time up to a minute, and a refused login or a run of five failed tiles stops the task.
-- **It resumes.** A tile already in the mirror is skipped, so a failed task, or the whole job run again, fetches only what is missing.
-- **Nothing to forget.** A machine has to be made, given credentials on its disk, watched and deleted. The job uses the same image, identity and secrets as everything else, and stops costing when it ends.
-- **It is cheap.** Converting a tile took 1.8 s and peaked at 236 MiB, so the work is waiting on the network. Four tasks of about four hours at 1 vCPU and 2 GiB come to about 58,000 vCPU-seconds, inside the jobs free tier of 240,000 a month, and $1.27 at the published rate beyond it.
-
-A task may run for up to five hours (`elevation_copy.timeout`), an hour more than one should need, so a task that stalls is stopped then and retried. Cloud Run allows up to 168.
+- **It is polite by construction.** Each share holds one connection, and a machine runs its shares one after another, so two machines are two connections. A read that hears nothing for 60 seconds gives up, a failed attempt waits 2 seconds before the next, doubling each time up to a minute, and a refused login or a run of five failed tiles stops the share.
+- **It resumes.** A tile already in the mirror is skipped, so a failed share, or the whole copy run again, fetches only what is missing.
+- **Nothing to forget.** Each machine is removed when it exits.
 
 The converted mirror is about half the source: SU16nw went from 48 MB to 24 MB. The bucket ends at about 177 GB.
 
-### Content delivery network: off at launch
+## Copying the elevation from Google
 
-A CDN in front of Cloud Run needs a global external Application Load Balancer, whose forwarding rule is $0.025 an hour, $18.25 a month, before any traffic. The load balancer also charges $0.008 a GB in each direction.
+Google's copy is finishing in `gs://$P-elevation/england/`, where `P` is the Google project id (`fieldclub-uk`). Copy it once to `openantiquity-elevation/england/` with [rclone](https://rclone.org/), from any machine with a good connection, after Google's copy has finished:
 
-Cloud CDN's cache egress to Europe is $0.08 a GB against $0.12 a GB for the service's own premium-tier egress. The saving of $0.04 a GB pays for the standing charge at about 460 GB a month served from cache. The light use estimated below is about 70 GB. The service already caches every tile in the bucket, so a CDN would save CPU only on tiles rendered once and fetched again from another instance.
+1. Make a temporary Tigris key in the dashboard (`fly storage dashboard openantiquity-elevation`) with Editor on `openantiquity-elevation` alone.
+2. Write it into an untracked rclone configuration, `var/rclone.conf`, with an editor, so neither secret is typed on a command line:
 
-It becomes worth having when either the monthly tile traffic reaches several hundred GB, or a custom domain is wanted, because the load balancer is also the only way to put a domain on Cloud Run in London. Turning it on is one variable.
+   ```
+   [google]
+   type = google cloud storage
+   env_auth = true
+   bucket_policy_only = true
+
+   [tigris]
+   type = s3
+   provider = Other
+   endpoint = https://fly.storage.tigris.dev
+   region = auto
+   access_key_id = <the temporary key's id>
+   secret_access_key = <its secret>
+   ```
+
+   `env_auth = true` uses the Google application default credentials the owner already has from `gcloud auth application-default login`.
+
+3. Copy, leaving out the per-tile locks, then check:
+
+   ```
+   export P=fieldclub-uk
+   RCLONE_CONFIG=var/rclone.conf rclone copy "google:$P-elevation/england" tigris:openantiquity-elevation/england \
+     --exclude "mirror/locks/**" --checksum --transfers 8 --progress
+   RCLONE_CONFIG=var/rclone.conf rclone check "google:$P-elevation/england" tigris:openantiquity-elevation/england \
+     --exclude "mirror/locks/**" --one-way
+   ```
+
+4. Delete the temporary key in the dashboard, and `var/rclone.conf`.
+
+The copy is about 177 GB, plus the national overview's 3.5 GB if Google built it. Google charges $0.12 a GB for data leaving its network, so about $21 to $22. Writing to Tigris is about 6,000 Class A requests, $0.03. The bytes pass through the machine running rclone. If Google's national overview was built, `national.json` and its COG come across with it and the service uses them; otherwise run step 9.
 
 ## Estimated monthly cost
 
-Prices were read from Google's published pricing pages on 2026-11-10. Those pages show only their default region's prices without running the page's script, which is us-central1 (Iowa) for Cloud Run, Cloud SQL and Cloud Storage. London is Tier 2 for Cloud Run and is dearer than Iowa for Cloud SQL and Cloud Storage, by an amount these pages didn't show. Treat each figure as the floor of what London charges. The Cloud Run free tier is applied at Tier 1 rates, so it is worth slightly less in London than it looks.
+Prices were read on 2026-11-11 from Fly's [pricing page](https://docs.fly.io/about/pricing), whose regional table didn't load, and from Tigris's [pricing page](https://www.tigrisdata.com/pricing/). Fly's machine prices are for its cheapest regions in the US east and "vary by region", so London's are not known and each machine figure is a floor. Fly lists Tigris on its own invoice at Tigris's list price.
 
-Assumptions for light use: 50 visits a day of ten minutes each, 300 tile requests a visit with half already cached, 150 KB a tile, and each visit holding the event stream open for its ten minutes, one visit at a time.
+Assumptions for light use, as on Google: 50 visits a day of ten minutes each, 300 tile requests a visit with half already cached, 150 KB a tile, each visit holding the event stream open for its ten minutes, one visit at a time. A machine then runs about 375 hours a month, counting a few idle minutes after each visit before Fly suspends it.
 
 | Item | Price used | At rest | Light use |
 |---|---|---|---|
-| Cloud SQL `db-g1-small` | $0.035 an hour | $25.55 | $25.55 |
-| Cloud SQL SSD, 30 to 70 GB once the records are in | $0.17 a GB-month | $5.10 to $11.90 | $5.10 to $11.90 |
-| Cloud SQL backups, about 20 to 50 GB | $0.08 a GB-month | $1.60 to $4.00 | $1.60 to $4.00 |
-| Elevation mirror, 177 GB | $0.020 a GB-month | $3.54 | $3.54 |
-| Tile cache and photos, 6 GB | $0.020 a GB-month | $0.12 | $0.12 |
-| Artifact Registry, 1.4 GB, 0.5 GB free | $0.10 a GB-month | $0.09 | $0.09 |
-| Secret Manager, 12 versions, 6 free | $0.06 a version-month | $0.36 | $0.36 |
-| Cloud Scheduler, up to 3 jobs, 3 free | $0.10 a job-month | $0 | $0 |
-| Cloud Run jobs, scan and refresh | Inside the free tier | $0 | $0 |
-| Cloud Run service, 900,000 s of instance time | $0.000024 a vCPU-s, $0.0000025 a GiB-s, after the free tier | $0 | $18.63 at least |
-| Cloud Run requests, 450,000 | 2 million free | $0 | $0 |
-| Internet egress, 68 GB | $0.12 a GB | $0 | $8.10 |
-| Storage operations, 225,000 writes and about 2.5 million reads | $0.005 and $0.0004 a thousand | $0 | $2.13 |
-| Budget alert | Free | $0 | $0 |
-| **Total** | | **about $36 to $46** | **about $65 to $75** |
-| With the CDN module on | $0.025 an hour plus $0.008 a GB | +$18.25 | +$19.35 |
+| Managed Postgres Basic | $38 a month | $38.00 | $38.00 |
+| Its storage, 30 to 70 GB once the records are in | $0.28 a GB-month | $8.40 to $19.60 | $8.40 to $19.60 |
+| Web machines running, `shared-cpu-2x` 2 GB | $13.39 a month each, by the second | $0 | $6.97 |
+| Web machines suspended, three root file systems of about 1 GB, an estimate from the image's size | $0.15 a GB-month | $0.45 | $0.45 |
+| The hourly job machine, about 20 s an hour, and its stopped root file system | $12.70 a month at 2 GB; $0.15 a GB-month | $0.22 | $0.22 |
+| Its volume, 10 GB | $0.15 a GB-month | $1.50 | $1.50 |
+| Tigris storage, 177 GB of elevation and 6 GB of tiles and photos, 5 GB free | $0.02 a GB-month | $3.56 | $3.56 |
+| Tigris writes, 225,000, 10,000 free | $0.005 a thousand | $0 | $1.08 |
+| Tigris reads, about 2.5 million, 100,000 free | $0.0005 a thousand | $0 | $1.20 |
+| Data out to visitors, 68 GB | $0.02 a GB | $0 | $1.36 |
+| Shared IPv4, IPv6, six certificates | Free, the first ten certificates | $0 | $0 |
+| Image builder and registry | Free today, which the page says may change | $0 | $0 |
+| **Total** | | **about $52 to $63** | **about $63 to $74** |
 
-The disk starts at 20 GB but grows by itself as the records arrive and never shrinks, so it is priced at the 30 to 70 GB the ten million records are expected to need (see [The database](#the-database-db-g1-small)). The Cloud Run line is Iowa's Tier 1 rate less a free tier that is itself counted at Tier 1 rates, so in London, Tier 2, it can only be higher.
+At rest this is more than Google's estimate of $36 to $46, because Managed Postgres costs more than `db-g1-small`; Decision 0018 expected the two to cost about the same at rest. The saving is in traffic: at a thousand visits a day, the 675 GB a month the Google runbook assumed costs $13.50 here against $81 there, and there is no load balancer for the domain.
 
-The light-use Cloud Run line depends almost entirely on the event stream. Without it, the same visits keep an instance busy for about 45,000 s a month, inside the free tier, and light use comes to about $46 to $55. The web client closing the stream while its tab is hidden is the cheapest saving available.
+One-off costs: the national overview build on `performance-8x`, which the pricing page didn't list; at the listed $66 a month for `performance-2x`, four times that is about $0.37 an hour, so a build of a few hours costs a dollar or two. Copying the elevation from Google costs about $21 in Google's transfer fee.
 
-What these figures leave out, because it couldn't be priced from the pages read:
+What these figures leave out:
 
-- London's own rates for Cloud SQL, Cloud Storage and Cloud Run.
-- Cloud Logging and Monitoring. The first 50 GB of logs a month are free, and nothing here should come near it.
-- Cloud SQL's network egress to the service, free within the region, and its IP address, which these pages didn't price separately for a running instance.
-- Defra's side. Ingress into Google Cloud is free.
+- London's machine prices.
+- Data from the machines to Tigris, which Fly's pricing page says is billed separately, at a rate it didn't give.
+- Managed Postgres backups, if they are charged.
 - A real traffic pattern. The light-use row is a guess with its working shown.
-- The national overview build: its time and its peak memory over all 5,877 tiles, with its work folder in the instance's memory.
 
-## What can only be checked in a real project
+## Google Cloud until the cut-over
 
-- That the first apply succeeds, including the budget, which needs permissions on the billing account.
-- That `terraform plan` from the deploy workflow succeeds through federation, with the deployer's read-only roles.
-- That GDAL reads `gs://` through `/vsigs/` with the service account Cloud Run lends it, with no key file. The image sets `CPL_MACHINE_IS_GCE=YES` so that GDAL asks the metadata server for it, as GDAL's documentation says a container must.
-- That an upload with `if_generation_match=0` from an account holding only `objectCreator` is answered with a failed precondition, or a refusal, when the tile is already there. The mirror accepts either.
-- That the Cloud SQL connector, the unix socket at `/cloudsql` and `connector_enforcement = REQUIRED` work together, and that the `fieldclub` login may create the PostGIS, pg_trgm and citext extensions.
-- That the Cloud Storage volume mounts for the ingest job, and that the ingest downloader's partial files and renames behave on it.
-- The cold start on Cloud Run, and real tile latency with the mirror in a bucket.
-- That Defra's server accepts two connections at once from Google's addresses.
-- That Cloud Scheduler starts each job, and the ingest job with its overridden arguments.
-- The managed certificate and the load balancer, if the CDN module is turned on.
+The Google deployment in `terraform/` stays as it is, held back from the public (`service_public = false`), until the site on Fly has passed its checks (Decision 0018, point 10). Its full runbook is `git show 28488dd:infra/README.md`. Its Terraform, `bootstrap.sh` and `add-defra-secrets.sh` are kept unchanged until the project is taken down, and CI still checks the Terraform.
+
+An image built from main can't run there any more: the application now speaks only S3, and `terraform/settings.tf` sets `FIELDCLUB_STORAGE_BACKEND=gcs` and `gs://` terrain folders, which the settings refuse. Google keeps running the image it has. Don't apply a new `image_tag` there.
+
+### Taking the Google project down
+
+Once the site on Fly answers on openantiquity.org, the elevation is in Tigris and checked, and the first ingests have run:
+
+- [ ] `rclone check` (above) reports no missing files.
+- [ ] Copy out anything else wanted. The Google database holds what ingests make again, and whatever the owner did while trying the held-back site.
+- [ ] In `terraform/storage.tf`, remove the `prevent_destroy` line from the elevation bucket.
+- [ ] From `infra/terraform`, with `terraform.tfvars` as it was applied: `terraform destroy`. It removes the service, the jobs, the schedules, the database, the buckets, the secrets, the service accounts, the federation and the budget.
+- [ ] Delete the state bucket `gs://$P-tfstate`, then shut the project down: `gcloud projects delete "$P"`.
+- [ ] In GitHub, remove the repository variables `GCP_PROJECT_ID`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOYER_SERVICE_ACCOUNT` and `TFVARS`.
+- [ ] Remove `pki.goog` from the `CAA` records in `dns.toml` and apply.
+- [ ] Remove `terraform/`, `bootstrap.sh`, `add-defra-secrets.sh` and its test, and the Terraform step in `ci.yml`, in one commit, and update this file and `docs/ARCHITECTURE.md`.
+
+## What can only be checked on the real platform
+
+Each of these was written from documentation or inferred, and none was run:
+
+- Every flyctl command and flag above, against `--help` of the flyctl in use. In particular: `fly mpg create`'s version prompt, `fly mpg databases extensions enable`, `fly storage create --app`, `fly secrets list --json` and `fly machine list --json` and the field names in their output, `fly machine run` taking the job's own flags after `--`, `fly machine update --schedule` and `--skip-start` on a scheduled machine, `fly releases --image`, and the release command's machine getting `[env]` and the secrets.
+- That `fly storage create` makes a key with Editor on its own bucket and nothing more, and that a key given roles on three buckets reaches all three with one secret.
+- That a machine in `openantiquity-jobs` can pull `registry.fly.io/openantiquity:<commit>`, an image pushed by another app in the same organisation. If it can't, push the image to the jobs app as well (`fly deploy --build-only --push --app openantiquity-jobs --image-label <commit>` with `--config fly.toml`) and pass `--image registry.fly.io/openantiquity-jobs:<commit>` to `fly_jobs.py`.
+- That `--file-secret` writes the host key where the SFTP client reads it, readable by the image's user.
+- That `fly ssh console -C` runs with the app's secrets in its environment, which `cache_lifecycle.py` needs, and that Tigris accepts boto3's lifecycle request with its checksum header.
+- That `fly secrets import` keeps a value with `#`, `$`, quotes or inner spaces exactly as sent.
+- That health checks don't keep a suspended machine awake, and that the database's `LISTEN` connection is found dead and replaced after a resume (the spike didn't test it).
+- That Defra's server accepts connections from Fly's addresses, two at a time.
+- Tigris multipart upload of the national COG, about 3.5 GB, which the spike didn't test.
+- The certificates for six names, the shared IPv4 at the apex, and the 308 from each other name.
+- Memory during a photo upload while tiles render, and real tile latency with the mirror in Tigris.
+- London's prices, and what Fly does when prepaid credit runs out.
