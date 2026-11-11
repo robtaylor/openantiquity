@@ -12,6 +12,7 @@ from fieldclub import http
 from fieldclub.config import get_settings
 from fieldclub.ingest.base import (
     BRITISH_ISLES,
+    ISLES_BOX,
     Connector,
     RecordIn,
     SourceInfo,
@@ -21,6 +22,7 @@ from fieldclub.ingest.base import (
     point_in_bbox,
 )
 from fieldclub.models import Record
+from fieldclub.schemas.common import check_bbox
 from tests.ingest.fakes import SOURCE, FakeConnector
 
 
@@ -133,6 +135,11 @@ def test_a_connector_whose_source_is_not_a_source_info_is_refused() -> None:
 
             def fetch(self, *, bbox=None, limit=None):
                 yield from ()
+
+
+def test_the_islands_box_passes_the_one_rule_for_a_box() -> None:
+    # The adapters may not import the schemas, so the box is checked here rather than where it is defined.
+    assert check_bbox(ISLES_BOX) == ISLES_BOX
 
 
 def test_the_box_helpers_include_the_edges() -> None:
