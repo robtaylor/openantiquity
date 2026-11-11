@@ -315,7 +315,8 @@ test("uploads a ground photo, adds it, and shows it", async ({ page }) => {
     mimeType: "image/png",
     buffer: solidPng(64, 48, [96, 112, 72]),
   });
-  await expect(form.getByText("Chosen: barrow.png")).toBeVisible();
+  await expect(form.getByText(/barrow\.png is uploaded/)).toBeVisible();
+  await expect(form.getByText(/It's waiting for approval/)).toBeVisible();
   await form.getByRole("button", { name: "Add it" }).click();
   const photo = panel.getByRole("img", { name: "Ground photo added by Mary Anning" });
   await expect(photo).toBeVisible();

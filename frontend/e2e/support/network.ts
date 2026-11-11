@@ -13,9 +13,10 @@ import { solidPng } from "./png.js";
  * findings (for the map and for the list), a fixed height for any spot,
  * one-metre elevation everywhere, nobody signed in, nothing waiting for a
  * second look, no help wanted, no mentions, no activity, no notifications, a
- * live stream that sends nothing, and no investigations listed, though any one
- * asked for by its id is there, empty. The next square to scan is the one under
- * the point asked about, and nobody has scanned anything. A test can
+ * live stream that sends nothing, no investigations listed, though any one
+ * asked for by its id is there, empty, and anyone's page as a member who has
+ * done nothing yet. The next square to scan is the one under the point asked
+ * about, and nobody has scanned anything. A test can
  * answer any of them differently with a route of its own, which Playwright
  * tries first.
  */
@@ -184,6 +185,28 @@ export async function stubBackend(page: Page, log: NetworkLog = newLog()): Promi
       const body =
         part && part[2] === undefined
           ? investigationFixture({ public_id: publicId, title: `Investigation ${publicId}` })
+          : { items: [], next_cursor: null };
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    }
+    const person = /^\/api\/v1\/users\/([^/]+)(\/[a-z]+)?$/.exec(path);
+    if (person && route.request().method() === "GET") {
+      // Anyone asked for exists: a member who has done nothing yet, and whose name is their handle.
+      count("people");
+      const handle = decodeURIComponent(person[1] ?? "");
+      const body =
+        person[2] === undefined
+          ? {
+              handle,
+              display_name: handle,
+              avatar_url: null,
+              role: "member",
+              bio: null,
+              joined_at: "2026-11-01T10:00:00Z",
+              reputation: 0,
+              reputation_total: null,
+              counts: { findings: 0, second_looks: null, evidence: 0, comments: 0, mentions: 0 },
+              is_me: false,
+            }
           : { items: [], next_cursor: null };
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
     }

@@ -14,10 +14,10 @@ export async function stub(page: Page): Promise<void> {
   await page.route(tilesRoute(), (route) => route.fulfill({ status: 204 }));
 }
 
-/** Sign `page`'s browser in as a new member who has been through the welcome step. */
-export async function join(page: Page, handle: string): Promise<void> {
+/** Sign `page`'s browser in as someone new who has been through the welcome step, a member unless `role` says. */
+export async function join(page: Page, handle: string, role?: string): Promise<void> {
   const headers = { "X-FieldClub-Client": "web" };
-  const login = await page.request.post("/api/v1/auth/dev-login", { headers, data: { handle } });
+  const login = await page.request.post("/api/v1/auth/dev-login", { headers, data: { handle, role } });
   expect(login.status(), await login.text()).toBe(200);
   const welcome = await page.request.post("/api/v1/auth/welcome", {
     headers,
@@ -26,8 +26,13 @@ export async function join(page: Page, handle: string): Promise<void> {
   expect(welcome.status(), await welcome.text()).toBe(200);
 }
 
-/** A member in a browser of their own, the size of the test's page. */
-export async function helper(browser: Browser, viewport: { width: number; height: number } | null, handle: string) {
+/** Someone in a browser of their own, the size of the test's page: a member unless `role` says. */
+export async function helper(
+  browser: Browser,
+  viewport: { width: number; height: number } | null,
+  handle: string,
+  role?: string,
+) {
   const context = await browser.newContext({
     baseURL: `http://localhost:${WEB_PORT}`,
     viewport,
@@ -35,6 +40,6 @@ export async function helper(browser: Browser, viewport: { width: number; height
   });
   const page = await context.newPage();
   await stub(page);
-  await join(page, handle);
+  await join(page, handle, role);
   return { context, page };
 }

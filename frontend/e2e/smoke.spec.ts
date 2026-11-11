@@ -176,7 +176,8 @@ test.describe("desktop", () => {
       ["/help", "Help wanted"],
       ["/f/abc123", "Finding abc123"],
       ["/i/xyz", "Investigation xyz"],
-      ["/u/QuietBarrow42", "Profile"],
+      // The stand-in person's name is their handle.
+      ["/u/QuietBarrow42", "QuietBarrow42"],
       ["/about", "About Field Club"],
       ["/guide", "Guide"],
     ] as const) {
