@@ -270,7 +270,7 @@ def test_terrain_folders_follow_the_var_dir(clean_env: pytest.MonkeyPatch, tmp_p
     var = REPO_ROOT / "var"
     assert default.terrain_mirror == str(var / "lidar/england/mirror")
     assert default.terrain_source_dir == str(var / "lidar/england/dtm-2022")
-    assert default.terrain_national == str(var / "lidar/england/dtm-2022-10m/england-dtm-2022-10m-cog.tif")
+    assert default.terrain_national == str(var / "lidar/england/national")
     assert default.terrain_work_dir == str(var / "lidar/england/work")
     moved = settings(var_dir=tmp_path)
     assert moved.terrain_mirror == str(tmp_path / "lidar" / "england" / "mirror")

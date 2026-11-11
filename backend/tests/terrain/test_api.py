@@ -14,7 +14,6 @@ from pydantic import SecretStr
 from sqlalchemy.orm import Session
 
 from fieldclub.config import DefraSftpSettings
-from fieldclub.ingest.adapters.common import Polite
 from fieldclub.layers import LIDAR_STYLES, build_layers, default_tile_version
 from fieldclub.schemas.meta import RasterView
 from fieldclub.terrain import sftp
@@ -430,8 +429,7 @@ def test_a_refused_bulk_supply_never_puts_its_address_in_the_log(
         defra_sftp_password=SecretStr("not-a-real-password"),
         defra_sftp_known_hosts=known_hosts,
     )
-    no_wait = Polite(delay_s=0, backoff_s=1.0, sleep=lambda seconds: None)
-    fetcher = SftpFetcher(lambda: sftp.defra_connector(settings), max_failures=2, backoff=no_wait)
+    fetcher = SftpFetcher(lambda: sftp.defra_connector(settings), max_failures=2, sleep=lambda seconds: None)
     mirror = local_mirror(tmp_path, sources=mirror_dir / "src", extra=["SU16ne"], fetchers=[fetcher])
     app.dependency_overrides[get_terrain] = lambda: local_terrain(mirror, tmp_path / "tiles")
     start = TO_LONLAT.transform(414_900, 167_000)

@@ -10,9 +10,10 @@ import numpy as np
 import pytest
 from PIL import Image
 
+from fieldclub.errors import TileNotFoundError
 from fieldclub.storage import LocalStorage
 from fieldclub.terrain.errors import ElevationUnavailableError
-from fieldclub.terrain.grid import TILE_SIZE, TileNotFoundError, Window, nominal_ground_resolution, tile_at
+from fieldclub.terrain.grid import TILE_SIZE, Window, nominal_ground_resolution, tile_at
 from fieldclub.terrain.render import (
     DEM_KIND,
     ELEVATION_FORMAT,

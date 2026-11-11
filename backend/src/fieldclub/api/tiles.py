@@ -17,13 +17,12 @@ served range answers 404 `tile_not_found` (or `zoom_out_of_range`).
 
 from __future__ import annotations
 
-import hashlib
 from typing import Annotated
 
-from fastapi import APIRouter, Header, Query
+from fastapi import APIRouter, Query
 from starlette.responses import Response
 
-from fieldclub.api.deps import TerrainDep
+from fieldclub.api.deps import IfNoneMatch, TerrainDep, body_etag, not_modified
 from fieldclub.terrain.render import RenderedTile
 
 MOUNT_AT_ROOT = True
@@ -37,7 +36,6 @@ UNVERSIONED = "public, max-age=3600"
 CHANGING = "no-cache"
 
 VersionParam = Annotated[str | None, Query(alias="v")]
-IfNoneMatch = Annotated[str | None, Header()]
 
 
 def cache_control(tile: RenderedTile, asked: str | None) -> str:
@@ -48,11 +46,8 @@ def cache_control(tile: RenderedTile, asked: str | None) -> str:
 
 
 def _png(tile: RenderedTile, cache: str, if_none_match: str | None) -> Response:
-    etag = f'"{hashlib.sha256(tile.png).hexdigest()[:32]}"'
-    headers = {"Cache-Control": cache, "ETag": etag}
-    if if_none_match is not None and etag in {tag.strip() for tag in if_none_match.split(",")}:
-        return Response(status_code=304, headers=headers)
-    return Response(tile.png, media_type="image/png", headers=headers)
+    headers = {"Cache-Control": cache, "ETag": body_etag(tile.png)}
+    return not_modified(if_none_match, headers) or Response(tile.png, media_type="image/png", headers=headers)
 
 
 @router.get("/lidar/{style}/{z}/{x}/{y}.png", response_class=Response)

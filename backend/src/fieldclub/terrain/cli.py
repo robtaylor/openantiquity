@@ -54,6 +54,8 @@ from sqlalchemy.exc import OperationalError
 from fieldclub.config import get_settings
 from fieldclub.errors import AppError
 from fieldclub.gridref import transformer
+from fieldclub.schemas import common as schemas_common
+from fieldclub.schemas.common import BBox
 from fieldclub.terrain import years
 from fieldclub.terrain.attribution import register_sources
 from fieldclub.terrain.catalogue import SourceTile
@@ -69,14 +71,14 @@ logger = logging.getLogger(__name__)
 LOG_EVERY_S = 60.0
 
 
-def parse_bbox(text: str) -> tuple[float, float, float, float]:
-    parts = [float(part) for part in text.split(",")]
-    if len(parts) != 4:
-        raise argparse.ArgumentTypeError("a box is west,south,east,north in degrees")
-    west, south, east, north = parts
-    if not (west < east and south < north):
-        raise argparse.ArgumentTypeError("a box needs west < east and south < north")
-    return west, south, east, north
+def parse_bbox(text: str) -> BBox:
+    """A `--bbox` argument, held to the one rule for a box (`schemas.common.parse_bbox`)."""
+    try:
+        bbox = schemas_common.parse_bbox(text)
+    except AppError as exc:
+        raise argparse.ArgumentTypeError(exc.message) from None
+    assert bbox is not None, "text was given"
+    return bbox
 
 
 def parse_zooms(text: str) -> range:
@@ -87,7 +89,7 @@ def parse_zooms(text: str) -> range:
     return range(first, last + 1)
 
 
-def tiles_for_bbox(terrain: Terrain, bbox: tuple[float, float, float, float]) -> list[SourceTile]:
+def tiles_for_bbox(terrain: Terrain, bbox: BBox) -> list[SourceTile]:
     west, south, east, north = bbox
     eastings, northings = transformer(4326, 27700).transform(
         [west, east, east, west], [south, south, north, north]
@@ -305,7 +307,7 @@ def cmd_mirror(terrain: Terrain, args: argparse.Namespace) -> int:
     )
     if failed:
         shown = ", ".join(failed[:20]) + (" ..." if len(failed) > 20 else "")
-        print(f"{len(failed)} tiles failed or weren't tried: {shown}. Run the same command again to retry them.")
+        print(f"{len(failed)} tiles failed or weren't tried: {shown}. Run the same command again to retry.")
         return 1
     print(f"added {len(missing)} tiles, each read back and checked before it was published")
     return 0

@@ -92,7 +92,7 @@ def test_the_whole_country_job_resumes_without_repeating_finished_tiles(
     assert cli.main(["mirror", "--all", "--concurrency", "2"], terrain=terrain) == 1
     out = capsys.readouterr()
     assert "4 tiles asked for, 4 to add" in out.out
-    assert "1 tiles failed: SU17sw. Run the same command again to retry them." in out.out
+    assert "1 tiles failed or weren't tried: SU17sw. Run the same command again to retry." in out.out
     assert "GB" in out.err
     assert "left" in out.err
     assert sorted(terrain.mirror.store.names()) == sorted(set(NAMES) - {"SU17sw"})
@@ -277,3 +277,12 @@ def test_an_interrupt_starts_no_new_job_and_says_what_was_left(
     assert f"interrupted after {len(started)} jobs (0 failed), {40 - len(started)} not started" in err
     assert "Run the same command again to resume" in err
     assert (signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM)) == handlers
+
+
+@pytest.mark.parametrize(
+    "box", ["-1.9,51.4,inf,51.45", "-1.9,51.4,nan,51.45", "-1.8,51.4,-1.9,51.45", "-1.9,51.4,-1.8", "a,b,c,d"]
+)
+def test_a_box_is_held_to_the_one_rule_for_a_box(box: str, terrain: Terrain) -> None:
+    with pytest.raises(SystemExit) as raised:
+        cli.main(["mirror", f"--bbox={box}"], terrain=terrain)
+    assert raised.value.code == 2

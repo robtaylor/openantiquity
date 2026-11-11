@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from starlette.responses import JSONResponse, Response
 
-from fieldclub.api.deps import BBoxQuery, TerrainDep
+from fieldclub.api.deps import BBoxQuery, IfNoneMatch, TerrainDep, not_modified
 from fieldclub.ratelimit import rate_limit
 from fieldclub.schemas.common import parse_bbox
 from fieldclub.terrain.coverage import coverage, coverage_edition
@@ -63,13 +63,13 @@ def profile(body: ProfileRequest, terrain: TerrainDep) -> ProfileOut:
     )
 
 
-class CoveragePolygon(BaseModel):
+class CoveragePolygonOut(BaseModel):
     type: Literal["Polygon"]
     # One ring of five WGS84 positions, longitude then latitude, closed.
     coordinates: list[list[tuple[float, float]]]
 
 
-class CoverageProperties(BaseModel):
+class CoveragePropertiesOut(BaseModel):
     # The 5 km tile, such as SU16nw.
     tile: str
     # The edition the elevation comes from, such as "2022 composite".
@@ -79,17 +79,17 @@ class CoverageProperties(BaseModel):
     years: list[int]
 
 
-class CoverageFeature(BaseModel):
+class CoverageFeatureOut(BaseModel):
     type: Literal["Feature"]
     id: str
-    geometry: CoveragePolygon
-    properties: CoverageProperties
+    geometry: CoveragePolygonOut
+    properties: CoveragePropertiesOut
 
 
 class CoverageOut(BaseModel):
     type: Literal["FeatureCollection"]
     edition: str
-    features: list[CoverageFeature]
+    features: list[CoverageFeatureOut]
 
 
 # The coverage changes only with a new catalogue or new capture years, which change the ETag.
@@ -100,13 +100,14 @@ COVERAGE_CACHE = "public, max-age=3600"
 def get_coverage(
     terrain: TerrainDep,
     bbox: BBoxQuery = None,
-    if_none_match: Annotated[str | None, Header()] = None,
+    if_none_match: IfNoneMatch = None,
 ) -> Response:
     """The 5 km tiles that have 1 m elevation, with the years they were flown, as GeoJSON."""
     box = parse_bbox(bbox)
     etag = f'"{coverage_edition(terrain.catalogue)}"'
     headers = {"Cache-Control": COVERAGE_CACHE, "ETag": etag}
-    if if_none_match is not None and etag in {tag.strip() for tag in if_none_match.split(",")}:
-        return Response(status_code=304, headers=headers)
+    unchanged = not_modified(if_none_match, headers)
+    if unchanged is not None:
+        return unchanged
     body: dict[str, Any] = coverage(terrain.catalogue, box)
     return JSONResponse(body, headers=headers)

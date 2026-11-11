@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from fieldclub.errors import NotFoundError
+from fieldclub.errors import TileNotFoundError
 
 TILE_SIZE = 512
 EARTH_RADIUS = 6_378_137.0
@@ -28,11 +28,6 @@ HALF_WORLD = math.pi * EARTH_RADIUS
 # different radii and show a seam. Across England (50 to 55.8 N) the true
 # radius stays within 7% of the nominal one.
 REFERENCE_LATITUDE = 52.5
-
-
-class TileNotFoundError(NotFoundError):
-    code = "tile_not_found"
-    message = "There's no such map tile."
 
 
 def resolution(zoom: int) -> float:
