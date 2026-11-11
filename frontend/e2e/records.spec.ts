@@ -312,13 +312,14 @@ test.describe("live sources", () => {
     test("turns off quietly when a source refuses this browser, or answers with an error", async ({ page }) => {
       await serveLiveHosts(page, log);
       const live = await openLiveSources(page);
+      // A click, not check(): the failure can turn the switch off again before check() looks at it.
       const refusing = live.getByRole("switch", { name: ABERDEENSHIRE_LIVE.name });
-      await refusing.check();
+      await refusing.click();
       await expect(live.getByText(/didn't answer this browser/)).toBeVisible();
       await expect(refusing).not.toBeChecked();
 
       const failing = live.getByRole("switch", { name: DARTMOOR_LIVE.name });
-      await failing.check();
+      await failing.click();
       await expect(live.getByText(/answered with an error \(500\)/)).toBeVisible();
       await expect(failing).not.toBeChecked();
       await page.waitForTimeout(1500);

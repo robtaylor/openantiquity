@@ -72,3 +72,12 @@ export function database(action: "create" | "drop"): void {
     env: { ...process.env, FIELDCLUB_ENV_FILE: "" },
   });
 }
+
+/** Put the records spec's sources, records and place in the database, once however often it is called. */
+export function seedRecords(): void {
+  execFileSync("uv", ["run", "--project", BACKEND_DIR, "python", join(here, "records.py"), DATABASE], {
+    cwd: BACKEND_DIR,
+    stdio: "inherit",
+    env: { ...process.env, FIELDCLUB_ENV_FILE: "" },
+  });
+}
