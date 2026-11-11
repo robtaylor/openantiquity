@@ -60,6 +60,14 @@ describe("creditGroups", () => {
     expect(new Set(attributions).size).toBe(attributions.length);
   });
 
+  it("names two layers apart when they share a name but are credited differently", () => {
+    const layers = creditGroups(META, [])[0];
+    const names = layers?.credits.map((credit) => credit.name) ?? [];
+    expect(new Set(names).size).toBe(names.length);
+    expect(names).toContain("OpenStreetMap, as a map");
+    expect(names).toContain("OpenStreetMap, drawn over the terrain");
+  });
+
   it("gives a layer the licence /meta sends with it, and keeps layers under different licences apart", () => {
     const views = META.layers.views.map((view) =>
       view.id === "slope"

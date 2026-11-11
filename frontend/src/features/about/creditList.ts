@@ -42,36 +42,58 @@ export function categoryTitle(meta: Meta, category: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+interface CreditedLayer {
+  id: string;
+  title: string;
+  attribution?: string;
+  licence?: string;
+  licence_url?: string;
+}
+
 /**
  * The map's layers, one credit per attribution and licence: several views
  * drawn from the same data share it. A layer with no attribution needs none.
+ * Where two credits would carry the same name, such as a map view and an
+ * overlay drawn from the same data by different services, each says what it is.
  */
 function layerCredits(meta: Meta): Credit[] {
-  const layers: { id: string; title: string; attribution?: string; licence?: string; licence_url?: string }[] = [
+  const overlays = new Set(meta.layers.overlays.map((overlay) => overlay.id));
+  const layers: CreditedLayer[] = [
     ...meta.layers.views,
     { ...meta.layers.dem, id: "dem", title: "Height of the ground" },
     ...meta.layers.overlays,
   ];
   const byTerms = new Map<string, Credit>();
+  const overlayCredits = new Set<Credit>();
   for (const layer of layers) {
     const attribution = layer.attribution?.trim();
     if (!attribution) continue;
     const licence = layer.licence?.trim() || null;
     const terms = `${attribution}\n${licence ?? ""}`;
     const credit = byTerms.get(terms);
-    if (credit) credit.name = `${credit.name}, ${layer.title}`;
-    else
-      byTerms.set(terms, {
-        key: `layer-${layer.id}`,
-        name: layer.title,
-        publisher: null,
-        licence,
-        licenceUrl: licence ? (layer.licence_url ?? null) : null,
-        attribution,
-        homepage: null,
-      });
+    if (credit) {
+      credit.name = `${credit.name}, ${layer.title}`;
+      continue;
+    }
+    const added: Credit = {
+      key: `layer-${layer.id}`,
+      name: layer.title,
+      publisher: null,
+      licence,
+      licenceUrl: licence ? (layer.licence_url ?? null) : null,
+      attribution,
+      homepage: null,
+    };
+    byTerms.set(terms, added);
+    if (overlays.has(layer.id)) overlayCredits.add(added);
   }
-  return [...byTerms.values()];
+  const credits = [...byTerms.values()];
+  const names = credits.map((credit) => credit.name);
+  for (const credit of credits) {
+    if (names.indexOf(credit.name) === names.lastIndexOf(credit.name)) continue;
+    credit.name = overlayCredits.has(credit) ? `${credit.name}, drawn over the terrain` : `${credit.name}, as a map`;
+  }
+  return credits;
 }
 
 function liveCredit(source: LiveSource): Credit {

@@ -39,7 +39,7 @@ describe("the about page", () => {
     expect(panel.getByText(/a shared map for finding and checking/)).toBeInTheDocument();
     expect(panel.getByText(/free and non-commercial/)).toBeInTheDocument();
     expect(panel.getByText(metaFixture.notices.sensitivity)).toBeInTheDocument();
-    expect(panel.getByText(/Contributors are 16 or over, because/)).toBeInTheDocument();
+    expect(panel.getByText(/Contributors are 16 or over\./)).toBeInTheDocument();
     expect(panel.getByText(/There are no private messages, because/)).toBeInTheDocument();
     expect(panel.getByText(/the address that will be given here before Field Club opens/)).toBeInTheDocument();
     for (const title of ["Contributor terms", "Privacy notice", "Reporting something"]) {
@@ -96,7 +96,7 @@ describe("the notices", () => {
     const panel = await openPanel("/about#terms", "Contributor terms");
     expect(panel.getByRole("note")).toHaveTextContent("Draft");
     expect(document.getElementById("terms")).not.toBeNull();
-    expect(panel.getByText(/published under/)).toBeInTheDocument();
+    expect(panel.getByText(/must be 16 or over/)).toBeInTheDocument();
     expect(panel.getByRole("link", { name: "CC BY 4.0 licence" })).toHaveAttribute(
       "href",
       "https://creativecommons.org/licenses/by/4.0/",
@@ -117,15 +117,58 @@ describe("the notices", () => {
   it("says in the privacy notice what is kept, including the age band and the email from a provider", async () => {
     serve();
     const panel = await openPanel("/about/privacy", "Privacy notice");
-    expect(panel.getByText(/Your age band/)).toBeInTheDocument();
+    expect(panel.getByText(/Your age band \(16 or 17, or 18 and over\)/)).toBeInTheDocument();
     expect(panel.getByText(/Most providers tell us an email address/)).toBeInTheDocument();
+    // Only the providers /meta offers, never a hard-coded list.
+    expect(panel.getByText(/From the sign-in provider \(Google or OpenStreetMap\)/)).toBeInTheDocument();
+    expect(panel.queryByText(/Apple|Microsoft|Facebook/)).toBeNull();
+    expect(panel.getByText(/can't be read back without it/)).toBeInTheDocument();
     expect(panel.getByRole("note")).toHaveTextContent("Draft");
+  });
+
+  it.each([
+    ["/about/privacy", "Privacy notice"],
+    ["/about/terms", "Contributor terms"],
+  ])("opens %s with what matters most, and keeps the detail closed until asked for", async (path, title) => {
+    serve();
+    const user = userEvent.setup();
+    const panel = await openPanel(path, title);
+    const short = within(panel.getByRole("region", { name: "In short" }));
+    expect(short.getAllByRole("listitem")).toHaveLength(5);
+    const parts = panel.getAllByRole("group");
+    expect(parts.length).toBeGreaterThan(3);
+    for (const part of parts) expect(part).not.toHaveAttribute("open");
+    const first = parts[0] as HTMLElement;
+    await user.click(first.querySelector("summary") as HTMLElement);
+    expect(first).toHaveAttribute("open");
+  });
+
+  it("follows the minimum age, providers and licence /meta gives, and says the contact address only once", async () => {
+    serve({
+      ...metaFixture,
+      app: { ...metaFixture.app, contribution_licence: "CC BY-SA 4.0" },
+      auth: {
+        ...metaFixture.auth,
+        age_bands: ["18_plus"],
+        providers: metaFixture.auth.providers.map((provider) => ({ ...provider, enabled: provider.id === "email" })),
+      },
+    });
+    const panel = await openPanel("/about/privacy", "Privacy notice");
+    expect(panel.getByText(/Your age band \(18 and over\)/)).toBeInTheDocument();
+    expect(panel.queryByText(/16 and 17 year olds/)).toBeNull();
+    expect(panel.queryByText(/From the sign-in provider/)).toBeNull();
+    expect(panel.getByText(/If you ask for an emailed link: your email address/)).toBeInTheDocument();
+    // The address isn't given yet: the notice points to the about page, which says so once.
+    expect(panel.queryByText(/the address that will be given here/)).toBeNull();
+    expect(panel.getAllByRole("link", { name: "about page" })[0]).toHaveAttribute("href", "/about");
   });
 
   it("explains how anyone asks for something to be taken down, and links the other notices", async () => {
     serve();
     const panel = await openPanel("/about/takedown", "Asking for something to be taken down");
     expect(panel.getByText(/within 48 hours of the report/)).toBeInTheDocument();
+    // Links (mentions) can't be deleted from a finding's page yet, so the notice doesn't say they can.
+    expect(panel.getByText(/delete your own comments and evidence from a finding's page/)).toBeInTheDocument();
     const others = within(panel.getByRole("navigation", { name: "The other notices" }));
     expect(others.getByRole("link", { name: "Privacy notice" })).toHaveAttribute("href", "/about/privacy");
     expect(others.getByRole("link", { name: "About Field Club" })).toHaveAttribute("href", "/about");

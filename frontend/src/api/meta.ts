@@ -279,6 +279,12 @@ export interface Meta {
     dev_login?: boolean;
     /** The contributor terms. Always sent by the backend; optional here because older fixtures lack it. */
     terms?: ContributorTerms;
+    /**
+     * The age bands the welcome step accepts, youngest first, which follow
+     * the minimum age (`FIELDCLUB_MIN_AGE`, Decision 0009). Always sent by
+     * the backend; optional here because older fixtures lack it.
+     */
+    age_bands?: string[];
   };
   vocab: Vocab;
   layers: MetaLayers;
@@ -349,6 +355,7 @@ export function parseMeta(value: unknown): Meta {
       'each of "auth.providers" needs an id, a label and an enabled flag',
     );
   }
+  check(auth.age_bands === undefined || isStringArray(auth.age_bands), '"auth.age_bands" is not a list of bands');
   check(isRecord(vocab), '"vocab" is missing');
   for (const key of [
     "feature_classes",

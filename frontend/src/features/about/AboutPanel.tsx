@@ -6,6 +6,7 @@ import { GUIDE_PATH } from "../guide/GuidePanel.js";
 import { NotFoundPanel, useDocumentTitle } from "../placeholders.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { Credits } from "./Credits.js";
+import { minimumAge } from "./facts.js";
 import { ContactAddress, DraftBanner, findNotice, NOTICES, type NoticeEntry } from "./notices.js";
 import "../guide/guide.css";
 import "./about.css";
@@ -97,7 +98,7 @@ export function AboutPanel({ meta }: { meta: Meta }) {
             Who can join
           </h3>
           <p>
-            Contributors are 16 or over, because the coming rules on children online draw their line at 16, and because
+            Contributors are {minimumAge(meta)} or over. The coming rules on children online draw their line at 16, and
             {` ${name} `}sends people out to real places. Anyone of any age can look at the map.
           </p>
           <p>
