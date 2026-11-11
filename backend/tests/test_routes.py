@@ -10,7 +10,9 @@
 - `writer`: for a route that changes data, `CONTRIBUTOR` when it stores a
   contribution and so needs the welcome step (Decision 0009), or why it
   doesn't. None for a read.
-- `sample`: an address to call it at, for the cache check. A read that says
+- `sample`: an address to call it at, for the cache check. `{finding}`,
+  `{record}` and `{investigation}` are filled in with ones the test makes,
+  the investigation public. A read that says
   nothing about caching is sent private (`main.PrivateByDefaultMiddleware`).
   One sent as publicly cacheable must give a signed-in member exactly what it
   gives a signed-out visitor.
@@ -40,9 +42,11 @@ from starlette.routing import Mount, Route, WebSocketRoute
 from fieldclub.auth.deps import current_contributor
 from fieldclub.main import create_app, mount_frontend
 from fieldclub.services import record_tiles
+from fieldclub.vocab import Visibility
 from tests.findings import test_leaks
 from tests.findings.support import create
 from tests.helpers import MakeUser, add_record, add_source
+from tests.investigations.support import make
 
 CONTRIBUTOR = "contributor"
 MUTATING = frozenset({"POST", "PUT", "PATCH", "DELETE"})
@@ -52,7 +56,7 @@ MUTATING = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 class Expect:
     leak_test: str | None = None
     writer: str | None = None
-    # `{finding}`, `{record}` and `{person}` are filled in with ones the test makes.
+    # `{finding}`, `{record}`, `{person}` and `{investigation}` are filled in with ones the test makes.
     sample: str | None = None
     # Why there is no sample, when there isn't one for a read.
     unsampled: str | None = None
@@ -65,6 +69,10 @@ NOT_STORED = "stores nothing: a read that needs a body"
 NEEDS_MIRROR = "needs a mirror: tests/terrain/test_api.py checks its caching"
 ACTIVITY_LEAKS = "tests.activity.test_leaks:"
 U = "/api/v1/users/{person}"
+INV = "/api/v1/investigations/{investigation}"
+INVESTIGATION_LEAKS = "tests.investigations.test_leaks:"
+ITEMS_SHOWN = INVESTIGATION_LEAKS + "test_items_show_what_the_page_shows"
+ITEM_WRITES = INVESTIGATION_LEAKS + "test_item_writes_answer_with_what_the_writer_may_see"
 
 ROUTES: dict[tuple[str, str], Expect] = {
     # Accounts
@@ -122,6 +130,30 @@ ROUTES: dict[tuple[str, str], Expect] = {
     ("DELETE", "/api/v1/comments/{comment_id}"): Expect(writer=CONTRIBUTOR),
     ("PUT", "/api/v1/findings/{public_id}/follow"): Expect(writer=CONTRIBUTOR),
     ("DELETE", "/api/v1/findings/{public_id}/follow"): Expect(writer=CONTRIBUTOR),
+    # Investigations
+    ("GET", "/api/v1/investigations"): Expect(sample="/api/v1/investigations"),
+    ("POST", "/api/v1/investigations"): Expect(writer=CONTRIBUTOR),
+    ("GET", "/api/v1/investigations/{public_id}"): Expect(sample=INV),
+    ("PATCH", "/api/v1/investigations/{public_id}"): Expect(writer=CONTRIBUTOR),
+    ("DELETE", "/api/v1/investigations/{public_id}"): Expect(writer=CONTRIBUTOR),
+    ("GET", "/api/v1/investigations/{public_id}/items"): Expect(ITEMS_SHOWN, sample=INV + "/items"),
+    ("POST", "/api/v1/investigations/{public_id}/items"): Expect(ITEM_WRITES, CONTRIBUTOR),
+    ("PATCH", "/api/v1/investigations/{public_id}/items/{item_id}"): Expect(ITEM_WRITES, CONTRIBUTOR),
+    ("POST", "/api/v1/investigations/{public_id}/items/{item_id}/move"): Expect(ITEM_WRITES, CONTRIBUTOR),
+    ("DELETE", "/api/v1/investigations/{public_id}/items/{item_id}"): Expect(writer=CONTRIBUTOR),
+    ("GET", "/api/v1/investigations/{public_id}/members"): Expect(sample=INV + "/members"),
+    ("PUT", "/api/v1/investigations/{public_id}/members/{handle}"): Expect(writer=CONTRIBUTOR),
+    ("DELETE", "/api/v1/investigations/{public_id}/members/{handle}"): Expect(
+        writer="removes a membership and stores nothing, so leaving or declining needs only a session"
+    ),
+    ("POST", "/api/v1/investigations/{public_id}/invitation"): Expect(writer=CONTRIBUTOR),
+    ("GET", "/api/v1/investigations/{public_id}/export"): Expect(
+        INVESTIGATION_LEAKS + "test_downloads_follow_the_download_rule", sample=INV + "/export"
+    ),
+    # Scan a square
+    ("GET", "/api/v1/squares/next"): Expect(sample="/api/v1/squares/next?lon=-1.85&lat=51.43"),
+    ("PUT", "/api/v1/squares/{ref}"): Expect(writer=CONTRIBUTOR),
+    ("GET", "/api/v1/squares/coverage"): Expect(sample="/api/v1/squares/coverage?bbox=-1.9,51.4,-1.8,51.45"),
     # Records
     ("GET", "/api/v1/records/search"): Expect(sample="/api/v1/records/search?q=barrow"),
     ("GET", "/api/v1/records/nearby"): Expect(sample="/api/v1/records/nearby?lon=-1.85&lat=51.43"),
@@ -313,7 +345,13 @@ def samples(db: Session, make_user: MakeUser) -> dict[str, str]:
     record = add_record(db, add_source(db), "Bowl barrow", -1.85, 51.43)
     record_tiles.refresh_counts(db)
     db.commit()
-    return {"finding": finding.public_id, "record": str(record.id), "person": finder.handle}
+    investigation = make(db, make_user(), Visibility.PUBLIC)
+    return {
+        "finding": finding.public_id,
+        "record": str(record.id),
+        "person": finder.handle,
+        "investigation": investigation.public_id,
+    }
 
 
 @pytest.mark.parametrize(

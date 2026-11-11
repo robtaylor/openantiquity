@@ -3,8 +3,9 @@
 One public investigation holds an open, a protected and a restricted
 finding, each with an outline and at a point of its own. Its items and its
 three exports are fetched as someone signed out, a member, the finder, a
-trusted member and a moderator. Items follow what the finding's page shows;
-downloads follow the stricter rule for downloads (Decision 0005, rule 8).
+trusted member and a moderator. Items follow what the finding's page shows,
+and so does the item a write hands back to its writer; downloads follow the
+stricter rule for downloads (Decision 0005, rule 8).
 The check is the findings leak test's: it searches the whole body for the
 exact position as degrees, as grid references and as easting and northing.
 """
@@ -17,14 +18,15 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from shapely.geometry import box
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fieldclub.models import Investigation, User
+from fieldclub.models import Finding, Investigation, User
 from fieldclub.vocab import FeatureClass, InvestigationItemKind, Visibility
 from tests.findings.support import create
 from tests.findings.test_leaks import DOWNLOADS, LEVELS, POINTS, SEES, VIEWERS, check
 from tests.helpers import MakeUser
-from tests.investigations.support import add, make, url
+from tests.investigations.support import API, add, make, url
 
 
 @pytest.fixture
@@ -88,3 +90,27 @@ def test_downloads_follow_the_download_rule(
         for feature, level in zip(features, LEVELS, strict=True):
             assert feature["properties"]["obscured"] is (level not in DOWNLOADS[viewer])
             assert (feature["properties"]["outline"] is None) is (level not in DOWNLOADS[viewer])
+
+
+@pytest.mark.parametrize("viewer", ["member", "finder", "trusted", "moderator"])
+def test_item_writes_answer_with_what_the_writer_may_see(
+    world: tuple[Investigation, Callable[[str], TestClient]], db: Session, viewer: str
+) -> None:
+    _, client = world
+    writer = client(viewer)
+    created = writer.post(f"{API}/investigations", json={"title": f"{viewer}'s notebook"})
+    assert created.status_code == 201, created.text
+    base = f"{API}/investigations/{created.json()['public_id']}/items"
+    for level in LEVELS:
+        finding = db.scalars(select(Finding).where(Finding.sensitivity == level.value)).one()
+        allowed = {level} & SEES[viewer]
+        added = writer.post(base, json={"kind": "finding", "finding": finding.public_id})
+        assert added.status_code == 201, added.text
+        check(added.text, allowed, allowed, where=f"POST item ({level})")
+        item = f"{base}/{added.json()['id']}"
+        changed = writer.patch(item, json={"note": "Worth a visit."})
+        assert changed.status_code == 200, changed.text
+        check(changed.text, allowed, allowed, where=f"PATCH item ({level})")
+        moved = writer.post(f"{item}/move", json={"after": None})
+        assert moved.status_code == 200, moved.text
+        check(moved.text, allowed, allowed, where=f"move item ({level})")

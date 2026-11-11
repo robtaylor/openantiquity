@@ -71,6 +71,7 @@ from fieldclub.errors import (
     AppError,
     ConflictError,
     ForbiddenError,
+    InvalidCursorError,
     NotFoundError,
     UnauthorisedError,
     ValidationFailedError,
@@ -86,14 +87,7 @@ from fieldclub.models import (
     User,
 )
 from fieldclub.models.common import to_db_geometry
-from fieldclub.schemas.common import (
-    InvalidCursorError,
-    cursor_int,
-    decode_cursor,
-    int_from_cursor,
-    offset_page,
-    paginate,
-)
+from fieldclub.schemas.common import cursor_int, decode_cursor, offset_from_cursor, offset_page, paginate
 from fieldclub.schemas.text import has_unstorable_character
 from fieldclub.services import activity, findings, geo, ids, records, sensitivity
 from fieldclub.services.records import RecordResult
@@ -588,7 +582,7 @@ def list_members(
     db: Session, investigation: Investigation, *, limit: int, cursor: str | None = None
 ) -> tuple[list[MemberView], str | None]:
     """The owner first, then everyone else in the order they were invited, invitations included."""
-    offset = 0 if cursor is None else int_from_cursor(cursor)
+    offset = offset_from_cursor(cursor)
     rows = db.execute(
         select(
             User, InvestigationMember.role, InvestigationMember.created_at, InvestigationMember.accepted_at

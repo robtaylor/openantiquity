@@ -224,13 +224,17 @@ def test_signed_out_drafts_can_be_left_out(client: TestClient) -> None:
     params = {"lon": AVEBURY[0], "lat": AVEBURY[1]}
     left_out: list[str] = []
     for _ in range(15):
-        response = client.get(f"{API}/next", params=params | {"exclude": ",".join(left_out)})
+        response = client.get(f"{API}/next", params=params | {"exclude": left_out})
         assert response.json()["square"] not in left_out
         left_out.append(response.json()["square"])
-    bad = client.get(f"{API}/next", params=params | {"exclude": "SU16"})
+    bad = client.get(f"{API}/next", params=params | {"exclude": ["SU1069", "SU16"]})
     assert error_code(bad) == "invalid_square"
-    too_many = client.get(f"{API}/next", params=params | {"exclude": ",".join(["SU1069"] * 101)})
-    assert error_code(too_many) == "too_many_excluded"
+    # A repeated parameter, as every list filter is: one value naming several squares is refused.
+    joined = client.get(f"{API}/next", params=params | {"exclude": "SU1069,SU10"})
+    assert error_code(joined) == "invalid_square"
+    too_many = client.get(f"{API}/next", params=params | {"exclude": ["SU1069"] * 101})
+    assert too_many.status_code == 422
+    assert error_code(too_many) == "validation_error"
 
 
 def test_people_asking_at_once_are_spread_over_several_squares(db: Session, make_user: MakeUser) -> None:

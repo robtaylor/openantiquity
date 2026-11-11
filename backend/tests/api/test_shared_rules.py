@@ -17,8 +17,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from fieldclub.schemas.common import MAX_OFFSET, encode_cursor
+from fieldclub.vocab import Visibility
 from tests.findings.support import create
 from tests.helpers import ClientAs, MakeUser, add_record, add_source, error_code
+from tests.investigations.support import make
 
 API = "/api/v1"
 
@@ -39,6 +41,8 @@ BOX_ROUTES = [
     f"{API}/records/search",
     f"{API}/terrain/coverage",
     f"{API}/activity",
+    f"{API}/investigations",
+    f"{API}/squares/coverage",
 ]
 BAD_BOXES = [
     "1,2,3",
@@ -85,6 +89,7 @@ def lists(db: Session, make_user: MakeUser, client_as: ClientAs) -> tuple[TestCl
     finding = create(db, finder)
     add_record(db, add_source(db), "Bowl barrow", -1.85, 51.43)
     db.commit()
+    investigation = make(db, finder, Visibility.PUBLIC).public_id
     paths = [
         f"{API}/findings",
         f"{API}/findings?format=geojson",
@@ -101,6 +106,10 @@ def lists(db: Session, make_user: MakeUser, client_as: ClientAs) -> tuple[TestCl
         f"{API}/users/{finder.handle}/contributions",
         f"{API}/users/{finder.handle}/contributions?kind=second_look",
         f"{API}/users/{finder.handle}/points",
+        f"{API}/investigations",
+        f"{API}/investigations?scope=mine",
+        f"{API}/investigations/{investigation}/items",
+        f"{API}/investigations/{investigation}/members",
     ]
     return client_as(finder), paths
 
@@ -155,6 +164,7 @@ def test_no_offset_goes_past_the_shared_limit(lists: tuple[TestClient, list[str]
         (f"{API}/review/tasks", 201),
         (f"{API}/geo/search?q=avebury", 21),
         (f"{API}/activity", 201),
+        (f"{API}/investigations", 201),
     ],
 )
 def test_a_limit_above_the_maximum_is_a_validation_error(client: TestClient, path: str, limit: int) -> None:

@@ -5,19 +5,21 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
+from pydantic import StringConstraints
 
-from fieldclub.api.deps import Contributor, Db, OptionalUser, private, rate_limit, split_list
+from fieldclub.api.deps import Contributor, Db, OptionalUser, private, rate_limit
 from fieldclub.errors import BadRequestError
-from fieldclub.schemas.common import is_bbox, split_bbox
+from fieldclub.schemas.common import parse_bbox
 from fieldclub.schemas.squares import CoverageCollection, SquareOut, SurveyIn, SurveyOut, coverage_feature
 from fieldclub.services import squares
 
 router = APIRouter(prefix="/squares", tags=["squares"])
 
-
-class InvalidBboxError(BadRequestError):
-    code = "invalid_bbox"
-    message = "bbox must be west,south,east,north in degrees, running west to east and south to north."
+# Repeated parameters, `exclude=SU1069&exclude=SU1070`, as every list filter is.
+ExcludeParam = Annotated[
+    list[Annotated[str, StringConstraints(min_length=1, max_length=12)]] | None,
+    Query(max_length=squares.MAX_EXCLUDE, description="Squares to leave out, such as `SU1069`"),
+]
 
 
 @router.get(
@@ -31,10 +33,7 @@ def next_square(
     response: Response,
     lon: Annotated[float | None, Query(ge=-180, le=180)] = None,
     lat: Annotated[float | None, Query(ge=-90, le=90)] = None,
-    exclude: Annotated[
-        str | None,
-        Query(max_length=squares.MAX_EXCLUDE * 12, description="Squares to leave out, comma-separated"),
-    ] = None,
+    exclude: ExcludeParam = None,
 ) -> SquareOut:
     """A 1 km square few people have scanned, near `lon` and `lat` when given.
 
@@ -43,10 +42,7 @@ def next_square(
     """
     if (lon is None) != (lat is None):
         raise BadRequestError("Give both lon and lat, or neither.", code="invalid_point")
-    names = split_list(exclude) or []
-    if len(names) > squares.MAX_EXCLUDE:
-        raise BadRequestError(f"Leave out at most {squares.MAX_EXCLUDE} squares.", code="too_many_excluded")
-    left_out = {squares.name(squares.parse_square(text)) for text in names}
+    left_out = {squares.name(squares.parse_square(text)) for text in exclude or []}
     near = (lon, lat) if lon is not None and lat is not None else None
     chosen = squares.next_square(db, viewer, near=near, exclude=left_out)
     private(response)
@@ -83,19 +79,15 @@ def record_survey(ref: str, body: SurveyIn, user: Contributor, db: Db, response:
 def get_coverage(
     db: Db,
     response: Response,
-    bbox: Annotated[str, Query(max_length=200, description="west,south,east,north")],
+    bbox: Annotated[str, Query(max_length=200, description="west,south,east,north in degrees")],
 ) -> CoverageCollection:
     """How many people have scanned each 1 km square in view, as polygons for the map.
 
     The box may span at most 2,500 square kilometres. The answer is the same
     for everyone.
     """
-    try:
-        box = split_bbox(bbox)
-    except ValueError:
-        raise InvalidBboxError() from None
-    if not is_bbox(box):
-        raise InvalidBboxError()
+    box = parse_bbox(bbox)
+    assert box is not None, "bbox is required"
     cells = squares.coverage(db, box)
     response.headers["Cache-Control"] = "public, max-age=300"
     return CoverageCollection(features=[coverage_feature(cell) for cell in cells])

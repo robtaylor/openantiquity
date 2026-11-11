@@ -10,14 +10,22 @@ import json
 from typing import Annotated, Literal
 
 import shapely
-from fastapi import APIRouter, Depends, Path, Query, Response, status
+from fastapi import APIRouter, Depends, Path, Response, status
 from shapely.geometry.base import BaseGeometry
 
-from fieldclub.api.deps import Contributor, CurrentUser, Db, OptionalUser, PageQuery, private, rate_limit
-from fieldclub.api.findings import parse_bbox
+from fieldclub.api.deps import (
+    BBoxQuery,
+    Contributor,
+    CurrentUser,
+    Db,
+    OptionalUser,
+    PageQuery,
+    private,
+    rate_limit,
+)
 from fieldclub.errors import ValidationFailedError
 from fieldclub.models import User
-from fieldclub.schemas.common import MAX_ID, GeoJSONGeometry, Page, from_geojson
+from fieldclub.schemas.common import MAX_ID, GeoJSONGeometry, Page, from_geojson, parse_bbox
 from fieldclub.schemas.investigations import (
     AREA_MAX_POINTS,
     InvestigationCreate,
@@ -90,7 +98,7 @@ def list_investigations(
     response: Response,
     page: PageQuery,
     scope: Scope = Scope.PUBLIC,
-    bbox: Annotated[str | None, Query(max_length=200, description="west,south,east,north")] = None,
+    bbox: BBoxQuery = None,
 ) -> Page[InvestigationSummary]:
     """Public investigations. `bbox` matches their area.
 
