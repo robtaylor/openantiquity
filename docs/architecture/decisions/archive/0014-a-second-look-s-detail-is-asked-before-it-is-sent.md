@@ -1,8 +1,8 @@
 # Decision 0014 — A second look's detail is asked before it is sent
 
-**Status:** Proposed.
+**Status:** Superseded by Decision 0008 (2026-11-11), before acceptance: the API took the answer alone and its detail after it (point 8).
 
-**Current architecture:** [ARCHITECTURE.md, "Frontend"](../../ARCHITECTURE.md#frontend).
+**Current architecture:** [ARCHITECTURE.md, "Frontend"](../../../ARCHITECTURE.md#frontend).
 
 **TL;DR.** In the context of a second look, facing a conflict between UI.md's one-tap rule and an answer that is final once sent, we chose to ask the optional detail between choosing the answer and sending it, to keep what someone thinks a feature is unprompted, accepting a second press for every answer.
 
