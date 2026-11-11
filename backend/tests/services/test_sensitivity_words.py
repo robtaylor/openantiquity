@@ -3,7 +3,8 @@
 Each level states who sees the exact place (`exact_for`), and two sentences
 say it in words. The audience is held to `sensitivity.sees_exact` for every
 kind of viewer, and each sentence to the audience, so neither can drift from
-the code's own rule.
+the code's own rule. Where downloads are stricter (`sensitivity.downloads_exact`),
+a third sentence says so.
 """
 
 from __future__ import annotations
@@ -65,7 +66,7 @@ def test_each_level_s_sentences_say_what_its_audience_is() -> None:
             # Nobody is shown the square, so nobody is told why.
             assert level.square_sentence is None
             continue
-        assert level.who_sees.endswith("Everyone else sees its one-kilometre square.")
+        assert "Everyone else sees its one-kilometre square." in level.who_sees
         assert level.square_sentence is not None
         if signed_in:
             assert level.who_sees.startswith("Only people who have signed in see its exact place.")
@@ -76,6 +77,30 @@ def test_each_level_s_sentences_say_what_its_audience_is() -> None:
             # A member sees the square too, so signing in is no help.
             assert level.square_sentence.endswith(f"{FEW_WORDS} it.")
             assert "Sign in" not in level.square_sentence
+
+
+def test_a_level_whose_downloads_are_stricter_than_its_page_says_so(
+    make_user: MakeUser, make_finding: MakeFinding
+) -> None:
+    """A member sees a protected finding's place on its page, but a download gives them its square."""
+    finder = make_user(Role.MEMBER, handle="Finder")
+    viewers = _viewers(make_user, finder)
+    download_words = (
+        "Downloads give its exact place only to its finder, trusted members, archaeologists and moderators."
+    )
+    for level in SENSITIVITY_LEVELS:
+        finding = make_finding(finder, sensitivity=level.id.value)
+        downloads_for = {
+            kind
+            for kind, people in viewers.items()
+            if all(sensitivity.downloads_exact(finding, viewer) for viewer in people)
+        }
+        assert downloads_for <= level.exact_for, level.id
+        if downloads_for == level.exact_for:
+            assert "Downloads" not in level.who_sees, level.id
+        else:
+            assert downloads_for == FEW, level.id
+            assert level.who_sees.endswith(download_words), level.id
 
 
 def test_meta_serves_the_words(client: TestClient) -> None:

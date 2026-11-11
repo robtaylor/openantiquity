@@ -72,6 +72,8 @@ def test_valid_handles(handle: str) -> None:
         "admin",
         "Moderator",
         "ME",
+        # It would be read as GET /mod/users/eligible, the list.
+        "eligible",
         "line\nbreak",
         "nul\x00byte",
         # Deleted accounts are given handles that start like this.
@@ -111,6 +113,7 @@ def test_the_handle_pattern_does_not_let_a_trailing_newline_through() -> None:
         ("x" * 60, "x" * 60),
         ("The Moderator's Friend", "The Moderator's Friend"),
         ("Me", "Me"),
+        ("Eligible", "Eligible"),
     ],
 )
 def test_valid_display_names(given: str, stored: str) -> None:

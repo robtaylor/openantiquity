@@ -62,6 +62,8 @@ RESERVED = frozenset(
         "admin",
         "administrator",
         "anonymous",
+        # GET /mod/users/eligible is the list, so it can't be a person's page.
+        "eligible",
         "guest",
         "fieldclub",
         "me",
@@ -76,8 +78,9 @@ RESERVED = frozenset(
 
 # Display names that would read as official, or as an account that has gone.
 # Compared with case, width, spaces and punctuation folded away, so "A d m i n"
-# and "MODERATOR." are caught too. "me" only matters as a route, so it is fine here.
-RESERVED_DISPLAY_NAMES = (RESERVED - {"me"}) | {"formermember"}
+# and "MODERATOR." are caught too. "me" and "eligible" only matter as routes, so
+# they are fine here.
+RESERVED_DISPLAY_NAMES = (RESERVED - {"me", "eligible"}) | {"formermember"}
 
 # Unicode categories with no place in a name on one line: controls (line
 # breaks and tabs among them), format characters (the bidirectional overrides

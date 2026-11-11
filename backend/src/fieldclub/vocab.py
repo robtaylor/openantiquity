@@ -799,7 +799,8 @@ class SensitivityViewer(StrEnum):
 class SensitivityInfo:
     id: Sensitivity
     label: str
-    # Who sees the exact place, and who sees the square, in one or two sentences.
+    # Who sees the exact place, and who sees the square, in one or two sentences, and a third
+    # when a download gives the exact place to fewer people than the page does.
     who_sees: str
     # What someone shown only the square is told: why, and what would change it. None for open.
     square_sentence: str | None
@@ -811,6 +812,10 @@ class SensitivityInfo:
 _KEPT_BACK = "Sites like this can attract illegal metal detecting, so its exact place is kept back."
 _FEW_SEE_IT = "Only its finder, trusted members, archaeologists and moderators see"
 _EVERYONE_ELSE = "Everyone else sees its one-kilometre square."
+# Downloads are stricter than the page (Decision 0005, rule 8: `sensitivity.downloads_exact`).
+_FEW_DOWNLOAD_IT = (
+    "Downloads give its exact place only to its finder, trusted members, archaeologists and moderators."
+)
 
 SENSITIVITY_LEVELS: tuple[SensitivityInfo, ...] = (
     SensitivityInfo(
@@ -819,7 +824,7 @@ SENSITIVITY_LEVELS: tuple[SensitivityInfo, ...] = (
     SensitivityInfo(
         Sensitivity.PROTECTED,
         "Protected",
-        f"Only people who have signed in see its exact place. {_EVERYONE_ELSE}",
+        f"Only people who have signed in see its exact place. {_EVERYONE_ELSE} {_FEW_DOWNLOAD_IT}",
         f"{_KEPT_BACK} Sign in to see it.",
         frozenset(SensitivityViewer) - {SensitivityViewer.SIGNED_OUT},
     ),
