@@ -42,13 +42,15 @@ from fieldclub import http
 from fieldclub.config import Settings, get_settings
 from fieldclub.db import Base, SessionLocal
 from fieldclub.ingest.base import BRITISH_ISLES, BBox, SourceInfo
-from fieldclub.ingest.errors import IngestError
-from fieldclub.ingest.runner import (
-    SHRINK_ALWAYS_ALLOWED,
+from fieldclub.ingest.errors import (
     EmptyIngestError,
+    IngestError,
     IngestFailedError,
     InvalidRecordError,
     ShrinkTooLargeError,
+)
+from fieldclub.ingest.runner import (
+    SHRINK_ALWAYS_ALLOWED,
     check_bbox,
     source_lock,
     upsert_source,

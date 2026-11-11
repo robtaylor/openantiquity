@@ -60,7 +60,13 @@ from fieldclub.config import get_settings
 from fieldclub.db import SessionLocal
 from fieldclub.errors import ConflictError, InvalidBboxError
 from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo, fill_attribution
-from fieldclub.ingest.errors import IngestError
+from fieldclub.ingest.errors import (
+    EmptyIngestError,
+    IngestError,
+    IngestFailedError,
+    InvalidRecordError,
+    ShrinkTooLargeError,
+)
 from fieldclub.models import IngestRun, Record, Source
 from fieldclub.models.common import SRID
 from fieldclub.schemas import common
@@ -97,24 +103,6 @@ _UPDATED_COLUMNS = (
 )
 
 
-class InvalidRecordError(IngestError):
-    """A connector yielded a record that breaks the rules for `records`."""
-
-    code = "ingest_invalid_record"
-
-
-class EmptyIngestError(IngestError):
-    """A full run yielded nothing. Deleting every row on that evidence would be reckless."""
-
-    code = "ingest_empty"
-
-
-class ShrinkTooLargeError(IngestError):
-    """A full run is missing so much of what is stored that upstream probably cut its answer short."""
-
-    code = "ingest_shrink_too_large"
-
-
 class ConnectorNotConfiguredError(IngestError):
     code = "ingest_not_configured"
 
@@ -122,17 +110,6 @@ class ConnectorNotConfiguredError(IngestError):
 class IngestBusyError(ConflictError):
     code = "ingest_busy"
     message = "Another ingest run for this source is in progress."
-
-
-class IngestFailedError(IngestError):
-    """Raised after a failed run has been recorded. `__cause__` is what went wrong."""
-
-    code = "ingest_failed"
-
-    def __init__(self, source_key: str, run_id: int, cause: BaseException) -> None:
-        self.source_key = source_key
-        self.run_id = run_id
-        super().__init__(f"Ingest of {source_key} failed (run {run_id}): {type(cause).__name__}: {cause}")
 
 
 @dataclass

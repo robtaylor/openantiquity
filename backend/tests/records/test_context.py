@@ -132,6 +132,18 @@ def test_a_point_on_the_irish_grid_is_not_taken_for_northern_ireland(db: Session
     assert set(by_key(context.links_for(db, *DUBLIN))) == {"google-earth-web"}
 
 
+def test_a_point_off_the_north_coast_takes_northern_irelands_viewers_only_from_its_boundary(
+    db: Session,
+) -> None:
+    """At sea on the Irish Grid nothing is guessed, but a loaded nation within reach is offered."""
+    offshore = (-7.0, 55.35)  # about 6 km north of the box below
+    assert gridref.to_grid(*offshore)[0] is gridref.GridSystem.IRISH
+    assert set(by_key(context.links_for(db, *offshore))) == {"google-earth-web"}
+    db.add(admin_area("nation", "northern_ireland", "Northern Ireland", (-8.2, 54.0, -5.4, 55.3)))
+    db.commit()
+    assert "ncap-air-photo-finder" in by_key(context.links_for(db, *offshore))
+
+
 def test_links_off_the_grids(db: Session) -> None:
     found = context.links_for(db, *PARIS)
     assert found.grid_ref is None
