@@ -9,6 +9,7 @@ import { scrollBehaviour } from "../../ui/motion.js";
 import { Skeleton } from "../../ui/Skeleton.js";
 import { useSession } from "../account/session.js";
 import { MentionsSection } from "../mentions/MentionsSection.js";
+import { FindingModeration } from "../moderation/FindingModeration.js";
 import { useDocumentTitle } from "../placeholders.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { usePanelEnvironment } from "../shell/panelContext.js";
@@ -220,6 +221,7 @@ function FindingPage({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
       />
       <Discussion finding={finding} viewer={viewer} displayName={displayName} mayComment={position.mayComment} />
       <Tools meta={meta} finding={finding} position={position} onApplied={apply} />
+      <FindingModeration finding={finding} />
     </div>
   );
 }

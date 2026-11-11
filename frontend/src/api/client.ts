@@ -122,17 +122,21 @@ async function errorFrom(response: Response): Promise<ApiError> {
   } catch {
     payload = undefined;
   }
+  return errorFromPayload(response.status, response.statusText, payload);
+}
+
+function errorFromPayload(status: number, statusText: string, payload: unknown): ApiError {
   const envelope = isRecord(payload) && isRecord(payload.error) ? payload.error : undefined;
   if (envelope && typeof envelope.code === "string" && typeof envelope.message === "string") {
     const details = isRecord(envelope.details) ? envelope.details : undefined;
     const fields = fieldProblems(envelope.details);
-    return new ApiError(response.status, envelope.code, envelope.message, { details, fields });
+    return new ApiError(status, envelope.code, envelope.message, { details, fields });
   }
-  const reason = response.statusText ? `${response.status} ${response.statusText}` : String(response.status);
-  const message = GATEWAY_STATUSES.has(response.status)
+  const reason = statusText ? `${status} ${statusText}` : String(status);
+  const message = GATEWAY_STATUSES.has(status)
     ? `The server isn't answering right now (${reason}). It may be restarting.`
     : `The server answered ${reason}.`;
-  return new ApiError(response.status, `http_${response.status}`, message);
+  return new ApiError(status, `http_${status}`, message);
 }
 
 /**
@@ -168,9 +172,7 @@ export async function apiFetch<T>(path: string, request: ApiRequest = {}): Promi
     response = await fetch(apiUrl(path, request.query), init);
   } catch (cause) {
     if (isRecord(cause) && cause.name === "AbortError") throw cause;
-    throw new ApiError(0, "network_error", "Couldn't reach the server. Check your connection and try again.", {
-      cause,
-    });
+    throw networkError(cause);
   }
 
   if (response.status === 401) {
@@ -187,4 +189,75 @@ export async function apiFetch<T>(path: string, request: ApiRequest = {}): Promi
   } catch (cause) {
     throw new ApiError(response.status, "bad_response", "The server sent a reply that wasn't JSON.", { cause });
   }
+}
+
+export interface UploadRequest {
+  /** Told how much of the file has been sent, from 0 to 1, as it goes. */
+  onProgress?: (fraction: number) => void;
+  signal?: AbortSignal;
+}
+
+function networkError(cause?: unknown): ApiError {
+  return new ApiError(0, "network_error", "Couldn't reach the server. Check your connection and try again.", {
+    cause,
+  });
+}
+
+/**
+ * POST a file as the request body, as `apiFetch` does with `file`, but
+ * through `XMLHttpRequest`, because `fetch` can't say how much of an upload
+ * has been sent. The answer, the errors and the 401 and 403 listeners are
+ * the same as `apiFetch`'s. An abort rejects with an `AbortError`.
+ */
+export function apiUpload<T>(path: string, file: Blob, request: UploadRequest = {}): Promise<T> {
+  const url = apiUrl(path);
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const abort = () => xhr.abort();
+    const finish = () => request.signal?.removeEventListener("abort", abort);
+    if (request.signal?.aborted) {
+      reject(new DOMException("The upload was stopped.", "AbortError"));
+      return;
+    }
+    xhr.open("POST", url);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader("Accept", "application/json");
+    xhr.setRequestHeader("X-FieldClub-Client", "web");
+    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) request.onProgress?.(Math.min(1, event.loaded / event.total));
+    };
+    xhr.onerror = () => {
+      finish();
+      reject(networkError());
+    };
+    xhr.onabort = () => {
+      finish();
+      reject(new DOMException("The upload was stopped.", "AbortError"));
+    };
+    xhr.onload = () => {
+      finish();
+      let payload: unknown;
+      try {
+        payload = xhr.responseText ? JSON.parse(xhr.responseText) : undefined;
+      } catch {
+        payload = undefined;
+      }
+      if (xhr.status === 401) for (const listener of [...unauthorisedListeners]) listener(path);
+      if (xhr.status < 200 || xhr.status >= 300) {
+        const error = errorFromPayload(xhr.status, xhr.statusText, payload);
+        if (xhr.status === 403) for (const listener of [...forbiddenListeners]) listener(error, path);
+        reject(error);
+        return;
+      }
+      if (payload === undefined) {
+        reject(new ApiError(xhr.status, "bad_response", "The server sent a reply that wasn't JSON."));
+        return;
+      }
+      request.onProgress?.(1);
+      resolve(payload as T);
+    };
+    request.signal?.addEventListener("abort", abort);
+    xhr.send(file);
+  });
 }

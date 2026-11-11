@@ -51,6 +51,8 @@ import { isMarkPath, MarkLayer } from "../mark/MarkLayer.js";
 import { MARK_PATH, MarkPanel } from "../mark/MarkPanel.js";
 import { RECENT_MENTIONS_PATH } from "../mentions/paths.js";
 import { RecentMentionsPanel } from "../mentions/RecentMentionsPanel.js";
+import { MOD_ROUTE, ModerationPanel } from "../moderation/ModerationPanel.js";
+import { PROFILE_ROUTE, ProfilePanel as PersonPanel } from "../people/ProfilePanel.js";
 import { APP_NAME, NotFoundPanel, PLACEHOLDER_ROUTES, PlaceholderPanel } from "../placeholders.js";
 import { OpenElsewherePanel } from "../records/OpenElsewherePanel.js";
 import { ELSEWHERE_PATH, RECORD_SEARCH_PATH } from "../records/paths.js";
@@ -330,6 +332,8 @@ function ReadyShell({ meta }: { meta: Meta }) {
             <Route path={SCAN_PATH} element={<ScanPanel meta={meta} />} />
             <Route path={ACTIVITY_PATH} element={<ActivityPanel meta={meta} />} />
             <Route path="/account" element={<AccountPage />} />
+            <Route path={PROFILE_ROUTE} element={<PersonPanel meta={meta} />} />
+            <Route path={MOD_ROUTE} element={<ModerationPanel meta={meta} />} />
             <Route path={EMAIL_LINK_PATH} element={<EmailLinkPage />} />
             <Route path="/r/:id" element={<RecordPage />} />
             <Route path={RECORD_SEARCH_PATH} element={<RecordSearchPanel />} />

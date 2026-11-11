@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiFetch } from "../../api/client.js";
 import { useMapStore } from "../../map/store.js";
 import { type ApiRoutes, apiError, routeApi } from "../../test/apiRoutes.js";
+import { fakeUploads } from "../../test/fakeUpload.js";
 import {
   commentFixture,
   EXPERT,
@@ -568,27 +569,26 @@ describe("evidence", () => {
     expect(await panel.findByRole("heading", { name: /Site visit/ })).toBeInTheDocument();
   });
 
-  it("uploads a ground photo, then adds it as evidence, and says it waits for approval", async () => {
+  it("uploads a ground photo as soon as it is chosen, adds it as evidence, and says it waits for approval", async () => {
     const user = userEvent.setup();
+    const uploads = fakeUploads();
+    uploads.respond(() => ({
+      status: 201,
+      body: {
+        id: 77,
+        url: "/api/v1/media/77",
+        content_type: "image/jpeg",
+        bytes: 2048,
+        width: 800,
+        height: 600,
+        approved: false,
+        rejected: false,
+        hidden: false,
+        created_at: "2026-11-11T10:00:00Z",
+      },
+    }));
     const finding = seenFixture();
     const { panel, routes } = await open(finding);
-    routes.on("POST /media", () =>
-      json(
-        {
-          id: 77,
-          url: "/api/v1/media/77",
-          content_type: "image/jpeg",
-          bytes: 2048,
-          width: 800,
-          height: 600,
-          approved: false,
-          rejected: false,
-          hidden: false,
-          created_at: "2026-11-11T10:00:00Z",
-        },
-        201,
-      ),
-    );
     routes.on("POST /findings/f-ring/evidence", () =>
       json(
         seenFixture({ evidence: [evidenceFixture({ id: 9, kind: "photo", title: null, url: null, media_id: 77 })] }),
@@ -600,21 +600,27 @@ describe("evidence", () => {
     const form = within(await panel.findByRole("form", { name: "Add ground photo" }));
     await user.click(form.getByRole("button", { name: "Add it" }));
     expect(form.getByText("Choose the photo first.")).toBeInTheDocument();
-    expect(routes.callsTo("POST /media")).toHaveLength(0);
+    expect(uploads.calls).toHaveLength(0);
 
     const tooBig = new File([new Uint8Array(16 * 1024 * 1024)], "huge.jpg", { type: "image/jpeg" });
     await user.upload(form.getByLabelText("The photo"), tooBig);
     expect(form.getByText(/over 15 MB/)).toBeInTheDocument();
-    expect(form.queryByText("Chosen: huge.jpg")).toBeNull();
+    expect(uploads.calls).toHaveLength(0);
 
     const photo = new File([new Uint8Array(2048)], "barrow.jpg", { type: "image/jpeg" });
     await user.upload(form.getByLabelText("The photo"), photo);
+    expect(await form.findByText(/barrow\.jpg is uploaded/)).toBeInTheDocument();
+    expect(
+      form.getByText(/It's waiting for approval\. Until a moderator or trusted member approves it/),
+    ).toBeInTheDocument();
+    const [upload] = uploads.calls;
+    expect(upload).toMatchObject({ method: "POST", url: "/api/v1/media", body: photo });
+    expect(upload?.headers["Content-Type"]).toBe("image/jpeg");
+    expect(upload?.headers["X-FieldClub-Client"]).toBe("web");
+
     await user.type(form.getByLabelText("Note (optional)"), "From the east bank.");
     await user.click(form.getByRole("button", { name: "Add it" }));
     await waitFor(() => expect(routes.callsTo("POST /findings/f-ring/evidence")).toHaveLength(1));
-    const [upload] = harness.fetchMock().mock.calls.filter(([input]) => String(input).endsWith("/api/v1/media"));
-    expect(upload?.[1]).toMatchObject({ method: "POST", body: photo });
-    expect(new Headers(upload?.[1]?.headers).get("Content-Type")).toBe("image/jpeg");
     expect(routes.callsTo("POST /findings/f-ring/evidence")[0]?.body).toEqual({
       kind: "photo",
       stance: "supports",
@@ -623,6 +629,8 @@ describe("evidence", () => {
     });
     const item = await panel.findByRole("img", { name: /Ground photo added by/ });
     expect(item).toHaveAttribute("src", "/api/v1/media/77");
+    // Its uploader is told it still waits, and who sees it meanwhile.
+    expect(item.closest("figure")).toHaveTextContent(/Waiting for approval\. Until a moderator or trusted member/);
   });
 
   it("opens the form again as it was, with the server's reason, when evidence is refused", async () => {

@@ -1,0 +1,291 @@
+/* Moderation: the queues, the members, the log, and the dialogs that ask for a reason. */
+.fc-mod {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fc-mod__section,
+.fc-mod [role="tabpanel"] {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.fc-mod__hint {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-mod__loading {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fc-mod__more {
+  display: flex;
+  justify-content: center;
+}
+
+.fc-mod-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fc-mod-section + .fc-mod-section {
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.fc-mod-section h3 {
+  font-size: 18px;
+}
+
+.fc-mod-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fc-mod-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--raised);
+  overflow-wrap: anywhere;
+}
+
+.fc-mod-card[data-due] {
+  border-color: color-mix(in srgb, var(--warn) 70%, var(--border));
+  box-shadow: inset 4px 0 0 var(--warn);
+}
+
+.fc-mod-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.fc-mod-card__reason {
+  font-weight: 600;
+}
+
+.fc-mod-card__due {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warn) 18%, var(--surface));
+  color: #f6b089;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fc-mod-card__by {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-mod-card__note,
+.fc-mod-target__body {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--border);
+  background: var(--surface);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  white-space: pre-line;
+  font-size: 14px;
+}
+
+.fc-mod-target__body {
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.fc-mod-card__subhead {
+  margin-bottom: 6px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.fc-mod-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fc-mod-target {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: 14px;
+}
+
+.fc-mod-target__date {
+  white-space: nowrap;
+}
+
+.fc-mod-card__quote {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.fc-mod-card__quote figcaption {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.fc-mod-target__owner {
+  font-size: 13px;
+}
+
+.fc-mod-target__title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.fc-mod-target__url {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.fc-mod-target__url svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.fc-mod-target__state {
+  color: #f6b089;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fc-mod-target__open {
+  font-size: 13px;
+}
+
+.fc-mod-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.fc-mod-sources,
+.fc-mod-associates {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+
+.fc-mod-sources li {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 8px;
+}
+
+.fc-mod-sources__points {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--good);
+}
+
+.fc-mod-sources__why {
+  display: block;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-mod-lookup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 10px;
+}
+
+.fc-mod-lookup .fc-field {
+  flex: 1 1 200px;
+}
+
+.fc-mod-lookup .fc-button {
+  margin-top: 26px;
+}
+
+.fc-mod-log__what {
+  font-size: 14px;
+}
+
+.fc-mod-log__when {
+  font-size: 13px;
+}
+
+.fc-mod-log__details summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-mod-log__details[open] summary {
+  margin-bottom: 8px;
+}
+
+.fc-mod-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.fc-mod-dialog__check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.fc-mod-dialog__check input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.fc-mod-dialog__check > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-weight: 600;
+}
+
+.fc-mod-dialog__check-hint {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 400;
+}

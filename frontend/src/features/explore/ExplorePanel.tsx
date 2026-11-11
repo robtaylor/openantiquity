@@ -28,12 +28,19 @@ function labelOf(list: ReadonlyArray<{ id: string; label: string }>, id: string)
   return list.find((entry) => entry.id === id)?.label ?? id;
 }
 
+/** What a row needs of a finding: a list's summary, or the smaller one a feed or a profile sends. */
+export type FindingRowData = Pick<
+  FindingSummary,
+  "public_id" | "title" | "feature_class" | "tier" | "state" | "location"
+>;
+
 /**
  * A finding as a link to its page, with its pictogram, title, step and
  * class, and its square when this viewer may not see it exactly. Choosing
  * it marks it on the map. Other lists of findings show them the same way.
+ * `detail` adds a line, such as what someone did on it.
  */
-export function FindingLink({ meta, finding }: { meta: Meta; finding: FindingSummary }) {
+export function FindingLink({ meta, finding, detail }: { meta: Meta; finding: FindingRowData; detail?: ReactNode }) {
   const navigate = useNavigate();
   const select = useSelectedFinding((state) => state.select);
   const { location } = finding;
@@ -64,15 +71,17 @@ export function FindingLink({ meta, finding }: { meta: Meta; finding: FindingSum
             Somewhere in square <span className="fc-mono">{whereRef(location)}</span>
           </span>
         ) : null}
+        {detail ? <span className="fc-explore__where">{detail}</span> : null}
       </span>
     </a>
   );
 }
 
-function FindingRow({ meta, finding }: { meta: Meta; finding: FindingSummary }) {
+/** One finding in a list: `FindingLink` as a list item. */
+export function FindingRow({ meta, finding, detail }: { meta: Meta; finding: FindingRowData; detail?: ReactNode }) {
   return (
     <li>
-      <FindingLink meta={meta} finding={finding} />
+      <FindingLink meta={meta} finding={finding} detail={detail} />
     </li>
   );
 }

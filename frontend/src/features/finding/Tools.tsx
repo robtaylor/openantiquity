@@ -32,7 +32,12 @@ export async function copyLink(publicId: string): Promise<void> {
   }
 }
 
-const LEVEL_NAMES: Record<Sensitivity, string> = { open: "Open", protected: "Protected", restricted: "Restricted" };
+/** What each level is called. */
+export const LEVEL_NAMES: Record<Sensitivity, string> = {
+  open: "Open",
+  protected: "Protected",
+  restricted: "Restricted",
+};
 
 function EditDialog({
   meta,

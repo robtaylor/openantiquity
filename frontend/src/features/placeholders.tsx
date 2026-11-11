@@ -1,4 +1,4 @@
-import { BookOpen, Info, type LucideIcon, MapPinned, UserRound } from "lucide-react";
+import { BookOpen, Info, type LucideIcon, MapPinned } from "lucide-react";
 import { useEffect } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { EmptyState } from "../ui/EmptyState.js";
@@ -26,13 +26,6 @@ export interface PlaceholderRoute {
 }
 
 export const PLACEHOLDER_ROUTES: PlaceholderRoute[] = [
-  {
-    path: "/u/:handle",
-    title: "Profile",
-    subtitle: (params) => `@${params.handle ?? ""}`,
-    icon: UserRound,
-    body: "A profile will show what someone has found and what they've helped with.",
-  },
   {
     path: "/about",
     title: `About ${APP_NAME}`,

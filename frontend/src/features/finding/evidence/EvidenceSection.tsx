@@ -1,13 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Meta } from "../../../api/meta.js";
 import { useMapStore } from "../../../map/store.js";
 import { Button } from "../../../ui/Button.js";
 import { viewStateFrom } from "../../mark/describe.js";
-import { addEvidence, deleteEvidence, uploadPhoto, verifyEvidence, voteEvidence } from "../api.js";
+import { NO_PHOTO, type PhotoState } from "../../photos/PhotoUpload.js";
+import { addEvidence, deleteEvidence, verifyEvidence, voteEvidence } from "../api.js";
 import { groupEvidence, lowerFirst, offered, type Viewer, type ViewerPosition } from "../describe.js";
-import { composeEvidence, type FieldId, type FormValues, isRecordKind, photoProblem } from "../evidenceForms.js";
+import { composeEvidence, type FieldId, type FormValues, isRecordKind } from "../evidenceForms.js";
 import { reasonOf, toastFailure, useSignedInFirst } from "../feedback.js";
 import { findingPageKeys } from "../keys.js";
 import type { Evidence, EvidenceIn, FindingDetail } from "../types.js";
@@ -21,14 +22,14 @@ import { composeRecordLink, NO_RECORD, RecordLinkForm, type RecordLinkValues } f
 export interface OpenForm {
   kindId: string;
   values: FormValues;
-  /** The picture chosen for a form that takes one. */
-  file: File | null;
+  /** The photo, for a form that takes one. It is uploaded as soon as it is chosen. */
+  photo: PhotoState;
   record: RecordLinkValues;
   problem: { field: FieldId | null; message: string } | null;
 }
 
 export function openForm(kindId: string, record: Partial<RecordLinkValues> = {}): OpenForm {
-  return { kindId, values: {}, file: null, record: { ...NO_RECORD, ...record }, problem: null };
+  return { kindId, values: {}, photo: NO_PHOTO, record: { ...NO_RECORD, ...record }, problem: null };
 }
 
 /** A stand-in for evidence being saved, shown at once and replaced by the server's answer. */
@@ -111,6 +112,10 @@ export function EvidenceSection({
   }
 
   async function submit(open: OpenForm): Promise<void> {
+    if (open.photo.status === "uploading") {
+      setForm({ ...open, problem: { field: "photo", message: "Wait for the photo to finish sending." } });
+      return;
+    }
     const composed = isRecordKind(open.kindId)
       ? composeRecordLink(open.record)
       : composeEvidence(open.kindId, open.values, viewStateFrom(useMapStore.getState()));
@@ -122,8 +127,8 @@ export function EvidenceSection({
     setForm(null);
     setPending((items) => [...items, placeholder]);
     try {
-      // A form holds a file only when its kind takes a photo, which goes up first.
-      const body = open.file ? { ...composed.body, media_id: (await uploadPhoto(open.file)).id } : composed.body;
+      // A form holds an uploaded photo only when its kind takes one.
+      const body = open.photo.status === "done" ? { ...composed.body, media_id: open.photo.media.id } : composed.body;
       onApplied(await addEvidence(finding.public_id, body));
     } catch (error) {
       setForm({ ...open, problem: { field: null, message: reasonOf(error) } });
@@ -159,6 +164,23 @@ export function EvidenceSection({
       onApplied(await verifyEvidence(item.id));
     } catch (error) {
       toastFailure("It couldn't be verified.", error);
+    }
+  }
+
+  // A moderator hiding evidence takes it off the page at once, and puts it back if the server refuses.
+  const unhide = useRef(new Map<number, () => void>());
+  function hidden(item: Evidence, isHidden: boolean): void {
+    if (isHidden) {
+      unhide.current.set(
+        item.id,
+        optimistic((current) => ({
+          ...current,
+          evidence: current.evidence.filter((entry) => entry.id !== item.id),
+        })),
+      );
+    } else {
+      unhide.current.get(item.id)?.();
+      unhide.current.delete(item.id);
     }
   }
 
@@ -215,6 +237,12 @@ export function EvidenceSection({
                   onVote={(value) => vote(item, value)}
                   onVerify={() => void verify(item)}
                   onDelete={() => void remove(item)}
+                  onHidden={(isHidden) => hidden(item, isHidden)}
+                  onHiddenDone={() => {
+                    unhide.current.delete(item.id);
+                    // The finding is reassessed without it.
+                    refresh();
+                  }}
                 />
               );
             })}
@@ -249,17 +277,16 @@ export function EvidenceSection({
                 values={form.values}
                 problem={form.problem}
                 onChange={(values) => setForm({ ...form, values, problem: null })}
-                onFile={(file) => {
-                  // Said at once, rather than after the upload is refused.
-                  const problem = file ? photoProblem(file) : null;
-                  const kept = problem ? null : file;
+                photo={form.photo}
+                onPhoto={(photo) =>
+                  // The form reads only the name, to know that a photo is there.
                   setForm({
                     ...form,
-                    file: kept,
-                    values: { ...form.values, photo: kept?.name ?? "" },
-                    problem: problem ? { field: "photo", message: problem } : null,
-                  });
-                }}
+                    photo,
+                    values: { ...form.values, photo: photo.status === "done" ? photo.name : "" },
+                    problem: null,
+                  })
+                }
                 onSubmit={() => void submit(form)}
                 onCancel={() => setForm(null)}
               />

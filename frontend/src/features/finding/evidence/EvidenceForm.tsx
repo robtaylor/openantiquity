@@ -6,6 +6,7 @@ import { Button } from "../../../ui/Button.js";
 import { ChipGroup } from "../../../ui/Chip.js";
 import { Field } from "../../../ui/Field.js";
 import { viewStateFrom } from "../../mark/describe.js";
+import { type PhotoState, PhotoUpload } from "../../photos/PhotoUpload.js";
 import { outcomeWords, stanceWords } from "../describe.js";
 import {
   type FieldId,
@@ -13,7 +14,6 @@ import {
   type FormValues,
   formSpec,
   needsVisitReminder,
-  PHOTO_TYPES,
   today,
 } from "../evidenceForms.js";
 import { OUTCOMES, STANCES } from "../types.js";
@@ -91,37 +91,6 @@ function TextField({
   );
 }
 
-/** Choosing the picture for a form that takes one. The name of the file chosen is its value. */
-function PhotoField({
-  spec,
-  value,
-  error,
-  onFile,
-}: {
-  spec: FieldSpec;
-  value: string;
-  error: string | undefined;
-  onFile: (file: File | null) => void;
-}) {
-  return (
-    <Field label={spec.label} hint={spec.hint} error={error}>
-      {(control) => (
-        <>
-          <input
-            {...control}
-            className="fc-input fc-input--file"
-            type="file"
-            accept={PHOTO_TYPES.join(",")}
-            required={spec.required}
-            onChange={(event) => onFile(event.target.files?.[0] ?? null)}
-          />
-          {value ? <span className="fc-evidence-form__file">Chosen: {value}</span> : null}
-        </>
-      )}
-    </Field>
-  );
-}
-
 export interface EvidenceFormProps {
   meta: Meta;
   kindId: string;
@@ -130,8 +99,9 @@ export interface EvidenceFormProps {
   values: FormValues;
   problem: { field: FieldId | null; message: string } | null;
   onChange: (values: FormValues) => void;
-  /** A picture chosen, or taken away, for a form that takes one. */
-  onFile: (file: File | null) => void;
+  /** The photo, for a form that takes one: uploaded as soon as it is chosen. */
+  photo: PhotoState;
+  onPhoto: (photo: PhotoState) => void;
   onSubmit: () => void;
   onCancel: () => void;
 }
@@ -145,7 +115,8 @@ export function EvidenceForm({
   values,
   problem,
   onChange,
-  onFile,
+  photo,
+  onPhoto,
   onSubmit,
   onCancel,
 }: EvidenceFormProps) {
@@ -208,12 +179,14 @@ export function EvidenceForm({
         }
         if (field.id === "photo") {
           return (
-            <PhotoField
+            <PhotoUpload
               key={field.id}
-              spec={field}
-              value={values.photo ?? ""}
+              label={field.label}
+              hint={field.hint}
+              required={field.required}
+              value={photo}
+              onChange={onPhoto}
               error={errorFor(field.id)}
-              onFile={onFile}
             />
           );
         }

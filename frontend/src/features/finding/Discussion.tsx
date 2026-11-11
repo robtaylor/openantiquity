@@ -5,10 +5,12 @@ import { Avatar } from "../../ui/Avatar.js";
 import { Button } from "../../ui/Button.js";
 import { Field } from "../../ui/Field.js";
 import { Skeleton } from "../../ui/Skeleton.js";
+import { HideButton } from "../moderation/HideButton.js";
 import { addComment, deleteComment, fetchComments, setFollowing } from "./api.js";
 import { formatDate, type Viewer } from "./describe.js";
 import { toastFailure, useSignedInFirst } from "./feedback.js";
 import { findingPageKeys } from "./keys.js";
+import { ReportSlot } from "./Slots.js";
 import type { Comment, CommentPage, FindingDetail } from "./types.js";
 import { useOptimisticFinding } from "./useFinding.js";
 
@@ -222,6 +224,18 @@ export function Discussion({ finding, viewer, displayName, mayComment }: Discuss
                     Remove
                   </Button>
                 ) : null}
+                <ReportSlot target={{ kind: "comment", id: comment.id }} ownerHandle={comment.author.handle} />
+                <HideButton
+                  kind="comment"
+                  targetRef={String(comment.id)}
+                  ownerHandle={comment.author.handle}
+                  hidden={comment.hidden}
+                  onChange={(hidden) =>
+                    optimisticComments((all) =>
+                      all.map((entry) => (entry.id === comment.id ? { ...entry, hidden } : entry)),
+                    )
+                  }
+                />
               </div>
             ) : null}
           </>

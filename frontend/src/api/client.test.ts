@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { fakeUploads } from "../test/fakeUpload.js";
 import { json } from "../test/http.js";
-import { ApiError, apiFetch, apiUrl, onUnauthorised } from "./client.js";
+import { ApiError, apiFetch, apiUpload, apiUrl, onUnauthorised } from "./client.js";
 
 function stubFetch(outcome: Response | { throws: unknown }) {
   const mock = vi.fn(async (_url: string, _init?: RequestInit) => {
@@ -175,5 +176,41 @@ describe("error details and signed-out answers", () => {
     stubFetch(json({ error: { code: "unauthorised", message: "Sign in first." } }, 401));
     await apiFetch("/auth/me").catch(() => undefined);
     expect(heard).toEqual(["/findings"]);
+  });
+});
+
+describe("apiUpload", () => {
+  it("sends the file with its type and the client header, and says how far it has got", async () => {
+    const uploads = fakeUploads();
+    uploads.respond(() => ({ status: 201, body: { id: 7 } }));
+    const file = new Blob(["x"], { type: "image/png" });
+    const progress: number[] = [];
+    await expect(apiUpload("/media", file, { onProgress: (fraction) => progress.push(fraction) })).resolves.toEqual({
+      id: 7,
+    });
+    expect(uploads.calls[0]).toMatchObject({ method: "POST", url: "/api/v1/media", body: file });
+    expect(uploads.calls[0]?.headers).toMatchObject({ "Content-Type": "image/png", "X-FieldClub-Client": "web" });
+    expect(progress).toEqual([0.5, 1, 1]);
+  });
+
+  it("turns the error envelope into an ApiError and tells the 401 listeners", async () => {
+    const uploads = fakeUploads();
+    uploads.respond(() => ({ status: 401, body: { error: { code: "unauthorised", message: "Sign in first." } } }));
+    const heard: string[] = [];
+    const stop = onUnauthorised((path) => heard.push(path));
+    const failure = apiUpload("/media", new Blob(["x"]));
+    await expect(failure).rejects.toMatchObject({ status: 401, code: "unauthorised", message: "Sign in first." });
+    expect(heard).toEqual(["/media"]);
+    stop();
+  });
+
+  it("rejects with an AbortError when it is stopped", async () => {
+    const uploads = fakeUploads();
+    uploads.respond(() => null);
+    const controller = new AbortController();
+    const upload = apiUpload("/media", new Blob(["x"]), { signal: controller.signal });
+    controller.abort();
+    await expect(upload).rejects.toMatchObject({ name: "AbortError" });
+    expect(uploads.calls[0]?.aborted).toBe(true);
   });
 });

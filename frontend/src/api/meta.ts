@@ -186,6 +186,15 @@ export interface NextStepRule {
   needs_verification: boolean;
 }
 
+/** A reason someone may give for reporting something to the moderators. */
+export interface ReportReason {
+  id: string;
+  label: string;
+  hint: string;
+  /** Hours within which the law says a report for this reason must be dealt with, or null. */
+  due_hours: number | null;
+}
+
 export interface Vocab {
   feature_classes: FeatureClass[];
   periods: Period[];
@@ -198,6 +207,7 @@ export interface Vocab {
   record_categories: RecordCategory[];
   /** Which steps a second look meets, and which evidence meets the rest. Checked by `parseMeta`. */
   next_steps: NextStepRule[];
+  report_reasons: ReportReason[];
 }
 
 export interface SourceSummary {
@@ -323,6 +333,7 @@ export function parseMeta(value: unknown): Meta {
     "mention_kinds",
     "record_categories",
     "next_steps",
+    "report_reasons",
   ]) {
     check(Array.isArray(vocab[key]), `"vocab.${key}" is not a list`);
   }

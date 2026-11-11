@@ -1,0 +1,74 @@
+/* The report dialog. */
+.fc-report {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fc-report__reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.fc-report__reasons legend {
+  margin-bottom: 8px;
+  padding: 0;
+}
+
+.fc-report__reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.fc-report__reason:hover {
+  background: var(--raised);
+}
+
+.fc-report__reason:has(input:checked) {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+
+.fc-report__reason input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.fc-report__reason > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fc-report__reason-label {
+  font-weight: 600;
+}
+
+.fc-report__reason-hint {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-report__after {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Report, and a moderator's Hide, kept together at the end of a row of actions. */
+.fc-flag-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: auto;
+}

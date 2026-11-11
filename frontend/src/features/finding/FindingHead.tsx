@@ -87,7 +87,7 @@ export function FindingHead({ meta, finding, signedIn, change }: FindingHeadProp
         <span className="fc-finding__badge" key={`${tier.id}-${state.id}`}>
           <TierBadge tier={tier} state={state} />
         </span>
-        <ReportSlot finding={finding} target={{ kind: "finding", id: finding.public_id }} />
+        <ReportSlot target={{ kind: "finding", id: finding.public_id }} ownerHandle={finding.author.handle} />
       </div>
       <Meter value={assessment.score} tiers={meta.vocab.tiers} tierId={tier.id} ruledOut={state.id === "ruled_out"} />
       <Ladder meta={meta} tierId={tier.id} ruledOut={state.id === "ruled_out"} />

@@ -582,6 +582,53 @@ const vocab: Vocab = {
       needs_verification: true,
     },
   ],
+  report_reasons: [
+    {
+      id: "location_risk",
+      label: "Puts a site at risk",
+      hint: "It could lead someone to damage a site or dig or detect there.",
+      due_hours: null,
+    },
+    {
+      id: "illegal",
+      label: "Illegal",
+      hint: "It encourages a crime, such as metal detecting on a scheduled monument.",
+      due_hours: null,
+    },
+    {
+      id: "intimate_image",
+      label: "Intimate image",
+      hint: "A sexual or intimate image of someone shared without their consent.",
+      due_hours: 48,
+    },
+    {
+      id: "privacy",
+      label: "Reveals personal details",
+      hint: "It identifies a person, a home or a private garden, or says who owns the land.",
+      due_hours: null,
+    },
+    {
+      id: "defamation",
+      label: "Untrue about a person",
+      hint: "It says something untrue that harms a person's or an organisation's reputation.",
+      due_hours: 48,
+    },
+    { id: "abuse", label: "Abusive", hint: "Harassment, threats, hate or bullying of anyone.", due_hours: null },
+    {
+      id: "under_age",
+      label: "Under 16",
+      hint: "The person behind this account seems to be younger than 16.",
+      due_hours: null,
+    },
+    { id: "spam", label: "Spam", hint: "Advertising, or posts that have nothing to do with the map.", due_hours: null },
+    {
+      id: "misleading",
+      label: "Deliberately false",
+      hint: "Made up on purpose, such as a fake finding or a doctored picture.",
+      due_hours: null,
+    },
+    { id: "other", label: "Something else", hint: "Tell the moderators what is wrong in the note.", due_hours: null },
+  ],
 };
 
 export const metaFixture: Meta = {

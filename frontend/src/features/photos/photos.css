@@ -1,0 +1,171 @@
+/* Photos: the upload field, a photo shown from the API, and the approval queue. */
+.fc-photo-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fc-photo-upload__status:empty {
+  display: none;
+}
+
+.fc-photo-upload__progress {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.fc-photo-upload__bar {
+  grid-column: 1;
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--raised);
+}
+
+.fc-photo-upload__bar span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width var(--duration) var(--ease);
+}
+
+.fc-photo-upload__bar[data-indeterminate] span {
+  width: 30%;
+  animation: fc-photo-sending 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes fc-photo-sending {
+  from {
+    transform: translateX(-10%);
+  }
+  to {
+    transform: translateX(240%);
+  }
+}
+
+.fc-photo-upload__progress .fc-button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.fc-photo-upload__done {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.fc-photo-upload__done svg {
+  vertical-align: -2px;
+  color: var(--good);
+}
+
+.fc-photo-upload__thumb {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--bg);
+}
+
+.fc-photo-upload__who {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-photo-upload__problem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  color: #f0827c;
+  font-size: 13px;
+}
+
+.fc-photo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.fc-photo img {
+  display: block;
+  max-width: 100%;
+  max-height: 240px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+  background: var(--bg);
+}
+
+.fc-photo figcaption {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-photo__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.fc-photo--missing {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-photo--missing svg {
+  flex: none;
+}
+
+/* The approval queue. */
+.fc-photo-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fc-photo-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--raised);
+}
+
+.fc-photo-card .fc-photo img {
+  max-height: 320px;
+  width: 100%;
+}
+
+.fc-photo-card__meta {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-photo-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

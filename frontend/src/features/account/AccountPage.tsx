@@ -12,6 +12,7 @@ import { Field } from "../../ui/Field.js";
 import { Skeleton } from "../../ui/Skeleton.js";
 import { toast } from "../../ui/toastStore.js";
 import { discardAllDrafts, useDrafts } from "../drafts/store.js";
+import { ModerationLink } from "../moderation/ModerationLink.js";
 import { NotificationsSection } from "../notifications/NotificationsSection.js";
 import { useDocumentTitle } from "../placeholders.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
@@ -299,6 +300,7 @@ function SignedIn({ me }: { me: Me }) {
       <Link className="fc-account-link" to={`/u/${encodeURIComponent(me.handle)}`}>
         See your public profile
       </Link>
+      <ModerationLink role={me.role} />
 
       {me.needs_welcome ? (
         <Notice tone="info" title="You haven't finished joining">

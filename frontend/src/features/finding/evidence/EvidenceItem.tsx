@@ -1,12 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { BadgeCheck, ExternalLink, ThumbsDown, ThumbsUp, Trash2 } from "lucide-react";
-import { useState } from "react";
 import type { Meta } from "../../../api/meta.js";
 import { safeHref } from "../../../map/attribution.js";
 import { Button } from "../../../ui/Button.js";
-import { fetchRecord, mediaUrl } from "../api.js";
+import { HideButton } from "../../moderation/HideButton.js";
+import { photoAddress } from "../../photos/api.js";
+import { Photo, PhotoPlaceholder } from "../../photos/Photo.js";
+import { fetchRecord } from "../api.js";
 import { formatDate, labelOf, needsVerifying, outcomeWords, stanceWords } from "../describe.js";
 import { findingPageKeys } from "../keys.js";
+import { ReportSlot } from "../Slots.js";
 import type { Evidence } from "../types.js";
 import { RELATION_WORDS } from "./RecordLinkForm.js";
 
@@ -28,26 +31,6 @@ function RecordName({ meta, recordId }: { meta: Meta; recordId: number }) {
   );
 }
 
-/**
- * An uploaded photo. Until a moderator or trusted member approves it, only
- * its uploader and the people who approve photos are sent it, so anyone
- * else is told it is waiting.
- */
-function Photo({ mediaId, alt }: { mediaId: number; alt: string }) {
-  const [missing, setMissing] = useState(false);
-  if (missing) return <p className="fc-finding__hint">The photo shows here once it has been approved.</p>;
-  return (
-    <img
-      className="fc-evidence__photo"
-      src={mediaUrl(mediaId)}
-      alt={alt}
-      loading="lazy"
-      decoding="async"
-      onError={() => setMissing(true)}
-    />
-  );
-}
-
 function sourceName(meta: Meta, key: string | null): string | null {
   return key ? (meta.sources.find((source) => source.key === key)?.name ?? key) : null;
 }
@@ -66,6 +49,10 @@ export interface EvidenceItemProps {
   onVote: (value: -1 | 0 | 1) => void;
   onVerify: () => void;
   onDelete: () => void;
+  /** A moderator hid it, or the server refused and it is back. Hidden evidence leaves the page for everyone. */
+  onHidden?: (hidden: boolean) => void;
+  /** The server has hidden it. */
+  onHiddenDone?: () => void;
 }
 
 function people(count: number): string {
@@ -100,6 +87,8 @@ export function EvidenceItem({
   onVote,
   onVerify,
   onDelete,
+  onHidden,
+  onHiddenDone,
 }: EvidenceItemProps) {
   const external = item.kind === "record_link" && item.record_id === null;
   const official = needsVerifying(meta, item.kind);
@@ -143,10 +132,20 @@ export function EvidenceItem({
         ) : null}
       </div>
 
+      {/* The server leaves a photo's id out for anyone who may not see it yet. A square's viewer is told why above. */}
+      {item.kind === "photo" && item.media_id === null && !pending && !item.redacted ? <PhotoPlaceholder /> : null}
       {item.media_id !== null && !pending ? (
         <Photo
+          src={photoAddress(item.media_id)}
           mediaId={item.media_id}
           alt={`${labelOf(meta.vocab.evidence_kinds, item.kind)} added by ${item.contributor.display_name}`}
+          actions={
+            <ReportSlot
+              target={{ kind: "photo", id: item.media_id }}
+              ownerHandle={item.contributor.handle}
+              label="Report photo"
+            />
+          }
         />
       ) : null}
 
@@ -226,6 +225,19 @@ export function EvidenceItem({
             Remove
           </Button>
         ) : null}
+        {pending ? null : (
+          <span className="fc-flag-actions">
+            <ReportSlot target={{ kind: "evidence", id: item.id }} ownerHandle={item.contributor.handle} />
+            <HideButton
+              kind="evidence"
+              targetRef={String(item.id)}
+              ownerHandle={item.contributor.handle}
+              hidden={false}
+              onChange={(hidden) => onHidden?.(hidden)}
+              onDone={onHiddenDone}
+            />
+          </span>
+        )}
       </div>
     </li>
   );

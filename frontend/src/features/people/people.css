@@ -1,0 +1,178 @@
+/* A person's page. */
+.fc-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fc-profile__head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.fc-profile__who {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.fc-profile__who--loading {
+  flex: 1;
+}
+
+.fc-profile__role {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 14px;
+}
+
+.fc-profile__badge {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--raised);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fc-profile__badge:not([data-role="member"]) {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+
+.fc-profile__hint,
+.fc-profile__note {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-profile__bio {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.fc-profile__counts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+/* The number first and large, its name beneath. */
+.fc-profile__counts > div {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--raised);
+}
+
+.fc-profile__counts dt {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.fc-profile__counts dd {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.fc-profile__total {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.fc-profile__lists {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fc-profile__lists [role="tabpanel"] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fc-profile__loading {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.fc-profile__error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.fc-profile__more {
+  display: flex;
+  justify-content: center;
+}
+
+.fc-profile__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.fc-profile__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fc-points {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fc-points__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.fc-points__delta {
+  flex: none;
+  min-width: 40px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--good);
+}
+
+.fc-points__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+/* Each tab as wide as its name, so "Second looks" isn't cut short on a phone. */
+.fc-profile__lists .fc-tab {
+  flex: auto;
+  padding: 4px 8px;
+}

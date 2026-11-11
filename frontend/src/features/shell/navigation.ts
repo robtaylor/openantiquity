@@ -61,7 +61,15 @@ export const MODES: Mode[] = [
     icon: Activity,
     also: ["/mentions"],
   },
-  { id: "account", label: "Account", shortLabel: "Account", to: "/account", icon: CircleUser, also: ["/u/"] },
+  // A profile and moderation both belong to people, so they sit under Account.
+  {
+    id: "account",
+    label: "Account",
+    shortLabel: "Account",
+    to: "/account",
+    icon: CircleUser,
+    also: ["/u/", "/mod"],
+  },
 ];
 
 /** Reference pages, shown at the foot of the rail and under "More". */

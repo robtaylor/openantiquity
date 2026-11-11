@@ -12,7 +12,6 @@ import type {
   EvidenceIn,
   FindingDetail,
   FindingUpdate,
-  Media,
   ObservationDetailIn,
   ObservationIn,
   ObservationPage,
@@ -107,16 +106,6 @@ export function fetchObservations(publicId: string, signal?: AbortSignal): Promi
 
 export function addEvidence(publicId: string, body: EvidenceIn): Promise<FindingDetail> {
   return apiFetch<FindingDetail>(findingUrl(publicId, "/evidence"), { method: "POST", body });
-}
-
-/** Upload a photo. The answer's id goes with the evidence as `media_id`. */
-export function uploadPhoto(file: Blob): Promise<Media> {
-  return apiFetch<Media>("/media", { method: "POST", file });
-}
-
-/** Where a photo is served. Only people who may see it get it: others get 404. */
-export function mediaUrl(mediaId: number): string {
-  return `${API_BASE}/media/${mediaId}`;
 }
 
 export function deleteEvidence(evidenceId: number): Promise<void> {
