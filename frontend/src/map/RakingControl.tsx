@@ -1,5 +1,5 @@
 import { Sun } from "lucide-react";
-import { memo } from "react";
+import { memo, useId } from "react";
 import { type Meta, rakingView } from "../api/meta.js";
 import { Slider } from "../ui/Slider.js";
 import { compassPoint } from "./compass.js";
@@ -27,15 +27,24 @@ export const RakingControl = memo(function RakingControl({ meta }: { meta: Meta 
   const bearing = useMapStore((state) => state.camera.bearing);
   const setSun = useMapStore((state) => state.setSun);
   const setExaggeration = useMapStore((state) => state.setHillshadeExaggeration);
+  const hintId = useId();
   if (visible === null) return null;
 
   return (
     <section className="fc-raking" aria-label="Raking light">
-      <SunDial azimuth={sun.azimuth} bearing={bearing} onChange={(azimuth) => setSun({ azimuth })} />
+      <SunDial
+        azimuth={sun.azimuth}
+        bearing={bearing}
+        describedBy={hintId}
+        onChange={(azimuth) => setSun({ azimuth })}
+      />
       <div className="fc-raking__controls">
         <p className="fc-raking__title">
           <Sun size={16} aria-hidden />
           Light from the {compassPoint(sun.azimuth)}
+        </p>
+        <p className="fc-raking__hint" id={hintId}>
+          Turn the sun until faint banks catch the light. Lower sun, longer shadows.
         </p>
         <Slider
           label="Sun height"
@@ -48,6 +57,7 @@ export const RakingControl = memo(function RakingControl({ meta }: { meta: Meta 
         />
         <Slider
           label="Relief"
+          accessibleName="Relief: how much the heights are stretched"
           value={exaggeration}
           min={LIMITS.hillshadeExaggeration.min}
           max={LIMITS.hillshadeExaggeration.max}

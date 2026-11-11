@@ -28,7 +28,12 @@ const DEFAULT_VISIBLE: Record<OverlayType, boolean> = {
   coverage: false,
 };
 
-export const DEFAULT_SUN: SunState = { azimuth: 315, altitude: 25 };
+/**
+ * Light from the north-west, low. Checked against the 1 m tiles at Fyfield
+ * Down in November 2026: at 20 degrees the low field banks and ridges show,
+ * where 25 and higher wash them out and 15 burns the lit slopes white.
+ */
+export const DEFAULT_SUN: SunState = { azimuth: 315, altitude: 20 };
 export const DEFAULT_HILLSHADE_EXAGGERATION = 2;
 export const DEFAULT_TERRAIN: TerrainState = { enabled: false, exaggeration: 1.5 };
 /** Pitch applied when 3D is switched on from a flat view. */

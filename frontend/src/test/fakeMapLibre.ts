@@ -13,7 +13,7 @@ import { vi } from "vitest";
 type Listener = (event: Record<string, unknown>) => void;
 
 interface FakeStyle {
-  layers: Array<{ id: string; layout?: Record<string, unknown>; paint?: Record<string, unknown> }>;
+  layers: Array<{ id: string; type?: string; layout?: Record<string, unknown>; paint?: Record<string, unknown> }>;
   sources: Record<string, unknown>;
   terrain?: { source: string; exaggeration?: number };
 }
@@ -37,6 +37,7 @@ interface CameraTarget {
 export interface FakeSource {
   setData: ReturnType<typeof vi.fn>;
   setUrl: ReturnType<typeof vi.fn>;
+  setTiles: ReturnType<typeof vi.fn>;
 }
 
 export class FakeMap {
@@ -118,6 +119,43 @@ export class FakeMap {
   setCenterClampedToGround = vi.fn((clamped: boolean) => {
     this.centreClamped = clamped;
   });
+  addSource = vi.fn((id: string, source: unknown) => {
+    const style = this.requireStyle();
+    if (id in style.sources) throw new Error(`There is already a source with ID "${id}"`);
+    style.sources[id] = source;
+  });
+  /** Adds a layer on top, or just under the layer `before`, as the real map does. */
+  addLayer = vi.fn((layer: FakeStyle["layers"][number], before?: string) => {
+    const style = this.requireStyle();
+    if (style.layers.some((candidate) => candidate.id === layer.id)) throw new Error(`Layer "${layer.id}" exists`);
+    const index = before === undefined ? -1 : style.layers.findIndex((candidate) => candidate.id === before);
+    if (index < 0) style.layers.push(structuredClone(layer));
+    else style.layers.splice(index, 0, structuredClone(layer));
+  });
+  getStyle(): FakeStyle {
+    return this.requireStyle();
+  }
+  /** Double-click zoom, which a drawing tool turns off while it has the clicks. */
+  readonly doubleClickZoom = {
+    enabled: true,
+    enable: vi.fn(() => {
+      this.doubleClickZoom.enabled = true;
+    }),
+    disable: vi.fn(() => {
+      this.doubleClickZoom.enabled = false;
+    }),
+    isEnabled: () => this.doubleClickZoom.enabled,
+  };
+  /** Screen pixels for a position: Web Mercator at 512 px a tile, with the centre at (512, 384). Near enough for tests. */
+  project([lng, lat]: [number, number]): { x: number; y: number } {
+    const scale = 512 * 2 ** this.camera.zoom;
+    const mercY = (value: number) => Math.log(Math.tan(Math.PI / 4 + (value * Math.PI) / 360)) / (2 * Math.PI);
+    return {
+      x: 512 + ((lng - this.camera.lng) / 360) * scale,
+      y: 384 - (mercY(lat) - mercY(this.camera.lat)) * scale,
+    };
+  }
+
   /** Called by MapLibre when the style asks for an image the map does not have. */
   missingImageResolver: ((id: string) => void | Promise<void>) | null = null;
   setMissingStyleImageResolver = vi.fn((resolver: ((id: string) => void | Promise<void>) | null) => {
@@ -274,7 +312,7 @@ export class FakeMap {
     if (!(id in this.requireStyle().sources)) return undefined;
     let handle = this.sourceHandles.get(id);
     if (!handle) {
-      handle = { setData: vi.fn(), setUrl: vi.fn() };
+      handle = { setData: vi.fn(), setUrl: vi.fn(), setTiles: vi.fn() };
       this.sourceHandles.set(id, handle);
     }
     return handle;

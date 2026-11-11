@@ -151,8 +151,8 @@ describe("keyboard focus around panels", () => {
 
     screen.getByRole("button", { name: "Mark a finding" }).focus();
     const presses = await tabUntil(user, () => panel.contains(document.activeElement));
-    // The status bar's credits button is the only stop in between.
-    expect(presses).toBeLessThanOrEqual(2);
+    // The status bar's copy button and its credits button are the only stops in between.
+    expect(presses).toBeLessThanOrEqual(3);
   });
 });
 

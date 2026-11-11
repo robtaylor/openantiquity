@@ -6,6 +6,7 @@ import { isMapLive } from "../../map/MapPane.js";
 import { RECORD_LAYERS, recordsLiveSourceId, recordsSelectionSourceId } from "../../map/overlayLayers.js";
 import { useMapStore } from "../../map/store.js";
 import { overlayShown, overlaySourceId } from "../../map/style.js";
+import { mapToolActive } from "../../map/tool.js";
 import { FILTERED_RECORD_LAYERS, recordLayerFilter, useRecordFilters } from "./filters.js";
 import { EMPTY_COLLECTION, type FeatureCollection } from "./geojson.js";
 import { pickedKey, useLiveStore } from "./live/store.js";
@@ -133,7 +134,8 @@ export function useRecordsOnMap(meta: Meta, main: MapLibreMap | null, compare: M
     const detach: Array<() => void> = [];
     for (const map of maps) {
       const onClick = (event: MapMouseEvent): void => {
-        if (!isMapLive(map)) return;
+        // A tool such as the height profile has the clicks while it is open.
+        if (!isMapLive(map) || mapToolActive()) return;
         const target = recordTarget(query(map, CLICKABLE, event.point), event.lngLat);
         if (target === null) return;
         const { navigate: go, pathname } = latest.current;
@@ -151,7 +153,8 @@ export function useRecordsOnMap(meta: Meta, main: MapLibreMap | null, compare: M
       let frame = 0;
       const onMove = (event: MapMouseEvent): void => {
         // A drag moves the map, not the pointer over it, so there is nothing to check.
-        if (event.originalEvent?.buttons) return;
+        // A tool that has the clicks sets its own cursor.
+        if (event.originalEvent?.buttons || mapToolActive()) return;
         pending = event;
         if (frame !== 0) return;
         frame = requestAnimationFrame(() => {

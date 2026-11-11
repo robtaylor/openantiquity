@@ -1,6 +1,8 @@
+import { Copy } from "lucide-react";
 import { memo, useId, useMemo, useRef, useState } from "react";
 import type { Meta } from "../api/meta.js";
 import { USE_FIXTURES } from "../api/useMeta.js";
+import { copyWithToast } from "../ui/clipboard.js";
 import { useDismiss } from "../ui/useDismiss.js";
 import { Attribution, attributionText, useAttributions } from "./attribution.js";
 import { formatGridRef, wgs84ToGrid } from "./gridref.js";
@@ -61,6 +63,19 @@ function PointerReadout({ compact }: { compact: boolean }) {
       >
         {gridRef ?? "Off the grid"}
       </span>
+      {gridRef ? (
+        // Reaching the button takes the pointer off the map, so this copies the middle of the map:
+        // the server's exact reference once it has answered, or the readout's own.
+        <button
+          type="button"
+          className="fc-status__copy"
+          aria-label="Copy the grid reference of the middle of the map"
+          title="Copy the grid reference of the middle of the map"
+          onClick={() => void copyWithToast(exactRef ?? gridRef, `Copied ${exactRef ?? gridRef}`)}
+        >
+          <Copy size={14} aria-hidden />
+        </button>
+      ) : null}
       {compact ? null : (
         <>
           <span

@@ -13,6 +13,8 @@ export interface SunDialProps {
    */
   bearing?: number;
   size?: number;
+  /** The id of a line that says how to use the dial. */
+  describedBy?: string;
 }
 
 /** Bearing from the centre of a box to a point, in degrees clockwise from north. */
@@ -45,7 +47,7 @@ export function dialPoint(compassBearing: number, mapBearing: number, radius: nu
  * dial, to say where the light comes from. With the keyboard, the arrow keys
  * turn it five degrees at a time, or fifteen with Shift.
  */
-export function SunDial({ azimuth, onChange, bearing = 0, size = 96 }: SunDialProps) {
+export function SunDial({ azimuth, onChange, bearing = 0, size = 96, describedBy }: SunDialProps) {
   const ref = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
 
@@ -81,6 +83,7 @@ export function SunDial({ azimuth, onChange, bearing = 0, size = 96 }: SunDialPr
       role="slider"
       tabIndex={0}
       aria-label="Sun direction"
+      aria-describedby={describedBy}
       aria-valuemin={0}
       aria-valuemax={359}
       aria-valuenow={rounded}

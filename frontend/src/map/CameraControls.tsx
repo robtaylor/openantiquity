@@ -1,4 +1,4 @@
-import { Minus, Navigation2, Plus } from "lucide-react";
+import { Grid2x2, Minus, Navigation2, Plus } from "lucide-react";
 import { IconButton } from "../ui/IconButton.js";
 import { LIMITS } from "./permalink.js";
 import { useMapStore } from "./store.js";
@@ -10,13 +10,17 @@ import { useMapStore } from "./store.js";
  * turns the map with nothing else on screen to say so. The compass appears
  * whenever the map is turned, points to north, and turns the map back
  * north-up when pressed. It leaves the tilt alone, so pressing it in 3D
- * keeps the 3D view. The 3D button is the way back to a flat map.
+ * keeps the 3D view. The 3D button is the way back to a flat map. A map
+ * tilted any other way, by Ctrl and drag or two fingers, gets a plan-view
+ * button that looks straight down again, north-up.
  */
 export function CameraControls() {
   const zoom = useMapStore((state) => state.camera.zoom);
   const bearing = useMapStore((state) => state.camera.bearing);
   const zoomBy = useMapStore((state) => state.zoomBy);
   const resetNorth = useMapStore((state) => state.resetNorth);
+  const tilted = useMapStore((state) => state.camera.pitch >= 1);
+  const requestCamera = useMapStore((state) => state.requestCamera);
   const turned = bearing !== 0;
 
   return (
@@ -42,6 +46,16 @@ export function CameraControls() {
             data-testid="compass-needle"
             style={{ transform: `rotate(${-bearing}deg)` }}
           />
+        </IconButton>
+      ) : null}
+      {tilted ? (
+        <IconButton
+          floating
+          label="Back to plan view"
+          title="Look straight down, north-up"
+          onClick={() => requestCamera({ pitch: 0, bearing: 0 })}
+        >
+          <Grid2x2 size={18} aria-hidden />
         </IconButton>
       ) : null}
     </>
