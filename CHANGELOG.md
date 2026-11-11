@@ -21,6 +21,8 @@ Nothing is live yet. When the first version opens, this is what it does for you.
 - If you find an object, Field Club records nothing about it and tells you who to report it to in your part of the UK.
 - A second look counts the moment you press your answer. You can then say what you think it is, or not, before you see what the finder and everyone else said. If you leave in between, you're offered the same choice when you come back.
 - If a protected finding's title or note says where it is more closely than its one-kilometre square, the form says which one and what to take out.
+- When a video, article, podcast or paper talks about a finding, you can add it to the finding's page. You see what the link is before you save it, and a video opens at the moment the finding comes up.
+- A finding's page has a timeline of what has happened on the ground and on record, such as visits, surveys, digs and new heritage records, and says which of them moved it up.
 
 ### Added
 
@@ -32,4 +34,6 @@ Nothing is live yet. When the first version opens, this is what it does for you.
 - "Mark a finding": place a mark by tapping, clicking or with the keyboard, drag or nudge it, pick what it looks like and save. A title, the view you were using and the period are filled in for you. Signed out, the finding waits in your browser as a draft and is saved once you sign in.
 - A finding's page shows how far it has got up the ladder and what would move it up, each with a button for what you could do about it. You can give it a second look there, add evidence of every kind, ground photos included, link a heritage record, join the discussion and follow it. It names the nearest place, and one press shows it as its finder saw it. Its finder can edit it, withdraw it and protect it more, and a moderator can lower its protection with a reason for the log. What anyone is offered is what the server says they may do. Evidence says how many people endorsed and disputed it.
 - Second look: findings waiting for another pair of eyes, one at a time, in the view their finder used and with nothing about what they thought. Answer with one press, or the keys 1, 2 and 3, which sends it at once, add detail if you like, and then see the finding, how your answer compares and whether it moved it up. Nearby findings come first. Signed out, your answer waits as a draft you can still change, and is saved and revealed when you sign in.
+- Mentions on a finding's page, newest first, with adding one after a look at what the address holds, and removing your own. Mentions the channel scan found are marked as found automatically. "Recent mentions" lists them across the map, with each finding as you may see it.
+- The follow-up timeline on a finding's page, drawn from its site visits, surveys, digs, heritage records and designations, in date order.
 - Help wanted: the next steps on everyone's findings, by the kind of work they are, such as map detectives checking old maps and sky checkers looking at aerial photos. Each finding opens with the form for that work ready. Second looks are offered only through the blind queue.
