@@ -221,6 +221,12 @@ export function reticlePlace(map: MapLibreMap): LngLat | null {
   return lngLatAtClient(map, box.left + box.width / 2, box.top + box.height / 2);
 }
 
+/** "Place it here": put the mark under the cross, and have the form take focus once it is in view. */
+export function placeAtReticle(map: MapLibreMap | null): void {
+  const at = map ? reticlePlace(map) : null;
+  if (at) useMarkStore.getState().placeFromButton(at);
+}
+
 /** When drafts are saved, the map and the list ask again so the new findings show. */
 function useRefreshOnSavedDrafts(): void {
   const client = useQueryClient();

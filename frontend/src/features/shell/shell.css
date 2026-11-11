@@ -534,3 +534,11 @@
 a.fc-button {
   text-decoration: none;
 }
+
+/* On a phone the toasts keep clear of the column of map buttons down the right, so none is covered. */
+.fc-shell[data-layout="phone"] .fc-toasts {
+  left: var(--gap);
+  right: calc(var(--gap) * 2 + var(--control-height));
+  width: auto;
+  transform: none;
+}

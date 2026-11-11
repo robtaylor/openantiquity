@@ -85,6 +85,22 @@ describe("placing the mark", () => {
     await user.click(screen.getByRole("button", { name: "Place it here" }));
     expect(useMarkStore.getState().point).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Place it here" })).toBeNull();
+    // The button has gone, so focus goes on to the question that comes next, not to the foot of the page.
+    expect(panel().getByRole("heading", { name: "What does it look like?" })).toHaveFocus();
+  });
+
+  it("offers the same in the panel, straight after its heading, and focus goes on from there too", async () => {
+    const user = userEvent.setup();
+    await openMarking();
+    await user.click(panel().getByRole("button", { name: "Place it under the cross" }));
+    expect(useMarkStore.getState().point).not.toBeNull();
+    expect(panel().getByRole("heading", { name: "What does it look like?" })).toHaveFocus();
+  });
+
+  it("leaves focus where it is when the mark is placed on the map", async () => {
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    expect(panel().getByRole("heading", { name: "What does it look like?" })).not.toHaveFocus();
   });
 
   it("nudges the mark with the arrow keys, further with Shift", async () => {
@@ -143,7 +159,7 @@ describe("the form", () => {
     expect(panel().getByLabelText("Period")).toHaveValue("unknown");
     expect(panel().getByLabelText("Title")).toHaveAttribute(
       "placeholder",
-      expect.stringMatching(/^Enclosure in SU\d{4}$/),
+      expect.stringMatching(/^Enclosure in SU \d{2} \d{2}$/),
     );
   });
 
@@ -191,14 +207,14 @@ describe("saving, signed in", () => {
     await user.click(panel().getByRole("button", { name: "Save finding" }));
 
     // Optimistic: on the map before the server has answered.
-    expect(await screen.findByRole("img", { name: /^Enclosure in SU\d{4}, saving$/ })).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: /^Enclosure in SU \d{2} \d{2}, saving$/ })).toBeInTheDocument();
     const [call] = routes.callsTo("POST /findings");
     const body = call?.body as FindingCreate;
     expect(body).toMatchObject({
       location: { type: "Point", coordinates: point() },
       feature_class: "enclosure",
       period: "unknown",
-      title: expect.stringMatching(/^Enclosure in SU\d{4}$/),
+      title: expect.stringMatching(/^Enclosure in SU \d{2} \d{2}$/),
       description: "Faint ring by the barn.",
       view_state: { layer: "composite", sun_azimuth: 120, sun_altitude: 15, zoom: 14, bearing: 0, pitch: 0 },
     });
@@ -211,7 +227,7 @@ describe("saving, signed in", () => {
     expect(routes.callsTo("POST /findings")).toHaveLength(1);
   });
 
-  it("takes the mark back when the save fails, says why with a way to try again, and keeps the form", async () => {
+  it("takes the mark back when the server refuses the place, says why and what to do, and keeps the form", async () => {
     const user = userEvent.setup();
     const { map, routes } = await openMarking();
     routes.on("POST /findings", () => apiError(422, "outside_british_isles", "That position is outside them."));
@@ -227,6 +243,19 @@ describe("saving, signed in", () => {
     expect(panel().getByRole("radio", { name: "Moat" })).toHaveAttribute("aria-checked", "true");
     expect(panel().getByLabelText("Title")).toHaveValue("Square moat");
     expect(panel().getByRole("alert")).toHaveTextContent(/Move the mark onto it/);
+    // Sending the same place again would be refused the same way, so the toast doesn't offer it.
+    const toastBox = toast.closest(".fc-toast") as HTMLElement;
+    expect(within(toastBox).queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  it("offers to try again after a failure that may pass, and sends the same finding", async () => {
+    const user = userEvent.setup();
+    const { map, routes } = await openMarking();
+    routes.on("POST /findings", () => apiError(503, "unavailable", "The server is busy."));
+    act(() => map.click(400, 300));
+    await user.click(panel().getByRole("radio", { name: "Moat" }));
+    await user.click(panel().getByRole("button", { name: "Save finding" }));
+    const toast = await screen.findByText(/Your finding couldn't be saved\. The server is busy\./);
 
     routes.on("POST /findings", (call) => json(createdFinding(call.body as FindingCreate, "moat1"), 201));
     const toastBox = toast.closest(".fc-toast") as HTMLElement;
@@ -257,6 +286,6 @@ describe("saving, signed out", () => {
     // Closing the sheet keeps the draft, marked as not saved yet.
     await user.click(within(screen.getByRole("dialog", { name: "Sign in" })).getByRole("button", { name: "Close" }));
     expect(panel().getByText("Not saved yet", { selector: ".fc-draft-badge" })).toBeInTheDocument();
-    expect(await screen.findByText(/kept in this browser as a draft/)).toBeInTheDocument();
+    expect(await screen.findByText(/Kept in this browser as a draft until you sign in/)).toBeInTheDocument();
   });
 });

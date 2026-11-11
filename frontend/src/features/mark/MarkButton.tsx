@@ -2,7 +2,7 @@ import { CircleDot, MapPinPlus } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
 import { useMainMap } from "../../map/mainMap.js";
 import { Button } from "../../ui/Button.js";
-import { isMarkPath, reticlePlace } from "./MarkLayer.js";
+import { isMarkPath, placeAtReticle } from "./MarkLayer.js";
 import { MARK_PATH } from "./MarkPanel.js";
 import { useMarkStore } from "./markStore.js";
 
@@ -18,7 +18,6 @@ export function MarkButton() {
   const { pathname } = useLocation();
   const map = useMainMap();
   const placed = useMarkStore((state) => state.point !== null);
-  const place = useMarkStore((state) => state.place);
 
   if (!isMarkPath(pathname)) {
     return (
@@ -34,15 +33,7 @@ export function MarkButton() {
   }
   if (placed) return null;
   return (
-    <Button
-      variant="primary"
-      size="lg"
-      icon={<CircleDot size={20} aria-hidden />}
-      onClick={() => {
-        const at = map ? reticlePlace(map) : null;
-        if (at) place(at);
-      }}
-    >
+    <Button variant="primary" size="lg" icon={<CircleDot size={20} aria-hidden />} onClick={() => placeAtReticle(map)}>
       Place it here
     </Button>
   );

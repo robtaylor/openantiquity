@@ -41,6 +41,11 @@ export interface MarkFields {
   problem: { field: MarkProblemField; message: string } | null;
   /** True while the save is on its way. */
   saving: boolean;
+  /**
+   * True from a press of "Place it here" until the form has taken focus. The
+   * button goes once the mark is down, and focus would otherwise be lost.
+   */
+  focusForm: boolean;
 }
 
 export interface MarkState extends MarkFields {
@@ -49,6 +54,9 @@ export interface MarkState extends MarkFields {
   /** Take up a draft to change or save it. */
   load: (draftId: string, draft: FindingDraft) => void;
   place: (point: LngLat) => void;
+  /** Place the mark from a button, so the form takes focus once it is there. */
+  placeFromButton: (point: LngLat) => void;
+  formFocused: () => void;
   setFeatureClass: (id: string) => void;
   setPeriod: (id: string) => void;
   setTitle: (title: string) => void;
@@ -78,6 +86,7 @@ export const EMPTY_MARK: MarkFields = {
   drawing: false,
   problem: null,
   saving: false,
+  focusForm: false,
 };
 
 /** An outline read back from a draft's GeoJSON, so it can be drawn and changed again. */
@@ -130,6 +139,8 @@ export const useMarkStore = create<MarkState>()((set, get) => {
       }),
 
     place: (point) => set({ point, problem: problemAfter("point") }),
+    placeFromButton: (point) => set({ point, problem: problemAfter("point"), focusForm: true }),
+    formFocused: () => set({ focusForm: false }),
     setFeatureClass: (featureClass) => set({ featureClass, problem: problemAfter("featureClass") }),
     setPeriod: (period) => set({ period }),
     setTitle: (title) => set({ title }),

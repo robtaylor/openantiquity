@@ -3,9 +3,9 @@
  * details and outline, the two notices, and saving. `MarkPanel` shows it.
  */
 
-import { Crosshair, PenLine, Trash2, Undo2 } from "lucide-react";
+import { CircleDot, Crosshair, PenLine, Trash2, Undo2 } from "lucide-react";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { type ReactNode, useEffect, useId } from "react";
+import { type ReactNode, useEffect, useId, useRef } from "react";
 import { useNavigate } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { isMapLive } from "../../map/MapPane.js";
@@ -27,7 +27,7 @@ import { BARE_MAP_PATH } from "../shell/navigation.js";
 import { type PanelEnvironment, usePanelEnvironment } from "../shell/panelContext.js";
 import { exactGridRefOf, suggestTitle } from "./describe.js";
 import type { FindingDraft } from "./findingDrafts.js";
-import { reticlePlace } from "./MarkLayer.js";
+import { placeAtReticle, reticlePlace } from "./MarkLayer.js";
 import { useMarkStore } from "./markStore.js";
 import { FINDS_NOTICE, findsRoute, sensitivityNotice } from "./notices.js";
 import { canClose, canFinishLine } from "./outline.js";
@@ -104,9 +104,19 @@ function ClassChooser({ meta }: { meta: Meta }) {
   const hint = meta.vocab.feature_classes.find((candidate) => candidate.id === featureClass)?.hint;
   const notice = sensitivityNotice(meta, featureClass);
   const headingId = useId();
+  const heading = useRef<HTMLHeadingElement>(null);
+  const focusForm = useMarkStore((state) => state.focusForm);
+  const { isPhone, stop } = usePanelEnvironment();
+  // Placed from "Place it here", which has gone: the question comes next, once the sheet has
+  // risen from peek, where its body takes no focus.
+  useEffect(() => {
+    if (!focusForm || (isPhone && stop === "peek")) return;
+    heading.current?.focus();
+    useMarkStore.getState().formFocused();
+  }, [focusForm, isPhone, stop]);
   return (
     <section className="fc-mark__step" aria-labelledby={headingId}>
-      <h3 className="fc-field__label" id={headingId}>
+      <h3 className="fc-field__label" id={headingId} ref={heading} tabIndex={-1}>
         What does it look like?
       </h3>
       <ChipGroup
@@ -298,8 +308,14 @@ export function MarkForm({ meta, draft }: { meta: Meta; draft: KindDraft<Finding
         <div className="fc-mark__step">
           <p className="fc-mark__lead">{environment.isPhone ? "Tap" : "Click"} the map where you see it.</p>
           <p className="fc-mark__hint">
-            Or move the map until the cross is over it, and press “Place it here” at the foot of the map.
+            Or move the map until the cross in the middle is over it, and press “Place it here” at the foot of the map,
+            or this button.
           </p>
+          <div>
+            <Button icon={<CircleDot size={16} aria-hidden />} onClick={() => placeAtReticle(map)}>
+              Place it under the cross
+            </Button>
+          </div>
         </div>
       </div>
     );

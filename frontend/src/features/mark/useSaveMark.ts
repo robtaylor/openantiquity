@@ -1,6 +1,7 @@
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef } from "react";
 import { type NavigateFunction, useNavigate } from "react-router";
+import { ApiError, isTransient } from "../../api/client.js";
 import type { Meta } from "../../api/meta.js";
 import { useMapStore } from "../../map/store.js";
 import { toast } from "../../ui/toastStore.js";
@@ -38,8 +39,8 @@ export function draftPath(draftId: string): string {
  *
  * Signed in and through the welcome step: the mark joins the map at once,
  * `POST /findings` goes, and the finding's page opens. A refusal takes the
- * mark off again and says why in a toast with "Try again", and everything
- * typed stays in the form.
+ * mark off again and says why in a toast, with "Try again" when the failure
+ * may pass, and everything typed stays in the form.
  *
  * Otherwise, and whenever a draft is being edited, it is kept as a draft in
  * this browser and the sign-in sheet opens over the form (Decision 0002).
@@ -81,7 +82,7 @@ export function useSaveMark(meta: Meta): () => Promise<void> {
         await requireAccount();
       } catch (error) {
         if (!(error instanceof AccountRequiredError)) throw error;
-        toast("It's kept in this browser as a draft. Sign in when you're ready, and it will be saved.");
+        toast("Kept in this browser as a draft until you sign in.");
       }
     },
     [navigate, ready, requireAccount],
@@ -105,10 +106,14 @@ export function useSaveMark(meta: Meta): () => Promise<void> {
         const current = useMarkStore.getState();
         current.setSaving(false);
         if (problem.field) current.setProblem({ field: problem.field, message: problem.message });
+        // A refusal of what was sent would be refused again, and the form says what to change.
+        // Only a failure that may pass, of the network or the server, is worth sending again as it is.
+        const retry = !(error instanceof ApiError) || isTransient(error);
         toast(`Your finding couldn't be saved. ${problem.message}`, {
           kind: "error",
-          duration: 0,
-          action: { label: "Try again", onClick: () => void again.current() },
+          // It stays until dismissed, unless the form beside it says the same.
+          ...(retry || !problem.field ? { duration: 0 } : {}),
+          ...(retry ? { action: { label: "Try again", onClick: () => void again.current() } } : {}),
         });
       }
     },

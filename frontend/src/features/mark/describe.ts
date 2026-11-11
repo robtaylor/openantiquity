@@ -7,6 +7,7 @@ import type { Meta } from "../../api/meta.js";
 import { formatGridRef, kmSquareAt, wgs84ToGrid } from "../../map/gridref.js";
 import { LIMITS } from "../../map/permalink.js";
 import type { MapState } from "../../map/store.js";
+import { squareWords } from "../findings/square.js";
 import type { ViewState } from "../findings/types.js";
 import type { LngLat } from "./outline.js";
 
@@ -61,7 +62,7 @@ export function exactGridRefOf([lng, lat]: LngLat): string | null {
 
 /**
  * A title that needs no typing: what it looks like, and which one-kilometre
- * square it is in, such as "Enclosure in SU1069". The title is shown to
+ * square it is in, such as "Enclosure in SU 10 69". The title is shown to
  * everyone, signed out too, and the level that decides who may see the exact
  * place is the server's to set, so the title never names anything finer than
  * the square (Decision 0005).
@@ -69,5 +70,5 @@ export function exactGridRefOf([lng, lat]: LngLat): string | null {
 export function suggestTitle(meta: Meta, featureClass: string | null, point: LngLat | null): string {
   const label = meta.vocab.feature_classes.find((candidate) => candidate.id === featureClass)?.label ?? "Finding";
   const square = point ? kmSquareAt(point[0], point[1]) : null;
-  return (square ? `${label} in ${square.ref}` : label).slice(0, TITLE_MAX);
+  return (square ? `${label} in ${squareWords(square.ref)}` : label).slice(0, TITLE_MAX);
 }
