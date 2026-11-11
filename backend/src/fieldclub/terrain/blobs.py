@@ -1,7 +1,7 @@
-"""Folders of files the terrain service keeps: a local directory, or a prefix in a Cloud Storage bucket.
+"""Folders of files the terrain service keeps: a local directory, or a prefix in an S3 bucket.
 
 The mirror and the national overview both live in a `Folder`. GDAL reads a
-file through `gdal_path` (`/vsigs/` for a bucket), and everything else goes
+file through `gdal_path` (`/vsis3/` for a bucket), and everything else goes
 through the methods here, so the two kinds of folder behave the same:
 
 - `upload` makes a complete local file visible under its name in one step, and
@@ -12,8 +12,8 @@ through the methods here, so the two kinds of folder behave the same:
   exactly one of the processes that find it, and `replace_if` lets its holder
   refresh it without overwriting a lock someone else has taken since.
 
-`google-cloud-storage` is imported on first use, so development and the tests
-that don't touch a bucket never load it.
+`boto3` is imported on first use, so development and the tests that don't
+touch a bucket never load it.
 """
 
 from __future__ import annotations
@@ -27,26 +27,28 @@ import socket
 import threading
 import time
 import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
+from urllib.parse import urlsplit
 
+from fieldclub.config import S3_SCHEME
 from fieldclub.errors import DataIntegrityError
-from fieldclub.storage import check_key
+from fieldclub.storage import StorageError, check_key, s3_client, s3_get, s3_head, s3_refusal
 from fieldclub.terrain.errors import ElevationUnavailableError
 
 logger = logging.getLogger(__name__)
-
-GS_SCHEME = "gs://"
 
 
 @dataclass(frozen=True)
 class BlobInfo:
     size: int
     created: datetime
-    # Changes whenever the object is replaced: a generation in a bucket, an inode and mtime locally.
+    # Changes whenever the object is replaced with other bytes: an ETag in a
+    # bucket, an inode and mtime locally. A bucket gives two writes of the same
+    # bytes the same ETag, so a writer that relies on a token writes unique bytes.
     token: str
 
 
@@ -204,8 +206,16 @@ class LocalFolder:
         return f"LocalFolder({str(self.root)!r})"
 
 
-class GcsFolder:
-    """A prefix in a bucket. Writes are single requests, so an object is either whole or absent."""
+class S3Folder:
+    """A prefix in a bucket with the S3 interface. A put is one request, so an object is whole or absent.
+
+    The three conditional writes are S3's own preconditions, which the spike
+    on Fly.io proved Tigris honours (Decision 0018): `If-None-Match: *` to
+    create, and `If-Match` with the ETag `stat` gave to replace or delete. A
+    refused one answers 412. An ETag comes from an object's bytes, so two
+    writes of the same bytes share one: `ObjectLock` makes every write it
+    relies on a token for unique.
+    """
 
     shared = True
 
@@ -214,122 +224,150 @@ class GcsFolder:
         self.bucket_name = bucket
         self.prefix = prefix.strip("/")
         self._client = client
-        self._bucket: Any = None
-        self._guard = threading.Lock()
+        configure_gdal_for_s3()
 
     def _object(self, name: str) -> str:
         check_key(name)
         return f"{self.prefix}/{name}" if self.prefix else name
 
-    def _get_bucket(self) -> Any:
-        with self._guard:
-            if self._bucket is None:
-                if self._client is None:
-                    from google.cloud import storage as gcs
+    @property
+    def client(self) -> Any:
+        if self._client is None:
+            self._client = s3_client()
+        return self._client
 
-                    self._client = gcs.Client()
-                self._bucket = self._client.bucket(self.bucket_name)
-            return self._bucket
-
-    def gdal_path(self, name: str) -> str:
-        return f"/vsigs/{self.bucket_name}/{self._object(name)}"
-
-    def exists(self, name: str) -> bool:
-        return bool(self._get_bucket().blob(self._object(name)).exists())
-
-    def read(self, name: str) -> bytes | None:
-        from google.api_core.exceptions import NotFound
-
+    def _put(self, name: str, body: Any, content_type: str, **condition: str) -> bool:
+        """Put one object. False when the store refused `condition`, or the object has gone."""
         try:
-            return bytes(self._get_bucket().blob(self._object(name)).download_as_bytes())
-        except NotFound:
-            return None
-
-    def write(self, name: str, data: bytes, content_type: str) -> None:
-        self._get_bucket().blob(self._object(name)).upload_from_string(data, content_type=content_type)
-
-    def create(self, name: str, data: bytes) -> bool:
-        from google.api_core.exceptions import PreconditionFailed
-
-        blob = self._get_bucket().blob(self._object(name))
-        try:
-            # Generation 0 means "only if there is no live object".
-            blob.upload_from_string(data, content_type="application/json", if_generation_match=0)
-        except PreconditionFailed:
-            return False
+            self.client.put_object(
+                Bucket=self.bucket_name,
+                Key=self._object(name),
+                Body=body,
+                ContentType=content_type,
+                **condition,
+            )
+        except Exception as exc:
+            # 409 is S3's answer to a conditional write racing another on the
+            # same object; the caller looks again, as after a 412.
+            if condition and s3_refusal(exc) in (404, 409, 412):
+                return False
+            raise
         return True
 
-    def upload(self, local: Path, name: str, content_type: str, *, replace: bool = True) -> bool:
-        from google.api_core.exceptions import Forbidden, PreconditionFailed
+    def gdal_path(self, name: str) -> str:
+        return f"/vsis3/{self.bucket_name}/{self._object(name)}"
 
-        blob = self._get_bucket().blob(self._object(name))
+    def exists(self, name: str) -> bool:
+        return s3_head(self.client, self.bucket_name, self._object(name)) is not None
+
+    def read(self, name: str) -> bytes | None:
+        return s3_get(self.client, self.bucket_name, self._object(name))
+
+    def write(self, name: str, data: bytes, content_type: str) -> None:
+        self._put(name, data, content_type)
+
+    def create(self, name: str, data: bytes) -> bool:
+        return self._put(name, data, "application/json", IfNoneMatch="*")
+
+    def upload(self, local: Path, name: str, content_type: str, *, replace: bool = True) -> bool:
         size = local.stat().st_size
-        # Generation 0 means "only if there is no live object".
-        only_new = {} if replace else {"if_generation_match": 0}
-        try:
-            # The library checks the CRC32C of what arrived against the file's own.
-            blob.upload_from_filename(str(local), content_type=content_type, checksum="crc32c", **only_new)
-        except (PreconditionFailed, Forbidden):
-            # A writer that may create objects but not replace them can be
-            # refused outright, rather than told the precondition failed.
-            # Either is fine once the object is there.
-            if replace or not blob.exists():
-                raise
-            return False
-        if blob.size != size:
-            raise DataIntegrityError(f"{name} was stored with {blob.size} bytes, not {size}.")
+        if replace:
+            # A managed upload, in parts for a large file such as the national overview.
+            self.client.upload_file(
+                str(local), self.bucket_name, self._object(name), ExtraArgs={"ContentType": content_type}
+            )
+        else:
+            # One request, so the precondition the spike measured is the one
+            # that applies. A mirror tile is tens of megabytes.
+            with local.open("rb") as body:
+                if not self._put(name, body, content_type, IfNoneMatch="*"):
+                    if not self.exists(name):
+                        # A 409: another conditional write to it is under way.
+                        raise StorageError(f"The store refused to create {name}, and holds none yet.")
+                    return False
+        stored = s3_head(self.client, self.bucket_name, self._object(name))
+        if stored is None or stored["ContentLength"] != size:
+            got = None if stored is None else stored["ContentLength"]
+            raise DataIntegrityError(f"{name} was stored with {got} bytes, not {size}.")
         return True
 
     def names(self, suffix: str = "") -> list[str]:
         prefix = f"{self.prefix}/" if self.prefix else ""
-        blobs = self._get_bucket().list_blobs(prefix=prefix, delimiter="/")
-        return sorted(
-            blob.name[len(prefix) :]
-            for blob in blobs
-            if blob.name.endswith(suffix) and "/" not in blob.name[len(prefix) :]
-        )
+        found: list[str] = []
+        page: dict[str, Any] = {"Bucket": self.bucket_name, "Prefix": prefix, "Delimiter": "/"}
+        while True:
+            answer = self.client.list_objects_v2(**page)
+            found.extend(
+                item["Key"][len(prefix) :]
+                for item in answer.get("Contents", [])
+                if item["Key"].endswith(suffix) and "/" not in item["Key"][len(prefix) :]
+            )
+            if not answer.get("IsTruncated"):
+                return sorted(found)
+            page["ContinuationToken"] = answer["NextContinuationToken"]
 
     def stat(self, name: str) -> BlobInfo | None:
-        blob = self._get_bucket().get_blob(self._object(name))
-        if blob is None:
+        found = s3_head(self.client, self.bucket_name, self._object(name))
+        if found is None:
             return None
-        return BlobInfo(int(blob.size), blob.time_created, str(blob.generation))
+        return BlobInfo(int(found["ContentLength"]), found["LastModified"], str(found["ETag"]))
 
     def delete(self, name: str) -> None:
-        from google.api_core.exceptions import NotFound
-
-        with contextlib.suppress(NotFound):
-            self._get_bucket().blob(self._object(name)).delete()
+        # Removing an object that isn't there succeeds in S3.
+        self.client.delete_object(Bucket=self.bucket_name, Key=self._object(name))
 
     def delete_if(self, name: str, token: str) -> bool:
-        from google.api_core.exceptions import NotFound, PreconditionFailed
-
         try:
-            self._get_bucket().blob(self._object(name)).delete(if_generation_match=int(token))
-        except (NotFound, PreconditionFailed):
-            return False
+            self.client.delete_object(Bucket=self.bucket_name, Key=self._object(name), IfMatch=token)
+        except Exception as exc:
+            if s3_refusal(exc) in (404, 409, 412):
+                return False
+            raise
         return True
 
     def replace_if(self, name: str, data: bytes, token: str) -> bool:
-        from google.api_core.exceptions import NotFound, PreconditionFailed
-
-        blob = self._get_bucket().blob(self._object(name))
-        try:
-            blob.upload_from_string(data, content_type="application/json", if_generation_match=int(token))
-        except (NotFound, PreconditionFailed):
-            return False
-        return True
+        return self._put(name, data, "application/json", IfMatch=token)
 
     def __repr__(self) -> str:
-        return f"GcsFolder('gs://{self.bucket_name}/{self.prefix}')"
+        return f"S3Folder('{S3_SCHEME}{self.bucket_name}/{self.prefix}')"
+
+
+def gdal_s3_options(environ: Mapping[str, str]) -> dict[str, str]:
+    """GDAL's options for `/vsis3/` to reach the store at `AWS_ENDPOINT_URL_S3`. None of them is a secret.
+
+    GDAL reads the credentials from the environment itself. It is given the
+    endpoint's host, with HTTPS as the address says, and path-style requests,
+    which is how the spike on Fly.io read tiles from Tigris. Empty when no
+    endpoint is set, so GDAL keeps its own defaults for AWS.
+    """
+    endpoint = environ.get("AWS_ENDPOINT_URL_S3", "")
+    if not endpoint:
+        return {}
+    parsed = urlsplit(endpoint)
+    assert parsed.scheme in ("http", "https"), f"{endpoint!r} isn't an http(s) address"
+    assert parsed.netloc, f"{endpoint!r} has no host"
+    assert parsed.path in ("", "/"), f"{endpoint!r}: GDAL can't be given an endpoint with a path"
+    return {
+        "AWS_S3_ENDPOINT": parsed.netloc,
+        "AWS_HTTPS": "YES" if parsed.scheme == "https" else "NO",
+        "AWS_VIRTUAL_HOSTING": "FALSE",
+    }
+
+
+def configure_gdal_for_s3() -> None:
+    """Set `gdal_s3_options` for every thread in the process. Safe to call again."""
+    from rasterio.env import set_gdal_config
+
+    for key, value in gdal_s3_options(os.environ).items():
+        set_gdal_config(key, value)
 
 
 def folder(location: str) -> Folder:
-    """A folder for `gs://bucket/prefix` or a local directory."""
-    if location.startswith(GS_SCHEME):
-        bucket, _, prefix = location[len(GS_SCHEME) :].partition("/")
-        return GcsFolder(bucket, prefix)
-    assert "://" not in location, f"{location!r}: only local paths and gs:// are supported"
+    """A folder for `s3://bucket/prefix` or a local directory."""
+    if location.startswith(S3_SCHEME):
+        bucket, _, prefix = location[len(S3_SCHEME) :].partition("/")
+        return S3Folder(bucket, prefix)
+    assert "://" not in location, f"{location!r}: only local paths and {S3_SCHEME} are supported"
     return LocalFolder(Path(location))
 
 
@@ -357,7 +395,9 @@ class ObjectLock:
     runs, so the object's age is the time since its holder last showed it was
     alive, however long the work takes. A lock older than `stale_after_s` is
     treated as abandoned by a process that died: one waiter removes it, by
-    generation, and the waiters race to create it again, so exactly one wins.
+    its token, and the waiters race to create it again, so exactly one wins.
+    Every write of the lock has bytes of its own, so its token in a bucket
+    (an ETag, made from the bytes) changes with every write.
     Keep `stale_after_s` below `wait_s`, so a waiter outlasts a lock left by a
     crash.
 
@@ -394,7 +434,13 @@ class ObjectLock:
             self.release(name, owner)
 
     def _body(self, owner: str) -> bytes:
-        return json.dumps({"owner": owner, "since": self.now().isoformat()}).encode()
+        # `write` makes every write's bytes unique, and so its ETag in a
+        # bucket. Otherwise a refresh in the same instant as the last one, or
+        # with a clock that stood still, would keep the token a waiter saw,
+        # and that waiter could then remove a lock whose holder is alive.
+        return json.dumps(
+            {"owner": owner, "since": self.now().isoformat(), "write": uuid.uuid4().hex}
+        ).encode()
 
     def _beat(self, name: str, owner: str, stop: threading.Event) -> None:
         interval = self.heartbeat_s if self.heartbeat_s is not None else self.stale_after_s / 4
@@ -413,7 +459,12 @@ class ObjectLock:
         info = self.folder.stat(name)
         if info is None or not self._ours(name, owner):
             return False
-        return self.folder.replace_if(name, self._body(owner), info.token)
+        body = self._body(owner)
+        if self.folder.replace_if(name, body, info.token):
+            return True
+        # A retried write whose first attempt had in fact succeeded is refused
+        # by its own new token. Its unique bytes say it was ours.
+        return self.folder.read(name) == body
 
     def acquire(self, name: str, done: Callable[[], bool]) -> str | None:
         """The owner token once the lock is held, or None when `done()` became true while waiting."""

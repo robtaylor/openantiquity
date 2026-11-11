@@ -7,7 +7,14 @@ from pathlib import Path
 import pytest
 
 from fieldclub import __version__
-from fieldclub.config import DEV_SECRET_KEY, Environment, Settings, get_settings, reset_settings
+from fieldclub.config import (
+    DEV_SECRET_KEY,
+    Environment,
+    Settings,
+    database_address,
+    get_settings,
+    reset_settings,
+)
 from fieldclub.errors import ConfigError
 from tests.helpers import settings
 
@@ -21,9 +28,20 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
     import os
 
     for name in list(os.environ):
-        if name.startswith("FIELDCLUB_") or name in ("PORT", "K_SERVICE", "CLOUD_RUN_JOB"):
+        if name.startswith(("FIELDCLUB_", "AWS_", "FLY_")) or name in PLATFORM_VARIABLES:
             monkeypatch.delenv(name)
     return monkeypatch
+
+
+# Variables a platform sets that the settings look at.
+PLATFORM_VARIABLES = ("PORT", "K_SERVICE", "CLOUD_RUN_JOB", "DATABASE_URL")
+# What Fly sets on an app with a Tigris bucket attached, with made-up credentials.
+TIGRIS = {
+    "AWS_ACCESS_KEY_ID": "tid_test",
+    "AWS_SECRET_ACCESS_KEY": "tsec_test",
+    "AWS_ENDPOINT_URL_S3": "https://fly.storage.tigris.dev",
+    "AWS_REGION": "auto",
+}
 
 
 @pytest.fixture
@@ -67,7 +85,7 @@ def test_environment_variables_use_the_fieldclub_prefix(clean_env: pytest.Monkey
     assert config.should_create_schema is False
 
 
-def test_port_falls_back_to_the_cloud_run_variable(clean_env: pytest.MonkeyPatch) -> None:
+def test_port_falls_back_to_the_platform_s_variable(clean_env: pytest.MonkeyPatch) -> None:
     clean_env.setenv("PORT", "8080")
     assert settings().port == 8080
     clean_env.setenv("FIELDCLUB_PORT", "9001")
@@ -190,21 +208,160 @@ def test_ingest_max_shrink_is_a_share(clean_env: pytest.MonkeyPatch) -> None:
             settings()
 
 
-def test_gcs_storage_needs_a_bucket(clean_env: pytest.MonkeyPatch) -> None:
-    clean_env.setenv("FIELDCLUB_STORAGE_BACKEND", "gcs")
-    with pytest.raises(ConfigError, match="FIELDCLUB_GCS_BUCKET"):
+def test_s3_storage_needs_a_bucket_and_the_store_s_variables(clean_env: pytest.MonkeyPatch) -> None:
+    clean_env.setenv("FIELDCLUB_STORAGE_BACKEND", "s3")
+    with pytest.raises(ConfigError, match="FIELDCLUB_S3_BUCKET"):
         settings()
-    clean_env.setenv("FIELDCLUB_GCS_BUCKET", "fieldclub-data")
-    assert settings().gcs_bucket == "fieldclub-data"
+    clean_env.setenv("FIELDCLUB_S3_BUCKET", "openantiquity-data")
+    with pytest.raises(ConfigError, match="AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_ENDPOINT_URL_S3"):
+        settings()
+    for name, value in TIGRIS.items():
+        clean_env.setenv(name, value)
+    assert settings().s3_bucket == "openantiquity-data"
+    clean_env.delenv("AWS_ENDPOINT_URL_S3")
+    with pytest.raises(ConfigError, match="AWS_ENDPOINT_URL_S3 must be set"):
+        settings()
 
 
-def test_namespace_buckets_need_the_gcs_backend(clean_env: pytest.MonkeyPatch) -> None:
-    clean_env.setenv("FIELDCLUB_GCS_NAMESPACE_BUCKETS", '{"media": "fieldclub-photos"}')
-    with pytest.raises(ConfigError, match="FIELDCLUB_GCS_NAMESPACE_BUCKETS"):
+def test_namespace_buckets_need_the_s3_backend(clean_env: pytest.MonkeyPatch) -> None:
+    clean_env.setenv("FIELDCLUB_S3_NAMESPACE_BUCKETS", '{"media": "openantiquity-photos"}')
+    with pytest.raises(ConfigError, match="FIELDCLUB_S3_NAMESPACE_BUCKETS"):
         settings()
+    for name, value in TIGRIS.items():
+        clean_env.setenv(name, value)
+    clean_env.setenv("FIELDCLUB_STORAGE_BACKEND", "s3")
+    clean_env.setenv("FIELDCLUB_S3_BUCKET", "openantiquity-data")
+    assert settings().s3_namespace_buckets == {"media": "openantiquity-photos"}
+
+
+@pytest.mark.parametrize("name", ["FIELDCLUB_TERRAIN_MIRROR", "FIELDCLUB_TERRAIN_NATIONAL"])
+def test_a_terrain_folder_in_a_bucket_needs_the_store_s_variables(
+    clean_env: pytest.MonkeyPatch, name: str
+) -> None:
+    clean_env.setenv(name, "s3://openantiquity-lidar/england")
+    with pytest.raises(ConfigError, match="AWS_ACCESS_KEY_ID"):
+        settings()
+    for variable, value in TIGRIS.items():
+        clean_env.setenv(variable, value)
+    assert settings().uses_s3
+
+
+@pytest.mark.parametrize("location", ["gs://fieldclub-lidar/england/mirror", "https://example.org/mirror"])
+def test_a_terrain_folder_is_local_or_s3(clean_env: pytest.MonkeyPatch, location: str) -> None:
+    clean_env.setenv("FIELDCLUB_TERRAIN_MIRROR", location)
+    with pytest.raises(ConfigError, match="a local path or s3://"):
+        settings()
+
+
+def test_the_gcs_backend_is_gone(clean_env: pytest.MonkeyPatch) -> None:
+    from pydantic import ValidationError
+
     clean_env.setenv("FIELDCLUB_STORAGE_BACKEND", "gcs")
-    clean_env.setenv("FIELDCLUB_GCS_BUCKET", "fieldclub-data")
-    assert settings().gcs_namespace_buckets == {"media": "fieldclub-photos"}
+    with pytest.raises(ValidationError, match="storage_backend"):
+        settings()
+
+
+# --------------------------------------------------------------------------
+# The database address
+# --------------------------------------------------------------------------
+
+FLY_POOLED = "postgres://fly-user:s3cr%2Fet@pgbouncer.k8x2rq1yjv5lpwzd.flympg.net/fly-db"
+FLY_DIRECT = "postgresql+psycopg://fly-user:s3cr%2Fet@direct.k8x2rq1yjv5lpwzd.flympg.net/fly-db"
+
+
+@pytest.mark.parametrize(
+    ("given", "used"),
+    [
+        # What Fly attaches: the pooled host, under either scheme.
+        (FLY_POOLED, FLY_DIRECT),
+        (FLY_POOLED.replace("postgres://", "postgresql://"), FLY_DIRECT),
+        # Fly's direct address, given by hand.
+        (FLY_DIRECT.replace("postgresql+psycopg://", "postgresql://"), FLY_DIRECT),
+        (FLY_DIRECT, FLY_DIRECT),
+        # A port and options are kept.
+        (
+            "postgresql://u:p@pgbouncer.abc.flympg.net:5432/db?sslmode=require",
+            "postgresql+psycopg://u:p@direct.abc.flympg.net:5432/db?sslmode=require",
+        ),
+        # Anywhere else is left as it is.
+        (
+            "postgresql+psycopg://fieldclub:fieldclub@localhost:54329/fieldclub",
+            "postgresql+psycopg://fieldclub:fieldclub@localhost:54329/fieldclub",
+        ),
+        ("postgresql://u@pgbouncer.example.org/db", "postgresql+psycopg://u@pgbouncer.example.org/db"),
+        ("postgresql://u@[::1]:5432/db", "postgresql+psycopg://u@[::1]:5432/db"),
+    ],
+)
+def test_the_database_address_is_the_direct_one_with_psycopg(given: str, used: str) -> None:
+    assert database_address(given) == used
+
+
+@pytest.mark.parametrize(
+    "given", ["mysql://u:p@host/db", "postgresql+psycopg2://u:p@host/db", "localhost:5432/db", ""]
+)
+def test_a_database_address_that_isnt_postgresql_s_is_refused(given: str) -> None:
+    with pytest.raises(ConfigError, match="postgresql"):
+        database_address(given)
+
+
+def test_fly_s_database_url_is_read_when_the_setting_is_unset(clean_env: pytest.MonkeyPatch) -> None:
+    clean_env.setenv("DATABASE_URL", FLY_POOLED)
+    assert settings().database_url == FLY_DIRECT
+    clean_env.setenv("FIELDCLUB_DATABASE_URL", "postgresql://fieldclub:fieldclub@db.internal/fieldclub")
+    assert settings().database_url == "postgresql+psycopg://fieldclub:fieldclub@db.internal/fieldclub"
+
+
+# --------------------------------------------------------------------------
+# Platforms
+# --------------------------------------------------------------------------
+
+
+def on_fly(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FLY_APP_NAME", "openantiquity")
+    monkeypatch.setenv("FLY_MACHINE_ID", "d8901e3c6e4789")
+
+
+@pytest.mark.parametrize("env", [None, "dev", "test"])
+def test_fly_refuses_anything_but_production(clean_env: pytest.MonkeyPatch, env: str | None) -> None:
+    on_fly(clean_env)
+    clean_env.setenv("FIELDCLUB_SECRET_KEY", "a-long-random-value")
+    clean_env.setenv("FIELDCLUB_CLIENT_IP_HEADER", "Fly-Client-IP")
+    if env is not None:
+        clean_env.setenv("FIELDCLUB_ENV", env)
+    with pytest.raises(ConfigError, match=r"on Fly\. Set FIELDCLUB_ENV=prod"):
+        settings()
+
+
+def test_one_of_fly_s_variables_alone_is_not_fly(clean_env: pytest.MonkeyPatch) -> None:
+    clean_env.setenv("FLY_APP_NAME", "openantiquity")
+    assert settings().env is Environment.DEV
+
+
+def test_production_on_fly_needs_the_client_address_header(prod_env: pytest.MonkeyPatch) -> None:
+    on_fly(prod_env)
+    with pytest.raises(ConfigError, match="FIELDCLUB_CLIENT_IP_HEADER must be set on Fly"):
+        settings()
+    prod_env.setenv("FIELDCLUB_CLIENT_IP_HEADER", "Fly-Client-IP")
+    assert settings().client_ip_header == "Fly-Client-IP"
+
+
+def test_the_client_address_header_does_for_the_proxy_count_in_production(
+    prod_env: pytest.MonkeyPatch,
+) -> None:
+    prod_env.delenv("FIELDCLUB_TRUSTED_PROXY_HOPS")
+    with pytest.raises(ConfigError, match="FIELDCLUB_TRUSTED_PROXY_HOPS or FIELDCLUB_CLIENT_IP_HEADER"):
+        settings()
+    prod_env.setenv("FIELDCLUB_CLIENT_IP_HEADER", "Fly-Client-IP")
+    assert settings().trusted_proxy_hops == 0
+
+
+@pytest.mark.parametrize("value", ["Fly Client IP", "X-Real-IP:", ""])
+def test_the_client_address_header_is_one_header_name(clean_env: pytest.MonkeyPatch, value: str) -> None:
+    from pydantic import ValidationError
+
+    clean_env.setenv("FIELDCLUB_CLIENT_IP_HEADER", value)
+    with pytest.raises(ValidationError, match="client_ip_header"):
+        settings()
 
 
 def test_cookie_secure_and_schema_creation_can_be_forced(clean_env: pytest.MonkeyPatch) -> None:
@@ -289,8 +446,10 @@ def test_terrain_folders_follow_the_var_dir(clean_env: pytest.MonkeyPatch, tmp_p
     assert moved.terrain_mirror == str(tmp_path / "lidar" / "england" / "mirror")
     assert moved.terrain_work_dir == str(tmp_path / "lidar" / "england" / "work")
     assert moved.terrain_path(moved.terrain_mirror) == str(tmp_path / "lidar" / "england" / "mirror")
-    chosen = settings(var_dir=tmp_path, terrain_mirror="gs://bucket/mirror", terrain_source_dir="")
-    assert (chosen.terrain_mirror, chosen.terrain_source_dir) == ("gs://bucket/mirror", "")
+    for name, value in TIGRIS.items():
+        clean_env.setenv(name, value)
+    chosen = settings(var_dir=tmp_path, terrain_mirror="s3://bucket/mirror", terrain_source_dir="")
+    assert (chosen.terrain_mirror, chosen.terrain_source_dir) == ("s3://bucket/mirror", "")
     assert chosen.terrain_national.startswith(str(tmp_path))
 
 

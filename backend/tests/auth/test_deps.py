@@ -204,3 +204,60 @@ def test_client_ip_reads_every_forwarded_for_line(
     assert anonymous.get("/ip", headers=more).json() == {"ip": "203.0.113.5"}
     proxy_hops(3)
     assert anonymous.get("/ip", headers=more).json() == {"ip": "7.7.7.7"}
+
+
+# What Fly's proxy passes on for a visitor at 203.0.113.5 who forged both
+# headers: it overwrites Fly-Client-IP, and appends the visitor's address and
+# then its own edge's to whatever X-Forwarded-For the visitor sent.
+FLY_FORWARDED = {
+    "Fly-Client-IP": "203.0.113.5",
+    "X-Forwarded-For": "6.6.6.6, 7.7.7.7, 203.0.113.5, 66.241.124.11",
+}
+
+
+def test_client_ip_reads_the_proxy_s_own_header_when_told_to(
+    anonymous: TestClient, env: Callable[..., None]
+) -> None:
+    env(CLIENT_IP_HEADER="Fly-Client-IP")
+    assert anonymous.get("/ip", headers=FLY_FORWARDED).json() == {"ip": "203.0.113.5"}
+    # The hop count no longer matters: the forged X-Forwarded-For entries are never read.
+    env(TRUSTED_PROXY_HOPS="4")
+    assert anonymous.get("/ip", headers=FLY_FORWARDED).json() == {"ip": "203.0.113.5"}
+    assert anonymous.get("/ip", headers={"fly-client-ip": "2001:db8::7"}).json() == {"ip": "2001:db8::7"}
+
+
+def test_on_fly_the_visitor_is_second_from_the_right_of_x_forwarded_for(
+    anonymous: TestClient, proxy_hops: Callable[[int], None]
+) -> None:
+    # Without the header setting, two hops is the rule that matches Fly's proxy.
+    proxy_hops(2)
+    assert anonymous.get("/ip", headers=FLY_FORWARDED).json() == {"ip": "203.0.113.5"}
+
+
+def test_a_forged_client_ip_header_is_not_believed_where_it_isn_t_the_proxy_s(
+    anonymous: TestClient, proxy_hops: Callable[[int], None]
+) -> None:
+    forged = {"Fly-Client-IP": "6.6.6.6", "X-Forwarded-For": "203.0.113.5"}
+    assert anonymous.get("/ip", headers=forged).json() == {"ip": "testclient"}
+    proxy_hops(1)
+    assert anonymous.get("/ip", headers=forged).json() == {"ip": "203.0.113.5"}
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        # Not through the proxy at all, as from another machine on the private network.
+        [],
+        # Two lines: the proxy didn't overwrite what came in, so neither is believed.
+        [("Fly-Client-IP", "6.6.6.6"), ("Fly-Client-IP", "203.0.113.5")],
+        [("Fly-Client-IP", "6.6.6.6, 203.0.113.5")],
+        [("Fly-Client-IP", "not-an-address")],
+        [("Fly-Client-IP", "")],
+    ],
+)
+def test_a_client_ip_header_without_one_address_is_the_socket_s(
+    anonymous: TestClient, env: Callable[..., None], headers: list[tuple[str, str]]
+) -> None:
+    env(CLIENT_IP_HEADER="Fly-Client-IP")
+    sent = [*headers, ("X-Forwarded-For", "6.6.6.6")]
+    assert anonymous.get("/ip", headers=sent).json() == {"ip": "testclient"}

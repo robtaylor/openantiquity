@@ -76,12 +76,19 @@ for _name in (
     "FIELDCLUB_COOKIE_SECURE",
     "FIELDCLUB_USER_AGENT",
     "FIELDCLUB_CONTACT",
-    "FIELDCLUB_GCS_BUCKET",
+    "FIELDCLUB_S3_BUCKET",
+    "FIELDCLUB_CLIENT_IP_HEADER",
     "FIELDCLUB_INGEST_MAX_SHRINK",
     "PORT",
-    # Set by Cloud Run. Settings refuse a test environment there.
+    # Read when FIELDCLUB_DATABASE_URL is unset, as Fly attaches it.
+    "DATABASE_URL",
+    # Would point every S3 client and GDAL at a real store.
+    "AWS_ENDPOINT_URL_S3",
+    # Set by Cloud Run and by Fly. Settings refuse a test environment there.
     "K_SERVICE",
     "CLOUD_RUN_JOB",
+    "FLY_APP_NAME",
+    "FLY_MACHINE_ID",
 ):
     os.environ.pop(_name, None)
 

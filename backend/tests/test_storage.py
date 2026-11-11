@@ -4,67 +4,28 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 import pytest
-from google.api_core.exceptions import NotFound
 
 from fieldclub import storage
 from fieldclub.storage import (
-    GcsStorage,
     LocalStorage,
+    S3Storage,
     Storage,
     StorageKeyError,
     StorageNotFoundError,
     check_key,
     get_storage,
 )
+from tests.fake_s3 import FAKE_CREDENTIALS, FakeClient, FakeS3
 from tests.helpers import run_fresh
 
 
-class FakeBlob:
-    def __init__(self, bucket: FakeBucket, name: str) -> None:
-        self.bucket = bucket
-        self.name = name
-
-    def upload_from_string(self, data: bytes, content_type: str | None = None) -> None:
-        self.bucket.objects[self.name] = (data, content_type)
-
-    def download_as_bytes(self) -> bytes:
-        if self.name not in self.bucket.objects:
-            raise NotFound(self.name)
-        return self.bucket.objects[self.name][0]
-
-    def exists(self) -> bool:
-        return self.name in self.bucket.objects
-
-    def delete(self) -> None:
-        if self.name not in self.bucket.objects:
-            raise NotFound(self.name)
-        del self.bucket.objects[self.name]
-
-
-class FakeBucket:
-    def __init__(self) -> None:
-        self.objects: dict[str, tuple[bytes, str | None]] = {}
-
-    def blob(self, name: str) -> FakeBlob:
-        return FakeBlob(self, name)
-
-
-class FakeGcsClient:
-    def __init__(self) -> None:
-        self.buckets: dict[str, FakeBucket] = {}
-
-    def bucket(self, name: str) -> FakeBucket:
-        return self.buckets.setdefault(name, FakeBucket())
-
-
-@pytest.fixture(params=["local", "gcs"])
+@pytest.fixture(params=["local", "s3"])
 def store(request: pytest.FixtureRequest, tmp_path: Path) -> Storage:
     if request.param == "local":
         return LocalStorage(tmp_path / "store")
-    return GcsStorage("test-bucket", "prefix", client=FakeGcsClient())
+    return S3Storage("test-bucket", "prefix", client=FakeS3().client())
 
 
 def test_both_backends_satisfy_the_protocol(store: Storage) -> None:
@@ -145,34 +106,33 @@ def test_local_storage_treats_a_directory_as_missing(tmp_path: Path) -> None:
         store.get("a")
 
 
-def test_gcs_storage_prefixes_names_and_sets_content_type() -> None:
-    client = FakeGcsClient()
-    store = GcsStorage("fieldclub-data", "/cache/", client=client)
+def test_s3_storage_prefixes_names_and_sets_content_type(monkeypatch: pytest.MonkeyPatch) -> None:
+    s3 = FakeS3()
+    store = S3Storage("fieldclub-data", "/cache/", client=s3.client())
     store.put("tiles/a.png", b"png", "image/png")
     store.put("tiles/b.bin", b"raw")
-    assert client.buckets["fieldclub-data"].objects == {
+    assert {name: (stored.data, stored.content_type) for (_, name), stored in s3.objects.items()} == {
         "cache/tiles/a.png": (b"png", "image/png"),
         "cache/tiles/b.bin": (b"raw", "application/octet-stream"),
     }
-    assert store.url("tiles/a.png") == "https://storage.googleapis.com/fieldclub-data/cache/tiles/a.png"
+    monkeypatch.setenv("AWS_ENDPOINT_URL_S3", "https://fly.storage.tigris.dev/")
+    assert store.url("tiles/a.png") == "https://fly.storage.tigris.dev/fieldclub-data/cache/tiles/a.png"
     assert (
-        GcsStorage("fieldclub-data", client=client).url("x.png")
-        == "https://storage.googleapis.com/fieldclub-data/x.png"
+        S3Storage("fieldclub-data", client=s3.client()).url("x.png")
+        == "https://fly.storage.tigris.dev/fieldclub-data/x.png"
     )
 
 
-def test_gcs_client_is_only_built_when_first_needed(monkeypatch: pytest.MonkeyPatch) -> None:
-    built: list[Any] = []
+def test_s3_client_is_only_built_when_first_needed(monkeypatch: pytest.MonkeyPatch) -> None:
+    built: list[FakeClient] = []
+    s3 = FakeS3()
 
-    class Client(FakeGcsClient):
-        def __init__(self) -> None:
-            super().__init__()
-            built.append(self)
+    def client() -> FakeClient:
+        built.append(s3.client())
+        return built[-1]
 
-    import google.cloud.storage as gcs
-
-    monkeypatch.setattr(gcs, "Client", Client)
-    store = GcsStorage("fieldclub-data")
+    monkeypatch.setattr(storage, "s3_client", client)
+    store = S3Storage("fieldclub-data")
     assert built == []
     assert store.url("a.png")
     assert built == []
@@ -181,15 +141,37 @@ def test_gcs_client_is_only_built_when_first_needed(monkeypatch: pytest.MonkeyPa
     assert len(built) == 1
 
 
-def test_importing_fieldclub_does_not_load_the_google_client() -> None:
+def test_the_process_s_s3_client_uses_the_platform_s_endpoint_and_region(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name, value in FAKE_CREDENTIALS.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("AWS_ENDPOINT_URL_S3", "https://fly.storage.tigris.dev")
+    storage.s3_client.cache_clear()
+    try:
+        client = storage.s3_client()
+        # Built, not used: nothing here reaches the network.
+        assert client.meta.endpoint_url == "https://fly.storage.tigris.dev"
+        assert client.meta.region_name == "auto"
+        assert storage.s3_client() is client
+    finally:
+        storage.s3_client.cache_clear()
+
+
+def test_importing_storage_does_not_load_the_s3_client() -> None:
+    # rasterio loads botocore itself when it is installed, so the app as a whole does.
     code = (
-        "import sys; import fieldclub.storage, fieldclub.main; "
-        "sys.exit(1 if any(name.startswith('google.cloud') for name in sys.modules) else 0)"
+        "import sys; import fieldclub.storage, fieldclub.terrain.blobs; "
+        "sys.exit(1 if any(name.split('.')[0] in ('boto3', 'botocore') for name in sys.modules) else 0)"
     )
     run_fresh(code)
 
 
-def test_get_storage_follows_settings(env: Callable[..., None], tmp_path: Path) -> None:
+def test_get_storage_follows_settings(
+    env: Callable[..., None], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name, value in {**FAKE_CREDENTIALS, "AWS_ENDPOINT_URL_S3": "https://fly.storage.tigris.dev"}.items():
+        monkeypatch.setenv(name, value)
     env(VAR_DIR=str(tmp_path))
     get_storage.cache_clear()
     try:
@@ -199,10 +181,10 @@ def test_get_storage_follows_settings(env: Callable[..., None], tmp_path: Path) 
         assert get_storage("tiles") is local
         assert get_storage("media") is not local
 
-        env(STORAGE_BACKEND="gcs", GCS_BUCKET="fieldclub-data", GCS_PREFIX="prod")
+        env(STORAGE_BACKEND="s3", S3_BUCKET="fieldclub-data", S3_PREFIX="prod")
         get_storage.cache_clear()
         bucket = get_storage("tiles")
-        assert isinstance(bucket, GcsStorage)
+        assert isinstance(bucket, S3Storage)
         assert (bucket.bucket_name, bucket.prefix) == ("fieldclub-data", "prod/tiles")
         with pytest.raises(StorageKeyError):
             get_storage("../elsewhere")
@@ -210,21 +192,25 @@ def test_get_storage_follows_settings(env: Callable[..., None], tmp_path: Path) 
         storage.get_storage.cache_clear()
 
 
-def test_a_namespace_can_have_a_bucket_of_its_own(env: Callable[..., None]) -> None:
+def test_a_namespace_can_have_a_bucket_of_its_own(
+    env: Callable[..., None], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name, value in {**FAKE_CREDENTIALS, "AWS_ENDPOINT_URL_S3": "https://fly.storage.tigris.dev"}.items():
+        monkeypatch.setenv(name, value)
     env(
-        STORAGE_BACKEND="gcs",
-        GCS_BUCKET="fieldclub-cache",
-        GCS_PREFIX="prod",
-        GCS_NAMESPACE_BUCKETS='{"media": "fieldclub-photos"}',
+        STORAGE_BACKEND="s3",
+        S3_BUCKET="fieldclub-cache",
+        S3_PREFIX="prod",
+        S3_NAMESPACE_BUCKETS='{"media": "fieldclub-photos"}',
     )
     get_storage.cache_clear()
     try:
         photos = get_storage("media")
-        assert isinstance(photos, GcsStorage)
+        assert isinstance(photos, S3Storage)
         # Its own bucket, under the same prefix the shared bucket would use.
         assert (photos.bucket_name, photos.prefix) == ("fieldclub-photos", "prod/media")
         tiles = get_storage("tiles")
-        assert isinstance(tiles, GcsStorage)
+        assert isinstance(tiles, S3Storage)
         assert (tiles.bucket_name, tiles.prefix) == ("fieldclub-cache", "prod/tiles")
     finally:
         storage.get_storage.cache_clear()

@@ -8,6 +8,7 @@ empty string to read no file at all (the tests do this).
 from __future__ import annotations
 
 import os
+import re
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
@@ -32,6 +33,44 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 # second for a job. Neither is ever set by hand.
 _CLOUD_RUN_SERVICE = "K_SERVICE"
 _CLOUD_RUN_JOB = "CLOUD_RUN_JOB"
+# Fly sets both on every machine, a service's or a job's.
+_FLY_MARKERS = ("FLY_APP_NAME", "FLY_MACHINE_ID")
+
+# What an S3-compatible store needs, read by boto3 and GDAL from the
+# environment. Fly sets them on an app when a Tigris bucket is attached.
+S3_ENVIRONMENT = ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_ENDPOINT_URL_S3")
+S3_SCHEME = "s3://"
+
+# The database address Fly attaches is its connection pooler, on which LISTEN
+# receives nothing and a session lock may be lost. The same cluster answers
+# directly on `direct.<cluster>.flympg.net`.
+_FLY_POOLED_HOST = re.compile(r"pgbouncer\.(?P<cluster>[a-z0-9-]+\.flympg\.net)", re.IGNORECASE)
+
+
+def on_fly() -> bool:
+    """Whether this process runs on a Fly machine."""
+    return all(os.environ.get(name) for name in _FLY_MARKERS)
+
+
+def database_address(url: str) -> str:
+    """The URL to connect with: SQLAlchemy's psycopg driver, and Fly's direct address for its pooled one.
+
+    Accepts what Fly attaches (`postgres://` or `postgresql://`, the pooled
+    host) as well as a full SQLAlchemy URL, and changes nothing else in it.
+    Plain string work, because importing SQLAlchemy here would load it into
+    every command that reads a setting.
+    """
+    scheme, separator, rest = url.partition("://")
+    backend, _, driver = scheme.lower().partition("+")
+    if not separator or backend not in ("postgres", "postgresql") or driver not in ("", "psycopg"):
+        raise ConfigError("The database address must be a postgresql:// or postgresql+psycopg:// URL.")
+    # A password with "/" or "@" in it is percent-encoded in a URL, so these splits are safe.
+    authority, slash, path = rest.partition("/")
+    credentials, at, host_port = authority.rpartition("@")
+    host, colon, port = host_port.partition(":")
+    if pooled := _FLY_POOLED_HOST.fullmatch(host):
+        host = f"direct.{pooled.group('cluster')}"
+    return f"postgresql+psycopg://{credentials}{at}{host}{colon}{port}{slash}{path}"
 
 
 # Where each terrain folder is when it isn't set, below `var_dir`.
@@ -62,6 +101,10 @@ class Settings(BaseSettings):
     public_url: str = "http://localhost:5173"
     frontend_dist: Path = _REPO_ROOT / "frontend" / "dist"
     trusted_proxy_hops: int = Field(default=0, ge=0)
+    # A header the proxy in front sets to the visitor's address, overwriting
+    # whatever the visitor sent: `Fly-Client-IP` on Fly. When set it is read
+    # in place of X-Forwarded-For and `trusted_proxy_hops`.
+    client_ip_header: str | None = Field(default=None, pattern=r"^[A-Za-z0-9-]+$")
     # How long `fieldclub-api` waits for open requests to finish when told to stop.
     # Whole seconds, because uvicorn takes an int.
     shutdown_grace_s: int = Field(default=5, ge=0)
@@ -78,8 +121,13 @@ class Settings(BaseSettings):
     events_heartbeat_s: float = Field(default=15.0, gt=0)
     events_max_stream_s: float = Field(default=1800.0, gt=0)
 
-    # Database
-    database_url: str = "postgresql+psycopg://fieldclub:fieldclub@localhost:54329/fieldclub"
+    # Database. DATABASE_URL, which Fly attaches, is read when the setting is
+    # unset. Either is turned into the address to connect with by
+    # `database_address`.
+    database_url: str = Field(
+        default="postgresql+psycopg://fieldclub:fieldclub@localhost:54329/fieldclub",
+        validation_alias=AliasChoices("FIELDCLUB_DATABASE_URL", "DATABASE_URL"),
+    )
     db_pool_size: int = Field(default=5, ge=1)
     db_max_overflow: int = Field(default=5, ge=0)
     auto_create_schema: bool | None = None
@@ -146,12 +194,14 @@ class Settings(BaseSettings):
     # Runtime data. A relative path is resolved against the repository root,
     # so storage, ingest caches and terrain agree whatever the working directory.
     var_dir: Path = Path("var")
-    storage_backend: Literal["local", "gcs"] = "local"
-    gcs_bucket: str | None = None
-    gcs_prefix: str = ""
+    # `s3` is any store with the S3 interface, such as Tigris, reached with the
+    # credentials and endpoint in `S3_ENVIRONMENT`.
+    storage_backend: Literal["local", "s3"] = "local"
+    s3_bucket: str | None = None
+    s3_prefix: str = ""
     # Namespaces kept in a bucket of their own, such as {"media": "<photos bucket>"},
-    # so uploads and caches can have different lifecycles. Others use gcs_bucket.
-    gcs_namespace_buckets: dict[str, str] = {}
+    # so uploads and caches can have different lifecycles. Others use s3_bucket.
+    s3_namespace_buckets: dict[str, str] = {}
 
     # Outbound HTTP
     contact: str = ""
@@ -166,14 +216,14 @@ class Settings(BaseSettings):
 
     # Terrain (Decision 0006).
     # Elevation is read only from the mirror of cloud-optimised GeoTIFFs: a
-    # local folder, or `gs://bucket/prefix` in production. Relative paths are
+    # local folder, or `s3://bucket/prefix` in production. Relative paths are
     # resolved against the repository root, where `var/lidar` lives. Each
     # folder left unset is under `var_dir`, as in `_TERRAIN_UNDER_VAR`.
     terrain_mirror: str = ""
     # Defra's source tiles already on disk, converted instead of fetched. Empty to fetch everything.
     terrain_source_dir: str = ""
     # The national overview for zoom 12 and below, built from the mirror by
-    # `fieldclub-terrain national build`: a local folder or `gs://bucket/prefix`.
+    # `fieldclub-terrain national build`: a local folder or `s3://bucket/prefix`.
     terrain_national: str = ""
     # Downloads from the bulk supply that may run at once in one process. A map
     # tile or a profile never waits for one: missing tiles are added in the
@@ -205,6 +255,18 @@ class Settings(BaseSettings):
     def _var_dir_from_repo_root(cls, value: Path) -> Path:
         return value if value.is_absolute() else _REPO_ROOT / value
 
+    @field_validator("database_url")
+    @classmethod
+    def _database_address(cls, value: str) -> str:
+        return database_address(value)
+
+    @property
+    def uses_s3(self) -> bool:
+        """Whether anything is kept in an S3-compatible store: the storage backend or a terrain folder."""
+        return self.storage_backend == "s3" or any(
+            location.startswith(S3_SCHEME) for location in (self.terrain_mirror, self.terrain_national)
+        )
+
     @model_validator(mode="after")
     def _terrain_under_var_dir(self) -> Self:
         """Put each terrain folder that wasn't set under `var_dir`, like every other runtime path."""
@@ -222,13 +284,25 @@ class Settings(BaseSettings):
             raise ConfigError(
                 "FIELDCLUB_DEV_LOGIN lets anyone sign in as anyone. It can't be on in production."
             )
-        if is_prod and "trusted_proxy_hops" not in self.model_fields_set:
+        if is_prod and "trusted_proxy_hops" not in self.model_fields_set and not self.client_ip_header:
             # Unset means 0, and behind a proxy that puts every signed-out
             # caller in one rate-limit bucket. Make whoever deploys say.
             raise ConfigError(
-                "FIELDCLUB_TRUSTED_PROXY_HOPS must be set in production: the number of reverse proxies "
-                "in front of the API (1 on Cloud Run, 0 only when it is reached directly)."
+                "FIELDCLUB_TRUSTED_PROXY_HOPS or FIELDCLUB_CLIENT_IP_HEADER must be set in production: "
+                "the number of reverse proxies in front of the API (1 on Cloud Run, 0 only when it is "
+                "reached directly), or the header its proxy sets to the visitor's address."
             )
+        if on_fly():
+            # The same protections as on Cloud Run, by Fly's own variables.
+            if not is_prod:
+                raise ConfigError(f"FIELDCLUB_ENV is '{self.env.value}' on Fly. Set FIELDCLUB_ENV=prod.")
+            if not self.client_ip_header:
+                # Fly's proxy appends two entries to X-Forwarded-For, so a hop
+                # count is easy to get wrong. Its own header can't be forged.
+                raise ConfigError(
+                    "FIELDCLUB_CLIENT_IP_HEADER must be set on Fly. Set it to Fly-Client-IP, which "
+                    "Fly's proxy sets to the visitor's address."
+                )
         on_cloud_run_service = bool(os.environ.get(_CLOUD_RUN_SERVICE))
         if (on_cloud_run_service or os.environ.get(_CLOUD_RUN_JOB)) and not is_prod:
             # FIELDCLUB_ENV defaults to dev, which turns off the Secure cookie and
@@ -240,11 +314,26 @@ class Settings(BaseSettings):
                 "FIELDCLUB_TRUSTED_PROXY_HOPS is 0 on Cloud Run, where every request arrives through "
                 "Google's proxy. Set it to 1, or 2 behind a load balancer as well."
             )
-        if self.storage_backend == "gcs" and not self.gcs_bucket:
-            raise ConfigError("FIELDCLUB_GCS_BUCKET is required when FIELDCLUB_STORAGE_BACKEND is 'gcs'.")
-        if self.gcs_namespace_buckets and self.storage_backend != "gcs":
+        if self.storage_backend == "s3" and not self.s3_bucket:
+            raise ConfigError("FIELDCLUB_S3_BUCKET is required when FIELDCLUB_STORAGE_BACKEND is 's3'.")
+        if self.s3_namespace_buckets and self.storage_backend != "s3":
             raise ConfigError(
-                "FIELDCLUB_GCS_NAMESPACE_BUCKETS only applies when FIELDCLUB_STORAGE_BACKEND is 'gcs'."
+                "FIELDCLUB_S3_NAMESPACE_BUCKETS only applies when FIELDCLUB_STORAGE_BACKEND is 's3'."
+            )
+        for name in ("terrain_mirror", "terrain_national"):
+            location: str = getattr(self, name)
+            if "://" in location and not location.startswith(S3_SCHEME):
+                raise ConfigError(
+                    f"FIELDCLUB_{name.upper()} is {location!r}. A terrain folder is a local path or "
+                    f"{S3_SCHEME}bucket/prefix."
+                )
+        missing = [name for name in S3_ENVIRONMENT if not os.environ.get(name)]
+        if self.uses_s3 and missing:
+            # boto3 and GDAL read these themselves. Without them a store would
+            # fail at its first read, or reach AWS instead of the one meant.
+            raise ConfigError(
+                f"{', '.join(missing)} must be set to use an S3 store. Fly sets them when a Tigris "
+                "bucket is attached to the app."
             )
         # The log mailer writes working sign-in links to the log, so it must
         # never run where other people sign in.

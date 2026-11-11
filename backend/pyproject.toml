@@ -4,11 +4,11 @@ version = "0.1.0"
 description = "Open Antiquity: a collaborative map for finding and checking archaeological earthworks in UK LIDAR data"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "boto3>=1.44.1",
     "email-validator>=2.3.0",
     "fastapi>=0.162.2",
     "feedparser>=6.0.14",
     "geoalchemy2>=0.21.0",
-    "google-cloud-storage>=3.17.1",
     "httpx>=0.28.1",
     "joserfc>=1.8.0",
     "numpy>=2.5.4",
@@ -108,6 +108,7 @@ ignore = [
 "src/fieldclub/terrain/cli.py" = ["T20"]
 "src/fieldclub/ingest/adapters/ogr.py" = ["TID251"] # the one place pyogrio is imported
 "src/fieldclub/auth/handles.py" = ["SIM905"] # word lists read better as split strings
+"tests/fake_s3.py" = ["N803"] # boto3's own argument names, such as Bucket and Key
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"

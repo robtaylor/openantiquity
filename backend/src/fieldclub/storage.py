@@ -1,4 +1,4 @@
-"""Blob storage: local disk in development, a Cloud Storage bucket in production.
+"""Blob storage: local disk in development, a bucket with the S3 interface in production.
 
 The tile caches and uploads both go through `Storage`. Keys are slash-separated
 paths such as `tiles/composite/14/8107/5448.png`.
@@ -12,13 +12,10 @@ import re
 import tempfile
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from fieldclub.config import get_settings
 from fieldclub.errors import AppError, NotFoundError
-
-if TYPE_CHECKING:
-    from google.cloud.storage import Bucket
 
 
 class StorageError(AppError):
@@ -117,11 +114,11 @@ class LocalStorage:
         return self._path(key).as_uri()
 
 
-class GcsStorage:
-    """Objects in a Cloud Storage bucket, under an optional prefix.
+class S3Storage:
+    """Objects in a bucket with the S3 interface, such as Tigris, under an optional prefix.
 
-    `google-cloud-storage` is imported on first use, so development and the
-    tests never load it.
+    A put is one request, so an object is either whole or absent. `boto3` is
+    imported on first use, so development and the tests never load it.
     """
 
     def __init__(self, bucket: str, prefix: str = "", *, client: Any = None) -> None:
@@ -129,46 +126,111 @@ class GcsStorage:
         self.bucket_name = bucket
         self.prefix = prefix.strip("/")
         self._client = client
-        self._bucket: Bucket | None = None
 
     def _name(self, key: str) -> str:
         check_key(key)
         return f"{self.prefix}/{key}" if self.prefix else key
 
-    def _get_bucket(self) -> Bucket:
-        if self._bucket is None:
-            if self._client is None:
-                from google.cloud import storage as gcs
-
-                self._client = gcs.Client()
-            self._bucket = self._client.bucket(self.bucket_name)
-        assert self._bucket is not None
-        return self._bucket
+    @property
+    def client(self) -> Any:
+        if self._client is None:
+            self._client = s3_client()
+        return self._client
 
     def put(self, key: str, data: bytes, content_type: str | None = None) -> None:
-        blob = self._get_bucket().blob(self._name(key))
-        blob.upload_from_string(data, content_type=content_type or "application/octet-stream")
+        self.client.put_object(
+            Bucket=self.bucket_name,
+            Key=self._name(key),
+            Body=data,
+            ContentType=content_type or "application/octet-stream",
+        )
 
     def get(self, key: str) -> bytes:
-        from google.api_core.exceptions import NotFound
-
-        # One request: a miss comes back as NotFound, so there's no metadata fetch first.
-        try:
-            return self._get_bucket().blob(self._name(key)).download_as_bytes()
-        except NotFound:
-            raise StorageNotFoundError(f"Nothing is stored under {key!r}.") from None
+        data = s3_get(self.client, self.bucket_name, self._name(key))
+        if data is None:
+            raise StorageNotFoundError(f"Nothing is stored under {key!r}.")
+        return data
 
     def exists(self, key: str) -> bool:
-        return bool(self._get_bucket().blob(self._name(key)).exists())
+        return s3_head(self.client, self.bucket_name, self._name(key)) is not None
 
     def delete(self, key: str) -> None:
-        from google.api_core.exceptions import NotFound
-
-        with contextlib.suppress(NotFound):
-            self._get_bucket().blob(self._name(key)).delete()
+        # Removing a key that isn't there succeeds in S3.
+        self.client.delete_object(Bucket=self.bucket_name, Key=self._name(key))
 
     def url(self, key: str) -> str:
-        return f"https://storage.googleapis.com/{self.bucket_name}/{self._name(key)}"
+        endpoint = os.environ.get("AWS_ENDPOINT_URL_S3", "https://s3.amazonaws.com").rstrip("/")
+        return f"{endpoint}/{self.bucket_name}/{self._name(key)}"
+
+
+# --------------------------------------------------------------------------
+# The S3 client, shared by every bucket in the process
+# --------------------------------------------------------------------------
+
+
+@lru_cache(maxsize=1)
+def s3_client() -> Any:
+    """One boto3 client for the process. Clients are safe to share between threads.
+
+    Credentials come from `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`,
+    which boto3 reads itself, and the store from `AWS_ENDPOINT_URL_S3`. Fly
+    sets all three when a Tigris bucket is attached; the settings refuse to
+    start without them (`config.S3_ENVIRONMENT`).
+    """
+    from boto3.session import Session
+    from botocore.config import Config
+
+    return Session().client(
+        "s3",
+        endpoint_url=os.environ.get("AWS_ENDPOINT_URL_S3") or None,
+        # Tigris takes "auto". Fly's own documentation gives no region.
+        region_name=os.environ.get("AWS_REGION") or "auto",
+        config=Config(
+            retries={"mode": "standard", "max_attempts": 4},
+            connect_timeout=10,
+            read_timeout=60,
+            # Tile renders, fetches and uploads share it.
+            max_pool_connections=32,
+        ),
+    )
+
+
+def s3_refusal(exc: BaseException) -> int | None:
+    """The HTTP status of an S3 error answer, such as 404 or 412, or None for anything else."""
+    response = getattr(exc, "response", None)
+    if not isinstance(response, dict):
+        return None
+    status = response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+    if isinstance(status, int):
+        return status
+    # A HEAD carries no body, so botocore puts the status in the code.
+    code = str(response.get("Error", {}).get("Code", ""))
+    return int(code) if code.isdigit() else None
+
+
+def s3_get(client: Any, bucket: str, name: str) -> bytes | None:
+    """The object's bytes, or None when there is none.
+
+    One request: a miss comes back as an error, so there's no metadata fetch first.
+    """
+    try:
+        answer = client.get_object(Bucket=bucket, Key=name)
+    except Exception as exc:
+        if s3_refusal(exc) == 404:
+            return None
+        raise
+    with answer["Body"] as body:
+        return bytes(body.read())
+
+
+def s3_head(client: Any, bucket: str, name: str) -> dict[str, Any] | None:
+    """The object's metadata, or None when there is none."""
+    try:
+        return client.head_object(Bucket=bucket, Key=name)
+    except Exception as exc:
+        if s3_refusal(exc) == 404:
+            return None
+        raise
 
 
 @lru_cache(maxsize=16)
@@ -176,15 +238,15 @@ def get_storage(namespace: str) -> Storage:
     """The configured storage for one kind of data, such as `tiles` or `media`.
 
     Locally that is `var/<namespace>/`. In a bucket it is the `<namespace>/`
-    prefix under `FIELDCLUB_GCS_PREFIX`, in the namespace's own bucket when
-    `FIELDCLUB_GCS_NAMESPACE_BUCKETS` names one and in `FIELDCLUB_GCS_BUCKET`
+    prefix under `FIELDCLUB_S3_PREFIX`, in the namespace's own bucket when
+    `FIELDCLUB_S3_NAMESPACE_BUCKETS` names one and in `FIELDCLUB_S3_BUCKET`
     otherwise.
     """
     check_key(namespace)
     settings = get_settings()
-    if settings.storage_backend == "gcs":
-        assert settings.gcs_bucket, "Settings guarantee a bucket when the backend is gcs"
-        bucket = settings.gcs_namespace_buckets.get(namespace, settings.gcs_bucket)
-        prefix = "/".join(part for part in (settings.gcs_prefix.strip("/"), namespace) if part)
-        return GcsStorage(bucket, prefix)
+    if settings.storage_backend == "s3":
+        assert settings.s3_bucket, "Settings guarantee a bucket when the backend is s3"
+        bucket = settings.s3_namespace_buckets.get(namespace, settings.s3_bucket)
+        prefix = "/".join(part for part in (settings.s3_prefix.strip("/"), namespace) if part)
+        return S3Storage(bucket, prefix)
     return LocalStorage(settings.var_dir / namespace)

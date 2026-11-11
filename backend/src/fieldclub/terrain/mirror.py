@@ -1,7 +1,7 @@
 """The mirror of cloud-optimised elevation tiles, filled on first use (Decision 0006, points 4 and 5).
 
 A mirror is a folder of `<tile>.tif` COGs: a local directory in development,
-`gs://bucket/prefix` in production, which GDAL reads through `/vsigs/`.
+`s3://bucket/prefix` in production, which GDAL reads through `/vsis3/`.
 
 `Mirror.ensure(name)` returns the path GDAL should open for a tile, adding the
 tile first if it is missing. Adding one means finding the source GeoTIFF (on
@@ -43,7 +43,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from fieldclub.terrain import sftp
-from fieldclub.terrain.blobs import Folder, GcsFolder, LocalFolder, ObjectLock, folder
+from fieldclub.terrain.blobs import Folder, LocalFolder, ObjectLock, S3Folder, folder
 from fieldclub.terrain.catalogue import Catalogue, SourceTile, normalise_name
 from fieldclub.terrain.cog import COG_FORMAT, UNREADABLE_ERRORS, to_cog
 from fieldclub.terrain.errors import (
@@ -89,8 +89,8 @@ class MirrorStore:
     def publish(self, local: Path, name: str) -> None:
         """Make a complete local COG the tile's mirror file, in one step, and remove the local copy.
 
-        A tile already in the mirror is never replaced. In a bucket the
-        writers hold permission to create objects, not to replace them, so a
+        A tile already in the mirror is never replaced: in a bucket the upload
+        is made only if no object has the name (`If-None-Match: *`), so a
         mirror file can't be overwritten or lost, and another instance that
         published the same tile first has done the job.
         """
@@ -112,15 +112,15 @@ class LocalMirrorStore(MirrorStore):
         self.root = Path(root)
 
 
-class GcsMirrorStore(MirrorStore):
-    """A mirror in a Cloud Storage bucket. An upload only becomes visible once it is complete."""
+class S3MirrorStore(MirrorStore):
+    """A mirror in a bucket with the S3 interface. An upload only becomes visible once it is complete."""
 
     def __init__(self, bucket: str, prefix: str = "", *, client: Any = None) -> None:
-        super().__init__(GcsFolder(bucket, prefix, client=client))
+        super().__init__(S3Folder(bucket, prefix, client=client))
 
 
 def mirror_store(location: str) -> MirrorStore:
-    """A store for `gs://bucket/prefix` or a local directory."""
+    """A store for `s3://bucket/prefix` or a local directory."""
     return MirrorStore(folder(location))
 
 

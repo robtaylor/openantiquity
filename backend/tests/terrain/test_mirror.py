@@ -10,11 +10,11 @@ from typing import Any
 
 import pytest
 import rasterio
-from google.api_core.exceptions import Forbidden, PreconditionFailed
+from botocore.exceptions import ClientError
 
 from fieldclub.config import DefraSftpSettings
 from fieldclub.errors import DataIntegrityError
-from fieldclub.terrain.blobs import GcsFolder, LocalFolder
+from fieldclub.terrain.blobs import LocalFolder, S3Folder
 from fieldclub.terrain.catalogue import SourceTile
 from fieldclub.terrain.cog import check_cog
 from fieldclub.terrain.errors import (
@@ -25,16 +25,16 @@ from fieldclub.terrain.errors import (
 )
 from fieldclub.terrain.mirror import (
     Fetched,
-    GcsMirrorStore,
     LocalMirrorStore,
     LocalSourceFetcher,
     Mirror,
+    S3MirrorStore,
     SftpFetcher,
     mirror_store,
 )
 from fieldclub.terrain.sftp import defra_connector
+from tests.fake_s3 import FakeS3, client_error
 from tests.terrain.fakes import FakeServer, catalogue_of, local_mirror, small_cog, write_source_tile
-from tests.terrain.gcs import FakeGcs
 
 
 @pytest.fixture(scope="module")
@@ -163,42 +163,45 @@ def test_mirror_locations() -> None:
     assert isinstance(local.folder, LocalFolder)
     assert not local.shared
     assert local.gdal_path("SU16nw") == "/data/mirror/SU16nw.tif"
-    bucket = mirror_store("gs://fieldclub-lidar/england/dtm-2022")
-    assert isinstance(bucket.folder, GcsFolder)
+    bucket = mirror_store("s3://fieldclub-lidar/england/dtm-2022")
+    assert isinstance(bucket.folder, S3Folder)
     assert bucket.shared
-    assert bucket.gdal_path("su16nw") == "/vsigs/fieldclub-lidar/england/dtm-2022/SU16nw.tif"
+    assert bucket.gdal_path("su16nw") == "/vsis3/fieldclub-lidar/england/dtm-2022/SU16nw.tif"
     assert bucket.lock_name("su16nw") == "locks/SU16nw.lock"
 
 
 def test_a_bucket_mirror_uploads_whole_files_under_its_prefix(tmp_path: Path) -> None:
-    gcs = FakeGcs()
-    store = GcsMirrorStore("lidar", "england", client=gcs.client())
+    s3 = FakeS3()
+    store = S3MirrorStore("lidar", "england", client=s3.client())
     assert store.shared
     local = tmp_path / "SU16nw.cog.tif"
     local.write_bytes(b"cog")
     assert not store.exists("SU16nw")
     store.publish(local, "SU16nw")
-    assert gcs.names("lidar") == ["england/SU16nw.tif"]
-    assert gcs.data("lidar", "england/SU16nw.tif") == b"cog"
+    assert s3.names("lidar") == ["england/SU16nw.tif"]
+    assert s3.data("lidar", "england/SU16nw.tif") == b"cog"
+    # One request, made only if nothing has the name.
+    assert [call for call in s3.calls if call[0] == "put"] == [("put", "england/SU16nw.tif")]
     assert store.exists("SU16nw")
     assert store.names() == ["SU16nw"]
     assert not local.exists()
 
 
-@pytest.mark.parametrize("refusal", [PreconditionFailed, Forbidden])
+@pytest.mark.parametrize("same_bytes", [False, True])
 def test_a_bucket_mirror_never_replaces_a_tile_another_instance_published(
-    tmp_path: Path, refusal: type[Exception]
+    tmp_path: Path, same_bytes: bool
 ) -> None:
-    gcs = FakeGcs(refusal=refusal)
-    store = GcsMirrorStore("lidar", "england", client=gcs.client())
+    s3 = FakeS3()
+    store = S3MirrorStore("lidar", "england", client=s3.client())
     first, second = tmp_path / "first.tif", tmp_path / "second.tif"
     first.write_bytes(b"first")
-    second.write_bytes(b"second")
+    second.write_bytes(b"first" if same_bytes else b"second")
     store.publish(first, "SU16nw")
-    # The writers may create objects but not replace them, so a second upload must ask not to.
+    kept = s3.objects[("lidar", "england/SU16nw.tif")]
+    # The second upload asks to be made only if nothing is there, so the store refuses it.
     store.publish(second, "SU16nw")
-    assert gcs.names("lidar") == ["england/SU16nw.tif"]
-    assert gcs.data("lidar", "england/SU16nw.tif") == b"first"
+    assert s3.names("lidar") == ["england/SU16nw.tif"]
+    assert s3.objects[("lidar", "england/SU16nw.tif")] is kept
     assert not second.exists()
 
 
@@ -215,16 +218,16 @@ def test_a_local_mirror_never_replaces_a_tile_either(tmp_path: Path) -> None:
 
 
 def test_a_refused_upload_of_a_new_tile_is_an_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    gcs = FakeGcs()
+    s3 = FakeS3()
 
     def refuse(*args: Any, **kwargs: Any) -> Any:
-        raise Forbidden("no permission")
+        raise client_error("PutObject", 403, "AccessDenied")
 
-    monkeypatch.setattr(gcs, "put", refuse)
-    store = GcsMirrorStore("lidar", "england", client=gcs.client())
+    monkeypatch.setattr(s3, "put", refuse)
+    store = S3MirrorStore("lidar", "england", client=s3.client())
     local = tmp_path / "SU16nw.cog.tif"
     local.write_bytes(b"cog")
-    with pytest.raises(Forbidden):
+    with pytest.raises(ClientError):
         store.publish(local, "SU16nw")
 
 

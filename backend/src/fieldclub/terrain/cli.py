@@ -11,8 +11,8 @@
 
 Mirroring lists the mirror once, skips the tiles it already holds and resumes
 partial downloads, so an interrupted run is simply started again. Each tile
-is read back as a COG before it is published, and its stored size (and, in a
-bucket, its CRC32C) is checked after. `--concurrency` is how many tiles are in
+is read back as a COG before it is published, and its stored size is
+checked after. `--concurrency` is how many tiles are in
 hand at once. At most `FIELDCLUB_TERRAIN_FETCH_CONCURRENCY` of them are being
 downloaded, each over its own SFTP connection, kept open from tile to tile.
 

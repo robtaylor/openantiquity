@@ -22,6 +22,7 @@ don't ask for it.
 
 from __future__ import annotations
 
+import ipaddress
 from collections.abc import Callable
 from typing import Annotated
 
@@ -50,14 +51,33 @@ def client_ip(request: Request) -> str | None:
     appending to the line it received. The lines are one list in the order
     they arrive, so they are joined before counting. Reading only the first
     line would believe the client's.
+
+    `FIELDCLUB_CLIENT_IP_HEADER` names a header the proxy sets to the
+    visitor's address, overwriting any the visitor sent (`Fly-Client-IP`).
+    When it is set, that header alone is read. A request without exactly one
+    valid address in it didn't come through the proxy, and is the socket's.
     """
-    hops = get_settings().trusted_proxy_hops
+    settings = get_settings()
+    if settings.client_ip_header:
+        given = request.headers.getlist(settings.client_ip_header)
+        if len(given) == 1 and _is_address(given[0].strip()):
+            return given[0].strip()
+        return request.client.host if request.client else None
+    hops = settings.trusted_proxy_hops
     if hops > 0:
         lines = request.headers.getlist("x-forwarded-for")
         forwarded = [part.strip() for line in lines for part in line.split(",") if part.strip()]
         if len(forwarded) >= hops:
             return forwarded[-hops]
     return request.client.host if request.client else None
+
+
+def _is_address(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return True
 
 
 def current_user_optional(request: Request, response: Response, db: Db) -> User | None:
