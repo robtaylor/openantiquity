@@ -44,6 +44,8 @@ import { ProfilePanel } from "../layers/profile/ProfilePanel.js";
 import { MarkButton } from "../mark/MarkButton.js";
 import { isMarkPath, MarkLayer } from "../mark/MarkLayer.js";
 import { MARK_PATH, MarkPanel } from "../mark/MarkPanel.js";
+import { RECENT_MENTIONS_PATH } from "../mentions/paths.js";
+import { RecentMentionsPanel } from "../mentions/RecentMentionsPanel.js";
 import { APP_NAME, NotFoundPanel, PLACEHOLDER_ROUTES, PlaceholderPanel } from "../placeholders.js";
 import { OpenElsewherePanel } from "../records/OpenElsewherePanel.js";
 import { ELSEWHERE_PATH, RECORD_SEARCH_PATH } from "../records/paths.js";
@@ -322,6 +324,7 @@ function ReadyShell({ meta }: { meta: Meta }) {
             <Route path={RECORD_SEARCH_PATH} element={<RecordSearchPanel />} />
             <Route path={ELSEWHERE_PATH} element={<OpenElsewherePanel />} />
             <Route path={PROFILE_PATH} element={<ProfilePanel />} />
+            <Route path={RECENT_MENTIONS_PATH} element={<RecentMentionsPanel meta={meta} />} />
             {PLACEHOLDER_ROUTES.map((route) => (
               <Route key={route.path} path={route.path} element={<PlaceholderPanel route={route} />} />
             ))}

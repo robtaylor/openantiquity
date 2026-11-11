@@ -14,6 +14,7 @@ import type { Evidence, EvidenceIn, FindingDetail } from "../types.js";
 import { useOptimisticFinding } from "../useFinding.js";
 import { EvidenceForm } from "./EvidenceForm.js";
 import { EvidenceItem } from "./EvidenceItem.js";
+import { KindChooser } from "./KindChooser.js";
 import { composeRecordLink, NO_RECORD, RecordLinkForm, type RecordLinkValues } from "./RecordLinkForm.js";
 
 /** Which form is open, and what it holds. Kept here so a failed save can open it again as it was. */
@@ -261,32 +262,16 @@ export function EvidenceSection({
             )}
           </div>
         ) : choosing ? (
-          <div className="fc-evidence-add">
-            <h4>What kind of evidence?</h4>
-            {/* Each kind is explained beside it, because a tooltip never reaches touch or the keyboard. */}
-            <ul className="fc-kind-list">
-              {meta.vocab.evidence_kinds.map((kind) => (
-                <li key={kind.id} className="fc-kind-list__item">
-                  <Button
-                    size="sm"
-                    aria-describedby={`fc-kind-hint-${kind.id}`}
-                    onClick={() => {
-                      setChoosing(false);
-                      void signedIn(() => setForm(openForm(kind.id)));
-                    }}
-                  >
-                    {kind.label}
-                  </Button>
-                  <span className="fc-finding__hint" id={`fc-kind-hint-${kind.id}`}>
-                    {kind.hint}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            <Button size="sm" variant="ghost" onClick={() => setChoosing(false)}>
-              Cancel
-            </Button>
-          </div>
+          <KindChooser
+            heading="What kind of evidence?"
+            kinds={meta.vocab.evidence_kinds}
+            idPrefix="fc-kind-hint"
+            onChoose={(kindId) => {
+              setChoosing(false);
+              void signedIn(() => setForm(openForm(kindId)));
+            }}
+            onCancel={() => setChoosing(false)}
+          />
         ) : (
           <Button icon={<Plus size={16} aria-hidden />} onClick={() => setChoosing(true)}>
             Add evidence

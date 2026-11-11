@@ -10,7 +10,7 @@ import { solidPng } from "./png.js";
  * The API calls the app makes in fixture mode get stand-in answers too: no
  * findings (for the map and for the list), a fixed height for any spot,
  * one-metre elevation everywhere, nobody signed in, nothing waiting for a
- * second look and no help wanted. A test can
+ * second look, no help wanted, no mentions and no activity. A test can
  * answer any of them differently with a route of its own, which Playwright
  * tries first.
  */
@@ -181,6 +181,15 @@ export async function stubBackend(page: Page, log: NetworkLog = newLog()): Promi
       count("review");
       const body = path === "/api/v1/review/next" ? { items: [], next_cursor: null } : { groups: [] };
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    }
+    if (path === "/api/v1/mentions/recent" || path === "/api/v1/activity") {
+      // Nobody has mentioned anything, and nothing has happened.
+      count(path === "/api/v1/activity" ? "activity" : "mentions");
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ items: [], next_cursor: null }),
+      });
     }
     if (path === "/api/v1/terrain/coverage") {
       count("coverage");

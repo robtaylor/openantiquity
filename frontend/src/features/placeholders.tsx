@@ -30,6 +30,8 @@ export interface PlaceholderRoute {
   icon: LucideIcon;
   /** What this page will do, in a sentence or two. */
   body: string;
+  /** A part of it that is built already, offered beside "Back to the map". */
+  built?: { to: string; label: string };
 }
 
 export const PLACEHOLDER_ROUTES: PlaceholderRoute[] = [
@@ -57,6 +59,7 @@ export const PLACEHOLDER_ROUTES: PlaceholderRoute[] = [
     title: "Activity",
     icon: Activity,
     body: "New findings, findings moving up a step, and mentions in videos and articles will appear here as they happen.",
+    built: { to: "/mentions", label: "Recent mentions" },
   },
   {
     path: "/u/:handle",
@@ -104,7 +107,22 @@ export function PlaceholderPanel({ route }: { route: PlaceholderRoute }) {
   const Icon = route.icon;
   return (
     <PanelFrame panelKey={pathname} title={route.title} subtitle={route.subtitle?.(params)}>
-      <EmptyState icon={<Icon size={22} />} title="This part isn't built yet" action={<BackToMap />}>
+      <EmptyState
+        icon={<Icon size={22} />}
+        title="This part isn't built yet"
+        action={
+          route.built ? (
+            <>
+              <Link className="fc-button fc-button--primary fc-button--md" to={route.built.to}>
+                {route.built.label}
+              </Link>
+              <BackToMap />
+            </>
+          ) : (
+            <BackToMap />
+          )
+        }
+      >
         <p>{route.body}</p>
       </EmptyState>
     </PanelFrame>

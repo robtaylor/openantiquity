@@ -1,3 +1,5 @@
+import type { MouseEvent } from "react";
+import { useNavigate } from "react-router";
 import { create } from "zustand";
 import { kmSquareAt } from "../../map/gridref.js";
 import { onPersonChanged } from "../account/session.js";
@@ -35,4 +37,27 @@ onPersonChanged(() => useSelectedFinding.getState().clear());
 /** The path of a finding's page. */
 export function findingPath(publicId: string): string {
   return `/f/${encodeURIComponent(publicId)}`;
+}
+
+/** Enough of a finding to open its page and mark it: its id and the position this viewer may see. */
+export interface FindingToOpen {
+  public_id: string;
+  location: { lon: number; lat: number; obscured: boolean };
+}
+
+/**
+ * A click handler for a link to a finding's page: it marks the finding on the
+ * map, as its square when obscured, and opens the page through the router. A
+ * click with a modifier key, or not with the main button, is left to the browser.
+ */
+export function useOpenFinding(): (finding: FindingToOpen) => (event: MouseEvent<HTMLAnchorElement>) => void {
+  const navigate = useNavigate();
+  const select = useSelectedFinding((state) => state.select);
+  return ({ public_id: publicId, location }) =>
+    (event) => {
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+      event.preventDefault();
+      select(publicId, [location.lon, location.lat], location.obscured);
+      navigate(findingPath(publicId));
+    };
 }

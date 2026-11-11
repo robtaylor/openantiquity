@@ -52,7 +52,15 @@ export const MODES: Mode[] = [
     icon: NotebookText,
     also: ["/i/"],
   },
-  { id: "activity", label: "Activity", shortLabel: "Activity", to: "/activity", icon: Activity },
+  // The recent mentions across the map are part of the activity.
+  {
+    id: "activity",
+    label: "Activity",
+    shortLabel: "Activity",
+    to: "/activity",
+    icon: Activity,
+    also: ["/mentions"],
+  },
   { id: "account", label: "Account", shortLabel: "Account", to: "/account", icon: CircleUser, also: ["/u/"] },
 ];
 

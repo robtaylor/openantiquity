@@ -8,6 +8,7 @@ import { EmptyState } from "../../ui/EmptyState.js";
 import { scrollBehaviour } from "../../ui/motion.js";
 import { Skeleton } from "../../ui/Skeleton.js";
 import { useSession } from "../account/session.js";
+import { MentionsSection } from "../mentions/MentionsSection.js";
 import { useDocumentTitle } from "../placeholders.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { usePanelEnvironment } from "../shell/panelContext.js";
@@ -20,10 +21,10 @@ import { findingPageKeys } from "./keys.js";
 import { panIntoView, useFindingOnMap, whenStageSettled } from "./mapView.js";
 import { NextSteps } from "./NextSteps.js";
 import { Answers, Credits } from "./People.js";
-import { FollowUpTimelineSlot, MentionsSlot } from "./Slots.js";
 import { SecondLook } from "./secondLook/SecondLook.js";
 import { actionForStep, STEP_PARAM, STRAND_PARAM, stepFromAddress } from "./stepLink.js";
 import { copyLink, Tools } from "./Tools.js";
+import { FollowUpTimeline } from "./timeline/FollowUpTimeline.js";
 import type { FindingDetail, Observation, Reveal } from "./types.js";
 import { isNotFound, useApplyFinding, useFinding, useOptimisticFinding } from "./useFinding.js";
 import "./finding.css";
@@ -120,7 +121,8 @@ function FindingPage({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
 
   function openEvidence(next: OpenForm): void {
     setForm(next);
-    reveal(() => document.querySelector<HTMLElement>(".fc-evidence-add"));
+    // The evidence section's form, not the timeline's list of kinds, which uses the same frame.
+    reveal(() => document.querySelector<HTMLElement>("#fc-evidence .fc-evidence-add"));
   }
 
   function act(action: StepAction): void {
@@ -202,8 +204,19 @@ function FindingPage({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
       />
       <Answers meta={meta} finding={finding} />
       <Credits finding={finding} />
-      <MentionsSlot finding={finding} />
-      <FollowUpTimelineSlot finding={finding} />
+      <MentionsSection
+        meta={meta}
+        finding={finding}
+        viewer={viewer}
+        displayName={displayName}
+        mayAdd={position.takesWork && position.mayComment}
+      />
+      <FollowUpTimeline
+        meta={meta}
+        finding={finding}
+        position={position}
+        onAdd={(kindId) => openEvidence(openForm(kindId))}
+      />
       <Discussion finding={finding} viewer={viewer} displayName={displayName} mayComment={position.mayComment} />
       <Tools meta={meta} finding={finding} position={position} onApplied={apply} />
     </div>

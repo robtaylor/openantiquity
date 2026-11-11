@@ -35,7 +35,7 @@ export function signedOutResponse(): Response {
  * The fixtures' answer to a request: `/meta` and `/findings` from their
  * fixtures (GeoJSON for the map, a page for the list, with the filters
  * applied as the server applies them), nobody signed in, an empty second-look
- * queue and no help wanted, and 404 for anything else, as a backend that has
+ * queue and no help wanted, no mentions and no activity, and 404 for anything else, as a backend that has
  * not built the endpoint yet would say.
  */
 export async function fixtureResponse(input: unknown): Promise<Response> {
@@ -54,7 +54,13 @@ export async function fixtureResponse(input: unknown): Promise<Response> {
       return json({ items: [], next_cursor: null });
     case "/api/v1/review/tasks":
       return json({ groups: [] });
+    // Nobody has mentioned anything, and nothing has happened.
+    case "/api/v1/mentions/recent":
+    case "/api/v1/activity":
+      return json({ items: [], next_cursor: null });
     default:
+      if (/^\/api\/v1\/findings\/[^/]+\/mentions$/.test(requestPath(input)))
+        return json({ items: [], next_cursor: null });
       return json({ detail: "Not Found" }, 404);
   }
 }

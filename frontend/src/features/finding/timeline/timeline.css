@@ -1,0 +1,94 @@
+/* The follow-up timeline: entries down a line, each with a dot on it. */
+.fc-timeline {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+  padding: 0 0 0 22px;
+  list-style: none;
+}
+
+.fc-timeline::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 5px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--border);
+}
+
+.fc-timeline__entry {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.fc-timeline__dot {
+  position: absolute;
+  top: 5px;
+  left: -22px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.fc-timeline__when {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.fc-timeline__what {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  overflow-wrap: anywhere;
+}
+
+.fc-timeline__named {
+  color: var(--text);
+}
+
+.fc-timeline__who {
+  color: var(--text-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.fc-timeline__found {
+  gap: 4px;
+}
+
+.fc-timeline__note {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+/* Stretched, so the words and the badge share a line when there is room for both. */
+.fc-timeline__moved {
+  align-self: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--good);
+}
+
+.fc-timeline__moved > .fc-tier-badge {
+  color: var(--text);
+}
+
+.fc-timeline__empty > svg {
+  vertical-align: -2px;
+}

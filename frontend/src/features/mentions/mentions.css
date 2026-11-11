@@ -1,0 +1,221 @@
+/* Mentions: on a finding's page, in the form that adds one, and in the recent feed. */
+.fc-mentions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fc-mention {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--raised);
+}
+
+.fc-mention[aria-busy="true"] {
+  opacity: 0.65;
+}
+
+/* A video's picture is 16 by 9. Anything else gets the same box, so the list lines up. */
+.fc-mention__thumb {
+  display: block;
+  width: 96px;
+  height: 54px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--bg);
+}
+
+.fc-mention__thumb--none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.fc-mention__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.fc-mention__title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.fc-mention__title > svg {
+  margin-left: 4px;
+  vertical-align: -1px;
+}
+
+.fc-mention__meta,
+.fc-mention__by {
+  color: var(--text-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.fc-mention__auto {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.fc-mention__auto > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--info);
+}
+
+.fc-mention__note {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.fc-mention__hidden {
+  color: var(--warn);
+  font-size: 13px;
+}
+
+.fc-mention__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.fc-mention__empty > svg {
+  vertical-align: -2px;
+}
+
+/* "Recent mentions everywhere", at the end of the section's heading. */
+.fc-mentions-link {
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+/* The finding a mention in the recent feed is about. */
+.fc-mention__about {
+  grid-column: 1 / -1;
+}
+
+.fc-mention__finding {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.fc-mention__finding:hover {
+  background: color-mix(in srgb, var(--bg) 70%, var(--border));
+}
+
+.fc-mention__finding-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.fc-mention__finding-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.fc-mention__finding-meta .fc-mono {
+  white-space: nowrap;
+}
+
+.fc-mention__finding-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* Adding one. */
+.fc-mention-add {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.fc-mention-add > h4 {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.fc-mention-add textarea.fc-input {
+  resize: vertical;
+}
+
+/* The address takes the full width, so a long one can be read, with its button under it. */
+.fc-mention-add__address {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.fc-mention-add__address > .fc-field {
+  align-self: stretch;
+}
+
+.fc-mention-add__found {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--raised);
+}
+
+.fc-mention-add__problem {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-mention-add__error {
+  color: #f0827c;
+  font-size: 14px;
+}
+
+.fc-mention-add__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.fc-mentions-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.fc-mentions-feed__hint {
+  color: var(--text-muted);
+  font-size: 13px;
+}
