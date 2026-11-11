@@ -945,6 +945,12 @@ Decision 0009 admits 16 and 17 year olds and accepts the children's risk assessm
 | Contributor terms | Contributions under CC BY 4.0, the `contribution_licence` in `docs/ARCHITECTURE.md`. Decision 0004 requires only an open licence that permits commercial reuse. The research suggested OSM-style terms: the member keeps ownership and grants Field Club a non-exclusive, perpetual, sublicensable licence, with an extra permission for use in OpenStreetMap. Members confirm they didn't copy from Google imagery, Ordnance Survey licensed mapping or HER data supplied under licence |
 | Conduct agreement | The research pointed to the Kent LiDAR Portal's terms: no trespass without the landowner's permission, the Countryside Code, and no metal-detecting, excavation or survey without consent |
 
+The drafts in `frontend/src/features/about/notices.tsx` make statements the owner, with legal advice, must confirm or correct before they are published:
+
+- The privacy notice says the stored form of an internet address is "made with a secret key so it can't be read back without it". It is an HMAC keyed with the server secret, so anyone holding the key could recover an IPv4 address by trying every address.
+- The takedown notice says members can delete their own comments and evidence from a finding's page. Links (mentions) can't be deleted in the interface yet. Add them to the sentence when they can.
+- The deadlines (48 hours for an intimate image, 48 hours and five days for defamation) and the one-month reply to a data request.
+
 ADS question d in WS5 asks whether CC BY 4.0 meets its "public domain" condition. Hold the contributor terms until ADS answers, or publish them and revisit if ADS disagrees.
 
 **Deliverables:**
