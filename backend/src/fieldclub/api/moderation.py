@@ -1,8 +1,8 @@
 """The moderation queue and moderators' actions: reports, hiding, location levels, roles, bans and the log.
 
-Every route here is for moderators and admins. Those that change anything
-need the welcome step finished, as every write does; reading the queues and
-the log doesn't (`tests/test_routes.py`). The photo approval queue, which trusted members share, is in
+Every route here is for moderators and admins who have finished the welcome
+step, reads included, because that step is where a person accepts the terms
+(`tests/test_routes.py` says so of each route). The photo approval queue, which trusted members share, is in
 `api.media`. Responses depend on who asks, so none may be cached.
 """
 
@@ -12,7 +12,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query, Response
 
-from fieldclub.api.deps import Contributor, CurrentUser, CursorQuery, Db, PageQuery, private, rate_limit
+from fieldclub.api.deps import Contributor, CursorQuery, Db, PageQuery, private, rate_limit
 from fieldclub.api.findings import detail
 from fieldclub.errors import BadRequestError, ForbiddenError
 from fieldclub.models import User
@@ -36,24 +36,18 @@ from fieldclub.services import moderation
 from fieldclub.vocab import MODERATOR_ROLES, ReportReason, ReportStatus, ReportTarget, Role
 
 
-def _moderator(user: User) -> User:
+def require_moderator(user: Contributor) -> User:
+    """A moderator or admin who has finished the welcome step, or a 403.
+
+    Every route here needs the welcome step, reads included, since that step
+    is where a person accepts the terms they moderate by.
+    """
     if Role(user.role) not in MODERATOR_ROLES:
         raise ForbiddenError("Only moderators can do that.", code="moderators_only")
     return user
 
 
-def require_moderator(user: CurrentUser) -> User:
-    """A signed-in moderator or admin, or a 403. Enough to read the queues and the log."""
-    return _moderator(user)
-
-
-def require_acting_moderator(user: Contributor) -> User:
-    """A moderator or admin who has finished the welcome step, as every write needs (Decision 0009)."""
-    return _moderator(user)
-
-
 Moderator = Annotated[User, Depends(require_moderator)]
-ActingModerator = Annotated[User, Depends(require_acting_moderator)]
 
 router = APIRouter(prefix="/mod", tags=["moderation"], dependencies=[Depends(private)])
 
@@ -89,7 +83,7 @@ def report_queue(
 
 @router.post("/reports/{report_id}/resolve", response_model=ResolvedOut, dependencies=_writes)
 def resolve_report(
-    report_id: Annotated[int, Path(ge=1, le=2**63 - 1)], body: ResolveIn, moderator: ActingModerator, db: Db
+    report_id: Annotated[int, Path(ge=1, le=2**63 - 1)], body: ResolveIn, moderator: Moderator, db: Db
 ) -> ResolvedOut:
     """Uphold or dismiss a report, and with it every other open report on the same target.
 
@@ -113,12 +107,13 @@ _HIDE_PATHS: dict[ReportTarget, str] = {
     ReportTarget.EVIDENCE: "evidence",
     ReportTarget.MENTION: "mentions",
     ReportTarget.PHOTO: "media",
+    ReportTarget.INVESTIGATION: "investigations",
 }
 assert set(_HIDE_PATHS) == moderation.HIDEABLE, "every hideable kind has a route"
 
 
 def _hide_route(kind: ReportTarget, hidden: bool):
-    def route(target_id: TargetRef, body: ReasonIn, moderator: ActingModerator, db: Db) -> HiddenOut:
+    def route(target_id: TargetRef, body: ReasonIn, moderator: Moderator, db: Db) -> HiddenOut:
         state = moderation.set_hidden(db, kind, target_id, moderator, hidden=hidden, reason=body.reason)
         db.commit()
         return HiddenOut.build(state)
@@ -151,7 +146,7 @@ for _kind, _segment in _HIDE_PATHS.items():
 
 @router.put("/findings/{public_id}/sensitivity", response_model=FindingDetail, dependencies=_writes)
 def set_sensitivity(
-    public_id: TargetRef, body: ModSensitivityIn, moderator: ActingModerator, db: Db, response: Response
+    public_id: TargetRef, body: ModSensitivityIn, moderator: Moderator, db: Db, response: Response
 ) -> FindingDetail:
     """Set a finding's location level, lower as well as higher. The reason goes in the moderation log."""
     finding = moderation.set_sensitivity(db, public_id, moderator, body.level, body.reason)
@@ -181,7 +176,7 @@ Handle = Annotated[str, Path(min_length=1, max_length=TARGET_REF_MAX)]
 
 
 @router.put("/users/{handle}/role", response_model=ModUserOut, dependencies=_writes)
-def change_role(handle: Handle, body: RoleIn, moderator: ActingModerator, db: Db) -> ModUserOut:
+def change_role(handle: Handle, body: RoleIn, moderator: Moderator, db: Db) -> ModUserOut:
     """Make a member trusted or put them back, or mark an archaeologist as expert.
 
     Only an admin makes or unmakes a moderator.
@@ -192,7 +187,7 @@ def change_role(handle: Handle, body: RoleIn, moderator: ActingModerator, db: Db
 
 
 @router.post("/users/{handle}/ban", response_model=BanOut, dependencies=_writes)
-def ban(handle: Handle, body: ReasonIn, moderator: ActingModerator, db: Db) -> BanOut:
+def ban(handle: Handle, body: ReasonIn, moderator: Moderator, db: Db) -> BanOut:
     """Ban someone. Their sessions end now, and their answers, evidence and votes stop counting."""
     result = moderation.ban(db, handle, moderator, body.reason)
     db.commit()
@@ -204,7 +199,7 @@ def ban(handle: Handle, body: ReasonIn, moderator: ActingModerator, db: Db) -> B
 
 
 @router.post("/users/{handle}/unban", response_model=BanOut, dependencies=_writes)
-def unban(handle: Handle, body: ReasonIn, moderator: ActingModerator, db: Db) -> BanOut:
+def unban(handle: Handle, body: ReasonIn, moderator: Moderator, db: Db) -> BanOut:
     """Lift a ban. Their work counts again at once."""
     result = moderation.unban(db, handle, moderator, body.reason)
     db.commit()

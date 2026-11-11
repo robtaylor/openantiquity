@@ -9,6 +9,7 @@ from fieldclub.models import Report
 from fieldclub.vocab import Role
 from tests.findings.support import add_desk_evidence
 from tests.helpers import MakeFinding, MakeUser
+from tests.investigations.support import make
 from tests.moderation.support import (
     APPROVERS,
     CONTRIBUTORS,
@@ -41,6 +42,7 @@ def routes(db: Session, make_user: MakeUser, make_finding: MakeFinding) -> list[
     report = Report(reporter_id=owner.id, target_kind="comment", target_id=said.id, reason="spam")
     db.add(report)
     db.commit()
+    notebook = make(db, owner, title="A notebook to hide")
     pid = finding.public_id
     hide_targets = {
         "findings": pid,
@@ -48,6 +50,7 @@ def routes(db: Session, make_user: MakeUser, make_finding: MakeFinding) -> list[
         "evidence": evidence.id,
         "mentions": talked.id,
         "media": shown.id,
+        "investigations": notebook.public_id,
     }
     found = [
         Route("GET", "/mod/reports", None, MODERATORS),

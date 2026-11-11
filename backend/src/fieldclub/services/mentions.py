@@ -11,13 +11,17 @@ and no actor, so every follower is told.
 A mention is not evidence. Nothing here touches the confidence engine, and a
 mention never moves a finding's tier, state or score.
 
-A removed mention keeps its row with `deleted_at` and `removed_by` set, and
-disappears from every list. Someone removing their own mention blocks
-nothing: anyone may add that address again, and so may the scan. A moderator
-removing someone else's mention, or one the scan found, sets
-`blocks_readding`, and then neither a member nor the scan can add that
-address to that finding again. Otherwise anyone could bury a finding's real
-video by adding it and removing it.
+Only the person who added a mention removes it here. The row stays with
+`deleted_at` set and disappears from every list, and anyone may add that
+address again, the scan included. A moderator never removes someone else's
+mention: they hide it through `/mod/mentions/{id}/hide`, with a reason that
+goes in the moderation log (`services.moderation.set_hidden`), as with
+comments and evidence. A hidden mention leaves `mention_count`, and is left
+out of the finding's list, the recent feed and profiles for everyone but
+moderators and whoever added it (`shown_clause`). While it stays hidden it
+holds its address on the finding, even once its adder removes it, so neither
+a member nor the channel scan can add it again (`mention_hidden`). Otherwise
+its adder could remove a hidden link and add it straight back.
 
 Adding fetches the address, which can take seconds. `add` takes a
 `before_fetch` callback, and the router ends its transaction there, so no
@@ -38,7 +42,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select, text, update
+from sqlalchemy import ColumnElement, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -46,7 +50,7 @@ from fieldclub.errors import ConflictError, ForbiddenError, NotFoundError
 from fieldclub.models import Finding, Mention, User
 from fieldclub.models.findings import MENTION_HOLDS_ADDRESS
 from fieldclub.schemas.common import int_from_cursor, paginate
-from fieldclub.services import activity, findings, unfurl
+from fieldclub.services import activity, findings, sensitivity, unfurl
 from fieldclub.vocab import ActivityKind, FindingState, MentionKind
 
 logger = logging.getLogger(__name__)
@@ -64,14 +68,25 @@ class MentionExistsError(ConflictError):
     message = "That's already mentioned on this finding."
 
 
-class MentionRemovedError(ConflictError):
-    code = "mention_removed"
-    message = "A moderator removed that from this finding, so it can't be added again."
+class MentionHiddenError(ConflictError):
+    code = "mention_hidden"
+    message = "A moderator has hidden that on this finding, so it can't be added again."
 
 
 class MentionForbiddenError(ForbiddenError):
     code = "mention_forbidden"
-    message = "Only the person who added a mention, or a moderator, can remove it."
+    message = "Only the person who added a mention can remove it."
+
+
+def shown_clause(viewer: User | None) -> ColumnElement[bool]:
+    """Mentions this viewer may see in a list: not removed, and not hidden from them."""
+    return Mention.deleted_at.is_(None) & findings.shown_clause(Mention.hidden_at, Mention.user_id, viewer)
+
+
+def may_see_hidden_mention(mention: Mention, viewer: User | None) -> bool:
+    """A mention hidden by a moderator is seen only by moderators and whoever added it."""
+    active = sensitivity.active_viewer(viewer)
+    return active is not None and (active.has_id(mention.user_id) or findings.is_moderator(active))
 
 
 @dataclass(frozen=True)
@@ -100,12 +115,12 @@ def preview(url: str) -> Preview:
 
 
 def _holding(db: Session, finding: Finding, address: unfurl.Address) -> Mention | None:
-    """The mention that holds this address on the finding: a live one, or a removal that blocks it."""
+    """The mention that holds this address on the finding: a live one, or a hidden one."""
     return db.scalar(
         select(Mention).where(
             Mention.finding_id == finding.id,
             Mention.match_key == address.match_key,
-            Mention.deleted_at.is_(None) | Mention.blocks_readding,
+            text(MENTION_HOLDS_ADDRESS),
         )
     )
 
@@ -113,8 +128,9 @@ def _holding(db: Session, finding: Finding, address: unfurl.Address) -> Mention 
 def _refuse_existing(found: Mention | None) -> None:
     if found is None:
         return
-    if found.deleted_at is not None:
-        raise MentionRemovedError()
+    if found.hidden_at is not None:
+        # Says nothing of who added it, or its id, to someone who may not see it.
+        raise MentionHiddenError()
     raise MentionExistsError(details={"mention_id": found.id})
 
 
@@ -184,7 +200,7 @@ def add(
 ) -> Mention:
     """Add a mention a member found. The address is fetched for its title, unless that fails.
 
-    Raises `MentionExistsError` or `MentionRemovedError` when the finding
+    Raises `MentionExistsError` or `MentionHiddenError` when the finding
     already has this address, before anything is fetched. `before_fetch` is
     called just before the fetch, for the caller to end its transaction. The
     finding is read again after it, since it may have changed meanwhile.
@@ -215,14 +231,14 @@ def add(
 
 
 def add_detected(db: Session, finding: Finding, draft: Draft) -> Mention | None:
-    """Add a mention the channel scan found, or None when the finding has it or a moderator removed it."""
+    """Add a mention the channel scan found, or None when the finding has it or a moderator hid it."""
     if finding.hidden_at is not None or finding.state == FindingState.WITHDRAWN.value:
         return None
     return _insert(db, finding, None, draft, auto_detected=True)
 
 
 def remove(db: Session, mention_id: int, user: User) -> Mention:
-    """Remove a mention, by whoever added it or a moderator."""
+    """Remove a mention, by whoever added it. A moderator hides someone else's instead."""
     mention = db.get(Mention, mention_id)
     if mention is None or mention.deleted_at is not None:
         raise MentionNotFoundError()
@@ -230,18 +246,18 @@ def remove(db: Session, mention_id: int, user: User) -> Mention:
     assert finding is not None, "a mention always belongs to a finding"
     if finding.hidden_at is not None and not findings.may_see_hidden(finding, user):
         raise MentionNotFoundError()
-    own = user.has_id(mention.user_id)
-    if not (own or findings.is_moderator(user)):
+    if mention.hidden_at is not None and not may_see_hidden_mention(mention, user):
+        raise MentionNotFoundError()
+    if not user.has_id(mention.user_id):
         raise MentionForbiddenError()
     mention.deleted_at = datetime.now(UTC)
-    mention.removed_by = user.id
-    # A moderator's removal of a mention that isn't theirs sticks.
-    mention.blocks_readding = not own
-    db.execute(
-        update(Finding)
-        .where(Finding.id == finding.id)
-        .values(mention_count=func.greatest(Finding.mention_count - 1, 0))
-    )
+    if mention.hidden_at is None:
+        # Hiding already took a hidden mention out of the count.
+        db.execute(
+            update(Finding)
+            .where(Finding.id == finding.id)
+            .values(mention_count=func.greatest(Finding.mention_count - 1, 0))
+        )
     db.flush()
     return mention
 
@@ -267,11 +283,13 @@ def _page(
     return MentionPage(items, adders, next_cursor, on, authors)
 
 
-def for_finding(db: Session, finding: Finding, *, limit: int, cursor: str | None = None) -> MentionPage:
-    """A finding's mentions, newest first."""
+def for_finding(
+    db: Session, finding: Finding, viewer: User | None, *, limit: int, cursor: str | None = None
+) -> MentionPage:
+    """A finding's mentions this viewer may see, newest first."""
     query = (
         select(Mention)
-        .where(Mention.finding_id == finding.id, Mention.deleted_at.is_(None))
+        .where(Mention.finding_id == finding.id, shown_clause(viewer))
         .order_by(Mention.id.desc())
     )
     if cursor is not None:
@@ -285,7 +303,7 @@ def recent(db: Session, viewer: User | None, *, limit: int, cursor: str | None =
         select(Mention, Finding)
         .join(Finding, Finding.id == Mention.finding_id)
         .where(
-            Mention.deleted_at.is_(None),
+            shown_clause(viewer),
             findings.not_hidden_clause(viewer),
             Finding.state != FindingState.WITHDRAWN.value,
         )

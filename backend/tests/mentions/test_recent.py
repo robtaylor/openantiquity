@@ -130,7 +130,7 @@ def test_hidden_and_withdrawn_findings_leave_the_feed(world: World, db: Session,
 
 def test_a_removed_mention_leaves_the_feed(world: World, db: Session) -> None:
     finding = world.findings[Sensitivity.OPEN]
-    (mention,) = mentions.for_finding(db, finding, limit=5).mentions
+    (mention,) = mentions.for_finding(db, finding, None, limit=5).mentions
     mention.deleted_at = datetime(2026, 11, 5, tzinfo=UTC)
     db.commit()
     for viewer in VIEWERS:

@@ -124,6 +124,30 @@ def record(
     return activity
 
 
+def notify_invitation(db: Session, invited: User, owner: User, investigation: Investigation) -> Notification:
+    """Tell someone they've been invited to an investigation. The caller commits.
+
+    The notification goes to that one person, so it carries no free text at
+    all, neither a message nor the investigation's title (Decision 0009: no
+    private channel). It names the investigation by its id and the owner who
+    invited them, and they open the investigation to read it. Nothing is
+    written to `activity` or sent on the bus, because an invitation is
+    nobody else's business.
+    """
+    assert invited.id is not None, "the invited person must be saved"
+    assert owner.id is not None, "the owner must be saved"
+    assert not invited.has_id(owner.id), "nobody invites themselves"
+    notification = Notification(
+        user_id=invited.id,
+        kind=ActivityKind.INVESTIGATION_INVITATION.value,
+        actor_id=owner.id,
+        investigation_id=investigation.id,
+    )
+    db.add(notification)
+    db.flush()
+    return notification
+
+
 def _square_point(finding: Finding) -> WKBElement | None:
     """The centre of the finding's 1 km square as a geometry value, or None off both grids.
 

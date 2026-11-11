@@ -27,7 +27,7 @@ from fieldclub.schemas.findings import (
     SensitivityChange,
     finding_feature,
 )
-from fieldclub.services import exports, findings, sensitivity
+from fieldclub.services import exports, findings, moderation
 from fieldclub.services.findings import OUTLINE_TYPES, FindingFilters, FindingSort
 from fieldclub.vocab import FeatureClass, FindingState, Tier
 
@@ -232,9 +232,10 @@ def change_sensitivity(
     """Raise a finding's level: its finder, a trusted member or a moderator.
 
     A moderator lowers a level with `PUT /mod/findings/{public_id}/sensitivity`, which logs it.
+    A moderator raising someone else's finding here is logged too, with no reason.
     """
     finding = findings.lock_finding(db, public_id, user)
-    sensitivity.raise_sensitivity(db, finding, user, body.level)
+    moderation.raise_sensitivity(db, finding, user, body.level)
     db.commit()
     private(response)
     return detail(db, finding, user)

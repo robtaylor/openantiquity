@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Response
 
-from fieldclub.api.deps import Contributor, CurrentUser, Db, PageQuery, private, rate_limit
+from fieldclub.api.deps import CurrentUser, Db, PageQuery, private, rate_limit
 from fieldclub.schemas.activity import MarkRead, MarkReadOut, NotificationOut, NotificationPageOut
 from fieldclub.services import feed
 
@@ -22,7 +22,8 @@ def list_notifications(user: CurrentUser, db: Db, page: PageQuery, response: Res
     found = feed.list_notifications(db, user, limit=page.limit, cursor=page.cursor)
     return NotificationPageOut(
         items=[
-            NotificationOut.build(item.notification, item.actor, item.finding, user) for item in found.items
+            NotificationOut.build(item.notification, item.actor, item.finding, user, item.investigation)
+            for item in found.items
         ],
         next_cursor=found.next_cursor,
         unread_count=found.unread_count,
@@ -34,8 +35,8 @@ def list_notifications(user: CurrentUser, db: Db, page: PageQuery, response: Res
     response_model=MarkReadOut,
     dependencies=[Depends(rate_limit("notifications_read", 600, per_seconds=3600))],
 )
-def mark_read(body: MarkRead, user: Contributor, db: Db, response: Response) -> MarkReadOut:
-    """Mark some of your notifications read, or all of them."""
+def mark_read(body: MarkRead, user: CurrentUser, db: Db, response: Response) -> MarkReadOut:
+    """Mark some of your notifications read, or all of them. Needs only a session: it stores nothing."""
     private(response)
     marked = feed.mark_read(db, user, ids=body.ids, up_to=body.up_to)
     db.commit()

@@ -28,6 +28,11 @@ they have no role, the investigation isn't in their `mine` list, and they
 can decline by leaving. Someone who hasn't finished the welcome step can't
 be invited.
 
+A moderator can hide an investigation (`services.moderation.set_hidden`).
+A hidden one is found only by its members and moderators: it leaves the
+public list, feeds and invitations, and everyone else gets
+`investigation_not_found`.
+
 Only a public investigation is in the public list or a feed. Making one
 public records `investigation_published`; making it unlisted or private again
 removes that row, so no feed built from `activity` can show it afterwards.
@@ -379,10 +384,17 @@ def role_of(db: Session, investigation: Investigation, viewer: User | None) -> I
     return access_for(db, investigation, viewer).role
 
 
-def may_read(investigation: Investigation, role: InvestigationRole | None) -> bool:
-    """Public and unlisted ones are open to anyone who has the id. A private one only to its owner."""
+def may_read(
+    investigation: Investigation, role: InvestigationRole | None, viewer: User | None = None
+) -> bool:
+    """Public and unlisted ones are open to anyone who has the id. A private one only to its owner.
+
+    One a moderator has hidden is open only to its members and moderators.
+    """
     if Visibility(investigation.visibility) is Visibility.PRIVATE:
         return role is InvestigationRole.OWNER
+    if investigation.hidden_at is not None:
+        return role is not None or findings.is_moderator(viewer)
     return True
 
 
@@ -404,7 +416,7 @@ def load(
     if investigation is None:
         raise InvestigationNotFoundError()
     access = access_for(db, investigation, viewer)
-    if not may_read(investigation, access.role):
+    if not may_read(investigation, access.role, viewer):
         raise InvestigationNotFoundError()
     if need is Need.EDIT and not access.may_edit:
         raise InvestigationForbiddenError()
@@ -504,7 +516,10 @@ def list_investigations(
     """
     query = select(Investigation, User, _item_count()).join(User, User.id == Investigation.owner_id)
     if scope is Scope.PUBLIC:
-        query = query.where(Investigation.visibility == Visibility.PUBLIC.value)
+        query = query.where(
+            Investigation.visibility == Visibility.PUBLIC.value,
+            findings.shown_clause(Investigation.hidden_at, Investigation.owner_id, viewer),
+        )
     else:
         active = sensitivity.active_viewer(viewer)
         if active is None:
@@ -521,6 +536,9 @@ def list_investigations(
                 & (InvestigationMember.user_id == active.id)
                 & (accepted if scope is Scope.MINE else ~accepted),
             )
+            if scope is Scope.INVITED and not findings.is_moderator(active):
+                # Someone only invited isn't a member yet, so a hidden one is gone for them.
+                query = query.where(Investigation.hidden_at.is_(None))
     if bbox is not None:
         query = query.where(func.ST_Intersects(Investigation.area, geo.envelope(bbox)))
     if cursor is not None:
@@ -642,7 +660,8 @@ def put_member(
     """Invite `user` with `role`, or change the role they have or were offered. True when invited.
 
     The owner's call, under the lock. A private investigation takes nobody.
-    The person is a member once they accept (`accept_invitation`).
+    The person is a member once they accept (`accept_invitation`). A new
+    invitation sends them a notification (`activity.notify_invitation`).
     """
     role = InvestigationRole(role)
     investigation = access.investigation
@@ -659,6 +678,10 @@ def put_member(
         raise TooManyMembersError()
     member = add_member(db, investigation, user, role, accepted=False)
     assert member is not None, "the owner was handled above"
+    owner = db.get(User, investigation.owner_id)
+    assert owner is not None, "an investigation's owner always has a row"
+    # The invited person is told, with nothing but who asked and which investigation.
+    activity.notify_invitation(db, user, owner, investigation)
     return member, True
 
 

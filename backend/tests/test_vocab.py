@@ -289,6 +289,8 @@ def test_enumerations_from_the_contract() -> None:
         "mention_added",
         "followup_logged",
         "investigation_published",
+        # A notification only: see services.activity.notify_invitation.
+        "investigation_invitation",
     ]
     assert [item.value for item in vocab.NextStepCode] == [
         "need_observers",

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from fieldclub.vocab import Role
 from tests.findings.support import add_desk_evidence
 from tests.helpers import ClientAs, MakeFinding, MakeUser, error_code
-from tests.moderation.support import API, Route, comment, log_entries
+from tests.moderation.support import API, Route, comment, log_entries, mention
 
 WRITE_METHODS = {"post", "put", "patch", "delete"}
 LOGGED_PREFIX = f"{API}/mod/"
@@ -59,10 +59,7 @@ FOR_THE_CALLER = {
     ("POST", f"{API}/investigations/{{public_id}}/invitation"): "the caller's own invitation",
     ("POST", f"{API}/findings/{{public_id}}/mentions"): "adds a mention as the caller",
     ("POST", f"{API}/mentions/preview"): "fetches an address, stores nothing",
-    # Not yet true. The mentions track lets a moderator remove someone else's mention here with no
-    # reason and no log entry. It was written beside this rule, not under it: a moderator should
-    # hide a mention through /mod/mentions/{id}/hide instead, as with comments and evidence.
-    ("DELETE", f"{API}/mentions/{{mention_id}}"): "the person who added it (and, for now, a moderator)",
+    ("DELETE", f"{API}/mentions/{{mention_id}}"): "the person who added it only: mention_forbidden",
 }
 
 
@@ -102,6 +99,8 @@ def test_a_moderator_cannot_skip_the_log_through_the_members_routes(
     finding = make_finding(owner, sensitivity="restricted")
     said = comment(db, finding, owner)
     evidence, _ = add_desk_evidence(db, finding, owner)
+    talked = mention(db, finding, owner)
+    scanned = mention(db, finding, None, title="Found by the scan")
     client = client_as(make_user(Role.MODERATOR))
     pid = finding.public_id
     refusals = [
@@ -109,6 +108,8 @@ def test_a_moderator_cannot_skip_the_log_through_the_members_routes(
         ("PUT", f"/findings/{pid}/sensitivity", {"level": "protected"}, "lower_through_moderation"),
         ("DELETE", f"/comments/{said.id}", None, "comment_forbidden"),
         ("DELETE", f"/evidence/{evidence.id}", None, "evidence_forbidden"),
+        ("DELETE", f"/mentions/{talked.id}", None, "mention_forbidden"),
+        ("DELETE", f"/mentions/{scanned.id}", None, "mention_forbidden"),
         ("PATCH", f"/findings/{pid}", {"title": "Renamed by a moderator"}, "not_finder"),
         ("POST", f"/findings/{pid}/withdraw", None, "not_finder"),
     ]
@@ -121,4 +122,6 @@ def test_a_moderator_cannot_skip_the_log_through_the_members_routes(
     assert finding.state != "withdrawn"
     assert said.deleted_at is None
     assert evidence.deleted_at is None
+    assert talked.deleted_at is None
+    assert scanned.deleted_at is None
     assert log_entries(db) == []

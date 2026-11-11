@@ -338,11 +338,13 @@ def test_adding_then_removing_a_mention_cant_bury_it(
     # And so can the channel scan, once a member's own removal is all there is.
     removed = db.get(Mention, added.json()["id"])
     assert removed is not None
-    assert removed.removed_by is not None
-    assert removed.blocks_readding is False
+    assert removed.deleted_at is not None
 
 
-def test_a_moderators_removal_sticks(
+REASON = {"reason": "Spam link."}
+
+
+def test_a_moderator_hides_a_mention_and_it_holds_its_address(
     client_as: ClientAs,
     db: Session,
     make_user: MakeUser,
@@ -350,30 +352,55 @@ def test_a_moderators_removal_sticks(
     offline: respx.MockRouter,
 ) -> None:
     serve_youtube_oembed()
-    serve_article()
     finding = make_finding()
-    moderator = make_user("moderator")
-    added = post(client_as(make_user()), finding, YOUTUBE_URL)
-    assert client_as(moderator).delete(f"{API}/mentions/{added.json()['id']}").status_code == 204
-    for user in (make_user(), moderator):
+    moderator = client_as(make_user("moderator"))
+    adder = make_user()
+    added = post(client_as(adder), finding, YOUTUBE_URL)
+    mention_id = added.json()["id"]
+    # Removal is the adder's alone: a moderator hides it, with a reason, through /mod.
+    refused = moderator.delete(f"{API}/mentions/{mention_id}")
+    assert (refused.status_code, error_code(refused)) == (403, "mention_forbidden")
+    assert moderator.post(f"{API}/mod/mentions/{mention_id}/hide", json=REASON).status_code == 200
+    for user in (make_user(), make_user("moderator"), adder):
         again = post(client_as(user), finding, "https://youtu.be/dQw4w9WgXcQ")
-        assert error_code(again) == "mention_removed"
+        assert (again.status_code, error_code(again)) == (409, "mention_hidden")
+        assert "mention_id" not in again.text
     draft = mentions.Draft(
         address=unfurl.canonical(YOUTUBE_URL), kind=MentionKind.VIDEO, metadata=unfurl.NOTHING
     )
     assert mentions.add_detected(db, finding, draft) is None
-    # A moderator removing a mention they added themselves blocks nothing.
-    own = post(client_as(moderator), finding, ARTICLE_URL)
-    assert own.status_code == 201
-    assert client_as(moderator).delete(f"{API}/mentions/{own.json()['id']}").status_code == 204
-    assert post(client_as(make_user()), finding, ARTICLE_URL).status_code == 201
+    # Its adder removing it doesn't free the address while it stays hidden.
+    assert client_as(adder).delete(f"{API}/mentions/{mention_id}").status_code == 204
+    db.refresh(finding)
+    assert finding.mention_count == 0
+    assert error_code(post(client_as(make_user()), finding, YOUTUBE_URL)) == "mention_hidden"
+    assert mentions.add_detected(db, finding, draft) is None
 
 
-def test_a_moderator_removes_anyones_including_the_scans(
+def test_once_shown_again_the_address_is_held_as_before(
+    client_as: ClientAs,
+    db: Session,
+    make_user: MakeUser,
+    make_finding: MakeFinding,
+    offline: respx.MockRouter,
+) -> None:
+    serve_youtube_oembed()
+    finding = make_finding()
+    moderator = client_as(make_user("moderator"))
+    adder = make_user()
+    mention_id = post(client_as(adder), finding, YOUTUBE_URL).json()["id"]
+    moderator.post(f"{API}/mod/mentions/{mention_id}/hide", json=REASON)
+    assert moderator.post(f"{API}/mod/mentions/{mention_id}/unhide", json=REASON).status_code == 200
+    again = post(client_as(make_user()), finding, YOUTUBE_URL)
+    assert (again.status_code, error_code(again)) == (409, "mention_exists")
+    assert client_as(adder).delete(f"{API}/mentions/{mention_id}").status_code == 204
+    assert post(client_as(make_user()), finding, YOUTUBE_URL).status_code == 201
+
+
+def test_a_moderator_hides_the_scans_mentions_and_nobody_removes_them(
     client_as: ClientAs, db: Session, make_user: MakeUser, make_finding: MakeFinding
 ) -> None:
     finding = make_finding()
-    mention, *_ = add_three(db, finding, make_user())
     found = mentions.add_detected(
         db,
         finding,
@@ -385,10 +412,35 @@ def test_a_moderator_removes_anyones_including_the_scans(
     )
     db.commit()
     assert found is not None
-    assert error_code(client_as(make_user()).delete(f"{API}/mentions/{found.id}")) == "mention_forbidden"
     moderator = client_as(make_user("moderator"))
-    assert moderator.delete(f"{API}/mentions/{found.id}").status_code == 204
-    assert moderator.delete(f"{API}/mentions/{mention.id}").status_code == 204
+    for client in (client_as(make_user()), moderator):
+        assert error_code(client.delete(f"{API}/mentions/{found.id}")) == "mention_forbidden"
+    assert moderator.post(f"{API}/mod/mentions/{found.id}/hide", json=REASON).status_code == 200
+    db.refresh(finding)
+    assert finding.mention_count == 0
+
+
+def test_a_hidden_mention_is_listed_only_for_moderators_and_its_adder(
+    client: TestClient, client_as: ClientAs, db: Session, make_user: MakeUser, make_finding: MakeFinding
+) -> None:
+    finding = make_finding()
+    adder = make_user()
+    hidden, shown, _ = add_three(db, finding, adder)
+    moderator = make_user("moderator")
+    client_as(moderator).post(f"{API}/mod/mentions/{hidden.id}/hide", json=REASON)
+    paths = [f"{API}/findings/{finding.public_id}/mentions", f"{API}/mentions/recent"]
+    for viewer in (client, client_as(make_user()), client_as(make_user("trusted"))):
+        for path in paths:
+            listed = {m["id"] for m in viewer.get(path).json()["items"]}
+            assert hidden.id not in listed, path
+            assert shown.id in listed, path
+    for who in (adder, moderator):
+        for path in paths:
+            items = {m["id"]: m["hidden"] for m in client_as(who).get(path).json()["items"]}
+            assert items[hidden.id] is True, path
+            assert items[shown.id] is False, path
+    db.refresh(finding)
+    assert finding.mention_count == 2
 
 
 def test_delete_needs_a_contributor(

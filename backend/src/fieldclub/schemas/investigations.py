@@ -225,6 +225,8 @@ class InvestigationSummary(ApiModel):
     item_count: int
     created_at: datetime
     updated_at: datetime
+    # True when a moderator has hidden it, which only its members and moderators then see.
+    hidden: bool = False
 
     @classmethod
     def from_listed(cls, listed: Listed) -> InvestigationSummary:
@@ -243,6 +245,7 @@ def _summary_fields(investigation: Investigation, owner: User, item_count: int) 
         "item_count": item_count,
         "created_at": investigation.created_at,
         "updated_at": investigation.updated_at,
+        "hidden": investigation.hidden_at is not None,
     }
 
 

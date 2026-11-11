@@ -49,7 +49,7 @@ def list_activity(
         bbox=parse_bbox(bbox),
         kinds=tuple(dict.fromkeys(kind or ())),
         finding_id=findings.get_finding(db, finding, viewer).id if finding is not None else None,
-        investigation_id=feed.public_investigation(db, investigation).id
+        investigation_id=feed.public_investigation(db, investigation, viewer).id
         if investigation is not None
         else None,
         actor_id=people.get_person(db, person).id if person is not None else None,

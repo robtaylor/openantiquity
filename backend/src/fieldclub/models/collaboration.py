@@ -64,6 +64,9 @@ class Investigation(Base):
         Text, default=Visibility.PRIVATE.value, server_default=Visibility.PRIVATE.value
     )
     updated_at: Mapped[datetime] = mapped_column(TimestampTz, server_default=func.now(), onupdate=func.now())
+    # Set by a moderator. A hidden investigation is found only by its members
+    # and moderators (`services.investigations`).
+    hidden_at: Mapped[datetime | None] = mapped_column(TimestampTz)
 
 
 class InvestigationMember(Base):
@@ -170,12 +173,14 @@ class Notification(Base):
     kind: Mapped[str] = mapped_column(Text)
     actor_id: Mapped[int | None] = fk("users.id", ondelete="SET NULL")
     finding_id: Mapped[int | None] = fk("findings.id", ondelete="CASCADE", index=True)
+    # Set for an invitation to an investigation, which goes to the invited person alone.
+    investigation_id: Mapped[int | None] = fk("investigations.id", ondelete="CASCADE", index=True)
     data: Mapped[JsonDict | None] = json_column()
     read_at: Mapped[datetime | None] = mapped_column(TimestampTz)
 
 
 class Report(Base):
-    """A report of a finding, comment, piece of evidence, mention, photo or person, for moderators.
+    """A report of a finding, comment, evidence, mention, photo, person or investigation, for moderators.
 
     `target_id` is the target's own `id`, whatever its kind. See `services.moderation`.
     """

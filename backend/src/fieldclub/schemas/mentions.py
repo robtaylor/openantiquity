@@ -80,6 +80,8 @@ class MentionOut(ApiModel):
     auto_detected: bool
     added_by: PublicUser | None
     created_at: datetime
+    # True only for the moderators and the adder who still see a hidden mention.
+    hidden: bool = False
 
     @classmethod
     def build(cls, mention: Mention, adder: User | None) -> MentionOut:
@@ -100,6 +102,7 @@ class MentionOut(ApiModel):
             auto_detected=mention.auto_detected,
             added_by=PublicUser.from_user(adder) if adder is not None else None,
             created_at=mention.created_at,
+            hidden=mention.hidden_at is not None,
         )
 
 

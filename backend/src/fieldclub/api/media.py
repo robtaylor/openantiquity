@@ -16,7 +16,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Request, Response, status
 
-from fieldclub.api.deps import Contributor, CurrentUser, Db, OptionalUser, PageQuery, private, rate_limit
+from fieldclub.api.deps import Contributor, Db, OptionalUser, PageQuery, private, rate_limit
 from fieldclub.errors import ForbiddenError
 from fieldclub.models import User
 from fieldclub.schemas.common import Page
@@ -108,7 +108,12 @@ def get_media(media_id: MediaId, db: Db, viewer: OptionalUser) -> Response:
 # --------------------------------------------------------------------------
 
 
-def _photo_approver(user: User) -> User:
+def require_photo_approver(user: Contributor) -> User:
+    """A moderator or trusted member (experts and admins count) who has finished the welcome step.
+
+    Reads of the queue need the welcome step as well as decisions do: everything
+    under `/mod` does, since that step is where a person accepts the terms.
+    """
     if Role(user.role) not in MEDIA_APPROVER_ROLES:
         raise ForbiddenError(
             "Only moderators and trusted members approve photos.", code="photo_approvers_only"
@@ -116,18 +121,7 @@ def _photo_approver(user: User) -> User:
     return user
 
 
-def require_photo_approver(user: CurrentUser) -> User:
-    """A moderator or trusted member (experts and admins count), to read the queue."""
-    return _photo_approver(user)
-
-
-def require_deciding_approver(user: Contributor) -> User:
-    """A photo approver who has finished the welcome step, as every write needs (Decision 0009)."""
-    return _photo_approver(user)
-
-
 PhotoApprover = Annotated[User, Depends(require_photo_approver)]
-DecidingApprover = Annotated[User, Depends(require_deciding_approver)]
 _decisions = [Depends(rate_limit("media_decisions", 600, per_seconds=3600))]
 
 
@@ -142,7 +136,7 @@ def approval_queue(approver: PhotoApprover, db: Db, page: PageQuery) -> Page[Que
 
 
 @router.post("/mod/media/{media_id}/approve", response_model=MediaOut, dependencies=_decisions)
-def approve(media_id: MediaId, approver: DecidingApprover, db: Db) -> MediaOut:
+def approve(media_id: MediaId, approver: PhotoApprover, db: Db) -> MediaOut:
     """Approve a photo, so that everyone who may see its finding sees it."""
     photo = moderation.approve_photo(db, media_id, approver)
     db.commit()
@@ -150,7 +144,7 @@ def approve(media_id: MediaId, approver: DecidingApprover, db: Db) -> MediaOut:
 
 
 @router.post("/mod/media/{media_id}/reject", response_model=MediaOut, dependencies=_decisions)
-def reject(media_id: MediaId, body: MediaRejection, approver: DecidingApprover, db: Db) -> MediaOut:
+def reject(media_id: MediaId, body: MediaRejection, approver: PhotoApprover, db: Db) -> MediaOut:
     """Refuse a photo waiting for approval. Its file is deleted, and the same file can't be uploaded again."""
     photo = moderation.reject_photo(db, media_id, approver, body.reason)
     db.commit()

@@ -3,8 +3,9 @@
 Moderation routes are for moderators and admins. The photo approval queue is
 shared with trusted members and experts (Decision 0009). Reporting is open to
 every contributor. A banned account is refused whatever its role. One that
-hasn't finished the welcome step reads the queues and the log if its role
-allows, and is refused every write, as on every other route.
+hasn't finished the welcome step is refused everything here, reads of the
+queues and the log included, because that step is where a person accepts the
+terms.
 
 The routes, each aimed at something that belongs to someone other than the
 caller, come from the `routes` fixture in `conftest.py`.
@@ -50,10 +51,8 @@ REFUSALS = {
 
 
 def admitted(who: str, route: Route) -> bool:
-    # The newcomer is a moderator: only the welcome step stands between them and a write.
-    if who == "newcomer":
-        return route.method == "GET"
-    return who in route.allowed
+    # The newcomer is a moderator: only the welcome step stands between them and every route.
+    return who not in REFUSALS and who in route.allowed
 
 
 def refusal(who: str, route: Route) -> tuple[int, str]:

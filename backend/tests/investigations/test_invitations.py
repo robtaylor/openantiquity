@@ -246,3 +246,34 @@ def test_exports_leave_out_invitations_nobody_accepted(
     assert exported.status_code == 200
     assert "Penny" not in exported.text
     assert "Pending" not in exported.text
+
+
+def test_an_invitation_tells_the_person_with_no_free_text(
+    db: Session, make_user: MakeUser, client_as: ClientAs
+) -> None:
+    owner, guest = make_user(handle="Owner"), make_user(handle="Guest")
+    inv = make(db, owner, Visibility.UNLISTED, title="Meet me at the barrow on Saturday")
+    me, them = client_as(owner), client_as(guest)
+    assert me.put(url(inv, "/members/Guest"), json={"role": "viewer"}).status_code == 201
+    # Changing the role offered tells nobody again.
+    assert me.put(url(inv, "/members/Guest"), json={"role": "editor"}).status_code == 200
+
+    page = them.get(f"{API}/notifications").json()
+    assert page["unread_count"] == 1
+    (told,) = page["items"]
+    assert told["kind"] == "investigation_invitation"
+    assert told["investigation"] == inv.public_id
+    assert told["actor"]["handle"] == "Owner"
+    assert told["finding"] is None
+    assert "barrow" not in them.get(f"{API}/notifications").text, "the title is free text: it isn't sent"
+    # Nobody else hears of it, and it never reaches the feed or the event bus.
+    assert me.get(f"{API}/notifications").json()["items"] == []
+    assert "investigation_invitation" not in client_as(make_user()).get(f"{API}/activity").text
+
+    # Once the owner takes the invitation back it leaves the list.
+    assert me.delete(url(inv, "/members/Guest")).status_code == 204
+    assert them.get(f"{API}/notifications").json() | {"next_cursor": None} == {
+        "items": [],
+        "next_cursor": None,
+        "unread_count": 0,
+    }

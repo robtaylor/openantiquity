@@ -183,15 +183,17 @@ def test_mark_read_refuses_what_it_cant_mean(busy: dict[str, User], client_as: C
     assert error_code(response) == "validation_error"
 
 
-def test_notifications_need_a_session_and_marking_needs_the_welcome_step(
+def test_notifications_and_marking_them_read_need_only_a_session(
     app, client_for: ClientFor, newcomer: User
 ) -> None:
     signed_out = client_for(app)
     assert error_code(signed_out.get(f"{API}/notifications")) == "unauthorised"
     assert error_code(signed_out.post(f"{API}/notifications/read", json={"all": True})) == "unauthorised"
+    # Marking your own notifications read stores nothing, so it needs no welcome step.
     fresh = client_for(app, newcomer)
     assert fresh.get(f"{API}/notifications").status_code == 200
-    assert error_code(fresh.post(f"{API}/notifications/read", json={"all": True})) == "onboarding_required"
+    marked = fresh.post(f"{API}/notifications/read", json={"all": True})
+    assert marked.status_code == 200, marked.text
 
 
 def test_notifications_about_hidden_or_removed_things_disappear(

@@ -10,6 +10,13 @@
 - `writer`: for a route that changes data, `CONTRIBUTOR` when it stores a
   contribution and so needs the welcome step (Decision 0009), or why it
   doesn't. None for a read.
+- `hidden_test` or `nothing_hidden`, for a read: the test that proves it
+  leaves out what a moderator has hidden for everyone the moderation rules
+  don't let see it (named as `leak_test` is), or why it holds nothing a
+  moderator can hide. Every read says one or the other.
+- `welcome`: true for a read that needs the welcome step all the same, as
+  everything under `/mod` does, since that step is where a person accepts the
+  terms.
 - `sample`: an address to call it at, for the cache check. `{finding}`,
   `{record}`, `{investigation}` and `{photo}` are filled in with ones the test makes,
   the investigation public. A read that says
@@ -63,6 +70,11 @@ class Expect:
     sample: str | None = None
     # Why there is no sample, when there isn't one for a read.
     unsampled: str | None = None
+    # For a read: the test that proves it leaves hidden things out, or why it holds none.
+    hidden_test: str | None = None
+    nothing_hidden: str | None = None
+    # A read that needs the welcome step, as the moderation routes do.
+    welcome: bool = False
 
 
 F = "/api/v1/findings/{finding}"
@@ -76,33 +88,45 @@ INV = "/api/v1/investigations/{investigation}"
 INVESTIGATION_LEAKS = "tests.investigations.test_leaks:"
 ITEMS_SHOWN = INVESTIGATION_LEAKS + "test_items_show_what_the_page_shows"
 ITEM_WRITES = INVESTIGATION_LEAKS + "test_item_writes_answer_with_what_the_writer_may_see"
+HIDDEN = "tests.moderation.test_hidden_everywhere:test_hidden_content_leaves_every_read_route"
+HIDDEN_STREAM = "tests.moderation.test_hidden_everywhere:test_the_stream_announces_nothing_hidden"
+NO_CONTRIBUTIONS = "serves nothing people contribute, so nothing a moderator hides"
+REDIRECT_ONLY = "a sign-in redirect that carries no content"
 
 ROUTES: dict[tuple[str, str], Expect] = {
     # Accounts
-    ("GET", "/api/v1/auth/me"): Expect(sample="/api/v1/auth/me"),
+    ("GET", "/api/v1/auth/me"): Expect(sample="/api/v1/auth/me", hidden_test=HIDDEN),
     ("PATCH", "/api/v1/auth/me"): Expect(writer=OWN_ACCOUNT + "; a bio checks it itself"),
     ("DELETE", "/api/v1/auth/me"): Expect(writer=OWN_ACCOUNT),
     ("POST", "/api/v1/auth/welcome"): Expect(writer="is the welcome step"),
     ("POST", "/api/v1/auth/logout"): Expect(writer=OWN_ACCOUNT),
-    ("GET", "/api/v1/auth/handle-suggestion"): Expect(sample="/api/v1/auth/handle-suggestion"),
-    ("GET", "/api/v1/auth/oauth/{provider}/start"): Expect(unsampled="a redirect, tested in tests/auth"),
-    ("GET", "/api/v1/auth/oauth/{provider}/callback"): Expect(unsampled="a redirect, tested in tests/auth"),
+    ("GET", "/api/v1/auth/handle-suggestion"): Expect(
+        sample="/api/v1/auth/handle-suggestion", nothing_hidden="a free handle, made up on the spot"
+    ),
+    ("GET", "/api/v1/auth/oauth/{provider}/start"): Expect(
+        unsampled="a redirect, tested in tests/auth", nothing_hidden=REDIRECT_ONLY
+    ),
+    ("GET", "/api/v1/auth/oauth/{provider}/callback"): Expect(
+        unsampled="a redirect, tested in tests/auth", nothing_hidden=REDIRECT_ONLY
+    ),
     ("POST", "/api/v1/auth/oauth/{provider}/callback"): Expect(writer=SIGN_IN),
     ("POST", "/api/v1/auth/email/start"): Expect(writer=SIGN_IN),
     ("POST", "/api/v1/auth/email/verify"): Expect(writer=SIGN_IN),
     ("POST", "/api/v1/auth/dev-login"): Expect(writer=SIGN_IN),
     # Findings
-    ("GET", "/api/v1/findings"): Expect("test_lists_and_the_map", sample="/api/v1/findings"),
+    ("GET", "/api/v1/findings"): Expect(
+        "test_lists_and_the_map", sample="/api/v1/findings", hidden_test=HIDDEN
+    ),
     ("POST", "/api/v1/findings"): Expect("test_writes_answer_with_what_the_writer_may_see", CONTRIBUTOR),
     ("GET", "/api/v1/findings/export"): Expect(
-        "test_downloads_of_a_filtered_set", sample="/api/v1/findings/export"
+        "test_downloads_of_a_filtered_set", sample="/api/v1/findings/export", hidden_test=HIDDEN
     ),
-    ("GET", "/api/v1/findings/{public_id}"): Expect("test_a_finding_page", sample=F),
+    ("GET", "/api/v1/findings/{public_id}"): Expect("test_a_finding_page", sample=F, hidden_test=HIDDEN),
     ("PATCH", "/api/v1/findings/{public_id}"): Expect("test_a_finding_page", CONTRIBUTOR),
     ("POST", "/api/v1/findings/{public_id}/withdraw"): Expect("test_a_finding_page", CONTRIBUTOR),
     ("PUT", "/api/v1/findings/{public_id}/sensitivity"): Expect("test_a_finding_page", CONTRIBUTOR),
     ("GET", "/api/v1/findings/{public_id}/export"): Expect(
-        "test_downloads_of_one_finding", sample=F + "/export"
+        "test_downloads_of_one_finding", sample=F + "/export", hidden_test=HIDDEN
     ),
     # Second looks
     ("PUT", "/api/v1/findings/{public_id}/observation"): Expect(
@@ -110,12 +134,16 @@ ROUTES: dict[tuple[str, str], Expect] = {
     ),
     ("DELETE", "/api/v1/findings/{public_id}/observation"): Expect(writer=CONTRIBUTOR),
     ("GET", "/api/v1/findings/{public_id}/observations"): Expect(
-        "test_comments_and_answers_carry_no_position", sample=F + "/observations"
+        "test_comments_and_answers_carry_no_position", sample=F + "/observations", hidden_test=HIDDEN
     ),
     ("GET", "/api/v1/review/next"): Expect(
-        "test_review_cards_are_only_for_findings_the_viewer_sees_exactly", sample="/api/v1/review/next"
+        "test_review_cards_are_only_for_findings_the_viewer_sees_exactly",
+        sample="/api/v1/review/next",
+        hidden_test=HIDDEN,
     ),
-    ("GET", "/api/v1/review/tasks"): Expect("test_help_wanted", sample="/api/v1/review/tasks"),
+    ("GET", "/api/v1/review/tasks"): Expect(
+        "test_help_wanted", sample="/api/v1/review/tasks", hidden_test=HIDDEN
+    ),
     # Evidence
     ("POST", "/api/v1/findings/{public_id}/evidence"): Expect(
         "test_writes_answer_with_what_the_writer_may_see", CONTRIBUTOR
@@ -125,7 +153,7 @@ ROUTES: dict[tuple[str, str], Expect] = {
     ("POST", "/api/v1/evidence/{evidence_id}/verify"): Expect("test_a_finding_page", CONTRIBUTOR),
     # Discussion
     ("GET", "/api/v1/findings/{public_id}/comments"): Expect(
-        "test_comments_and_answers_carry_no_position", sample=F + "/comments"
+        "test_comments_and_answers_carry_no_position", sample=F + "/comments", hidden_test=HIDDEN
     ),
     ("POST", "/api/v1/findings/{public_id}/comments"): Expect(
         "test_writes_answer_with_what_the_writer_may_see", CONTRIBUTOR
@@ -134,32 +162,44 @@ ROUTES: dict[tuple[str, str], Expect] = {
     ("PUT", "/api/v1/findings/{public_id}/follow"): Expect(writer=CONTRIBUTOR),
     ("DELETE", "/api/v1/findings/{public_id}/follow"): Expect(writer=CONTRIBUTOR),
     # Investigations
-    ("GET", "/api/v1/investigations"): Expect(sample="/api/v1/investigations"),
+    ("GET", "/api/v1/investigations"): Expect(sample="/api/v1/investigations", hidden_test=HIDDEN),
     ("POST", "/api/v1/investigations"): Expect(writer=CONTRIBUTOR),
-    ("GET", "/api/v1/investigations/{public_id}"): Expect(sample=INV),
+    ("GET", "/api/v1/investigations/{public_id}"): Expect(sample=INV, hidden_test=HIDDEN),
     ("PATCH", "/api/v1/investigations/{public_id}"): Expect(writer=CONTRIBUTOR),
     ("DELETE", "/api/v1/investigations/{public_id}"): Expect(writer=CONTRIBUTOR),
-    ("GET", "/api/v1/investigations/{public_id}/items"): Expect(ITEMS_SHOWN, sample=INV + "/items"),
+    ("GET", "/api/v1/investigations/{public_id}/items"): Expect(
+        ITEMS_SHOWN, sample=INV + "/items", hidden_test=HIDDEN
+    ),
     ("POST", "/api/v1/investigations/{public_id}/items"): Expect(ITEM_WRITES, CONTRIBUTOR),
     ("PATCH", "/api/v1/investigations/{public_id}/items/{item_id}"): Expect(ITEM_WRITES, CONTRIBUTOR),
     ("POST", "/api/v1/investigations/{public_id}/items/{item_id}/move"): Expect(ITEM_WRITES, CONTRIBUTOR),
     ("DELETE", "/api/v1/investigations/{public_id}/items/{item_id}"): Expect(writer=CONTRIBUTOR),
-    ("GET", "/api/v1/investigations/{public_id}/members"): Expect(sample=INV + "/members"),
+    ("GET", "/api/v1/investigations/{public_id}/members"): Expect(
+        sample=INV + "/members", hidden_test=HIDDEN
+    ),
     ("PUT", "/api/v1/investigations/{public_id}/members/{handle}"): Expect(writer=CONTRIBUTOR),
     ("DELETE", "/api/v1/investigations/{public_id}/members/{handle}"): Expect(
         writer="removes a membership and stores nothing, so leaving or declining needs only a session"
     ),
     ("POST", "/api/v1/investigations/{public_id}/invitation"): Expect(writer=CONTRIBUTOR),
     ("GET", "/api/v1/investigations/{public_id}/export"): Expect(
-        INVESTIGATION_LEAKS + "test_downloads_follow_the_download_rule", sample=INV + "/export"
+        INVESTIGATION_LEAKS + "test_downloads_follow_the_download_rule",
+        sample=INV + "/export",
+        hidden_test=HIDDEN,
     ),
     # Scan a square
-    ("GET", "/api/v1/squares/next"): Expect(sample="/api/v1/squares/next?lon=-1.85&lat=51.43"),
+    ("GET", "/api/v1/squares/next"): Expect(
+        sample="/api/v1/squares/next?lon=-1.85&lat=51.43",
+        nothing_hidden="a square to scan, chosen from counts of surveys, which are never hidden",
+    ),
     ("PUT", "/api/v1/squares/{ref}"): Expect(writer=CONTRIBUTOR),
-    ("GET", "/api/v1/squares/coverage"): Expect(sample="/api/v1/squares/coverage?bbox=-1.9,51.4,-1.8,51.45"),
+    ("GET", "/api/v1/squares/coverage"): Expect(
+        sample="/api/v1/squares/coverage?bbox=-1.9,51.4,-1.8,51.45",
+        nothing_hidden="counts of surveys per square, which keep no finding and are never hidden",
+    ),
     # Mentions
     ("GET", "/api/v1/findings/{public_id}/mentions"): Expect(
-        MENTIONS + "test_a_findings_own_list_carries_no_position", sample=F + "/mentions"
+        MENTIONS + "test_a_findings_own_list_carries_no_position", sample=F + "/mentions", hidden_test=HIDDEN
     ),
     ("POST", "/api/v1/findings/{public_id}/mentions"): Expect(writer=CONTRIBUTOR),
     ("DELETE", "/api/v1/mentions/{mention_id}"): Expect(writer=CONTRIBUTOR),
@@ -168,78 +208,113 @@ ROUTES: dict[tuple[str, str], Expect] = {
     ("GET", "/api/v1/mentions/recent"): Expect(
         MENTIONS + "test_the_feed_shows_each_position_as_the_viewer_may_see_it",
         sample="/api/v1/mentions/recent",
+        hidden_test=HIDDEN,
     ),
     # Records
-    ("GET", "/api/v1/records/search"): Expect(sample="/api/v1/records/search?q=barrow"),
-    ("GET", "/api/v1/records/nearby"): Expect(sample="/api/v1/records/nearby?lon=-1.85&lat=51.43"),
-    ("GET", "/api/v1/records/{record_id}"): Expect(sample="/api/v1/records/{record}"),
-    ("GET", "/api/v1/sources"): Expect(sample="/api/v1/sources"),
+    ("GET", "/api/v1/records/search"): Expect(
+        sample="/api/v1/records/search?q=barrow", nothing_hidden=NO_CONTRIBUTIONS
+    ),
+    ("GET", "/api/v1/records/nearby"): Expect(
+        sample="/api/v1/records/nearby?lon=-1.85&lat=51.43", nothing_hidden=NO_CONTRIBUTIONS
+    ),
+    ("GET", "/api/v1/records/{record_id}"): Expect(
+        sample="/api/v1/records/{record}", nothing_hidden=NO_CONTRIBUTIONS
+    ),
+    ("GET", "/api/v1/sources"): Expect(sample="/api/v1/sources", nothing_hidden=NO_CONTRIBUTIONS),
     ("GET", "/api/v1/findings/{public_id}/suggested-records"): Expect(
-        "test_suggested_records", sample=F + "/suggested-records"
+        "test_suggested_records", sample=F + "/suggested-records", hidden_test=HIDDEN
     ),
-    ("GET", "/tiles/records/{z}/{x}/{y}.mvt"): Expect(sample="/tiles/records/0/0/0.mvt"),
+    ("GET", "/tiles/records/{z}/{x}/{y}.mvt"): Expect(
+        sample="/tiles/records/0/0/0.mvt", nothing_hidden=NO_CONTRIBUTIONS
+    ),
     # Context and geography
-    ("GET", "/api/v1/context/live-sources"): Expect(sample="/api/v1/context/live-sources"),
-    ("GET", "/api/v1/context/links"): Expect(sample="/api/v1/context/links?lon=-1.85&lat=51.43"),
-    ("GET", "/api/v1/geo/search"): Expect(
-        "test_the_search_box_flies_to_what_the_viewer_may_see", sample="/api/v1/geo/search?q={finding}"
+    ("GET", "/api/v1/context/live-sources"): Expect(
+        sample="/api/v1/context/live-sources", nothing_hidden=NO_CONTRIBUTIONS
     ),
-    ("GET", "/api/v1/geo/point"): Expect(sample="/api/v1/geo/point?lon=-1.85&lat=51.43"),
-    ("GET", "/api/v1/meta"): Expect(sample="/api/v1/meta"),
+    ("GET", "/api/v1/context/links"): Expect(
+        sample="/api/v1/context/links?lon=-1.85&lat=51.43", nothing_hidden=NO_CONTRIBUTIONS
+    ),
+    ("GET", "/api/v1/geo/search"): Expect(
+        "test_the_search_box_flies_to_what_the_viewer_may_see",
+        sample="/api/v1/geo/search?q={finding}",
+        hidden_test=HIDDEN,
+    ),
+    ("GET", "/api/v1/geo/point"): Expect(
+        sample="/api/v1/geo/point?lon=-1.85&lat=51.43", nothing_hidden=NO_CONTRIBUTIONS
+    ),
+    ("GET", "/api/v1/meta"): Expect(sample="/api/v1/meta", nothing_hidden=NO_CONTRIBUTIONS),
     # Terrain
     ("POST", "/api/v1/terrain/profile"): Expect(writer=NOT_STORED),
-    ("GET", "/api/v1/terrain/coverage"): Expect(sample="/api/v1/terrain/coverage?bbox=-1.9,51.4,-1.8,51.45"),
-    ("GET", "/tiles/lidar/{style}/{z}/{x}/{y}.png"): Expect(unsampled=NEEDS_MIRROR),
-    ("GET", "/tiles/dem/{z}/{x}/{y}.png"): Expect(unsampled=NEEDS_MIRROR),
+    ("GET", "/api/v1/terrain/coverage"): Expect(
+        sample="/api/v1/terrain/coverage?bbox=-1.9,51.4,-1.8,51.45", nothing_hidden=NO_CONTRIBUTIONS
+    ),
+    ("GET", "/tiles/lidar/{style}/{z}/{x}/{y}.png"): Expect(
+        unsampled=NEEDS_MIRROR, nothing_hidden=NO_CONTRIBUTIONS
+    ),
+    ("GET", "/tiles/dem/{z}/{x}/{y}.png"): Expect(unsampled=NEEDS_MIRROR, nothing_hidden=NO_CONTRIBUTIONS),
     # People
     ("GET", "/api/v1/users/{handle}"): Expect(
-        ACTIVITY_LEAKS + "test_profiles_findings_and_contributions", sample=U
+        ACTIVITY_LEAKS + "test_profiles_findings_and_contributions", sample=U, hidden_test=HIDDEN
     ),
     ("GET", "/api/v1/users/{handle}/findings"): Expect(
-        ACTIVITY_LEAKS + "test_profiles_findings_and_contributions", sample=U + "/findings"
+        ACTIVITY_LEAKS + "test_profiles_findings_and_contributions",
+        sample=U + "/findings",
+        hidden_test=HIDDEN,
     ),
     ("GET", "/api/v1/users/{handle}/contributions"): Expect(
-        ACTIVITY_LEAKS + "test_profiles_findings_and_contributions", sample=U + "/contributions"
+        ACTIVITY_LEAKS + "test_profiles_findings_and_contributions",
+        sample=U + "/contributions",
+        hidden_test=HIDDEN,
     ),
-    ("GET", "/api/v1/users/{handle}/points"): Expect(ACTIVITY_LEAKS + "test_points", sample=U + "/points"),
+    ("GET", "/api/v1/users/{handle}/points"): Expect(
+        ACTIVITY_LEAKS + "test_points", sample=U + "/points", hidden_test=HIDDEN
+    ),
     # Activity
-    ("GET", "/api/v1/activity"): Expect(ACTIVITY_LEAKS + "test_the_feed", sample="/api/v1/activity"),
-    ("GET", "/api/v1/notifications"): Expect(
-        ACTIVITY_LEAKS + "test_notifications", sample="/api/v1/notifications"
+    ("GET", "/api/v1/activity"): Expect(
+        ACTIVITY_LEAKS + "test_the_feed", sample="/api/v1/activity", hidden_test=HIDDEN
     ),
-    ("POST", "/api/v1/notifications/read"): Expect(writer=CONTRIBUTOR),
+    ("GET", "/api/v1/notifications"): Expect(
+        ACTIVITY_LEAKS + "test_notifications", sample="/api/v1/notifications", hidden_test=HIDDEN
+    ),
+    ("POST", "/api/v1/notifications/read"): Expect(
+        writer="marks the caller's own notifications read; stores nothing"
+    ),
     ("GET", "/api/v1/events/stream"): Expect(
         ACTIVITY_LEAKS + "test_stream_payloads_carry_no_position",
         unsampled="a stream that stays open: tests/activity/test_events.py checks it is sent no-cache",
+        hidden_test=HIDDEN_STREAM,
     ),
     # Photos
     ("POST", "/api/v1/media"): Expect(writer=CONTRIBUTOR),
     ("GET", "/api/v1/media/{media_id}"): Expect(
         "tests.media.test_leaks:test_a_photo_goes_only_to_those_who_see_its_finding_exactly",
         sample="/api/v1/media/{photo}",
+        hidden_test=HIDDEN,
     ),
-    ("GET", "/api/v1/mod/media"): Expect(sample="/api/v1/mod/media"),
+    ("GET", "/api/v1/mod/media"): Expect(sample="/api/v1/mod/media", hidden_test=HIDDEN, welcome=True),
     ("POST", "/api/v1/mod/media/{media_id}/approve"): Expect(writer=CONTRIBUTOR),
     ("POST", "/api/v1/mod/media/{media_id}/reject"): Expect(writer=CONTRIBUTOR),
     # Reports and moderation
     ("POST", "/api/v1/reports"): Expect(writer=CONTRIBUTOR),
-    ("GET", "/api/v1/mod/reports"): Expect(sample="/api/v1/mod/reports"),
+    ("GET", "/api/v1/mod/reports"): Expect(sample="/api/v1/mod/reports", hidden_test=HIDDEN, welcome=True),
     ("POST", "/api/v1/mod/reports/{report_id}/resolve"): Expect(writer=CONTRIBUTOR),
     **{
         ("POST", f"/api/v1/mod/{segment}/{{target_id}}/{verb}"): Expect(writer=CONTRIBUTOR)
-        for segment in ("findings", "comments", "evidence", "mentions", "media")
+        for segment in ("findings", "comments", "evidence", "mentions", "media", "investigations")
         for verb in ("hide", "unhide")
     },
     ("PUT", "/api/v1/mod/findings/{public_id}/sensitivity"): Expect(
         "tests.moderation.test_leaks:test_the_moderators_level_route_answers_only_moderators", CONTRIBUTOR
     ),
-    ("GET", "/api/v1/mod/users/eligible"): Expect(sample="/api/v1/mod/users/eligible"),
+    ("GET", "/api/v1/mod/users/eligible"): Expect(
+        sample="/api/v1/mod/users/eligible", hidden_test=HIDDEN, welcome=True
+    ),
     ("PUT", "/api/v1/mod/users/{handle}/role"): Expect(writer=CONTRIBUTOR),
     ("POST", "/api/v1/mod/users/{handle}/ban"): Expect(writer=CONTRIBUTOR),
     ("POST", "/api/v1/mod/users/{handle}/unban"): Expect(writer=CONTRIBUTOR),
-    ("GET", "/api/v1/mod/actions"): Expect(sample="/api/v1/mod/actions"),
+    ("GET", "/api/v1/mod/actions"): Expect(sample="/api/v1/mod/actions", hidden_test=HIDDEN, welcome=True),
     # The app itself
-    ("GET", "/healthz"): Expect(sample="/healthz"),
+    ("GET", "/healthz"): Expect(sample="/healthz", nothing_hidden="the process is up"),
 }
 
 
@@ -342,8 +417,30 @@ def test_every_route_that_stores_a_contribution_needs_the_welcome_step(
     every_route: dict[tuple[str, str], APIRoute],
 ) -> None:
     for key, route in every_route.items():
+        expect = ROUTES[key]
         needs_welcome = current_contributor in set(_calls(route.dependant))
-        assert needs_welcome is (ROUTES[key].writer == CONTRIBUTOR), f"{key}: {ROUTES[key].writer}"
+        assert needs_welcome is (expect.writer == CONTRIBUTOR or expect.welcome), f"{key}: {expect.writer}"
+
+
+def test_only_reads_say_they_need_the_welcome_step_and_everything_under_mod_does() -> None:
+    for (method, path), expect in ROUTES.items():
+        if expect.welcome:
+            assert method == "GET", f"{method} {path}: a write says so through `writer`"
+        if path.startswith("/api/v1/mod/"):
+            assert expect.welcome or expect.writer == CONTRIBUTOR, f"{method} {path}"
+
+
+def test_every_read_says_how_it_leaves_hidden_things_out() -> None:
+    """A moderator's hide reaches every read route, so none can be added without saying how."""
+    for (method, path), expect in ROUTES.items():
+        if method != "GET":
+            assert expect.hidden_test is None, f"{method} {path}"
+            assert expect.nothing_hidden is None, f"{method} {path}"
+            continue
+        stated = (expect.hidden_test is not None) + (expect.nothing_hidden is not None)
+        assert stated == 1, f"GET {path}: name a hidden_test, or say why nothing_hidden"
+        if expect.hidden_test is not None:
+            assert callable(leak_test(expect.hidden_test)), f"GET {path}: there is no {expect.hidden_test}"
 
 
 def test_every_write_is_rate_limited(every_route: dict[tuple[str, str], APIRoute]) -> None:

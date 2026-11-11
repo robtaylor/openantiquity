@@ -6,12 +6,20 @@ only while what it is about can still be seen:
 - an event on a finding that is hidden from this viewer (`findings.not_hidden_clause`)
   or withdrawn is left out,
 - an event on an investigation that isn't public is left out, so a private or
-  unlisted one never appears,
+  unlisted one never appears, and so is one on an investigation a moderator
+  has hidden, but for moderators and its owner,
 - an event whose actor is banned is left out, and a deleted actor is shown as
   no one, because the account's name has gone,
 - `comment_added`, `evidence_added`, `followup_logged` and `mention_added`
   are left out once the comment, evidence or mention they name in `data`
-  (`comment_id`, `evidence_id`, `mention_id`) has been deleted.
+  (`comment_id`, `evidence_id`, `mention_id`) has been deleted, or hidden from
+  this viewer by the rules its own lists follow: a hidden comment or mention
+  is still listed for moderators and its author, and hidden evidence for
+  nobody.
+
+A notification of an invitation to an investigation (`investigation_id`)
+is listed while the person is still invited to it or belongs to it, and
+not once a moderator hides it, unless they are a member or a moderator.
 
 `public_event` applies the same rule for a signed-out visitor, and the
 event stream uses it to decide what it may announce.
@@ -43,9 +51,19 @@ from sqlalchemy import ColumnElement, Select, and_, exists, func, not_, or_, sel
 from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
 
 from fieldclub.errors import NotFoundError
-from fieldclub.models import Activity, Comment, Evidence, Finding, Investigation, Mention, Notification, User
+from fieldclub.models import (
+    Activity,
+    Comment,
+    Evidence,
+    Finding,
+    Investigation,
+    InvestigationMember,
+    Mention,
+    Notification,
+    User,
+)
 from fieldclub.schemas.common import BBox, int_from_cursor, is_bbox, paginate
-from fieldclub.services import findings, geo, ids
+from fieldclub.services import findings, geo, ids, mentions
 from fieldclub.vocab import ActivityKind, FindingState, Visibility
 
 # The user who did something, as distinct from the viewer.
@@ -76,16 +94,36 @@ def _ref(data: Any, key: str) -> ColumnElement[Any]:
     return data[key].as_integer()
 
 
-def _content_removed(kind: InstrumentedAttribute[str], data: Any) -> ColumnElement[bool]:
-    """Rows about a comment, evidence or mention that has since been deleted."""
-    comment_live = exists().where(Comment.id == _ref(data, "comment_id"), Comment.deleted_at.is_(None))
-    evidence_live = exists().where(Evidence.id == _ref(data, "evidence_id"), Evidence.deleted_at.is_(None))
-    mention_live = exists().where(Mention.id == _ref(data, "mention_id"))
+def _content_gone(kind: InstrumentedAttribute[str], data: Any, viewer: User | None) -> ColumnElement[bool]:
+    """Rows about a comment, evidence or mention that has been deleted, or hidden from this viewer.
+
+    A hidden comment or mention is still listed for moderators and its
+    author, as its finding's page shows it to them. Hidden evidence, and
+    evidence by a banned account, leaves pages for everyone, and so leaves
+    these lists too (`findings.standing_evidence_clause`).
+    """
+    comment_shown = exists().where(
+        Comment.id == _ref(data, "comment_id"),
+        Comment.deleted_at.is_(None),
+        findings.shown_clause(Comment.hidden_at, Comment.user_id, viewer),
+    )
+    evidence_shown = exists().where(
+        Evidence.id == _ref(data, "evidence_id"), findings.standing_evidence_clause()
+    )
+    mention_shown = exists().where(Mention.id == _ref(data, "mention_id"), mentions.shown_clause(viewer))
     return or_(
-        and_(kind.in_(_COMMENT_KINDS), not_(comment_live)),
-        and_(kind.in_(_EVIDENCE_KINDS), not_(evidence_live)),
+        and_(kind.in_(_COMMENT_KINDS), not_(comment_shown)),
+        and_(kind.in_(_EVIDENCE_KINDS), not_(evidence_shown)),
         # A mention found by the channel scan may name none, so only one that is named is checked.
-        and_(kind.in_(_MENTION_KINDS), data.has_key("mention_id"), not_(mention_live)),
+        and_(kind.in_(_MENTION_KINDS), data.has_key("mention_id"), not_(mention_shown)),
+    )
+
+
+def investigation_listed_clause(viewer: User | None) -> ColumnElement[bool]:
+    """Investigations whose events this viewer may see: public, and not hidden from them."""
+    return and_(
+        Investigation.visibility == Visibility.PUBLIC.value,
+        findings.shown_clause(Investigation.hidden_at, Investigation.owner_id, viewer),
     )
 
 
@@ -97,25 +135,26 @@ def _listed[*Row](
     data: Any,
     actor_id: InstrumentedAttribute[int | None],
     finding_id: InstrumentedAttribute[int | None],
+    investigation: ColumnElement[bool] | None = None,
     investigation_id: InstrumentedAttribute[int | None] | None = None,
 ) -> Select[*Row]:
     """Join a query over activity or notifications to what its rows are about, and keep what may be listed.
 
     The query must select from the table the columns belong to. Finding and
     the `Actor` alias are outer-joined, and Investigation too when the table
-    has an investigation column, so callers can select them.
+    has an investigation column, so callers can select them. `investigation`
+    says which investigations a row may be about.
     """
     query = query.outerjoin(Finding, Finding.id == finding_id).outerjoin(Actor, Actor.id == actor_id)
     conditions: list[ColumnElement[bool]] = [
         or_(finding_id.is_(None), finding_listed_clause(viewer)),
         or_(actor_id.is_(None), Actor.banned_at.is_(None)),
-        not_(_content_removed(kind, data)),
+        not_(_content_gone(kind, data, viewer)),
     ]
     if investigation_id is not None:
+        assert investigation is not None, "say which investigations may be listed"
         query = query.outerjoin(Investigation, Investigation.id == investigation_id)
-        conditions.append(
-            or_(investigation_id.is_(None), Investigation.visibility == Visibility.PUBLIC.value)
-        )
+        conditions.append(or_(investigation_id.is_(None), investigation))
     return query.where(*conditions)
 
 
@@ -127,6 +166,7 @@ def _listed_activity[*Row](query: Select[*Row], viewer: User | None) -> Select[*
         data=Activity.data,
         actor_id=Activity.actor_id,
         finding_id=Activity.finding_id,
+        investigation=investigation_listed_clause(viewer),
         investigation_id=Activity.investigation_id,
     )
 
@@ -204,14 +244,14 @@ def list_feed(
     )
 
 
-def public_investigation(db: Session, public_id: str) -> Investigation:
-    """A public investigation by its public id, or `InvestigationNotFoundError`."""
+def public_investigation(db: Session, public_id: str, viewer: User | None) -> Investigation:
+    """A public investigation not hidden from this viewer, by its public id, or not found."""
     normalised = ids.normalise(public_id)
     if normalised is None:
         raise InvestigationNotFoundError()
     investigation = db.scalar(
         select(Investigation).where(
-            Investigation.public_id == normalised, Investigation.visibility == Visibility.PUBLIC.value
+            Investigation.public_id == normalised, investigation_listed_clause(viewer)
         )
     )
     if investigation is None:
@@ -237,6 +277,8 @@ class NotificationItem:
     notification: Notification
     actor: User | None
     finding: Finding | None
+    # The investigation an invitation is to.
+    investigation: Investigation | None = None
 
 
 @dataclass(frozen=True)
@@ -244,6 +286,25 @@ class NotificationPage:
     items: list[NotificationItem]
     next_cursor: str | None
     unread_count: int
+
+
+def _invitation_listed(user: User) -> ColumnElement[bool]:
+    """An investigation a notification may name: one the person is still invited to or belongs to.
+
+    An invitation the owner took back, or the person declined, leaves the
+    list, and so does one to an investigation a moderator has hidden from them.
+    """
+    member = exists().where(
+        InvestigationMember.investigation_id == Investigation.id, InvestigationMember.user_id == user.id
+    )
+    if findings.is_moderator(user):
+        return member
+    joined = exists().where(
+        InvestigationMember.investigation_id == Investigation.id,
+        InvestigationMember.user_id == user.id,
+        InvestigationMember.accepted_at.is_not(None),
+    )
+    return and_(member, or_(Investigation.hidden_at.is_(None), joined))
 
 
 def _my_notifications[*Row](query: Select[*Row], user: User) -> Select[*Row]:
@@ -255,6 +316,8 @@ def _my_notifications[*Row](query: Select[*Row], user: User) -> Select[*Row]:
         data=Notification.data,
         actor_id=Notification.actor_id,
         finding_id=Notification.finding_id,
+        investigation=_invitation_listed(user),
+        investigation_id=Notification.investigation_id,
     )
     return listed.where(Notification.user_id == user.id)
 
@@ -265,9 +328,10 @@ def unread_count(db: Session, user: User) -> int:
     return db.scalar(query.where(Notification.read_at.is_(None))) or 0
 
 
-def notifications_query(user: User) -> Select[Notification, Finding, User]:
-    """The person's listed notifications, newest first, as (Notification, Finding, Actor) rows."""
-    return _my_notifications(select(Notification, Finding, Actor), user).order_by(Notification.id.desc())
+def notifications_query(user: User) -> Select[Notification, Finding, User, Investigation]:
+    """The person's listed notifications, newest first, with their finding, actor and investigation."""
+    query = select(Notification, Finding, Actor, Investigation)
+    return _my_notifications(query, user).order_by(Notification.id.desc())
 
 
 def list_notifications(db: Session, user: User, *, limit: int, cursor: str | None = None) -> NotificationPage:
@@ -278,7 +342,7 @@ def list_notifications(db: Session, user: User, *, limit: int, cursor: str | Non
     rows: Sequence[Any] = db.execute(query.limit(limit + 1)).all()
     page, next_cursor = paginate(rows, limit, lambda row: [row[0].id])
     return NotificationPage(
-        [NotificationItem(row[0], _shown_actor(row[2]), row[1]) for row in page],
+        [NotificationItem(row[0], _shown_actor(row[2]), row[1], row[3]) for row in page],
         next_cursor,
         unread_count(db, user),
     )

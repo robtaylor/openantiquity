@@ -4,9 +4,10 @@ Targets
 =======
 
 A report, a hide and a log entry each name a target by kind and id: a
-finding, a comment, a piece of evidence, a mention, a photo or a person
-(`ReportTarget`). The API names a finding by its public id, a person by
-their handle and everything else by its numeric id. `load_target` turns that
+finding, a comment, a piece of evidence, a mention, a photo, a person or an
+investigation (`ReportTarget`). The API names a finding or an investigation
+by its public id, a person by their handle and everything else by its
+numeric id. `load_target` turns that
 reference into the row, and refuses with `target_not_found` anything the
 person asking may not see, so a member can't report, or learn of, something
 hidden from them.
@@ -14,9 +15,9 @@ hidden from them.
 Hiding
 ======
 
-A moderator can hide a finding, a comment, a piece of evidence, a mention or
-a photo, and undo it. Hidden things disappear for everyone else on the next
-request:
+A moderator can hide a finding, a comment, a piece of evidence, a mention, a
+photo or an investigation, and undo it. Hidden things disappear for everyone
+else on the next request:
 
 - a hidden finding is seen only by moderators and its finder, everywhere
   findings are listed or opened (`findings.may_see_hidden`, and
@@ -26,10 +27,14 @@ request:
 - hidden evidence stops counting at once (the finding is reassessed) and
   leaves finding pages, credits and exports for everyone
   (`findings.standing_evidence_clause`);
-- a hidden mention leaves `mention_count`, and every mention list must leave
-  it out;
+- a hidden mention leaves `mention_count`, and every mention list, the
+  recent feed and profiles for everyone but moderators and whoever added it,
+  and holds its address on the finding, so nobody, the channel scan
+  included, can add it again while it stays hidden (`services.mentions`);
 - a hidden photo is served only to moderators and its uploader
-  (`media.may_see_media`).
+  (`media.may_see_media`);
+- a hidden investigation is found only by its members and moderators, and
+  leaves the public list and feeds (`investigations.may_read`).
 
 An event a moderator's action causes, such as a tier change after evidence
 is hidden, has no actor, so moderators aren't named in feeds.
@@ -41,7 +46,9 @@ A ban ends the person's sessions at once, and from then on every request
 they make is treated as signed out (`auth.deps`). Their second looks, votes,
 evidence and verifications stop counting, and their evidence leaves finding
 pages and exports, while the ban lasts: every finding they touched is
-reassessed straight away, with no actor. Their findings and comments stay,
+reassessed straight away, with no actor. Their square surveys stop counting
+too (`squares.counted_clause`), and their events and notifications leave
+every list (`services.feed`). Their findings and comments stay,
 because other people's work sits on them; a moderator hides any that need
 it. Lifting the ban restores everything and reassesses again. Points already
 paid stay paid, because there are no penalties: the eligible list shows where
@@ -70,9 +77,11 @@ Every action here, and every photo approved or refused, writes one
 can't be skipped: the routes members use refuse a moderator what only a
 moderator could do there. Lowering a level through
 `PUT /findings/{public_id}/sensitivity` is `lower_through_moderation`
-(`sensitivity.raise_sensitivity`), and only its author deletes a comment or
-evidence (`findings.delete_comment`, `findings.delete_evidence`), so a
-moderator hides someone else's instead.
+(`sensitivity.raise_sensitivity`), and a moderator raising someone else's
+level there is logged (`raise_sensitivity`). Only its author deletes a
+comment, evidence or a mention (`findings.delete_comment`,
+`findings.delete_evidence`, `mentions.remove`), so a moderator hides
+someone else's instead.
 
 Nobody moderates their own work. A moderator can't hide, show again or set
 the level of what they posted (`own_content`), resolve a report they made or
@@ -118,6 +127,7 @@ from fieldclub.models import (
     Evidence,
     EvidenceVote,
     Finding,
+    Investigation,
     Media,
     Mention,
     ModerationAction,
@@ -126,8 +136,8 @@ from fieldclub.models import (
     ReputationEvent,
     User,
 )
-from fieldclub.schemas.common import int_from_cursor, paginate
-from fieldclub.services import findings, ids, media, sensitivity
+from fieldclub.schemas.common import PublicUser, int_from_cursor, paginate
+from fieldclub.services import findings, ids, investigations, media, sensitivity
 from fieldclub.services.reputation import OBSERVATION_CORROBORATED, OBSERVATION_RULED_OUT, TRUSTED_AT
 from fieldclub.vocab import (
     REPORT_DUE_HOURS,
@@ -149,6 +159,7 @@ HIDEABLE = frozenset(
         ReportTarget.EVIDENCE,
         ReportTarget.MENTION,
         ReportTarget.PHOTO,
+        ReportTarget.INVESTIGATION,
     }
 )
 # Roles a moderator may give or take away. An admin may also give and take `moderator`.
@@ -283,10 +294,11 @@ _MODELS: dict[ReportTarget, type[Any]] = {
     ReportTarget.MENTION: Mention,
     ReportTarget.PHOTO: Media,
     ReportTarget.USER: User,
+    ReportTarget.INVESTIGATION: Investigation,
 }
 assert set(_MODELS) == set(ReportTarget), "every target kind has a table"
 
-TargetRow = Finding | Comment | Evidence | Mention | Media | User
+TargetRow = Finding | Comment | Evidence | Mention | Media | User | Investigation
 
 # Who posted each kind of target, as a column: see `owner_of`.
 _OWNER_COLUMNS: dict[ReportTarget, Any] = {
@@ -296,6 +308,7 @@ _OWNER_COLUMNS: dict[ReportTarget, Any] = {
     ReportTarget.MENTION: Mention.user_id,
     ReportTarget.PHOTO: Media.user_id,
     ReportTarget.USER: User.id,
+    ReportTarget.INVESTIGATION: Investigation.owner_id,
 }
 assert set(_OWNER_COLUMNS) == set(ReportTarget), "every target kind has an owner"
 
@@ -322,12 +335,14 @@ def owner_of(kind: ReportTarget, row: TargetRow) -> int | None:
         return row.author_id
     if isinstance(row, User):
         return row.id
+    if isinstance(row, Investigation):
+        return row.owner_id
     return row.user_id
 
 
 def ref_of(kind: ReportTarget, row: TargetRow) -> str:
-    """How the API names a target: a finding's public id, a handle, or the id."""
-    if isinstance(row, Finding):
+    """How the API names a target: a finding's or investigation's public id, a handle, or the id."""
+    if isinstance(row, Finding | Investigation):
         return row.public_id
     if isinstance(row, User):
         return row.handle
@@ -340,6 +355,13 @@ def _row_by_ref(db: Session, kind: ReportTarget, ref: str) -> TargetRow | None:
         return db.scalar(select(Finding).where(Finding.public_id == public_id)) if public_id else None
     if kind is ReportTarget.USER:
         return db.scalar(select(User).where(User.handle == ref, User.deleted_at.is_(None)))
+    if kind is ReportTarget.INVESTIGATION:
+        public_id = ids.normalise(ref)
+        return (
+            db.scalar(select(Investigation).where(Investigation.public_id == public_id))
+            if public_id
+            else None
+        )
     if not _NUMERIC_REF.fullmatch(ref):
         return None
     return db.get(_MODELS[kind], int(ref))
@@ -375,7 +397,7 @@ def _visible(db: Session, target: Target, viewer: User | None) -> bool:
         standing = db.scalar(select(findings.standing_evidence_clause()).where(Evidence.id == row.id))
         return bool(standing) or is_moderator(viewer)
     if isinstance(row, Mention):
-        return row.hidden_at is None or _sees_hidden(row.user_id, viewer)
+        return row.deleted_at is None and (row.hidden_at is None or _sees_hidden(row.user_id, viewer))
     return True
 
 
@@ -388,6 +410,12 @@ def load_target(db: Session, kind: ReportTarget | str, ref: str, viewer: User | 
         try:
             row = findings.get_finding(db, ref, viewer)
         except findings.FindingNotFoundError:
+            raise TargetNotFoundError() from None
+    elif kind is ReportTarget.INVESTIGATION:
+        # The one investigation lookup, so a private or hidden one is found by exactly those who may read it.
+        try:
+            row = investigations.load(db, ref, viewer).investigation
+        except investigations.InvestigationNotFoundError:
             raise TargetNotFoundError() from None
     else:
         row = _row_by_ref(db, kind, ref)
@@ -436,16 +464,25 @@ def _details(row: TargetRow) -> dict[str, Any]:
             "photo_id": row.media_id,
         }
     if isinstance(row, Mention):
-        return {"hidden": row.hidden_at is not None, "title": row.title, "body": row.note, "url": row.url}
+        return {
+            "hidden": row.hidden_at is not None,
+            "removed": row.deleted_at is not None,
+            "title": row.title,
+            "body": row.note,
+            "url": row.url,
+        }
     if isinstance(row, Media):
         return {
             "hidden": row.hidden_at is not None,
             "removed": row.rejected_at is not None,
             "photo_id": row.id,
         }
-    # A 16 or 17 year old's provider name is shown to nobody, moderators included (Decision 0009).
-    name = row.handle if row.shows_handle_only else row.display_name
-    return {"removed": row.is_deleted, "title": name, "body": row.bio}
+    if isinstance(row, Investigation):
+        text = "\n\n".join(part for part in (row.summary, row.notes) if part)
+        return {"hidden": row.hidden_at is not None, "title": row.title, "body": text or None}
+    # A 16 or 17 year old's provider name is shown to nobody, moderators included (Decision 0009):
+    # the one public face of a person is `PublicUser`. The bio is what a report may be about.
+    return {"removed": row.is_deleted, "title": PublicUser.from_user(row).display_name, "body": row.bio}
 
 
 def _summary(
@@ -781,7 +818,7 @@ def _recount(db: Session, finding_id: int) -> None:
     )
     mentions = (
         select(func.count())
-        .where(Mention.finding_id == finding_id, Mention.hidden_at.is_(None))
+        .where(Mention.finding_id == finding_id, Mention.deleted_at.is_(None), Mention.hidden_at.is_(None))
         .scalar_subquery()
     )
     db.execute(
@@ -812,6 +849,9 @@ def set_hidden(
     if finding is not None:
         findings.lock(db, finding)
         db.refresh(row)
+    elif isinstance(row, Investigation):
+        # Every change to an investigation takes its row lock first.
+        db.refresh(row, with_for_update=True)
     if (row.hidden_at is not None) == hidden:
         raise AlreadyHiddenError() if hidden else NotHiddenError()
     row.hidden_at = (now or _now()) if hidden else None
@@ -856,6 +896,29 @@ def set_sensitivity(db: Session, public_id: str, moderator: User, level: Sensiti
             ReportTarget.FINDING,
             finding.id,
             reason,
+            {"from": before, "to": finding.sensitivity},
+        )
+    return finding
+
+
+def raise_sensitivity(db: Session, finding: Finding, actor: User, level: Sensitivity) -> Finding:
+    """`PUT /findings/{public_id}/sensitivity`: raise a level, as a finder or trusted member may.
+
+    A moderator who raises the level of someone else's finding here is still
+    acting as a moderator, so the change is logged, with no reason, as
+    `change_sensitivity`. A finder raising their own isn't logged, whatever
+    their role. The caller holds the finding's lock and commits.
+    """
+    before = finding.sensitivity
+    sensitivity.raise_sensitivity(db, finding, actor, level)
+    if finding.sensitivity != before and is_moderator(actor) and not actor.has_id(finding.author_id):
+        log_action(
+            db,
+            actor,
+            ModerationActionKind.CHANGE_SENSITIVITY,
+            ReportTarget.FINDING,
+            finding.id,
+            None,
             {"from": before, "to": finding.sensitivity},
         )
     return finding

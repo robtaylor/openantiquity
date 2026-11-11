@@ -18,6 +18,7 @@ from fieldclub.services import findings
 from fieldclub.vocab import EvidenceKind, Role, Tier
 from tests.findings.support import add_desk_evidence, answer, create
 from tests.helpers import ClientAs, ClientFor, MakeUser, error_code
+from tests.investigations.support import make as make_investigation
 from tests.moderation.support import API, REASON, comment, log_entries, mention, photo
 
 SECRET = "Meet me at the barrow at midnight with a detector"
@@ -264,6 +265,7 @@ TARGET_MAKERS: list[tuple[str, Callable[[Session, Finding, User], object]]] = [
     ("evidence", lambda db, f, u: add_desk_evidence(db, f, u)[0].id),
     ("mentions", lambda db, f, u: mention(db, f, u).id),
     ("media", lambda db, f, u: photo(db, u).id),
+    ("investigations", lambda db, f, u: make_investigation(db, u).public_id),
 ]
 
 

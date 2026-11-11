@@ -46,7 +46,7 @@ def preview(body: MentionPreviewIn, user: Contributor, db: Db) -> MentionPreview
 def list_mentions(public_id: str, page: PageQuery, db: Db, viewer: OptionalUser) -> Page[MentionOut]:
     """A finding's mentions, newest first."""
     finding = findings.get_finding(db, public_id, viewer)
-    found = mentions.for_finding(db, finding, limit=page.limit, cursor=page.cursor)
+    found = mentions.for_finding(db, finding, viewer, limit=page.limit, cursor=page.cursor)
     return Page[MentionOut](
         items=[
             MentionOut.build(m, found.adders[m.user_id] if m.user_id is not None else None)
@@ -86,7 +86,7 @@ def add_mention(public_id: str, body: MentionIn, user: Contributor, db: Db) -> M
     dependencies=[Depends(_per_member)],
 )
 def delete_mention(mention_id: int, user: Contributor, db: Db) -> None:
-    """Remove a mention you added. A moderator can remove anyone's."""
+    """Remove a mention you added. A moderator hides someone else's through `/mod/mentions/{id}/hide`."""
     mentions.remove(db, mention_id, user)
     db.commit()
 

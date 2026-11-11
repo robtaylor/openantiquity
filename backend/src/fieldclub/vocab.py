@@ -900,6 +900,7 @@ class ReportTarget(StrEnum):
     MENTION = "mention"
     PHOTO = "photo"
     USER = "user"
+    INVESTIGATION = "investigation"
 
 
 class ReportReason(StrEnum):
@@ -1007,6 +1008,8 @@ class ActivityKind(StrEnum):
     MENTION_ADDED = "mention_added"
     FOLLOWUP_LOGGED = "followup_logged"
     INVESTIGATION_PUBLISHED = "investigation_published"
+    # A notification only, never an `activity` row: someone was invited to an investigation.
+    INVESTIGATION_INVITATION = "investigation_invitation"
 
 
 # --------------------------------------------------------------------------

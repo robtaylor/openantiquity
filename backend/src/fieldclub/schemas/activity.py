@@ -134,13 +134,22 @@ class NotificationOut(ApiModel):
     read: bool
     actor: PublicUser | None
     finding: ActivityFindingOut | None
+    # The public id of the investigation an `investigation_invitation` is to.
+    # Its title isn't sent: a notification carries no free text (Decision 0009).
+    investigation: str | None = None
     details: ActivityDetailsOut
 
     @classmethod
     def build(
-        cls, notification: Notification, actor: User | None, finding: Finding | None, viewer: User
+        cls,
+        notification: Notification,
+        actor: User | None,
+        finding: Finding | None,
+        viewer: User,
+        investigation: Investigation | None = None,
     ) -> NotificationOut:
         assert viewer.has_id(notification.user_id), "a notification goes only to its own account"
+        assert (investigation is None) == (notification.investigation_id is None), "wrong investigation"
         return cls(
             id=notification.id,
             kind=ActivityKind(notification.kind),
@@ -148,6 +157,7 @@ class NotificationOut(ApiModel):
             read=notification.read_at is not None,
             actor=PublicUser.from_user(actor) if actor is not None else None,
             finding=ActivityFindingOut.build(finding, viewer) if finding is not None else None,
+            investigation=investigation.public_id if investigation is not None else None,
             details=ActivityDetailsOut.from_data(notification.kind, notification.data),
         )
 

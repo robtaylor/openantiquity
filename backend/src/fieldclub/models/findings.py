@@ -273,8 +273,9 @@ class Comment(Base):
 
 
 # The mentions that hold their address on a finding: every live one, and a
-# removed one whose removal blocks adding it again.
-MENTION_HOLDS_ADDRESS = "deleted_at IS NULL OR blocks_readding"
+# hidden one even after its adder removed it, so that while a moderator keeps
+# it hidden neither a member nor the channel scan can add that address again.
+MENTION_HOLDS_ADDRESS = "deleted_at IS NULL OR hidden_at IS NOT NULL"
 
 
 class Mention(Base):
@@ -282,8 +283,8 @@ class Mention(Base):
 
     __tablename__ = "mentions"
     __table_args__ = (
-        # One live mention per address on a finding. A removal that blocks
-        # adding the address again keeps its place here too.
+        # One live mention per address on a finding. A hidden one keeps its
+        # place here even once removed.
         Index(
             "uq_mentions_finding_id_match_key",
             "finding_id",
@@ -314,14 +315,11 @@ class Mention(Base):
     start_seconds: Mapped[int | None] = mapped_column(Integer)
     note: Mapped[str | None] = mapped_column(Text)
     auto_detected: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
-    # Removed by the person who added it or a moderator. The row stays as a record.
+    # Removed by the person who added it. The row stays as a record.
     deleted_at: Mapped[datetime | None] = mapped_column(TimestampTz)
-    removed_by: Mapped[int | None] = fk("users.id", ondelete="SET NULL")
-    # Set when a moderator removed someone else's mention, or one the channel
-    # scan found, so neither a member nor the scan can add that address again.
-    # A person removing their own mention blocks nothing.
-    blocks_readding: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
-    # Set by a moderator. A hidden mention is left out of every list and feed.
+    # Set by a moderator (`services.moderation`). A hidden mention is left out
+    # of every list and feed for everyone but moderators and its adder, and
+    # holds its address on the finding while it stays hidden.
     hidden_at: Mapped[datetime | None] = mapped_column(TimestampTz)
 
 

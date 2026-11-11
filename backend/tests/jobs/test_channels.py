@@ -240,14 +240,14 @@ def test_hidden_withdrawn_and_removed_get_nothing(
         canonical_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         match_key="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         auto_detected=True,
-        deleted_at=datetime(2026, 11, 2, tzinfo=UTC),
-        # A moderator removed it, so the scan mustn't bring it back.
-        blocks_readding=True,
+        # A moderator hid it, so the scan mustn't bring it back, as a new mention or at all.
+        hidden_at=datetime(2026, 11, 2, tzinfo=UTC),
     )
     db.add(removed)
     db.commit()
     assert scan(limits=NO_DELAY).added == 1
-    assert db.scalars(select(Mention.finding_id).where(Mention.deleted_at.is_(None))).all() == [barrow.id]
+    shown = select(Mention.finding_id).where(Mention.deleted_at.is_(None), Mention.hidden_at.is_(None))
+    assert db.scalars(shown).all() == [barrow.id]
 
 
 def test_a_channel_on_another_provider_fails_cleanly(db: Session, offline: respx.MockRouter) -> None:

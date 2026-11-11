@@ -698,14 +698,23 @@ class FindingFilters:
         assert self.bbox is None or is_bbox(self.bbox), "bbox runs west to east and south to north"
 
 
-def not_hidden_clause(viewer: User | None) -> ColumnElement[bool]:
-    """Findings that aren't hidden from this viewer: see `may_see_hidden`."""
+def shown_clause(hidden_at: Any, owner_id: Any, viewer: User | None) -> ColumnElement[bool]:
+    """Rows a moderator hasn't hidden, or that this viewer still sees: moderators, and the row's owner.
+
+    The one rule for hidden findings, comments, mentions and investigations in
+    a query. `hidden_at` and `owner_id` are the table's columns.
+    """
     if is_moderator(viewer):
         return true()
     active = sensitivity.active_viewer(viewer)
     if active is None:
-        return Finding.hidden_at.is_(None)
-    return or_(Finding.hidden_at.is_(None), Finding.author_id == active.id)
+        return hidden_at.is_(None)
+    return or_(hidden_at.is_(None), owner_id == active.id)
+
+
+def not_hidden_clause(viewer: User | None) -> ColumnElement[bool]:
+    """Findings that aren't hidden from this viewer: see `may_see_hidden`."""
+    return shown_clause(Finding.hidden_at, Finding.author_id, viewer)
 
 
 def _escape_like(text: str) -> str:

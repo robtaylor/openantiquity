@@ -135,7 +135,7 @@ def test_reports_check_their_input(
         {"note": "x" * 2001},
         {"target_id": ""},
         {"target_id": "x" * 65},
-        {"target_kind": "investigation"},
+        {"target_kind": "record"},
         {"extra": True},
     ]:
         body = {"target_kind": "finding", "target_id": finding.public_id, "reason": "spam"} | bad
@@ -289,3 +289,41 @@ def test_report_reasons_are_in_meta_with_their_deadlines(client) -> None:
     due = {r["id"]: r["due_hours"] for r in reasons if r["due_hours"] is not None}
     assert due == {"intimate_image": 48, "defamation": 48}
     assert len(vocab.REPORT_REASONS) == len(ReportReason)
+
+
+def test_an_investigation_can_be_reported_by_anyone_who_can_read_it_and_hidden(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    from fieldclub.vocab import InvestigationRole
+    from tests.investigations.support import make
+
+    owner, editor, reader = make_user(handle="Owner"), make_user(handle="Editor"), make_user()
+    public = make(
+        db, owner, "unlisted", members={InvestigationRole.EDITOR: [editor]}, title="Phone me on 07700 900000"
+    )
+    private = make(db, owner, "private")
+    for ref, status in ((public.public_id, 201), (private.public_id, 404), ("ZZZZZZ", 404)):
+        response = report(client_as(reader), "investigation", ref)
+        assert response.status_code == status, (ref, response.text)
+    moderator = client_as(make_user("moderator"))
+    (queued,) = moderator.get(f"{API}/mod/reports").json()["items"]
+    target = queued["target"]
+    assert (target["kind"], target["ref"], target["title"]) == (
+        "investigation",
+        public.public_id,
+        public.title,
+    )
+    assert target["owner"]["handle"] == "Owner"
+    hidden = moderator.post(
+        f"{API}/mod/investigations/{public.public_id}/hide", json={"reason": "Contact details."}
+    )
+    assert hidden.status_code == 200, hidden.text
+    path = f"{API}/investigations/{public.public_id}"
+    assert client_as(reader).get(path).status_code == 404
+    assert (
+        client_as(make_user()).get(f"{API}/investigations", params={"scope": "unlisted"}).status_code == 403
+    )
+    for who in (owner, editor):
+        shown = client_as(who).get(path)
+        assert (shown.status_code, shown.json()["hidden"]) == (200, True)
+    assert moderator.get(path).json()["hidden"] is True

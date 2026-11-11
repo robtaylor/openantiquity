@@ -87,3 +87,39 @@ def test_the_log_names_who_did_what_to_which_target_and_why(
     first = moderator.get(f"{API}/mod/actions", params={"limit": 3}).json()
     rest = moderator.get(f"{API}/mod/actions", params={"limit": 3, "cursor": first["next_cursor"]}).json()
     assert [i["id"] for i in first["items"] + rest["items"]] == [i["id"] for i in items]
+
+
+def test_a_moderator_raising_someone_elses_level_through_the_ordinary_route_is_logged(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    finder, moderator = make_user(handle="Finder"), make_user(Role.MODERATOR, handle="Mod")
+    finding = create(db, finder)
+    raised = client_as(moderator).put(
+        f"{API}/findings/{finding.public_id}/sensitivity", json={"level": "restricted"}
+    )
+    assert raised.status_code == 200, raised.text
+    (entry,) = log_entries(db)
+    assert (entry.actor_id, entry.action, entry.target_kind, entry.target_id) == (
+        moderator.id,
+        "change_sensitivity",
+        "finding",
+        finding.id,
+    )
+    assert entry.data == {"from": "open", "to": "restricted"}
+    # Asking for the level it already has changes nothing and logs nothing.
+    client_as(moderator).put(f"{API}/findings/{finding.public_id}/sensitivity", json={"level": "restricted"})
+    assert len(log_entries(db)) == 1
+
+
+def test_a_finder_or_trusted_member_raising_a_level_is_not_moderation(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    finder = make_user(Role.MODERATOR, handle="ModeratorFinder")
+    own = create(db, finder)
+    other = create(db, make_user(), lon=-1.85, lat=51.43)
+    client_as(finder).put(f"{API}/findings/{own.public_id}/sensitivity", json={"level": "restricted"})
+    trusted = make_user(Role.TRUSTED)
+    client_as(trusted).put(f"{API}/findings/{other.public_id}/sensitivity", json={"level": "restricted"})
+    db.expire_all()
+    assert (own.sensitivity, other.sensitivity) == ("restricted", "restricted")
+    assert log_entries(db) == []

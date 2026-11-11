@@ -19,8 +19,10 @@ anyone else sees leaves out the points an answer earns
 finding turned out. The itemised points, and the full total, are for the
 person themselves.
 
-Lists leave out findings that are withdrawn, or hidden from the viewer, and
-anything deleted. Positions come from `sensitivity.visible_location` for the
+Lists and counts leave out findings that are withdrawn, or hidden from the
+viewer, and anything deleted. A hidden comment or mention is left out for
+everyone but moderators and the person themselves, and hidden evidence for
+everyone, as on the finding's own page. Positions come from `sensitivity.visible_location` for the
 viewer, in the schemas.
 
 Services flush and never commit.
@@ -40,7 +42,7 @@ from sqlalchemy.orm import Session
 from fieldclub.errors import ForbiddenError, InvalidCursorError, NotFoundError
 from fieldclub.models import Comment, Evidence, Finding, Mention, Observation, ReputationEvent, User
 from fieldclub.schemas.common import cursor_int, decode_cursor, int_from_cursor, paginate
-from fieldclub.services import feed, findings, reputation, sensitivity
+from fieldclub.services import feed, findings, mentions, reputation, sensitivity
 from fieldclub.services.findings import FindingFilters
 
 
@@ -118,7 +120,7 @@ def _evidence(person: User, viewer: User | None) -> Select[str, int, int, dateti
         Evidence.id.label("id"),
         Evidence.finding_id.label("finding_id"),
         Evidence.created_at.label("created_at"),
-    ).where(Evidence.user_id == person.id, Evidence.deleted_at.is_(None))
+    ).where(Evidence.user_id == person.id, findings.standing_evidence_clause())
     return _on_listed_findings(query, Evidence.finding_id, viewer)
 
 
@@ -128,7 +130,11 @@ def _comments(person: User, viewer: User | None) -> Select[str, int, int, dateti
         Comment.id.label("id"),
         Comment.finding_id.label("finding_id"),
         Comment.created_at.label("created_at"),
-    ).where(Comment.user_id == person.id, Comment.deleted_at.is_(None))
+    ).where(
+        Comment.user_id == person.id,
+        Comment.deleted_at.is_(None),
+        findings.shown_clause(Comment.hidden_at, Comment.user_id, viewer),
+    )
     return _on_listed_findings(query, Comment.finding_id, viewer)
 
 
@@ -138,7 +144,7 @@ def _mentions(person: User, viewer: User | None) -> Select[str, int, int, dateti
         Mention.id.label("id"),
         Mention.finding_id.label("finding_id"),
         Mention.created_at.label("created_at"),
-    ).where(Mention.user_id == person.id)
+    ).where(Mention.user_id == person.id, mentions.shown_clause(viewer))
     return _on_listed_findings(query, Mention.finding_id, viewer)
 
 
