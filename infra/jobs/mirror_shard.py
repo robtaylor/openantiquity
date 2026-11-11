@@ -10,6 +10,8 @@ task holds one connection to Defra's server unless told otherwise, so the
 job's parallelism is the number of connections the job opens. A task stops
 early if the supply refuses the login or several tiles fail in a row
 (`fieldclub-terrain mirror`), so a broken supply isn't asked about every tile.
+The job has no database, so it leaves the LIDAR `sources` rows to
+`fieldclub-terrain sources` (`--skip-sources`; infra/README.md, step 7).
 
 A tile already in the mirror is skipped, so a failed or interrupted task can be
 run again and only fetches what is still missing.
@@ -47,7 +49,8 @@ def shares(tiles: list[SourceTile], count: int) -> list[list[str]]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="One task's share of the whole-country elevation copy.")
-    parser.add_argument("--concurrency", type=int, default=1, choices=range(1, 9), metavar="1-8")
+    # The range `fieldclub-terrain mirror --concurrency` accepts.
+    parser.add_argument("--concurrency", type=int, default=1, choices=range(1, 5), metavar="1-4")
     args = parser.parse_args(argv)
     index = int(os.environ.get("CLOUD_RUN_TASK_INDEX", "0"))
     count = int(os.environ.get("CLOUD_RUN_TASK_COUNT", "1"))
@@ -57,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("Task %d of %d: %d tiles", index + 1, count, len(share))
     if not share:
         return 0
-    return cli.main(["mirror", *share, "--concurrency", str(args.concurrency)])
+    return cli.main(["mirror", *share, "--concurrency", str(args.concurrency), "--skip-sources"])
 
 
 if __name__ == "__main__":

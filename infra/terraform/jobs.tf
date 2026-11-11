@@ -11,9 +11,13 @@
 locals {
   # Each job says only what differs from the defaults below.
   job_specs = {
-    # Builds the extensions, tables and extras. Safe to run again.
+    # Builds the extensions, tables and extras. Safe to run again. The module
+    # is an argument, so an execution can run another one that needs the
+    # database: `--args=-m,fieldclub.terrain.cli,sources` writes the LIDAR
+    # sources rows, which the elevation jobs leave out (infra/README.md).
     "schema" = {
-      command = ["python", "-m", "fieldclub.db"]
+      command = ["python"]
+      args    = ["-m", "fieldclub.db"]
       timeout = "900s"
     }
     # One source per execution; the key is passed with --args. `list` is a
@@ -52,16 +56,16 @@ locals {
       parallelism = var.elevation_copy.parallelism
       env         = local.sftp_env
     }
-    # Writes the national overview through a mounted bucket, because the
-    # command builds a local file.
+    # Builds the national overview in its work folder and uploads it to the
+    # elevation bucket, then points national.json at it. The work folder is in
+    # /tmp, which on Cloud Run is memory, and holds about 8 GB for all of
+    # England (fieldclub-terrain's own help), hence 16 GiB, which needs 4 vCPU.
     "national-build" = {
       command = ["fieldclub-terrain"]
       args    = var.national_build_args
-      cpu     = "2"
-      memory  = "8Gi"
+      cpu     = "4"
+      memory  = "16Gi"
       timeout = "21600s"
-      env     = { FIELDCLUB_TERRAIN_NATIONAL = "/mnt/elevation/${local.national_object}" }
-      mount   = { bucket = "elevation", path = "/mnt/elevation", only_dir = "" }
     }
   }
 

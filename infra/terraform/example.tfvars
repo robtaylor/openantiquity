@@ -37,5 +37,4 @@ budget = {
 github_repository    = ""
 github_repository_id = ""
 
-# national_built = true once the national overview job has written its file.
 # service_fetches_elevation = false once the whole-country copy has finished.

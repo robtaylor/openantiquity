@@ -1,10 +1,10 @@
 # The settings every workload runs with, as FIELDCLUB_* variables. The image
 # already sets the paths (see infra/Dockerfile); these are the deployment's.
-# backend/.env.example documents each one.
+# backend/.env.example documents each one. FIELDCLUB_TERRAIN_NATIONAL is the
+# national overview's folder: until the first build has written national.json
+# there, zooms below 13 are drawn from the mirrored tiles' own overviews.
 
 locals {
-  national_location = var.national_built ? "gs://${google_storage_bucket.elevation.name}/${local.national_object}" : "/app/national-not-built.tif"
-
   common_env = {
     FIELDCLUB_ENV                       = "prod"
     FIELDCLUB_LOG_LEVEL                 = "INFO"
@@ -15,7 +15,7 @@ locals {
     FIELDCLUB_GCS_BUCKET                = google_storage_bucket.cache.name
     FIELDCLUB_GCS_NAMESPACE_BUCKETS     = jsonencode({ media = google_storage_bucket.photos.name })
     FIELDCLUB_TERRAIN_MIRROR            = "gs://${google_storage_bucket.elevation.name}/${local.mirror_prefix}"
-    FIELDCLUB_TERRAIN_NATIONAL          = local.national_location
+    FIELDCLUB_TERRAIN_NATIONAL          = "gs://${google_storage_bucket.elevation.name}/${local.national_prefix}"
     FIELDCLUB_TERRAIN_FETCH_CONCURRENCY = "1"
     # Production refuses to start unless this is said out loud. A job serves
     # no requests, so 0 is right for it; the service overrides it.

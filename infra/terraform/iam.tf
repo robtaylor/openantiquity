@@ -16,9 +16,11 @@ locals {
   # Bucket roles by workload. objectUser reads, writes, replaces, deletes and
   # lists objects; objectViewer only reads and lists; objectCreator only adds
   # objects that don't exist yet. Nothing may delete or replace a mirror file:
-  # the mirror's writers get objectViewer plus objectCreator, and the national
-  # build may change only the national overview's folder, where it also keeps
-  # the download and its temporary copy.
+  # the mirror's writers get objectViewer plus objectCreator, and objectUser
+  # only on the mirror's `locks/` and `failed/` folders, where a tile's lock is
+  # rewritten while held and removed after, and a failure record is cleared
+  # once the tile is in. The national build may change only the national
+  # overview's folder, where it keeps its builds, national.json and its lock.
   bucket_access = merge(
     {
       "service/cache"                = { workload = "service", bucket = "cache", role = "roles/storage.objectUser" }
@@ -27,12 +29,16 @@ locals {
       "service/elev-read"            = { workload = "service", bucket = "elevation", role = "roles/storage.objectViewer" }
       "elevation-copy/elev-read"     = { workload = "elevation-copy", bucket = "elevation", role = "roles/storage.objectViewer" }
       "elevation-copy/elev-add"      = { workload = "elevation-copy", bucket = "elevation", role = "roles/storage.objectCreator" }
+      "elevation-copy/elev-locks"    = { workload = "elevation-copy", bucket = "elevation", role = "roles/storage.objectUser", only = "${local.mirror_prefix}/locks/" }
+      "elevation-copy/elev-failed"   = { workload = "elevation-copy", bucket = "elevation", role = "roles/storage.objectUser", only = "${local.mirror_prefix}/failed/" }
       "national-build/elev-read"     = { workload = "national-build", bucket = "elevation", role = "roles/storage.objectViewer" }
-      "national-build/elev-national" = { workload = "national-build", bucket = "elevation", role = "roles/storage.objectUser", only = "${dirname(local.national_object)}/" }
+      "national-build/elev-national" = { workload = "national-build", bucket = "elevation", role = "roles/storage.objectUser", only = "${local.national_prefix}/" }
     },
     # The service adds to the mirror only while it may fetch a missing tile.
     var.service_fetches_elevation ? {
-      "service/elev-add" = { workload = "service", bucket = "elevation", role = "roles/storage.objectCreator" }
+      "service/elev-add"    = { workload = "service", bucket = "elevation", role = "roles/storage.objectCreator" }
+      "service/elev-locks"  = { workload = "service", bucket = "elevation", role = "roles/storage.objectUser", only = "${local.mirror_prefix}/locks/" }
+      "service/elev-failed" = { workload = "service", bucket = "elevation", role = "roles/storage.objectUser", only = "${local.mirror_prefix}/failed/" }
     } : {},
   )
   buckets = {

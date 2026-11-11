@@ -117,15 +117,6 @@ variable "service_fetches_elevation" {
   default     = true
 }
 
-variable "national_built" {
-  description = <<-EOT
-    Whether the national overview exists in the elevation bucket. Until it does,
-    zooms below 13 are drawn from the overviews of the tiles already mirrored.
-  EOT
-  type        = bool
-  default     = false
-}
-
 variable "min_age" {
   description = "The youngest contributor age, 16 to 18 (Decision 0009)."
   type        = number
@@ -234,12 +225,11 @@ variable "elevation_copy" {
 variable "national_build_args" {
   description = <<-EOT
     Arguments to fieldclub-terrain that build the national overview into the
-    elevation bucket. The job is only ever started by hand. The default names a
-    subcommand the terrain track has still to add: check `fieldclub-terrain
-    --help` in the image before running it.
+    elevation bucket. The job is only ever started by hand. It has no database,
+    so the sources rows are left to `fieldclub-terrain sources`.
   EOT
   type        = list(string)
-  default     = ["national", "build"]
+  default     = ["national", "build", "--skip-sources"]
 }
 
 variable "schedules" {

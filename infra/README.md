@@ -157,6 +157,15 @@ gcloud run jobs execute fieldclub-schema --region=europe-west2 --project="$P" --
 
 It runs `python -m fieldclub.db`, which creates the extensions, the tables and the extras, and is safe to run again. Until the first release there is no migration history (`docs/ARCHITECTURE.md`, Conventions), so a change to an existing table needs the database rebuilt or Alembic, which starts at the first deploy.
 
+Then write the `sources` rows of the elevation, which must exist before any of it is stored or shown. The elevation jobs have no database, so they pass `--skip-sources` and leave this to the same job, which runs another module when asked:
+
+```
+gcloud run jobs execute fieldclub-schema --region=europe-west2 --project="$P" --wait \
+  --args=-m,fieldclub.terrain.cli,sources
+```
+
+It is safe to run again.
+
 ### 8. Copy England's elevation into the bucket
 
 ```
@@ -165,7 +174,7 @@ gcloud run jobs execute fieldclub-elevation-copy --region=europe-west2 --project
 
 The job splits the 5,877 tiles into four shares of 88.4 GB each, by size, and runs two shares at a time, one SFTP connection each. At the 8 MB/s per connection measured on 2026-11-10 a share takes about 3.1 hours to download and 0.8 hours to convert, so the copy takes about eight hours. See [The elevation copy](#the-elevation-copy) for why it runs like this.
 
-While `service_fetches_elevation` is true, every service instance can open a connection of its own for a tile someone is looking at, so Defra may see the job's two plus up to `service_max_instances` more. Instances don't share their tile locks, so two of them can fetch the same tile at once; the second upload is then dropped. To keep Defra at two connections during the copy, set `service_fetches_elevation = false` and apply before starting the job, and set it back afterwards if the copy is incomplete.
+While `service_fetches_elevation` is true, every service instance can open a connection of its own for a tile someone is looking at, so Defra may see the job's two plus up to `service_max_instances` more. The job and the instances share a lock object per tile under `england/mirror/locks/`, so only one of them fetches a given tile; were two ever to upload it, the second upload would be dropped. To keep Defra at two connections during the copy, set `service_fetches_elevation = false` and apply before starting the job, and set it back afterwards if the copy is incomplete.
 
 Progress is the number of files in the mirror:
 
@@ -181,7 +190,7 @@ A task that fails is retried twice. A task stops at once if Defra refuses the lo
 gcloud run jobs execute fieldclub-national-build --region=europe-west2 --project="$P" --wait
 ```
 
-It runs `fieldclub-terrain` with `national_build_args`, default `national build`, writing through a mounted bucket. That subcommand belongs to the terrain track's national overview built from the mirror's 8 m copies (WS2 of `docs/plans/v1-england.md`). Check the name in `fieldclub-terrain --help` before running it. When the file is in the bucket, set `national_built = true` and apply. Until then zooms below 13 are drawn from the mirrored tiles' own overviews.
+It runs `fieldclub-terrain national build --skip-sources` (`national_build_args`), which mosaics the 8 m copies inside the mirrored tiles into one cloud-optimised file under `england/national/`, uploads it and points `england/national/national.json` at it (Decision 0012). The service reads `national.json`, so nothing needs applying afterwards. Until the first build, zooms below 13 are drawn from the mirrored tiles' own overviews, uncached. Run it again whenever tiles have been added: a build that already holds every mirrored tile stops at once. It exits 0 when the overview is current and 1 on an error, including when another build holds the overview's lock. Its work folder, about 8 GB for all of England, is in the instance's memory, so the job has 16 GiB.
 
 ### 10. Run the first ingests
 
@@ -356,7 +365,7 @@ What these figures leave out, because it couldn't be priced from the pages read:
 - Cloud SQL's network egress to the service, free within the region, and its IP address, which these pages didn't price separately for a running instance.
 - Defra's side. Ingress into Google Cloud is free.
 - A real traffic pattern. The light-use row is a guess with its working shown.
-- The national overview build, which depends on a command not yet written.
+- The national overview build: its time and its peak memory over all 5,877 tiles, with its work folder in the instance's memory.
 
 ## What can only be checked in a real project
 
@@ -365,7 +374,7 @@ What these figures leave out, because it couldn't be priced from the pages read:
 - That GDAL reads `gs://` through `/vsigs/` with the service account Cloud Run lends it, with no key file. The image sets `CPL_MACHINE_IS_GCE=YES` so that GDAL asks the metadata server for it, as GDAL's documentation says a container must.
 - That an upload with `if_generation_match=0` from an account holding only `objectCreator` is answered with a failed precondition, or a refusal, when the tile is already there. The mirror accepts either.
 - That the Cloud SQL connector, the unix socket at `/cloudsql` and `connector_enforcement = REQUIRED` work together, and that the `fieldclub` login may create the PostGIS, pg_trgm and citext extensions.
-- That the Cloud Storage volumes mount for the ingest and national jobs, and that the ingest downloader's partial files and renames behave on them.
+- That the Cloud Storage volume mounts for the ingest job, and that the ingest downloader's partial files and renames behave on it.
 - The cold start on Cloud Run, and real tile latency with the mirror in a bucket.
 - That Defra's server accepts two connections at once from Google's addresses.
 - That Cloud Scheduler starts each job, and the ingest job with its overridden arguments.

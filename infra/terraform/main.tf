@@ -27,9 +27,10 @@ locals {
   run_app_url = "https://${var.name}-${data.google_project.this.number}.${var.region}.run.app"
   public_url  = var.public_url != "" ? var.public_url : (var.cdn.enabled ? "https://${var.cdn.domain}" : local.run_app_url)
 
-  # Where the elevation lives inside its bucket.
+  # Where the elevation lives inside its bucket. The national overview is a
+  # folder: one file per build and `national.json` naming the current one.
   mirror_prefix   = "england/mirror"
-  national_object = "england/national/england-dtm-2022-10m-cog.tif"
+  national_prefix = "england/national"
 }
 
 resource "google_project_service" "enabled" {
