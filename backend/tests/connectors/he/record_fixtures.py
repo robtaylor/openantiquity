@@ -7,6 +7,9 @@ each query below, ordered by object id. The queries are chosen to show the quirk
 out in the connectors' notes, such as features with no monument number. Their features are
 merged into one fixture file in object id order.
 
+`he-aim-detailed-mapping.gpkg` is cut from the Hub's GeoPackage export instead: run
+`uv run python -m tests.connectors.he.record_fixtures --cut-detailed-mapping <export path>`.
+
 The fixtures were recorded on 2026-11-10. Nothing in them is personal data: the layers hold
 monument outlines, report titles and the names of designated places.
 """
@@ -19,8 +22,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from fieldclub import http
-from fieldclub.ingest.adapters.common import Polite
+from fieldclub.ingest.adapters import ogr
+from fieldclub.ingest.adapters.common import Polite, bbox_from_wgs84
 
 HOST = "https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services"
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -43,17 +49,6 @@ Query = tuple[str, str | None, int]
 # key: (layer path, queries, other query parameters). The features of every query are merged,
 # in object id order, as one page.
 RECORDINGS: dict[str, tuple[str, list[Query], dict[str, str]]] = {
-    "he-aim-detailed-mapping": (
-        f"{AIM}/0",
-        [
-            ("1=1", STONEHENGE, 4),
-            # Features with no monument number, which are most of the layer.
-            ("HE_UID = ' NONE GIVEN' AND LAYER = 'RIDGE_AND_FURROW_AREA'", None, 2),
-            ("LAYER = 'DITCH' AND PERIOD = 'MEDIEVAL\\POST MEDIEVAL'", None, 3),
-            ("LAYER = 'STRUCTURE' AND PERIOD = 'SECOND WORLD WAR'", None, 2),
-        ],
-        {},
-    ),
     "he-aim-monument-extents": (f"{AIM}/1", [("1=1", STONEHENGE, 3)], {}),
     "he-aim-project-areas": (f"{AIM}/2", [("1=1", None, 3)], {"geometryPrecision": "4"}),
     "he-heritage-at-risk-2026": (
@@ -120,8 +115,66 @@ def record(key: str, polite: Polite) -> None:
     (FIXTURES / f"{key}.json").write_text(json.dumps(fixture, separators=(",", ":")) + "\n", encoding="utf-8")
 
 
+# What `he-aim-detailed-mapping.gpkg` keeps of the export: a few features for each of these queries (a
+# `where` and a WGS84 box). Bell barrows at Stonehenge; ridge and furrow with no monument number; medieval
+# and post-medieval ditches; a Second World War structure; two features whose type, period and evidence
+# are all "NO MONUMENT RECORD"; and one with a mangled term, `POND70449`.
+DETAILED_QUERIES: list[tuple[str | None, tuple[float, float, float, float] | None, int]] = [
+    ("HE_UID <> ' NONE GIVEN'", (-1.84, 51.16, -1.80, 51.19), 4),
+    ("HE_UID = ' NONE GIVEN' AND LAYER = 'RIDGE_AND_FURROW_AREA'", None, 2),
+    ("LAYER = 'DITCH' AND PERIOD = 'MEDIEVAL\\POST MEDIEVAL'", None, 2),
+    ("LAYER = 'STRUCTURE' AND PERIOD = 'SECOND WORLD WAR'", None, 2),
+    ("MONUMENT_TYPE LIKE '%NO MONUMENT RECORD%'", None, 2),
+    ("MONUMENT_TYPE LIKE '%POND70449%'", None, 1),
+]
+
+
+def cut_detailed_mapping(export: Path) -> None:
+    """Writes `he-aim-detailed-mapping.gpkg` from the Hub's 4.7 GB GeoPackage export of layer 0.
+
+    The export is downloaded by running the connector (`uv run fieldclub-ingest run
+    he-aim-detailed-mapping`), which keeps it at `var/ingest/he-aim-detailed-mapping/detailed-mapping.gpkg`.
+    The features' values and geometry are copied as they are, in EPSG:27700. This makes no requests.
+    """
+    geometries: list[Any] = []
+    columns: list[list[Any]] | None = None
+    names: list[str] = []
+    crs = ""
+    for where, box, count in DETAILED_QUERIES:
+        meta, _, geometry, fields = ogr.read(
+            str(export),
+            where=where,
+            bbox=bbox_from_wgs84(box, "EPSG:27700") if box else None,
+            max_features=count,
+            return_fids=True,
+        )
+        names, crs = list(meta["fields"]), meta["crs"]
+        geometries.extend(geometry)
+        columns = (
+            [list(old) + list(new) for old, new in zip(columns, fields, strict=True)]
+            if columns
+            else [list(f) for f in fields]
+        )
+    assert columns is not None
+    target = FIXTURES / "he-aim-detailed-mapping.gpkg"
+    target.unlink(missing_ok=True)
+    ogr.write(
+        str(target),
+        np.array(geometries, dtype=object),
+        [np.array(column, dtype=object) for column in columns],
+        names,
+        layer="Detailed_Mapping",
+        driver="GPKG",
+        geometry_type="MultiPolygon Z",
+        crs=crs,
+    )
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     polite = Polite()
+    if sys.argv[1:2] == ["--cut-detailed-mapping"]:
+        cut_detailed_mapping(Path(sys.argv[2]))
+        sys.exit()
     for source_key in sys.argv[1:] or RECORDINGS:
         record(source_key, polite)

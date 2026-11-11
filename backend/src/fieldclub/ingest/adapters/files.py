@@ -57,7 +57,8 @@ def _vsi(path: Path | str) -> str:
 def vector_info(path: Path | str, layer: str | int | None = None) -> dict[str, Any]:
     """The layer's CRS, fields, geometry type and feature count, as pyogrio reports them."""
     try:
-        return dict(ogr.read_info(_vsi(path), layer=layer))
+        with quiet_ogr():
+            return dict(ogr.read_info(_vsi(path), layer=layer))
     except DataSourceError as exc:
         raise UpstreamFormatError(f"{Path(path).name} could not be opened: {exc}") from None
 
@@ -131,7 +132,7 @@ def ogr_features(
 
 @contextmanager
 def quiet_ogr() -> Iterator[None]:
-    """Silence two warnings from reading OGR data that say nothing is wrong.
+    """Silence three warnings from reading OGR data that say nothing is wrong.
 
     Historic England's GeoPackages write some dates as `1925-03-10T00:00:00.0Z`.
     GDAL reads them correctly and says so with a RuntimeWarning. pyogrio 0.13
@@ -143,6 +144,8 @@ def quiet_ogr() -> Iterator[None]:
         warnings.filterwarnings(
             "ignore", message="The 'generic' unit for NumPy timedelta", category=DeprecationWarning
         )
+        # Historic England's AIM export has measured (M) polygons, which pyogrio reads as plain ones.
+        warnings.filterwarnings("ignore", message="Measured \\(M\\) geometry types", category=UserWarning)
         yield
 
 

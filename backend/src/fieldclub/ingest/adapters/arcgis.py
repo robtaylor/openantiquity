@@ -65,7 +65,6 @@ class ArcGISLayer:
         geometry_precision: int | None = None,
         tolerance: float = 0.0,
         by_object_id: bool = False,
-        timeout_s: float | None = None,
     ) -> None:
         """`tolerance` is the share of the count that may go missing between counting and paging.
 
@@ -73,8 +72,7 @@ class ArcGISLayer:
         ranges of object ids even when the layer offers offsets. Use it for a layer whose
         offsets count rows the layer then filters out, such as a view that holds several
         kinds of shape and shows one: its pages come back short of what was asked for
-        while more remain, and paging by offset ends early. `timeout_s` replaces the
-        client's timeout for this layer's requests, for one whose pages are slow to build.
+        while more remain, and paging by offset ends early.
         """
         assert url.rstrip("/").rsplit("/", 1)[-1].isdigit(), f"{url} must end with the layer number"
         assert page_size is None or page_size >= 1, "page_size must be at least 1"
@@ -88,15 +86,13 @@ class ArcGISLayer:
         self.geometry_precision = geometry_precision
         self.tolerance = tolerance
         self.by_object_id = by_object_id
-        self.timeout_s = timeout_s
         self._info: dict[str, Any] | None = None
 
     # ------------------------------------------------------------------ metadata
 
     def _get(self, path: str, params: dict[str, str]) -> dict[str, Any]:
-        extra: dict[str, Any] = {} if self.timeout_s is None else {"timeout": self.timeout_s}
         response = self.polite.request(
-            self.client, "GET", f"{self.url}{path}", params={**params, "f": "json"}, **extra
+            self.client, "GET", f"{self.url}{path}", params={**params, "f": "json"}
         )
         body = json_body(response, f"{self.url}{path}")
         if not isinstance(body, dict):

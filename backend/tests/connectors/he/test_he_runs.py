@@ -35,6 +35,8 @@ CONNECTORS: dict[str, type[Connector]] = {
     "he-greater-london-apas": GreaterLondonApas,
 }
 KEYS = list(CONNECTORS)
+# The detailed mapping is read from a GeoPackage export, so it has its own tests.
+ARCGIS_KEYS = [key for key in KEYS if key != "he-aim-detailed-mapping"]
 
 
 def rows(db: Session) -> list[tuple[Any, ...]]:
@@ -78,7 +80,7 @@ def test_the_source_carries_the_work_list_licence_and_attribution(key: str) -> N
     assert info.access == "bulk"
 
 
-@pytest.mark.parametrize("key", KEYS)
+@pytest.mark.parametrize("key", ARCGIS_KEYS)
 @respx.mock
 def test_a_run_stores_every_feature_the_layer_gave(key: str, db: Session) -> None:
     layer = serve(key)
@@ -97,7 +99,7 @@ def test_a_run_stores_every_feature_the_layer_gave(key: str, db: Session) -> Non
     assert all(record.name.strip() and record.raw for record in stored)
 
 
-@pytest.mark.parametrize("key", KEYS)
+@pytest.mark.parametrize("key", ARCGIS_KEYS)
 @respx.mock
 def test_running_twice_gives_the_same_rows(key: str, db: Session) -> None:
     serve(key)
@@ -110,7 +112,7 @@ def test_running_twice_gives_the_same_rows(key: str, db: Session) -> None:
     assert second.stats["updated"] == len(before)
 
 
-@pytest.mark.parametrize("key", KEYS)
+@pytest.mark.parametrize("key", ARCGIS_KEYS)
 @respx.mock
 def test_a_partial_run_by_bbox_asks_the_server_for_the_box_and_deletes_nothing(key: str, db: Session) -> None:
     layer = serve(key)
@@ -134,7 +136,7 @@ def test_a_partial_run_by_bbox_asks_the_server_for_the_box_and_deletes_nothing(k
     assert len(db.scalars(select(Record)).all()) == stored
 
 
-@pytest.mark.parametrize("key", KEYS)
+@pytest.mark.parametrize("key", ARCGIS_KEYS)
 @respx.mock
 def test_a_layer_that_changed_shape_fails_the_run_and_writes_nothing(key: str, db: Session) -> None:
     layer = serve(key)
@@ -145,7 +147,7 @@ def test_a_layer_that_changed_shape_fails_the_run_and_writes_nothing(key: str, d
     assert db.scalars(select(Record)).all() == []
 
 
-@pytest.mark.parametrize("key", KEYS)
+@pytest.mark.parametrize("key", ARCGIS_KEYS)
 @respx.mock
 def test_a_layer_of_another_geometry_type_fails_the_run(key: str, db: Session) -> None:
     layer = serve(key)
@@ -155,7 +157,7 @@ def test_a_layer_of_another_geometry_type_fails_the_run(key: str, db: Session) -
     assert db.scalars(select(Record)).all() == []
 
 
-@pytest.mark.parametrize("key", KEYS)
+@pytest.mark.parametrize("key", ARCGIS_KEYS)
 @respx.mock
 def test_a_truncated_answer_fails_the_run_instead_of_looking_complete(key: str, db: Session) -> None:
     serve(key, count_adds=5)
@@ -163,7 +165,7 @@ def test_a_truncated_answer_fails_the_run_instead_of_looking_complete(key: str, 
         run_connector(CONNECTORS[key]())
 
 
-@pytest.mark.parametrize("key", KEYS)
+@pytest.mark.parametrize("key", ARCGIS_KEYS)
 def test_every_fixture_is_small_and_in_wgs84(key: str) -> None:
     assert (FIXTURES / f"{key}.json").stat().st_size < 150_000
     recorded = fixture(key)
@@ -171,9 +173,7 @@ def test_every_fixture_is_small_and_in_wgs84(key: str) -> None:
     assert recorded["recorded"] == "2026-11-10"
 
 
-@pytest.mark.parametrize(
-    "key", ["he-aim-detailed-mapping", "he-aim-monument-extents", "he-greater-london-apas"]
-)
+@pytest.mark.parametrize("key", ["he-aim-monument-extents", "he-greater-london-apas"])
 @respx.mock
 def test_a_sliver_too_small_to_keep_its_shape_is_left_out_and_the_rest_stored(key: str, db: Session) -> None:
     layer = serve(key)

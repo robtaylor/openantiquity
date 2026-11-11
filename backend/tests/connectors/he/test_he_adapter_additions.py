@@ -85,21 +85,3 @@ def test_a_ring_that_collapsed_to_a_point_is_dropped_not_kept_as_a_part() -> Non
     assert geometry.geom_type == "Polygon"
     assert geometry.is_valid
     assert esri_geometry({"rings": [collapsed]}) is None
-
-
-@respx.mock
-def test_a_layer_can_ask_for_a_longer_timeout_than_the_client_has() -> None:
-    layer = RecordedLayer("he-aim-project-areas")
-    timeouts: list[float | None] = []
-
-    def answer(request: httpx.Request) -> httpx.Response:
-        timeouts.append(request.extensions["timeout"]["read"])
-        return layer(request)
-
-    respx.route(host=HOST).mock(side_effect=answer)
-    url = "https://services-eu1.arcgis.com/x/arcgis/rest/services/s/FeatureServer/2"
-    list(ArcGISLayer(url, client=httpx.Client(), polite=NoWait(), timeout_s=90).features())
-    assert set(timeouts) == {90.0}
-    timeouts.clear()
-    list(ArcGISLayer(url, client=httpx.Client(timeout=7), polite=NoWait()).features())
-    assert set(timeouts) == {7.0}

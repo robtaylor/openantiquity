@@ -4,11 +4,13 @@ Work-list key `he-aim-detailed-mapping`. These are the features Historic England
 interpreters drew from aerial photographs and lidar: about half a million polygons
 for banks, ditches, structures, ridge and furrow, scarps and the extents of features,
 covering the project areas that have been mapped (just over half of England). An empty
-area means unmapped, not empty. The layer is read from the stable `HE_AIM_data`
-FeatureServer, layer 0, 2,000 a page, not from the dated `*_view` services the
-Mapping Explorer loads. The work-list names the Hub download as the first choice,
-but the Hub was regenerating its AIM exports when tested, and the FeatureServer
-gives the same rows with a bounding-box filter.
+area means unmapped, not empty. It is read from the Open Data Hub's GeoPackage export of
+the stable `HE_AIM_data` service (layer 0), not from the dated `*_view` services the
+Mapping Explorer loads. The FeatureServer would give the same rows with a box filter, but
+its pages grow to 50 MB or more near object id 400,000 (some polygons have tens of
+thousands of vertices), take over 40 s to build and often time out. Two attempts at the full
+layer by that route stalled there. The export is 4.7 GB, built by the Hub on request and
+downloaded at about half a megabyte a second.
 
 The layer has no identifier of its own. `HE_UID` is the number of the monument
 record a polygon belongs to, so it is shared by every polygon of that monument, and
@@ -27,10 +29,12 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Iterator
+from datetime import timedelta
 from typing import ClassVar
 
-from fieldclub.ingest.adapters.arcgis import ArcGISLayer
-from fieldclub.ingest.adapters.common import Feature, FeatureKeys, json_ready
+from fieldclub.ingest.adapters.common import Feature, FeatureKeys, UpstreamFormatError, cache_dir, json_ready
+from fieldclub.ingest.adapters.download import download
+from fieldclub.ingest.adapters.files import read_vector, vector_info
 from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo
 from fieldclub.ingest.registry import register
 from fieldclub.vocab import Period, RecordCategory, SourceAccess, SourceReuse
@@ -40,12 +44,15 @@ logger = logging.getLogger(__name__)
 LAYER_URL = (
     "https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/0"
 )
-FIELDS = ("OBJECTID", "LAYER", "project", "PERIOD", "MONUMENT_TYPE", "EVIDENCE_1", "EVIDENCE_2", "HE_UID")
-# Six decimal places of a degree is about a tenth of a metre, finer than the drawing. A few slivers
-# are smaller still and collapse to nothing.
-GEOMETRY_PRECISION = 6
-PAGE_SIZE = 250
-PAGE_TIMEOUT_S = 120.0
+FIELDS = ("LAYER", "project", "PERIOD", "MONUMENT_TYPE", "EVIDENCE_1", "EVIDENCE_2", "HE_UID")
+HUB_EXPORT = (
+    "https://opendata-historicengland.hub.arcgis.com/api/download/v1/items/"
+    "e08a1ca270ac4caa8ba5efcb74f86a74/geoPackage?layers=0"
+)
+# The export is 4.7 GB and the Hub builds it on request, then serves it at about half a megabyte a
+# second, so a copy is kept for a week. The layer was last edited in June 2026.
+MAX_AGE = timedelta(days=7)
+MAX_WAIT_S = 7200.0
 # What the interpreters write when they have nothing to say.
 EMPTY = frozenset({"", "NONE GIVEN", "NO MONUMENT RECORD", "NO MORPH RECORD"})
 LAYER_NAMES = {
@@ -100,26 +107,21 @@ class DetailedMapping(Connector):
     )
 
     def fetch(self, *, bbox: BBox | None = None, limit: int | None = None) -> Iterator[RecordIn]:
-        # Some of the layer's polygons are huge: pages of 1,000 near object id 400,000 are 50 to 75 MB,
-        # took 40 s to build and sometimes answered 504. Small pages and a long timeout get through.
-        layer = ArcGISLayer(
-            LAYER_URL,
-            client=self.http,
-            geometry_precision=GEOMETRY_PRECISION,
-            page_size=PAGE_SIZE,
-            timeout_s=PAGE_TIMEOUT_S,
-        )
-        layer.require_shape(FIELDS, "esriGeometryPolygon")
+        path = cache_dir(self.settings, self.source.key) / "detailed-mapping.gpkg"
+        fetched = download(HUB_EXPORT, path, client=self.http, max_age=MAX_AGE, max_wait_s=MAX_WAIT_S)
+        self.obtained_at = fetched.fetched_at
+        info = vector_info(path)
+        missing = [name for name in FIELDS if name not in set(info["fields"])]
+        if missing or info.get("crs") != "EPSG:27700" or "Polygon" not in str(info.get("geometry_type")):
+            raise UpstreamFormatError(
+                f"The detailed mapping export changed shape: crs {info.get('crs')}, "
+                f"geometry {info.get('geometry_type')}, missing {missing}."
+            )
         keys = FeatureKeys()
-        collapsed = 0
-        for feature in layer.features(bbox=bbox):
+        for feature in read_vector(path, bbox=bbox, info=info):
             if feature.geometry is None:
-                # A sliver smaller than the requested precision has no shape left. See `GEOMETRY_PRECISION`.
-                collapsed += 1
-                continue
+                raise UpstreamFormatError(f"AIM feature {feature.id} has no geometry.")
             yield to_record(feature, keys)
-        if collapsed:
-            logger.info("%s: %d features were too small to keep their shape", self.source.key, collapsed)
         if keys.repeats:
             logger.info(
                 "%s: %d features repeat another's layer, project, monument and outline",

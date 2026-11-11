@@ -5,18 +5,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-import pytest
 import respx
 from shapely.geometry import Point
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fieldclub.ingest.connectors.he_aim_detailed_mapping import (
-    EMPTY,
-    PERIOD_RULES,
-    DetailedMapping,
-    periods_of,
-)
 from fieldclub.ingest.connectors.he_aim_monument_extents import MonumentExtents
 from fieldclub.ingest.connectors.he_aim_project_areas import ProjectAreas
 from fieldclub.ingest.connectors.he_de_designated_sites import DeDesignatedSites
@@ -27,7 +20,6 @@ from fieldclub.ingest.connectors.he_turning_the_plough_2 import TurningThePlough
 from fieldclub.ingest.runner import run_connector
 from fieldclub.models import Record
 from fieldclub.models.common import point_lon_lat
-from fieldclub.vocab import Period
 from tests.connectors.he.support import serve
 
 
@@ -43,118 +35,6 @@ def stored(db: Session, key: str, connector: Any, **raw: Any) -> Record:
     ]
     assert len(found) == 1, f"{len(found)} records match {raw}"
     return found[0]
-
-
-# ------------------------------------------------------------------ AIM detailed mapping
-
-
-@respx.mock
-def test_a_detailed_feature_keeps_its_terms_period_and_evidence(db: Session) -> None:
-    barrow = stored(db, "he-aim-detailed-mapping", DetailedMapping(), OBJECTID=3250)
-    assert barrow.name == "Bell barrow"
-    assert barrow.category == "monument"
-    assert barrow.record_type == "Bank"
-    assert barrow.monument_types == ["BELL BARROW"]
-    assert barrow.periods == ["bronze_age"]
-    assert barrow.summary == "Evidence: earthwork. Project: Stonehenge World Heritage Site."
-    assert barrow.precision_m is None
-    assert barrow.url is None
-    # Nothing the source gave is lost, except the fields it left empty.
-    assert barrow.raw is not None
-    assert barrow.raw["HE_UID"] == "943187"
-    assert barrow.raw["PERIOD"] == "BRONZE AGE"
-    assert barrow.raw["SOURCE_1"].startswith("NMR SU 1141/75")
-    assert "SOURCE_2" not in barrow.raw
-    assert barrow.raw["HE_URL1"].endswith("uid=943187&resourceID=19191")
-    lon, lat = point_lon_lat(barrow.centroid)
-    assert Point(lon, lat).distance(Point(-1.826, 51.178)) < 0.05
-
-
-@respx.mock
-def test_several_terms_periods_and_kinds_of_evidence_are_all_kept(db: Session) -> None:
-    abbey = stored(db, "he-aim-detailed-mapping", DetailedMapping(), OBJECTID=148371)
-    assert abbey.record_type == "Ditch"
-    assert abbey.monument_types is not None
-    assert abbey.monument_types[:3] == ["ABBEY", "BANK (EARTHWORK)", "BOUNDARY DITCH"]
-    assert abbey.name.startswith("Abbey, Bank (earthwork), Boundary ditch")
-    assert abbey.periods == ["medieval", "post_medieval"]
-    assert abbey.summary is not None
-    assert "documentary evidence, earthwork, extant building, ruined building" in abbey.summary
-    assert abbey.raw is not None
-    assert abbey.raw["EVIDENCE_1"] == "DOCUMENTARY EVIDENCE\\EARTHWORK\\EXTANT BUILDING\\RUINED BUILDING"
-
-
-@respx.mock
-def test_a_twentieth_century_feature_is_modern(db: Session) -> None:
-    works = stored(db, "he-aim-detailed-mapping", DetailedMapping(), OBJECTID=1287)
-    assert works.periods == ["modern"]
-    assert works.summary is not None
-    assert works.summary.startswith("Evidence: cropmark, earthwork, structure.")
-
-
-@respx.mock
-def test_features_of_one_monument_get_different_ids_and_a_missing_monument_number_is_no_problem(
-    db: Session,
-) -> None:
-    serve("he-aim-detailed-mapping")
-    run_connector(DetailedMapping())
-    airfield = db.scalars(select(Record).where(Record.raw["HE_UID"].astext == "1408409")).all()
-    assert len(airfield) == 2
-    assert len({record.external_id for record in airfield}) == 2
-    nameless = db.scalars(select(Record).where(Record.raw["HE_UID"].astext == " NONE GIVEN")).all()
-    assert len(nameless) >= 4
-    assert all(len(record.external_id) == 20 for record in [*nameless, *airfield])
-
-
-@pytest.mark.parametrize(
-    ("text", "expected"),
-    [
-        ("BRONZE AGE", ["bronze_age"]),
-        ("MEDIEVAL\\POST MEDIEVAL", ["medieval", "post_medieval"]),
-        ("POST MEDIEVAL\\MEDIEVAL", ["post_medieval", "medieval"]),
-        ("MEDIEVAL/POST MEDIEVAL", ["medieval", "post_medieval"]),
-        ("POST-MEDIEVAL", ["post_medieval"]),
-        ("EARLY MEDIEVAL", ["early_medieval"]),
-        ("EARLY MEDIEVAL\\MEDIEVAL\\POST MEDIEVAL", ["early_medieval", "medieval", "post_medieval"]),
-        ("IRON AGE/ROMAN", ["iron_age", "roman"]),
-        ("LATE NEOLITHIC\\EARLY BRONZE AGE\\MEDIEVAL", ["neolithic", "bronze_age", "medieval"]),
-        ("LATER PREHISTORIC\\ROMAN", ["prehistoric", "roman"]),
-        ("VICTORIAN\\POST MEDIEVAL", ["post_medieval"]),
-        ("VICTORIAN\\SECOND WORLD WAR\\MID 20TH CENTURY", ["post_medieval", "modern"]),
-        ("FIRST WORLD WAR\\SECOND WORLD WAR", ["modern"]),
-        ("WORLD WAR II", ["modern"]),
-        ("ROMAN<Null>", ["roman"]),
-        ("POST MEDIEVAL\\UNCERTAIN", ["post_medieval"]),
-        ("UNCERTAIN", ["unknown"]),
-        ("NO MORPH RECORD", []),
-        ("NONE GIVEN", []),
-        ("", []),
-        (None, []),
-    ],
-)
-def test_fish_periods_map_onto_the_vocabulary(text: str | None, expected: list[str]) -> None:
-    assert periods_of(text) == expected
-
-
-def test_every_period_term_in_the_layer_maps_or_means_nothing() -> None:
-    # The 46 distinct terms in the whole layer on 2026-11-10, from its 498,295 features.
-    terms = (
-        "POST MEDIEVAL MEDIEVAL|SECOND WORLD WAR|ROMAN|UNCERTAIN|IRON AGE|20TH CENTURY|BRONZE AGE|"
-        "LATER PREHISTORIC|FIRST WORLD WAR|PREHISTORIC|EARLY MEDIEVAL|VICTORIAN|NEOLITHIC|MID 20TH CENTURY|"
-        "EARLY BRONZE AGE|WORLD WAR II|EARLY 20TH CENTURY|GEORGIAN|21ST CENTURY|LATE IRON AGE|LATE NEOLITHIC|"
-        "EARLY IRON AGE|LATE 20TH CENTURY|LATE BRONZE AGE|EARLY NEOLITHIC|HANOVERIAN|WORLD WAR I|"
-        "MIDDLE BRONZE AGE|COLD WAR|MIDDLE IRON AGE|EDWARDIAN|19TH CENTURY|NO MORPH RECORD|"
-        "NO MONUMENT RECORD|LATE 19TH CENTURY|TUDOR|MODERN|STUART|NONE GIVEN|EARLY 21ST CENTURY|"
-        "ANGLO-SAXON|POST-MEDIEVAL|TWENTIETH CENTURY"
-    ).replace("POST MEDIEVAL MEDIEVAL", "POST MEDIEVAL|MEDIEVAL")
-    for term in terms.split("|"):
-        mapped = periods_of(term)
-        assert mapped or term in EMPTY, term
-        assert all(period in Period for period in mapped)
-
-
-def test_the_period_rules_name_only_vocabulary_periods() -> None:
-    assert {period for _, period in PERIOD_RULES} <= set(Period)
 
 
 # ------------------------------------------------------------------ AIM extents and project areas

@@ -22,7 +22,7 @@ from typing import ClassVar
 from fieldclub.ingest.adapters.arcgis import ArcGISLayer
 from fieldclub.ingest.adapters.common import Feature, FeatureKeys, json_ready
 from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo
-from fieldclub.ingest.connectors.he_aim_detailed_mapping import EMPTY, GEOMETRY_PRECISION
+from fieldclub.ingest.connectors.he_aim_detailed_mapping import EMPTY
 from fieldclub.ingest.registry import register
 from fieldclub.vocab import RecordCategory, SourceAccess, SourceReuse
 
@@ -31,6 +31,9 @@ logger = logging.getLogger(__name__)
 LAYER_URL = (
     "https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1"
 )
+# Six decimal places of a degree is about a tenth of a metre, finer than the drawing. A few slivers
+# are smaller still and collapse to nothing.
+GEOMETRY_PRECISION = 6
 FIELDS = ("OBJECTID", "layer", "project", "HE_UID", "HER_No")
 
 
