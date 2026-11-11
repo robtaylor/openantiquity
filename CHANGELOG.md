@@ -25,3 +25,5 @@ Nothing is live yet. When the first version opens, this is what it does for you.
 - `GET /auth/session` answers with the signed-in person or null. `GET /auth/me` carries a stable `id`, and `PATCH /auth/me` removes the picture a sign-in provider gave.
 - `POST /findings` takes a `client_ref`, so a draft sent twice is saved once.
 - `GET /records/{id}/findings`, the nearest settlement in `GET /geo/point`, what each context link shows, and how to read each live source.
+- Explore lists the findings in view beside the map, kept in step with it, with filters for step, state and what a finding looks like. Choosing a finding in the list or on the map opens it and marks it.
+- "Mark a finding": place a mark by tapping, clicking or with the keyboard, drag or nudge it, pick what it looks like and save. A title, the view you were using and the period are filled in for you. Signed out, the finding waits in your browser as a draft and is saved once you sign in.
