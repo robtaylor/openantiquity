@@ -340,6 +340,8 @@ export interface paths {
         /**
          * Live Sources
          * @description The sources the browser queries for an area, with how to ask and how to credit each.
+         *
+         *     Sources withheld from this release, or whose credit isn't settled, are left out.
          */
         get: operations["context_live_sources"];
         put?: never;
@@ -631,6 +633,10 @@ export interface paths {
         /**
          * Put Observation
          * @description Give or change your second look. The reply reveals the finding in full and how your answer compares.
+         *
+         *     With `detail_follows`, the answer is stored and counts, and the reply
+         *     (`revealed: false`) shows nothing. Add the detail, or skip it, with
+         *     `POST /findings/{public_id}/observation/reveal`.
          */
         put: operations["observations_put_observation"];
         post?: never;
@@ -639,6 +645,29 @@ export interface paths {
          * @description Take back your second look.
          */
         delete: operations["observations_delete_observation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/{public_id}/observation/reveal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reveal
+         * @description Add the detail to an answer given with `detail_follows`, or send none to skip it, and see the finding.
+         *
+         *     The detail is added once. Asked again, it answers the same reveal while the
+         *     detail sent matches the stored one, and `answer_final` otherwise.
+         */
+        post: operations["observations_reveal"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -653,7 +682,7 @@ export interface paths {
         };
         /**
          * List Observations
-         * @description Everyone's answers, for the finder and for people who have answered. Others get `answer_first`.
+         * @description Everyone's answers, for the finder and those whose own answer was revealed. Others: `answer_first`.
          */
         get: operations["observations_list_observations"];
         put?: never;
@@ -1100,7 +1129,7 @@ export interface paths {
         };
         /**
          * Get Meta
-         * @description Vocabularies, tier definitions, the layer catalogue, sign-in providers and source attributions.
+         * @description Vocabularies, tiers, the layer catalogue, sign-in providers, source attributions and terrain.
          *
          *     The same for everyone. The tile addresses' `?v=` tokens change with an
          *     ingest or a new edition, so a copy is kept for a few minutes only.
@@ -2024,6 +2053,16 @@ export interface components {
             target: components["schemas"]["TargetOut"];
         };
         /**
+         * ActionOut
+         * @description Whether this viewer may do something, and if not, the code the route would refuse with.
+         */
+        ActionOut: {
+            /** Allowed */
+            allowed: boolean;
+            /** Reason */
+            reason: string | null;
+        };
+        /**
          * ActivityDetails
          * @description What changed, for the kinds that say. Every field is empty for the others.
          *
@@ -2102,6 +2141,19 @@ export interface components {
             unsure: number;
             /** Yes */
             yes: number;
+        };
+        /**
+         * AnswerHeld
+         * @description An answer given with `detail_follows`: stored and counted, and nothing shown yet.
+         */
+        AnswerHeld: {
+            observation: components["schemas"]["ObservationOut"];
+            /**
+             * Revealed
+             * @default false
+             * @constant
+             */
+            revealed: false;
         };
         /** AppInfo */
         AppInfo: {
@@ -2216,6 +2268,8 @@ export interface components {
             /** No Frame */
             no_frame: boolean;
             shows: components["schemas"]["LinkShows"];
+            /** Title */
+            title: string;
             /** Url */
             url: string;
             /** Verified */
@@ -2469,6 +2523,20 @@ export interface components {
             token: string;
         };
         /**
+         * Endorsement
+         * @description When an evidence item counts for a step only once someone else endorses it.
+         *
+         *     An item is endorsed when people other than its contributor and the finder
+         *     vote it up with a summed weight of at least `Thresholds.endorsement_weight`.
+         * @enum {string}
+         */
+        Endorsement: "not_needed" | "if_added_by_finder" | "unless_added_by_trusted_other";
+        /** EvidenceActionsOut */
+        EvidenceActionsOut: {
+            verify: components["schemas"]["ActionOut"];
+            vote: components["schemas"]["ActionOut"];
+        };
+        /**
          * EvidenceIn
          * @description A piece of evidence. Which fields each kind needs is checked by `services.findings`.
          */
@@ -2525,12 +2593,17 @@ export interface components {
          *     the view) is left out and `redacted` is true.
          */
         EvidenceOut: {
+            actions: components["schemas"]["EvidenceActionsOut"];
             contributor: components["schemas"]["PublicUser"];
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Disputes */
+            disputes: number;
+            /** Endorsements */
+            endorsements: number;
             /** Id */
             id: number;
             /** Independent */
@@ -2635,6 +2708,20 @@ export interface components {
             wales: components["schemas"]["FindReporting"];
         };
         /**
+         * FindingActionsOut
+         * @description What this viewer may do on the finding, from the rules its routes enforce (`services.actions`).
+         */
+        FindingActionsOut: {
+            add_evidence: components["schemas"]["ActionOut"];
+            answer: components["schemas"]["ActionOut"];
+            comment: components["schemas"]["ActionOut"];
+            edit: components["schemas"]["ActionOut"];
+            lower_level: components["schemas"]["ActionOut"];
+            raise_level: components["schemas"]["ActionOut"];
+            verify: components["schemas"]["ActionOut"];
+            withdraw: components["schemas"]["ActionOut"];
+        };
+        /**
          * FindingCreate
          * @description A new finding. Only the point and the feature class are required.
          */
@@ -2658,6 +2745,7 @@ export interface components {
          * @description A finding's page.
          */
         FindingDetail: {
+            actions: components["schemas"]["FindingActionsOut"];
             /** Answers Visible */
             answers_visible: boolean;
             assessment: components["schemas"]["AssessmentOut"];
@@ -3180,14 +3268,24 @@ export interface components {
             attribution: string;
             /** Coverage */
             coverage: string;
+            /** Credit */
+            credit: string | null;
+            /** Credit Field */
+            credit_field: string | null;
             /** Endpoint */
             endpoint: string;
+            /** Homepage */
+            homepage: string | null;
             /** Id Field */
             id_field: string | null;
             /** Key */
             key: string;
             /** Licence */
             licence: string;
+            /** Licence Field */
+            licence_field: string | null;
+            /** Licence Label */
+            licence_label: string | null;
             /** Limit Param */
             limit_param: string | null;
             /** Limits */
@@ -3202,12 +3300,16 @@ export interface components {
             name: string;
             /** Name Field */
             name_field: string | null;
+            /** Preferred Credit Field */
+            preferred_credit_field: string | null;
             /** Publisher */
             publisher: string;
             /** Query Pattern */
             query_pattern: string;
             /** Response Fields */
             response_fields: string;
+            /** Shown */
+            shown: boolean;
         };
         /** LiveSources */
         LiveSources: {
@@ -3466,6 +3568,12 @@ export interface components {
             /** Title */
             title: string;
         };
+        /**
+         * MetBy
+         * @description What kind of help meets a next step.
+         * @enum {string}
+         */
+        MetBy: "second_look" | "evidence";
         /** Meta */
         Meta: {
             app: components["schemas"]["AppInfo"];
@@ -3474,6 +3582,7 @@ export interface components {
             notices: components["schemas"]["Notices"];
             /** Sources */
             sources: components["schemas"]["SourceOut"][];
+            terrain: components["schemas"]["TerrainState"];
             vocab: components["schemas"]["Vocab"];
         };
         /** ModSensitivityIn */
@@ -3550,6 +3659,23 @@ export interface components {
             /** Weight Needed */
             weight_needed?: number | null;
         };
+        /**
+         * NextStepRuleOut
+         * @description What meets one next step, from `services.confidence.STEP_RULES`. `id` is the step's code.
+         */
+        NextStepRuleOut: {
+            endorsement: components["schemas"]["Endorsement"];
+            /** Evidence Kinds */
+            evidence_kinds: components["schemas"]["EvidenceKind"][];
+            id: components["schemas"]["NextStepCode"];
+            met_by: components["schemas"]["MetBy"];
+            /** Needs Verification */
+            needs_verification: boolean;
+            outcome: components["schemas"]["Outcome"] | null;
+            /** Record Relations */
+            record_relations: components["schemas"]["Relation"][];
+            stance: components["schemas"]["Stance"] | null;
+        };
         /** NoteItemIn */
         NoteItemIn: {
             /**
@@ -3599,14 +3725,40 @@ export interface components {
             unread_count: number;
         };
         /**
+         * ObservationDetailIn
+         * @description What you think it is, beyond whether you can see it. Every part is optional.
+         *
+         *     A check can't be asserted together with its matching explanation, such
+         *     as `not_modern` with `explanation: modern`.
+         */
+        ObservationDetailIn: {
+            explanation?: components["schemas"]["Explanation"] | null;
+            feature_class?: components["schemas"]["FeatureClass"] | null;
+            /** Not Artefact */
+            not_artefact?: boolean | null;
+            /** Not Modern */
+            not_modern?: boolean | null;
+            /** Not Natural */
+            not_natural?: boolean | null;
+            /** Note */
+            note?: string | null;
+            period?: components["schemas"]["Period"] | null;
+        };
+        /**
          * ObservationIn
          * @description A second look: can you see it, and optionally what do you think it is.
          *
-         *     It is final once given: only `note` can change afterwards. A check can't
-         *     be asserted together with its matching explanation, such as `not_modern`
-         *     with `explanation: modern`.
+         *     It is final once given: only `note` can change afterwards. With
+         *     `detail_follows`, it carries `visible` alone. It is stored and counts at
+         *     once, the reply reveals nothing, and the detail or the reveal alone
+         *     follows through `POST /findings/{public_id}/observation/reveal`.
          */
         ObservationIn: {
+            /**
+             * Detail Follows
+             * @default false
+             */
+            detail_follows: boolean;
             explanation?: components["schemas"]["Explanation"] | null;
             feature_class?: components["schemas"]["FeatureClass"] | null;
             /** Not Artefact */
@@ -3638,6 +3790,8 @@ export interface components {
             /** Note */
             note: string | null;
             period: components["schemas"]["Period"] | null;
+            /** Revealed */
+            revealed: boolean;
             /**
              * Updated At
              * Format: date-time
@@ -3695,6 +3849,15 @@ export interface components {
          * @enum {string}
          */
         Outcome: "supports" | "inconclusive" | "contradicts";
+        /** OverviewState */
+        OverviewState: {
+            /** Built */
+            built: boolean | null;
+            /** Built At */
+            built_at: string | null;
+            /** Tiles */
+            tiles: number;
+        };
         /** Page[Action] */
         Page_Action_: {
             /** Items */
@@ -4391,6 +4554,10 @@ export interface components {
         /**
          * Reveal
          * @description What answering a second look shows you: the finding in full, and whether it moved.
+         *
+         *     The tiers and states are those before and after this request. After an
+         *     answer given in two steps, the reveal compares the tier before and after
+         *     the detail, so a move the answer made on its own isn't shown as one.
          */
         Reveal: {
             comparison: components["schemas"]["ComparisonOut"];
@@ -4398,6 +4565,12 @@ export interface components {
             /** Moved Up */
             moved_up: boolean;
             observation: components["schemas"]["ObservationOut"];
+            /**
+             * Revealed
+             * @default true
+             * @constant
+             */
+            revealed: true;
             state_after: components["schemas"]["FindingState"];
             state_before: components["schemas"]["FindingState"];
             tier_after: components["schemas"]["Tier"];
@@ -4786,6 +4959,17 @@ export interface components {
             url: string;
         };
         /**
+         * TerrainState
+         * @description Facts for the map's terrain messages: "zoom in for detail", "the overview is still being prepared".
+         */
+        TerrainState: {
+            /** Catalogue Tiles */
+            catalogue_tiles: number;
+            /** Fine Minzoom */
+            fine_minzoom: number;
+            overview: components["schemas"]["OverviewState"];
+        };
+        /**
          * Tier
          * @enum {string}
          */
@@ -4877,6 +5061,8 @@ export interface components {
             feature_classes: components["schemas"]["FeatureClassOut"][];
             /** Mention Kinds */
             mention_kinds: components["schemas"]["MentionKindOut"][];
+            /** Next Steps */
+            next_steps: components["schemas"]["NextStepRuleOut"][];
             /** Periods */
             periods: components["schemas"]["PeriodOut"][];
             /** Record Categories */
@@ -6113,7 +6299,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Reveal"];
+                    "application/json": components["schemas"]["Reveal"] | components["schemas"]["AnswerHeld"];
                 };
             };
             /** @description Validation Error */
@@ -6144,6 +6330,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    observations_reveal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ObservationDetailIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reveal"];
+                };
             };
             /** @description Validation Error */
             422: {
