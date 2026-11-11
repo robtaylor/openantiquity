@@ -11,7 +11,9 @@ or by its id in any field.
 `WALKED` names the paths read for each route. A read route in `ROUTES` that
 names `HIDDEN_EVERYWHERE` must be walked here, and one that isn't walked
 must say in `ROUTES` why it holds nothing a moderator can hide, so a new read
-route can't be left out by omission.
+route can't be left out by omission. Each walked path must give something
+away before anything is hidden, or be in `KNOWINGLY_EMPTY` with the reason,
+so that a path the walk reads can't pass by having nothing to lose.
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fieldclub.models import Activity, Finding, Investigation, User
+from fieldclub.models import Activity, Finding, Investigation, ReputationEvent, User
 from fieldclub.services import feed, findings, investigations, mentions, moderation
 from fieldclub.services.findings import EvidenceFields
 from fieldclub.services.investigations import Need
@@ -35,10 +37,11 @@ from fieldclub.vocab import (
     InvestigationItemKind,
     InvestigationRole,
     Relation,
+    ReportReason,
     ReportTarget,
     Role,
 )
-from tests.findings.support import add_desk_evidence, create
+from tests.findings.support import add_desk_evidence, answer, create
 from tests.helpers import ClientFor, MakeUser, add_record, add_source
 from tests.investigations.support import add, make
 from tests.moderation.support import API, comment, photo
@@ -128,6 +131,23 @@ WALKED: dict[tuple[str, str], list[str]] = {
     ("GET", "/api/v1/mod/users/eligible"): ["/mod/users/eligible"],
 }
 
+# Walked paths that give nothing away to any viewer before anything is hidden, and why that's right.
+KNOWINGLY_EMPTY = {
+    "/auth/me": "the viewer's own account, which holds nothing a moderator hides",
+    "/auth/session": "the viewer's own account, which holds nothing a moderator hides",
+    # test_profile_counts_leave_hidden_contributions_out checks the counts.
+    "/users/{author}": "a profile carries counts, not titles",
+    "/users/{finder}": "a profile carries counts, not titles",
+    "/geo/search?q=Secret": "the search matches a finding by its id, never its title, as q={gid} does",
+    "/investigations?scope=unlisted": "lists unlisted investigations, and the walked one is public",
+    F + "/observations": "answers carry no hideable thing; the hidden finding's own list is walked as {gid}",
+    # `media.approval_queue` leaves hidden photos out whatever their state.
+    "/mod/media": "the queue holds photos waiting for approval, and the walked photo is approved",
+}
+
+# A response at these addresses is the hidden thing itself, so any 200 there gives it away.
+OWN_ADDRESS = {ReportTarget.FINDING: G, ReportTarget.INVESTIGATION: INV}
+
 
 @dataclass
 class World:
@@ -143,8 +163,11 @@ class World:
     record_id: int
     client: Callable[[str], TestClient]
 
-    def paths(self) -> Iterator[str]:
-        names = {
+    def path(self, template: str) -> str:
+        return template.format(**self.names())
+
+    def names(self) -> dict[str, str]:
+        return {
             "pid": self.finding.public_id,
             "gid": self.hidden_finding.public_id,
             "inv": self.investigation.public_id,
@@ -153,16 +176,19 @@ class World:
             "author": self.people["author"].handle,
             "finder": self.people["finder"].handle,
         }
+
+    def paths(self) -> Iterator[str]:
         for templates in WALKED.values():
             for template in templates:
-                yield template.format(**names)
+                yield self.path(template)
 
 
 @pytest.fixture
 def world(db: Session, make_user: MakeUser, app: FastAPI, client_for: ClientFor) -> World:
     people = {
         "finder": make_user(handle="Finder"),
-        "author": make_user(handle="Author"),
+        # Enough points to be eligible for trust, some of them from the finding that is hidden.
+        "author": make_user(handle="Author", reputation=60),
         "member": make_user(handle="Member"),
         "trusted": make_user(Role.TRUSTED, handle="Trusted"),
         "editor": make_user(handle="Editor"),
@@ -175,13 +201,22 @@ def world(db: Session, make_user: MakeUser, app: FastAPI, client_for: ClientFor)
     for found in (finding, hidden_finding):
         findings.follow(db, member, found)
     comment(db, hidden_finding, member, "A comment on the finding that is hidden.")
+    # The trusted member has answered both, so they may read the answers on each.
+    for found in (finding, hidden_finding):
+        answer(db, found, people["trusted"])
+    for earner in (author, finder):
+        db.add(ReputationEvent(user_id=earner.id, delta=60.0, reason="test", finding_id=hidden_finding.id))
     said = comment(db, finding, author, SECRET_COMMENT)
     evidence, _ = add_desk_evidence(db, finding, author, title=SECRET_EVIDENCE)
     # Port 8443 is refused by the fetcher, so nothing is fetched.
     talked = mentions.add(
         db, finding, author, "https://www.wiltshire-gazette.example:8443/story", note=SECRET_MENTION
     )
-    shown = photo(db, author, approved_by=people["trusted"])
+    # Approved through moderation, so the log names it.
+    shown = photo(db, author)
+    moderation.approve_photo(db, shown.id, people["trusted"])
+    # An open report, so the moderators' queue has the comment on it.
+    moderation.create_report(db, member, ReportTarget.COMMENT, str(said.id), ReportReason.SPAM, None)
     record = add_record(db, add_source(db), "Enclosure on the down", -1.85, 51.43)
     for found in (finding, hidden_finding):
         findings.add_evidence(
@@ -229,7 +264,7 @@ def world(db: Session, make_user: MakeUser, app: FastAPI, client_for: ClientFor)
             ReportTarget.COMMENT: [("comment", said.id)],
             ReportTarget.EVIDENCE: [("evidence", evidence.id)],
             ReportTarget.MENTION: [("mention", talked.id)],
-            ReportTarget.PHOTO: [],
+            ReportTarget.PHOTO: [("photo", shown.id)],
             ReportTarget.INVESTIGATION: [],
         },
         photo_id=shown.id,
@@ -255,6 +290,9 @@ def shows(world: World, kind: ReportTarget, path: str, response: Any) -> bool:
     """Whether the response gives the hidden thing away."""
     if kind is ReportTarget.PHOTO and path == f"/media/{world.photo_id}":
         return response.status_code == 200
+    own = OWN_ADDRESS.get(kind)
+    if own is not None and path.startswith(world.path(own)) and response.status_code == 200:
+        return True
     if any(text in response.text for text in world.texts[kind]):
         return True
     if "json" not in response.headers.get("content-type", ""):
@@ -282,6 +320,18 @@ def test_hidden_content_leaves_every_read_route(world: World, db: Session, kind:
             assert what_shows(world, kind, viewer) == set(), (kind, viewer)
     for viewer in STILL_SEEN_BY[kind] - {"moderator"}:
         assert what_shows(world, kind, viewer), (kind, viewer, "those who may still see it lose nothing")
+
+
+def test_every_walked_path_has_something_to_lose(world: World) -> None:
+    """Before anything is hidden, each path gives something away to someone, or says why not."""
+    empty = set()
+    for templates in WALKED.values():
+        for template in templates:
+            path = world.path(template)
+            responses = [world.client(viewer).get(API + path) for viewer in VIEWERS]
+            if not any(shows(world, kind, path, got) for got in responses for kind in moderation.HIDEABLE):
+                empty.add(template)
+    assert empty == set(KNOWINGLY_EMPTY)
 
 
 def test_the_routes_sent_here_are_the_routes_walked() -> None:
