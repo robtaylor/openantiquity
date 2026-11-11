@@ -1,4 +1,9 @@
-"""`POST /terrain/profile` and `GET /terrain/coverage`."""
+"""`POST /terrain/profile` and `GET /terrain/coverage`.
+
+A profile never waits for elevation to be added to the mirror: where a 5 km
+tile it crosses isn't mirrored yet, it is answered 503 `elevation_preparing`
+with a `Retry-After`, and the tile is fetched in the background.
+"""
 
 from __future__ import annotations
 
@@ -77,6 +82,10 @@ class CoveragePropertiesOut(BaseModel):
     resolution_m: float
     # The years the surveys behind this tile were flown, oldest first. Empty where the index has none.
     years: list[int]
+    # Whether the tile is in the elevation mirror yet. Where it isn't, 1 m map
+    # tiles and profiles answer 503 `elevation_preparing` until it has been
+    # fetched, so the map can say the area is being prepared.
+    mirrored: bool
 
 
 class CoverageFeatureOut(BaseModel):
@@ -92,8 +101,10 @@ class CoverageOut(BaseModel):
     features: list[CoverageFeatureOut]
 
 
-# The coverage changes only with a new catalogue or new capture years, which change the ETag.
-COVERAGE_CACHE = "public, max-age=3600"
+# The coverage changes with a new catalogue, new capture years or a tile
+# added to the mirror, each of which changes the ETag. The mirror is listed
+# at most once a minute, so a minute's caching hides nothing it would show.
+COVERAGE_CACHE = "public, max-age=60"
 
 
 @router.get("/coverage", response_model=CoverageOut)
@@ -102,12 +113,14 @@ def get_coverage(
     bbox: BBoxQuery = None,
     if_none_match: IfNoneMatch = None,
 ) -> Response:
-    """The 5 km tiles that have 1 m elevation, with the years they were flown, as GeoJSON."""
+    """The 5 km tiles that have 1 m elevation, with the years they were flown and whether each is
+    in the mirror yet, as GeoJSON."""
     box = parse_bbox(bbox)
-    etag = f'"{coverage_edition(terrain.catalogue)}"'
+    mirrored = terrain.mirrored()
+    etag = f'"{coverage_edition(terrain.catalogue, mirrored)}"'
     headers = {"Cache-Control": COVERAGE_CACHE, "ETag": etag}
     unchanged = not_modified(if_none_match, headers)
     if unchanged is not None:
         return unchanged
-    body: dict[str, Any] = coverage(terrain.catalogue, box)
+    body: dict[str, Any] = coverage(terrain.catalogue, box, mirrored)
     return JSONResponse(body, headers=headers)

@@ -192,6 +192,10 @@ class Overview:
     def edition(self) -> str:
         return self.snapshot().edition
 
+    def mirrored(self) -> frozenset[str]:
+        """The tiles the mirror holds, listed at most once a `refresh_s`."""
+        return self._mirror_names()
+
     def _mirror_names(self) -> frozenset[str]:
         """The tiles the mirror holds, listed at most once a `refresh_s`."""
         with self._guard:

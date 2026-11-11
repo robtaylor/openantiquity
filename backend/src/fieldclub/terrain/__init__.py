@@ -9,5 +9,7 @@ Mercator grid, `visualise.py` holds the pure numpy visualisations,
 `styles.py` the served styles and their versions, and `render.py` turns a map
 tile into a PNG through two caches in `Storage`. `years.py` and
 `attribution.py` give the coverage layer its capture years and the LIDAR its
-`sources` rows.
+`sources` rows. `prefetch.py` adds missing tiles in the background so no
+request waits for one, and `workers.py` draws map tiles on threads of their
+own (Decision 0015).
 """

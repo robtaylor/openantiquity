@@ -24,6 +24,7 @@ from fieldclub.terrain.grid import window_for
 from fieldclub.terrain.mirror import Fetcher, LocalMirrorStore, LocalSourceFetcher, Mirror
 from fieldclub.terrain.national import NationalStore
 from fieldclub.terrain.overview import Overview
+from fieldclub.terrain.prefetch import Prefetcher
 from fieldclub.terrain.render import Selection, TileRenderer
 from fieldclub.terrain.service import Terrain
 from fieldclub.terrain.sources import ElevationSource
@@ -185,15 +186,23 @@ def local_mirror(
 
 
 def local_terrain(
-    mirror: Mirror, tiles: Path, *, national: Path | None = None, refresh_s: float = 0.0
+    mirror: Mirror,
+    tiles: Path,
+    *,
+    national: Path | None = None,
+    refresh_s: float = 0.0,
+    prefetch: Prefetcher | None = None,
 ) -> Terrain:
     """The terrain service over a mirror, caching tiles in `tiles`.
 
     The national overview lives in `national`, beside `tiles` by default, and
     is looked up afresh on every request unless `refresh_s` says otherwise.
+    Without `prefetch` it fetches in the foreground, as the commands do. With
+    one, as the API has, nothing waits for a tile to be added.
     """
     store = NationalStore(LocalFolder(national or tiles.parent / "national"))
-    return Terrain(mirror, Overview(mirror, store, refresh_s=refresh_s), LocalStorage(tiles))
+    overview = Overview(mirror, store, refresh_s=refresh_s)
+    return Terrain(mirror, overview, LocalStorage(tiles), prefetch=prefetch)
 
 
 # --------------------------------------------------------------------------

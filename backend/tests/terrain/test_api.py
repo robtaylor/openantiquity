@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+from collections.abc import Iterator
 from pathlib import Path
 
 import numpy as np
@@ -19,6 +20,7 @@ from fieldclub.schemas.meta import RasterView
 from fieldclub.terrain import sftp
 from fieldclub.terrain.grid import tile_at
 from fieldclub.terrain.mirror import SftpFetcher
+from fieldclub.terrain.prefetch import Prefetcher
 from fieldclub.terrain.render import terrarium_decode
 from fieldclub.terrain.service import Terrain, get_terrain
 from tests.helpers import admin_area, error_code
@@ -28,6 +30,11 @@ from tests.terrain.fakes import TO_LONLAT, decode_png, local_mirror, local_terra
 INSIDE = TO_LONLAT.transform(412_505, 167_505)
 # The styles `/meta` offers.
 SERVED = [style_id for style_id, _, _ in LIDAR_STYLES]
+
+
+def prefetch_of(terrain: Terrain) -> Prefetcher:
+    assert terrain.prefetch is not None, "the API's terrain adds tiles in the background"
+    return terrain.prefetch
 
 
 def plane(east: np.ndarray, north: np.ndarray) -> np.ndarray:
@@ -42,9 +49,20 @@ def mirror_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.fixture
-def terrain(mirror_dir: Path, tmp_path: Path) -> Terrain:
+def terrain(mirror_dir: Path, tmp_path: Path) -> Iterator[Terrain]:
+    """The API's terrain: a tile the mirror lacks is added in the background, never waited for."""
     mirror = local_mirror(tmp_path, sources=mirror_dir / "src", extra=["SU16ne"])
-    return local_terrain(mirror, tmp_path / "tiles")
+    prefetch = Prefetcher(mirror, 1)
+    yield local_terrain(mirror, tmp_path / "tiles", prefetch=prefetch)
+    prefetch.wait(timeout=60)
+    prefetch.close()
+
+
+@pytest.fixture
+def mirrored(terrain: Terrain) -> Terrain:
+    """The same, with SU16nw already in the mirror."""
+    terrain.mirror.ensure("SU16nw")
+    return terrain
 
 
 @pytest.fixture
@@ -62,6 +80,7 @@ def api(app: FastAPI, client: TestClient, terrain: Terrain) -> TestClient:
 IMMUTABLE = "public, max-age=31536000, immutable"
 
 
+@pytest.mark.usefixtures("mirrored")
 def test_a_lidar_tile_is_a_512_pixel_png_with_immutable_caching(api: TestClient, terrain: Terrain) -> None:
     x, y = tile_at(*INSIDE, 15)
     version = terrain.renderer.version("composite")
@@ -74,6 +93,7 @@ def test_a_lidar_tile_is_a_512_pixel_png_with_immutable_caching(api: TestClient,
     assert image.size == (512, 512)
 
 
+@pytest.mark.usefixtures("mirrored")
 def test_the_meta_tile_urls_carry_the_versions_the_served_tiles_have(
     api: TestClient, terrain: Terrain
 ) -> None:
@@ -96,6 +116,7 @@ def test_without_a_terrain_service_the_layers_carry_the_unbuilt_token() -> None:
     ]
 
 
+@pytest.mark.usefixtures("mirrored")
 @pytest.mark.parametrize("query", ["", "?v=old"])
 def test_a_tile_without_the_current_version_is_cached_for_an_hour(api: TestClient, query: str) -> None:
     x, y = tile_at(*INSIDE, 15)
@@ -104,6 +125,7 @@ def test_a_tile_without_the_current_version_is_cached_for_an_hour(api: TestClien
     assert response.headers["cache-control"] == "public, max-age=3600"
 
 
+@pytest.mark.usefixtures("mirrored")
 def test_an_unchanged_tile_is_answered_not_modified(api: TestClient) -> None:
     x, y = tile_at(*INSIDE, 15)
     first = api.get(f"/tiles/lidar/slope/15/{x}/{y}.png")
@@ -113,6 +135,7 @@ def test_an_unchanged_tile_is_answered_not_modified(api: TestClient) -> None:
     assert again.headers["etag"] == first.headers["etag"]
 
 
+@pytest.mark.usefixtures("mirrored")
 def test_every_served_style_renders(api: TestClient) -> None:
     x, y = tile_at(*INSIDE, 16)
     for style in SERVED:
@@ -147,6 +170,7 @@ def test_bad_tile_addresses_are_refused(api: TestClient, path: str, status: int,
     assert error_code(response) == code
 
 
+@pytest.mark.usefixtures("mirrored")
 def test_dem_tiles_are_terrarium_with_opaque_pixels(api: TestClient, terrain: Terrain) -> None:
     x, y = tile_at(*INSIDE, 15)
     response = api.get(f"/tiles/dem/15/{x}/{y}.png?v={terrain.renderer.version('dem')}")
@@ -194,6 +218,7 @@ def test_a_tile_on_the_far_side_of_the_world_is_transparent_and_fetches_nothing(
 # --------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("mirrored")
 def test_a_profile_samples_heights_along_a_line(api: TestClient) -> None:
     start = TO_LONLAT.transform(411_000, 167_000)
     end = TO_LONLAT.transform(411_400, 167_300)
@@ -216,6 +241,7 @@ def test_a_profile_samples_heights_along_a_line(api: TestClient) -> None:
     assert samples[10]["lon"] == pytest.approx(TO_LONLAT.transform(411_080, 167_060)[0], abs=1e-6)
 
 
+@pytest.mark.usefixtures("mirrored")
 def test_a_profile_reports_the_level_it_really_read(api: TestClient) -> None:
     start = TO_LONLAT.transform(410_500, 167_500)
     end = TO_LONLAT.transform(414_500, 167_500)
@@ -231,18 +257,27 @@ def test_a_profile_reports_the_level_it_really_read(api: TestClient) -> None:
     assert close["resolution_m"] == 4
 
 
-def test_a_profile_into_a_tile_that_cannot_be_fetched_is_unavailable(api: TestClient) -> None:
+@pytest.mark.usefixtures("mirrored")
+def test_a_profile_into_a_tile_that_cannot_be_fetched_is_prepared_then_unavailable(
+    api: TestClient, terrain: Terrain
+) -> None:
     # SU16ne is in the catalogue, but nothing here can supply it.
     start = TO_LONLAT.transform(414_900, 167_000)
     end = TO_LONLAT.transform(415_100, 167_000)
-    response = api.post(
-        "/api/v1/terrain/profile",
-        json={"line": {"type": "LineString", "coordinates": [list(start), list(end)]}, "samples": 5},
-    )
-    assert response.status_code == 503
-    assert error_code(response) == "elevation_unavailable"
+    line = {"line": {"type": "LineString", "coordinates": [list(start), list(end)]}, "samples": 5}
+    first = api.post("/api/v1/terrain/profile", json=line)
+    assert first.status_code == 503
+    assert error_code(first) == "elevation_preparing"
+    assert first.json()["error"]["details"] == {"tiles": ["SU16ne"]}
+    assert prefetch_of(terrain).pending() <= {"SU16ne"}
+    prefetch_of(terrain).wait(timeout=60)
+    # The background attempt failed, so asking again says so rather than "being prepared".
+    again = api.post("/api/v1/terrain/profile", json=line)
+    assert again.status_code == 503
+    assert error_code(again) == "elevation_unavailable"
 
 
+@pytest.mark.usefixtures("mirrored")
 def test_a_profile_off_the_data_has_null_heights(api: TestClient) -> None:
     # South of SU16nw, where the catalogue lists nothing.
     start = TO_LONLAT.transform(411_000, 164_990)
@@ -336,9 +371,9 @@ def test_coverage_carries_the_years_each_tile_was_flown(api: TestClient) -> None
     assert features["SU16nw"]["properties"]["capture"] == "2022 composite"
 
 
-def test_coverage_has_an_etag_from_its_edition_and_an_hour_of_caching(api: TestClient) -> None:
+def test_coverage_has_an_etag_from_its_edition_and_a_minute_of_caching(api: TestClient) -> None:
     first = api.get("/api/v1/terrain/coverage")
-    assert first.headers["cache-control"] == "public, max-age=3600"
+    assert first.headers["cache-control"] == "public, max-age=60"
     etag = first.headers["etag"]
     assert etag.startswith('"')
     again = api.get("/api/v1/terrain/coverage", headers={"If-None-Match": etag})
@@ -379,9 +414,8 @@ def wiltshire(db: Session) -> None:
     db.commit()
 
 
-@pytest.mark.usefixtures("wiltshire")
-def test_a_point_has_its_grid_reference_place_and_height(api: TestClient, terrain: Terrain) -> None:
-    terrain.mirror.ensure("SU16nw")
+@pytest.mark.usefixtures("wiltshire", "mirrored")
+def test_a_point_has_its_grid_reference_place_and_height(api: TestClient) -> None:
     lon, lat = INSIDE
     response = api.get("/api/v1/geo/point", params={"lon": lon, "lat": lat})
     assert response.status_code == 200
@@ -390,6 +424,7 @@ def test_a_point_has_its_grid_reference_place_and_height(api: TestClient, terrai
     assert body["nation"] == "england"
     assert body["county"] == "Wiltshire"
     assert body["elevation"] == pytest.approx(float(plane(np.array(412_505.0), np.array(0.0))), abs=0.05)
+    assert body["elevation_status"] == "ready"
 
 
 @pytest.mark.usefixtures("wiltshire")
@@ -399,6 +434,9 @@ def test_a_point_never_fetches_and_has_no_height_where_nothing_is_mirrored(
     lon, lat = INSIDE
     body = api.get("/api/v1/geo/point", params={"lon": lon, "lat": lat}).json()
     assert body["elevation"] is None
+    # The 1 m data exists there and isn't in the mirror yet, and the read didn't start fetching it.
+    assert body["elevation_status"] == "preparing"
+    assert prefetch_of(terrain).pending() == frozenset()
     assert not terrain.mirror.has("SU16nw")
 
 
@@ -411,6 +449,7 @@ def test_a_point_off_the_grids_has_nulls(api: TestClient) -> None:
         "nation": None,
         "county": None,
         "elevation": None,
+        "elevation_status": "none",
         "sources": [],
         "place": None,
     }
@@ -432,15 +471,19 @@ def test_a_refused_bulk_supply_never_puts_its_address_in_the_log(
     )
     fetcher = SftpFetcher(lambda: sftp.defra_connector(settings), max_failures=2, sleep=lambda seconds: None)
     mirror = local_mirror(tmp_path, sources=mirror_dir / "src", extra=["SU16ne"], fetchers=[fetcher])
-    app.dependency_overrides[get_terrain] = lambda: local_terrain(mirror, tmp_path / "tiles")
+    prefetch = Prefetcher(mirror, 1)
+    terrain = local_terrain(mirror, tmp_path / "tiles", prefetch=prefetch)
+    app.dependency_overrides[get_terrain] = lambda: terrain
     start = TO_LONLAT.transform(414_900, 167_000)
     end = TO_LONLAT.transform(415_100, 167_000)
+    line = {"line": {"type": "LineString", "coordinates": [list(start), list(end)]}, "samples": 5}
     with caplog.at_level("DEBUG"):
-        response = client.post(
-            "/api/v1/terrain/profile",
-            json={"line": {"type": "LineString", "coordinates": [list(start), list(end)]}, "samples": 5},
-        )
-    assert response.status_code == 502
+        preparing = client.post("/api/v1/terrain/profile", json=line)
+        prefetch.wait(timeout=60)
+        response = client.post("/api/v1/terrain/profile", json=line)
+    prefetch.close()
+    assert error_code(preparing) == "elevation_preparing"
+    assert response.status_code == 503
     assert error_code(response) == "elevation_fetch_failed"
     assert "Traceback" in caplog.text
     for secret in ("127.0.0.1", "port 1", "someone-secret", "not-a-real-password", "composite/2022"):

@@ -49,7 +49,7 @@ from rasterio.windows import Window as RasterWindow
 from fieldclub.errors import DataIntegrityError
 from fieldclub.gridref import transformer
 from fieldclub.terrain.catalogue import Catalogue
-from fieldclub.terrain.errors import ReadTooLargeError
+from fieldclub.terrain.errors import ElevationPreparingError, ReadTooLargeError
 from fieldclub.terrain.grid import (
     HALF_WORLD,
     Window,
@@ -59,6 +59,7 @@ from fieldclub.terrain.grid import (
     window_for,
 )
 from fieldclub.terrain.mirror import Mirror
+from fieldclub.terrain.prefetch import Prefetcher
 
 logger = logging.getLogger(__name__)
 
@@ -378,13 +379,31 @@ def paste(ds: DatasetReader, res: float, data: np.ndarray, west: float, north: f
 MIRROR_RESOLUTIONS = (1.0, 2.0, 4.0, 8.0, 40.0, 200.0, 1000.0)
 
 
-def mirror_source(mirror: Mirror, *, fetch: bool = True) -> CogMosaicSource:
-    """The 1 m mosaic over a mirror. With `fetch` off, tiles not yet mirrored read as no data."""
+def mirror_source(
+    mirror: Mirror, *, fetch: bool = True, prefetch: Prefetcher | None = None
+) -> CogMosaicSource:
+    """The 1 m mosaic over a mirror. With `fetch` off, tiles not yet mirrored read as no data.
+
+    With a `prefetch`, a read never waits for a tile to be added: it starts
+    adding what is missing in the background and raises
+    `ElevationPreparingError` naming it. Otherwise a read adds what is
+    missing first, as the commands want.
+    """
     catalogue: Catalogue = mirror.catalogue
+    assert fetch or prefetch is None, "a source that doesn't fetch has nothing to prepare"
 
     def paths_for(bbox: tuple[float, float, float, float]) -> list[str]:
         names = [tile.name for tile in catalogue.covering(bbox)]
-        if fetch:
+        if prefetch is not None:
+            if len(names) > MAX_FETCHED_TILES:
+                raise ReadTooLargeError(
+                    f"A read of {bbox} would fetch {len(names)} tiles, more than {MAX_FETCHED_TILES}."
+                )
+            missing = prefetch.request(names)
+            if missing:
+                raise ElevationPreparingError(missing)
+            found = [mirror.path(name) for name in names]
+        elif fetch:
             if len(names) > MAX_FETCHED_TILES:
                 raise ReadTooLargeError(
                     f"A read of {bbox} would fetch {len(names)} tiles, more than {MAX_FETCHED_TILES}."

@@ -10,9 +10,13 @@ and touches up to nine, each of which a cold mirror would have to download
 (40 to 90 MB) before the tile could be drawn, while its 11.6 m pixels match
 the overview's 8 m.
 
-Point heights never fetch: they read the 1 m mirror where it already has the
-tile and the overview elsewhere. A height profile reads the 1 m mirror and
-fetches what it needs, within the limits below.
+Nothing the API serves waits for a tile to be added to the mirror. With a
+`Prefetcher`, which `build_terrain` gives the API, a map tile or a height
+profile that needs a 5 km tile the mirror lacks starts adding it in the
+background and is answered `elevation_preparing` (`prefetch.py`). Point
+heights never fetch at all: they read the 1 m mirror where it already has the
+tile and the overview elsewhere, and say which. The commands build the
+service without a prefetcher, so `warm` fetches in the foreground.
 """
 
 from __future__ import annotations
@@ -23,6 +27,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 
@@ -37,9 +42,11 @@ from fieldclub.terrain.cog import COG_FORMAT
 from fieldclub.terrain.mirror import Fetcher, LocalSourceFetcher, Mirror, SftpFetcher, mirror_store
 from fieldclub.terrain.national import NationalStore
 from fieldclub.terrain.overview import Overview, overview_edition
+from fieldclub.terrain.prefetch import Prefetcher
 from fieldclub.terrain.render import Selection, TileRenderer, tile_version
 from fieldclub.terrain.sources import mirror_source
 from fieldclub.terrain.styles import FINE_MINZOOM
+from fieldclub.terrain.workers import TileWorkers
 
 logger = logging.getLogger(__name__)
 
@@ -88,10 +95,27 @@ class TerrainStatus:
     overview: OverviewStatus
 
 
+# Where a point's height came from: the 1 m data; the overview, or nothing, while the 1 m tile
+# there is being prepared; or nowhere, outside the 1 m data.
+HeightStatus = Literal["ready", "preparing", "none"]
+
+
+@dataclass(frozen=True)
+class PointHeight:
+    # Metres, or None where nothing has a height for the point.
+    elevation: float | None
+    status: HeightStatus
+
+
 class Terrain:
-    def __init__(self, mirror: Mirror, overview: Overview, storage: Storage) -> None:
+    def __init__(
+        self, mirror: Mirror, overview: Overview, storage: Storage, *, prefetch: Prefetcher | None = None
+    ) -> None:
+        """With `prefetch`, map tiles and profiles never wait for a tile to be added to the mirror."""
+        assert prefetch is None or prefetch.mirror is mirror, "the prefetcher must fill this mirror"
         self.mirror = mirror
-        self.fine = mirror_source(mirror)
+        self.prefetch = prefetch
+        self.fine = mirror_source(mirror, prefetch=prefetch)
         self.fine_mirrored = mirror_source(mirror, fetch=False)
         self.overview = overview
         self.renderer = TileRenderer(self.select, storage, editions=self.editions)
@@ -151,17 +175,30 @@ class Terrain:
 
     def elevation_at(self, lon: float, lat: float) -> float | None:
         """Ground height in metres, or None where there is none. Never fetches."""
+        return self.height_at(lon, lat).elevation
+
+    def height_at(self, lon: float, lat: float) -> PointHeight:
+        """Ground height in metres, and whether the 1 m data gave it. Never fetches, even behind."""
         try:
             system, easting, northing = to_grid(lon, lat)
         except GridRefError:
-            return None
+            return PointHeight(None, "none")
         if system is not GridSystem.OSGB:
-            return None
+            return PointHeight(None, "none")
         eastings, northings = np.array([easting]), np.array([northing])
         value = float(self.fine_mirrored.sample(eastings, northings, FINE_RESOLUTION_M)[0])
-        if math.isnan(value):
-            value = float(self.overview.snapshot().sample(eastings, northings)[0])
-        return None if math.isnan(value) else round(value, 2)
+        if not math.isnan(value):
+            return PointHeight(round(value, 2), "ready")
+        covering = self.catalogue.covering((easting, northing, easting, northing))
+        status: HeightStatus = (
+            "preparing" if any(not self.mirror.has(tile.name) for tile in covering) else "none"
+        )
+        value = float(self.overview.snapshot().sample(eastings, northings)[0])
+        return PointHeight(None if math.isnan(value) else round(value, 2), status)
+
+    def mirrored(self) -> frozenset[str]:
+        """The 5 km tiles in the mirror now, as listed at most once a minute."""
+        return self.overview.mirrored()
 
     def profile(self, coordinates: list[tuple[float, float]], samples: int) -> Profile:
         """Heights at `samples` evenly spaced points along a line of WGS84 positions."""
@@ -231,16 +268,32 @@ def national_store(settings: Settings) -> NationalStore:
     return NationalStore(folder(settings.terrain_path(settings.terrain_national)))
 
 
-def build_terrain(settings: Settings | None = None, *, storage: Storage | None = None) -> Terrain:
+def build_terrain(
+    settings: Settings | None = None, *, storage: Storage | None = None, background: bool = True
+) -> Terrain:
+    """The terrain service. `background` (the API's) adds missing tiles without waiting for them.
+
+    The commands pass `background=False`, so they fetch what they read in the foreground.
+    """
     settings = settings or get_settings()
     mirror = build_mirror(settings)
-    return Terrain(mirror, Overview(mirror, national_store(settings)), storage or get_storage("tiles"))
+    prefetch = Prefetcher(mirror, settings.terrain_fetch_concurrency) if background else None
+    return Terrain(
+        mirror, Overview(mirror, national_store(settings)), storage or get_storage("tiles"), prefetch=prefetch
+    )
 
 
 @lru_cache(maxsize=1)
 def get_terrain() -> Terrain:
     """The process's terrain service. A FastAPI dependency, so tests can override it."""
     return build_terrain()
+
+
+@lru_cache(maxsize=1)
+def get_tile_workers() -> TileWorkers:
+    """The process's threads for drawing terrain tiles. A FastAPI dependency, so tests can override it."""
+    settings = get_settings()
+    return TileWorkers(settings.terrain_render_workers, settings.terrain_render_queue)
 
 
 def default_editions() -> tuple[str, str]:

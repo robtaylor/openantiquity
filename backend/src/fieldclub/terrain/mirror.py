@@ -319,6 +319,10 @@ class Mirror:
         assert self.has(tile.name), f"{tile.name} should be in the mirror now"
         return self.store.gdal_path(tile.name)
 
+    def refuse_if_failed(self, name: str) -> None:
+        """Raise `ElevationUnavailableError` for a tile that couldn't be added lately, as `ensure` would."""
+        self._refuse_if_failed(normalise_name(name))
+
     def _refuse_if_failed(self, name: str) -> None:
         """Raise `ElevationUnavailableError` when this process or the folder says the tile failed lately."""
         until = self._failed.get(name)

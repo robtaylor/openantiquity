@@ -175,8 +175,16 @@ class Settings(BaseSettings):
     # The national overview for zoom 12 and below, built from the mirror by
     # `fieldclub-terrain national build`: a local folder or `gs://bucket/prefix`.
     terrain_national: str = ""
-    # Downloads from the bulk supply that may run at once in one process.
+    # Downloads from the bulk supply that may run at once in one process. A map
+    # tile or a profile never waits for one: missing tiles are added in the
+    # background on a pool of this many threads (`terrain/prefetch.py`).
     terrain_fetch_concurrency: int = Field(default=2, ge=1, le=8)
+    # Terrain map tiles drawn at once in one process, on threads of their own,
+    # and how many more may wait for a turn before a tile is answered 503
+    # `tiles_busy` (`terrain/workers.py`). Tiles never use the thread pool the
+    # rest of the API runs on.
+    terrain_render_workers: int = Field(default=4, ge=1, le=32)
+    terrain_render_queue: int = Field(default=64, ge=0, le=1000)
     # A mirror in a bucket is filled under a lock object per tile, which its
     # holder rewrites every quarter of this. One not rewritten for this long is
     # taken to be left by a process that died. Kept below the wait.

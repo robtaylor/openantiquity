@@ -2,7 +2,10 @@
 
 One square per 5 km source tile in the catalogue, with the edition, its
 resolution and the years the surveys behind it were flown (`years.py`). A
-tile the survey index doesn't reach has an empty list of years.
+tile the survey index doesn't reach has an empty list of years. `mirrored`
+says whether the tile is in the elevation mirror yet: where it isn't, the map
+is told `elevation_preparing` the first time it asks for 1 m tiles there,
+and can say the area is being prepared.
 """
 
 from __future__ import annotations
@@ -51,20 +54,33 @@ def _features(catalogue: Catalogue) -> tuple[tuple[dict[str, Any], tuple[float, 
     return tuple(found)
 
 
-def coverage_edition(catalogue: Catalogue) -> str:
-    """Changes whenever the coverage could: the catalogue's edition or the capture years."""
-    return hashlib.sha256(f"{catalogue.edition}/{years_edition()}".encode()).hexdigest()[:16]
+def coverage_edition(catalogue: Catalogue, mirrored: frozenset[str] = frozenset()) -> str:
+    """Changes whenever the coverage could: the catalogue's edition, the capture years or the mirror."""
+    held = ",".join(sorted(name for name in mirrored if catalogue.get(name) is not None))
+    return hashlib.sha256(f"{catalogue.edition}/{years_edition()}/{held}".encode()).hexdigest()[:16]
 
 
-def coverage(catalogue: Catalogue, bbox: tuple[float, float, float, float] | None = None) -> dict[str, Any]:
-    """A FeatureCollection of the tiles that touch a WGS84 box, or of all of them."""
+def coverage(
+    catalogue: Catalogue,
+    bbox: tuple[float, float, float, float] | None = None,
+    mirrored: frozenset[str] = frozenset(),
+) -> dict[str, Any]:
+    """A FeatureCollection of the tiles that touch a WGS84 box, or of all of them.
+
+    Each says whether `mirrored`, the tiles in the elevation mirror, holds it.
+    """
     if bbox is None:
-        features = [feature for feature, _ in _features(catalogue)]
+        found = [feature for feature, _ in _features(catalogue)]
     else:
         west, south, east, north = bbox
-        features = [
+        found = [
             feature
             for feature, (fw, fs, fe, fn) in _features(catalogue)
             if fw <= east and fe >= west and fs <= north and fn >= south
         ]
+    # The cached features are shared, so each answer gets properties of its own.
+    features = [
+        {**feature, "properties": {**feature["properties"], "mirrored": feature["id"] in mirrored}}
+        for feature in found
+    ]
     return {"type": "FeatureCollection", "edition": catalogue.edition, "features": features}

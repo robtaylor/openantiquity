@@ -31,6 +31,38 @@ class SourceUnreadableError(DataIntegrityError):
     """Every copy of a source tile that could be found was the right size but couldn't be decoded."""
 
 
+# How long a map or a profile is told to wait before asking again for elevation being added to the
+# mirror. A 5 km tile takes from 13 seconds to three minutes to fetch and convert.
+PREPARING_RETRY_S = 20
+
+
+class ElevationPreparingError(AppError):
+    """Elevation for the area is being added to the mirror in the background. Nothing waited for it.
+
+    `details.tiles` names the 5 km tiles still missing. The answer carries
+    `Retry-After`, and like every error it is sent `no-cache`.
+    """
+
+    status_code = 503
+    code = "elevation_preparing"
+    message = "Elevation for this area is being prepared. Try again in a minute."
+
+    def __init__(self, tiles: list[str], retry_after_s: int = PREPARING_RETRY_S) -> None:
+        assert tiles, "something must be missing for an area to be being prepared"
+        super().__init__(details={"tiles": tiles}, headers={"Retry-After": str(retry_after_s)})
+
+
+class TilesBusyError(AppError):
+    """Every slot for drawing terrain tiles is taken and the queue for them is full."""
+
+    status_code = 503
+    code = "tiles_busy"
+    message = "The map is busy. Try again in a moment."
+
+    def __init__(self) -> None:
+        super().__init__(headers={"Retry-After": "1"})
+
+
 class ReadTooLargeError(AppError):
     """A read would cover far more ground than any tile or profile does. A bug, refused before any fetch."""
 

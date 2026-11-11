@@ -12,6 +12,7 @@ from fieldclub.gridref import GridRefError, to_gridref
 from fieldclub.models import Source
 from fieldclub.schemas.records import SourceRef, source_ref
 from fieldclub.services.geo import locality_sources, locate, nearest_place
+from fieldclub.terrain.service import HeightStatus
 
 router = APIRouter(prefix="/geo", tags=["geo"])
 
@@ -38,6 +39,11 @@ class GeoPoint(BaseModel):
     county: str | None
     # Ground height in metres, or null where there is no elevation data.
     elevation: float | None
+    # `ready` when the height is from the 1 m data. `preparing` while the 1 m
+    # data for this spot exists but isn't in the mirror yet: the height, if
+    # any, is the national overview's, to the nearest 8 m cell. `none` outside
+    # the 1 m data. This read never waits for data, nor starts fetching it.
+    elevation_status: HeightStatus
     # The boundary sources that gave the nation and county, whose attribution goes with them.
     sources: list[SourceRef]
     # The nearest settlement within 10 km, or null.
@@ -70,13 +76,15 @@ def point(
     except GridRefError:
         grid_ref = None
     place = locate(db, lon, lat)
+    height = terrain.height_at(lon, lat)
     return GeoPoint(
         lon=lon,
         lat=lat,
         grid_ref=grid_ref,
         nation=place.nation,
         county=place.county,
-        elevation=terrain.elevation_at(lon, lat),
+        elevation=height.elevation,
+        elevation_status=height.status,
         sources=[source_ref(source) for source in locality_sources(db, place)],
         place=_nearby(db, lon, lat),
     )

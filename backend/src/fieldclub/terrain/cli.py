@@ -478,7 +478,7 @@ def main(argv: list[str] | None = None, *, terrain: Terrain | None = None) -> in
             return 1
         print(f"sources rows written: {', '.join(keys)}")
     try:
-        return COMMANDS[args.command](terrain or build_terrain(), args)
+        return COMMANDS[args.command](terrain or build_terrain(background=False), args)
     except AppError as exc:
         print(f"error: {exc.message}", file=sys.stderr)
         return 1
