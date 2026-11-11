@@ -57,7 +57,18 @@ Sub-questions, cheapest first. A later one is only attempted if the earlier ones
 
 ## Findings
 
-(Filled in as the spike runs.)
+- 2026-11-11: the owner made the Fly organisation `openantiquity`. The spike's resources are in it: the app `openantiquity-spike` with no public address, the Managed Postgres cluster `openantiquity-spike` (Basic plan, 10 GB, London) and the Tigris bucket `openantiquity-spike-mirror`. Creating the bucket accepted Tigris's terms of service on the owner's behalf, which the owner was told afterwards.
+- 2026-11-11, Q1: moot. `fly mpg create` offers PostgreSQL 16 and 17, and the spike's cluster runs 17.11. Fly's documentation page still describes 16.
+- 2026-11-11, Q2 step 1: Tigris passed every check, run from a machine in London with boto3 1.44. A second create-only write was refused with 412 and the first value kept. Of twelve writers racing to create one object, exactly one won, three times out of three. A replace and a delete carrying a stale tag were each refused with 412, and a delete with the current tag removed the object. Forty writes were each read back at once with no stale read, and 25 new objects were all listed at once.
+- 2026-11-11, Q2 step 2: GDAL 3.12.2 read a real 24 MB elevation tile (LERC_ZSTD, 512-pixel blocks, three overviews) through `/vsis3/` with `AWS_S3_ENDPOINT` set to Tigris and virtual hosting off. One 512-pixel window took 38 ms at the median and 216 ms at worst, against 7 ms from local disk. A 64 KB range of an 8 MB object took 20 ms at the median. No figure from Google Cloud Storage was taken to compare.
+- 2026-11-11, Q2 step 3: the bucket accepted a rule that expires objects under a prefix after a number of days. Whether objects are then removed on time wasn't waited for.
+- 2026-11-11, Q3 step 1: the app's login is not a superuser. It created `pg_trgm` and `citext` itself and was refused `postgis`. After `fly mpg databases extensions enable postgis`, PostGIS 3.6.4 was there, and the login made a table with a geometry column and a GiST index.
+- 2026-11-11, Q3 step 2: the connection string Fly attaches to an app points at `pgbouncer.<cluster>.flympg.net`. A `LISTEN` on it received nothing. The same string with `direct` in place of `pgbouncer` delivered the notification. A session advisory lock survived commits on both, which on the pooled one may have been luck.
+- 2026-11-11, Q3 step 3: `max_connections` is 112 on the Basic plan, and sixty connections from one machine were all accepted.
+- 2026-11-11, Q3 step 4: Managed Postgres is offered in London (`lhr`) and Amsterdam, not Paris. Backups and a restore weren't tried.
+- 2026-11-11: one `fly deploy` failed after the image was pushed, with an internal error from Fly's machines API, and worked when run again.
+- 2026-11-11, Q5 step 1: not run. Putting Defra's login into Fly's secret store needs the owner's say-so first.
+- Q4, Q5 steps 2 to 4 and Q6: not yet run.
 
 ## Outcome
 
