@@ -70,6 +70,19 @@ export function Dialog({ open, onClose, title, children, actions, className }: D
     };
   }, [open]);
 
+  // A dialog taken out of the page while open is also closed first, so the
+  // browser puts focus back where it was, as it does when one is closed.
+  // Without it, a real browser drops focus to the page when a modal dialog
+  // that holds focus is removed, after the effect above has moved it
+  // (e2e/people.spec.ts, "a comment is reported…").
+  useLayoutEffect(
+    () => () => {
+      const dialog = ref.current;
+      if (dialog?.open && typeof dialog.close === "function") dialog.close();
+    },
+    [],
+  );
+
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
