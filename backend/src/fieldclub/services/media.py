@@ -183,19 +183,23 @@ def may_see_media(media: Media, viewer: User | None) -> bool:
 def may_fetch_media(db: Session, media: Media, viewer: User | None) -> bool:
     """Whether `viewer` may download the photo itself, through `GET /media/{id}`.
 
-    `may_see_media`, and for anyone but its uploader and moderators also:
-    the uploader isn't banned, and every finding the photo is attached to is
-    one this viewer may open and whose exact position they see. A photo of a
-    protected site shows where it is as well as a grid reference does, so
-    finding pages already leave it out for those viewers (Decision 0005).
+    `may_see_media`, and the uploader hasn't deleted their account, and for
+    anyone but the uploader and moderators also: the uploader isn't banned,
+    and every finding the photo is attached to is one this viewer may open
+    and whose exact position they see. A photo of a protected site shows
+    where it is as well as a grid reference does, so finding pages already
+    leave it out for those viewers (Decision 0005).
     """
     if not may_see_media(media, viewer):
         return False
     active = active_viewer(viewer)
+    uploader = db.get(User, media.user_id)
+    if uploader is None or uploader.is_deleted:
+        # A deleted account's photo is kept only to block the image, and its file has gone.
+        return False
     if active is not None and (active.has_id(media.user_id) or is_moderator(active)):
         return True
-    uploader = db.get(User, media.user_id)
-    if uploader is None or uploader.is_banned:
+    if uploader.is_banned:
         return False
     attached = db.execute(
         select(Evidence.hidden_at, Finding)
@@ -435,23 +439,34 @@ def upload(db: Session, user: User, raw: bytes, *, storage: Storage | None = Non
     return media
 
 
-def forget_account(db: Session, user: User, *, storage: Storage | None = None) -> int:
-    """Delete every photo a person uploaded, file and row, when they delete their account.
+def forget_account(db: Session, user: User) -> list[str]:
+    """Delete the photos a person uploaded when they delete their account. The caller commits.
 
     A photo is personal data, unlike the evidence it was attached to, which
-    stays without it (`evidence.media_id` is set to null). The caller commits.
-    Returns how many photos went.
+    stays without it (`evidence.media_id` is set to null). The row of a photo
+    that was refused or hidden stays, because those rows are what refuse the
+    same image when anyone uploads it again (`_blocked`). It stays credited to
+    the anonymised account, like the rest of what moderation keeps, and
+    nobody can download it any more (`may_fetch_media`).
+
+    Returns the storage keys of every photo the person uploaded. The caller
+    deletes those files with `delete_files` once the transaction has
+    committed, so that a rollback never leaves a row without its file.
     """
     photos = db.scalars(select(Media).where(Media.user_id == user.id).with_for_update()).all()
-    keys = [photo.storage_key for photo in photos]
     for photo in photos:
-        db.delete(photo)
+        if photo.rejected_at is None and photo.hidden_at is None:
+            db.delete(photo)
     db.flush()
+    return [photo.storage_key for photo in photos]
+
+
+def delete_files(keys: list[str], *, storage: Storage | None = None) -> None:
+    """Delete stored photo files, after the rows that named them have gone or been committed."""
     storage = storage or media_storage()
     for key in keys:
         # A refused photo's file has gone already, and deleting a missing file is harmless.
         storage.delete(key)
-    return len(keys)
 
 
 # --------------------------------------------------------------------------

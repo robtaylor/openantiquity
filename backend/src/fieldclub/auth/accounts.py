@@ -139,14 +139,14 @@ def dev_user(
     return user
 
 
-def delete_account(db: Session, user: User, *, now: datetime | None = None) -> None:
+def delete_account(db: Session, user: User, *, now: datetime | None = None) -> list[str]:
     """Delete an account at its owner's request. The caller commits.
 
     Personal data goes: the email address, the provider identities, the
     sessions and any unused sign-in links, the bio, settings and picture,
     the person's follows and notifications, which were only ever for them to
-    read, and every photo they uploaded, file and row. Their private
-    investigations go too, and their memberships and invitations elsewhere
+    read, and every photo they uploaded. Their private investigations go
+    too, and their memberships and invitations elsewhere
     (`investigations.forget_account`).
 
     The public record of their contributions stays, because it was published
@@ -160,6 +160,12 @@ def delete_account(db: Session, user: User, *, now: datetime | None = None) -> N
 
     Role, reputation and its itemised events are kept, because they set the
     weight of what the person contributed. Nobody else can read the events.
+
+    A photo's row goes, except when it was refused or hidden: that row keeps
+    the same image from being uploaded again (`media.forget_account`).
+    Returns the storage keys of the person's photo files, which the caller
+    deletes with `media.delete_files` after committing, so that a failure
+    here or in the commit never leaves a row whose file has gone.
     """
     assert user.id is not None, "the user must be flushed before it can be deleted"
     assert not user.is_deleted, f"user {user.id} is already deleted"
@@ -176,8 +182,8 @@ def delete_account(db: Session, user: User, *, now: datetime | None = None) -> N
     db.execute(delete(Notification).where(Notification.user_id == user.id))
     # Private investigations go; shared ones pass to an editor (see `forget_account`).
     investigations.forget_account(db, user)
-    # A photo is personal data: its file and row go, and the evidence it was on stays without it.
-    media.forget_account(db, user)
+    # A photo is personal data: the evidence it was on stays without it.
+    files = media.forget_account(db, user)
 
     user.email = None
     user.email_verified_at = None
@@ -188,6 +194,7 @@ def delete_account(db: Session, user: User, *, now: datetime | None = None) -> N
     user.deleted_at = now
     _anonymise_handle(db, user)
     db.flush()
+    return files
 
 
 def _anonymise_handle(db: Session, user: User) -> None:

@@ -54,6 +54,7 @@ from fieldclub.schemas.auth import (
     MeUpdate,
     Welcome,
 )
+from fieldclub.services import media
 from fieldclub.vocab import SignInProvider
 
 logger = logging.getLogger(__name__)
@@ -159,8 +160,9 @@ def delete_me(response: Response, user: CurrentUser, db: Db) -> None:
     Your email address, sign-in identities and sessions are removed. What you
     contributed stays, credited to "Former member".
     """
-    accounts.delete_account(db, user)
+    files = accounts.delete_account(db, user)
     db.commit()
+    media.delete_files(files)
     cookies.clear_session_cookie(response)
 
 
