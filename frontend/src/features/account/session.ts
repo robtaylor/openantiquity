@@ -112,10 +112,21 @@ export function signedOut(client: QueryClient): void {
 }
 
 /**
- * What tells one account from another, for as long as it exists. The handle
- * can change, so it is when the account was made. (`Me` has no id.)
+ * What tells one account from another, for as long as it exists: the
+ * person's own id, which never changes (docs/ARCHITECTURE.md, "Accounts").
+ * Prefixed, so it can never be taken for the creation time that drafts were
+ * once keyed to (`formerAccountIdentity`).
  */
 export function accountIdentity(me: Me): string {
+  return `person:${me.id}`;
+}
+
+/**
+ * What told accounts apart before `Me` carried an id: when the account was
+ * made. Drafts kept under it are moved to `accountIdentity` when the person
+ * signs in (`adoptFormerDrafts`).
+ */
+export function formerAccountIdentity(me: Me): string {
   return me.created_at;
 }
 
@@ -197,7 +208,7 @@ export function useSessionSync(handlers: SessionSyncHandlers = {}): void {
   }, [client]);
 
   // Whenever the person changes, what the viewer may see changes with them.
-  // A new handle is the same person, so it is told apart by when the account was made.
+  // A new handle is the same person, so it is told apart by the account's id.
   useEffect(() => {
     const identity = (me: Me | null | undefined): string | null | undefined =>
       me === undefined ? undefined : me === null ? null : accountIdentity(me);

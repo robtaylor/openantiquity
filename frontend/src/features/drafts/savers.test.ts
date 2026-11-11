@@ -24,8 +24,8 @@ import {
 } from "./store.js";
 
 /** The signed-in person, by `accountIdentity`. */
-const ME = "2026-11-01T09:00:00Z";
-const SOMEONE_ELSE = "2026-10-01T09:00:00Z";
+const ME = "person:42";
+const SOMEONE_ELSE = "person:7";
 
 /** A kind of draft no feature has: proof that the machinery works for any kind. */
 const PROBE = "probe";

@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  adoptFormerDrafts,
   adoptSignedOutDrafts,
   DRAFTS_STORAGE_KEY,
   DRAFTS_UNREADABLE_KEY,
@@ -73,6 +74,24 @@ describe("putDraft and listDrafts", () => {
     const setItem = vi.spyOn(Storage.prototype, "setItem");
     expect(adoptSignedOutDrafts("account-a")).toBe(0);
     expect(setItem).not.toHaveBeenCalled();
+  });
+
+  it("moves drafts kept under an account's former identity to its id, and no one else's", () => {
+    // Drafts were once keyed to when the account was made. The person's id replaces it at sign-in.
+    setDraftsViewer("2026-11-01T10:00:00Z");
+    putDraft("finding", { n: 1 });
+    setDraftsViewer("2026-10-01T09:00:00Z");
+    putDraft("finding", { n: 2 });
+    setDraftsViewer(null);
+    expect(adoptFormerDrafts("2026-11-01T10:00:00Z", "person:42")).toBe(1);
+    expect(listDrafts().map((draft) => draft.owner)).toEqual([
+      { account: "person:42" },
+      { account: "2026-10-01T09:00:00Z" },
+    ]);
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+    expect(adoptFormerDrafts("2026-11-01T10:00:00Z", "person:42")).toBe(0);
+    expect(setItem).not.toHaveBeenCalled();
+    setItem.mockRestore();
   });
 
   it("replaces a draft given its id, keeping when it was made", () => {

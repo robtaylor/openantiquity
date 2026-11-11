@@ -19,7 +19,9 @@
  *     discardDraft(id)
  *
  * Whose a draft is. A browser can be shared, so each draft records who made
- * it: `{account}` for someone signed in (`setDraftsViewer`), or
+ * it: `{account}` for someone signed in (`setDraftsViewer`), by the
+ * account's id (drafts kept under the creation time it was once known by
+ * are moved to the id at sign-in, `adoptFormerDrafts`), or
  * `{signedOut: epoch}` for someone who wasn't. The epoch is a random value
  * kept with the drafts. When someone signs in, the signed-out drafts of the
  * current epoch become theirs (`adoptSignedOutDrafts`) and a new epoch
@@ -39,7 +41,7 @@
  */
 
 import { useMemo, useSyncExternalStore } from "react";
-import { isRecord } from "../../api/guards.js";
+import { isRecord, isStringArray } from "../../api/guards.js";
 
 export const DRAFTS_STORAGE_KEY = "fieldclub.drafts";
 /** Unreadable stores are copied aside under this prefix, one key per copy. */
@@ -69,6 +71,8 @@ export interface DraftFailure {
   code: string;
   /** Plain words, for the person. */
   message: string;
+  /** The fields the refusal named, such as `body.title`, so a form can say it beside them. */
+  fields?: string[];
 }
 
 export interface Draft {
@@ -153,6 +157,7 @@ function readDraft(value: unknown): Draft | null {
       isRecord(failure) && typeof failure.code === "string" && typeof failure.message === "string"
         ? { code: failure.code, message: failure.message }
         : { code: "unknown", message: "This draft couldn't be saved." };
+    if (isRecord(failure) && isStringArray(failure.fields)) draft.failure.fields = failure.fields;
   }
   if (draft.state === "saving") {
     if (isRecord(claim) && typeof claim.tab === "string" && typeof claim.at === "number") {
@@ -536,6 +541,26 @@ export function adoptSignedOutDrafts(account: string): number {
     return taken;
   });
   return adopted;
+}
+
+/**
+ * `account` has just signed in, and drafts may be kept under `former`, the
+ * identity this account had before drafts were keyed to its id: they become
+ * `account`'s. Returns how many moved. Nothing is written when none did.
+ */
+export function adoptFormerDrafts(former: string, account: string): number {
+  const isFormer = (draft: Draft): boolean =>
+    draft.owner !== null && "account" in draft.owner && draft.owner.account === former;
+  if (former === account || !readFreshDrafts().some(isFormer)) return 0;
+  let moved = 0;
+  updateDrafts((drafts) =>
+    drafts.map((draft) => {
+      if (!isFormer(draft)) return draft;
+      moved += 1;
+      return { ...draft, owner: { account } };
+    }),
+  );
+  return moved;
 }
 
 /** The person says these drafts are theirs: "Save as mine". */

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { toast } from "../../ui/toastStore.js";
 import { isDue, onDraftsSaved, saveWaitingDrafts, useSaversVersion, withDraftsLock } from "./savers.js";
-import { adoptSignedOutDrafts, setDraftsViewer, useDrafts } from "./store.js";
+import { adoptFormerDrafts, adoptSignedOutDrafts, setDraftsViewer, useDrafts } from "./store.js";
 import { useDraftsUi } from "./uiStore.js";
 
 function plural(count: number, one: string, many: string): string {
@@ -14,13 +14,14 @@ function plural(count: number, one: string, many: string): string {
  * they are through the welcome step. Mounted once, by the account layer.
  *
  * New drafts are stamped with `account`. When someone signs in, the drafts
- * made signed out just before become theirs. While `ready`, every waiting
+ * made signed out just before become theirs, and so do drafts kept under
+ * `former`, the identity their account had before drafts were keyed to its id. While `ready`, every waiting
  * draft of theirs that has a saver is saved, and they are told what happened.
  * Anyone else's drafts wait to be asked about in the drafts bar. It runs
  * again when a draft or a saver arrives, and each run reports once however
  * many times React runs the effect.
  */
-export function useDraftAutoSave(account: string | null, ready: boolean): void {
+export function useDraftAutoSave(account: string | null, ready: boolean, former: string | null = null): void {
   const drafts = useDrafts();
   const saversVersion = useSaversVersion();
   // Worked out each render: a saver arriving re-renders through `useSaversVersion`.
@@ -28,8 +29,12 @@ export function useDraftAutoSave(account: string | null, ready: boolean): void {
 
   useEffect(() => {
     setDraftsViewer(account);
-    if (account !== null) void withDraftsLock(async () => adoptSignedOutDrafts(account));
-  }, [account]);
+    if (account === null) return;
+    void withDraftsLock(async () => {
+      if (former !== null) adoptFormerDrafts(former, account);
+      adoptSignedOutDrafts(account);
+    });
+  }, [account, former]);
 
   useEffect(
     () =>

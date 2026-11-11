@@ -180,7 +180,11 @@ const STORAGE_FULL: DraftFailure = {
 };
 
 function failureFrom(error: unknown): DraftFailure {
-  if (error instanceof ApiError) return { code: error.code, message: error.message };
+  if (error instanceof ApiError) {
+    const failure: DraftFailure = { code: error.code, message: error.message };
+    if (error.fields.length > 0) failure.fields = error.fields.map((problem) => problem.field);
+    return failure;
+  }
   return { code: "save_failed", message: "Something went wrong while saving it." };
 }
 

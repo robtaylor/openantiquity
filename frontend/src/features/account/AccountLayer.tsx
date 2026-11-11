@@ -6,7 +6,7 @@ import { SIGNIN_ERROR_PARAM, withoutSigninError } from "./next.js";
 import { useAccountUi } from "./requireAccount.js";
 import { currentMapHash } from "./returnPath.js";
 import { SignInSheet } from "./SignInSheet.js";
-import { accountIdentity, useSession, useSessionSync } from "./session.js";
+import { accountIdentity, formerAccountIdentity, useSession, useSessionSync } from "./session.js";
 import { WelcomeSheet } from "./WelcomeSheet.js";
 
 /**
@@ -51,7 +51,7 @@ export function AccountLayer({ meta }: { meta: Meta }) {
     if (needsWelcome && sheet === null && !welcomeDismissed) useAccountUi.getState().openWelcome();
   }, [needsWelcome, sheet, welcomeDismissed]);
 
-  useDraftAutoSave(me === null ? null : accountIdentity(me), ready);
+  useDraftAutoSave(me === null ? null : accountIdentity(me), ready, me === null ? null : formerAccountIdentity(me));
 
   return (
     <>

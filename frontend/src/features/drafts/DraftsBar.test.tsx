@@ -116,6 +116,19 @@ describe("the drafts bar", () => {
     expect(screen.queryByRole("region", { name: "Drafts" })).toBeNull();
   });
 
+  it("saves, without asking, the person's drafts kept from before drafts were keyed to their id", async () => {
+    const me = meFixture();
+    routeApi(harness.fetchMock(), { "GET /auth/me": () => json(me) });
+    // An earlier build kept the signed-in person's drafts under when their account was made.
+    setDraftsViewer(me.created_at);
+    putDraft(PROBE, { note: "kept" });
+    setDraftsViewer(null);
+    renderApp();
+    expect(await screen.findByText("Your draft is saved.")).toBeInTheDocument();
+    expect(saved).toEqual(["kept"]);
+    expect(listDrafts()).toEqual([]);
+  });
+
   it("asks before saving drafts someone else left in this browser", async () => {
     routeApi(harness.fetchMock(), { "GET /auth/me": () => json(meFixture()) });
     // Someone else signed in here, made a draft, and their session ran out.
