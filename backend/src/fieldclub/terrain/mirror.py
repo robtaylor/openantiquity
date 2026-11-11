@@ -17,30 +17,41 @@ checking it and publishing it under its final name. So:
   its `stale_after_s`;
 - a partial download or conversion is never published, because only a
   complete, checked COG is moved or uploaded to the final name;
-- a source file GDAL can't read is set aside (a local one renamed with
-  `UNREADABLE_SUFFIX`, a download deleted) and the next fetcher is tried.
+- a source file GDAL can't read, at its start or part-way through its data,
+  is set aside (a local one renamed with `UNREADABLE_SUFFIX`, a download
+  deleted) and the next fetcher is tried;
+- a tile that couldn't be added isn't fetched again for a while: requests for
+  it are answered `elevation_unavailable` at once. A tile whose every copy was
+  unreadable waits `UNREADABLE_RETRY_S`, recorded in the folder under
+  `failed/` so that every server sharing it waits too. One whose download
+  failed waits `FETCH_RETRY_S` in this process only. `ensure(...,
+  retry_failed=True)`, which the mirror command uses, tries it regardless.
 """
 
 from __future__ import annotations
 
 import contextlib
 import fcntl
+import json
 import logging
 import threading
 import time
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from rasterio.errors import RasterioError
-
-from fieldclub.errors import DataIntegrityError
 from fieldclub.terrain import sftp
 from fieldclub.terrain.blobs import Folder, GcsFolder, LocalFolder, ObjectLock, folder
 from fieldclub.terrain.catalogue import Catalogue, SourceTile, normalise_name
-from fieldclub.terrain.cog import COG_FORMAT, to_cog
-from fieldclub.terrain.errors import ElevationUnavailableError, SupplyRefusedError
+from fieldclub.terrain.cog import COG_FORMAT, UNREADABLE_ERRORS, to_cog
+from fieldclub.terrain.errors import (
+    ElevationUnavailableError,
+    FetchFailedError,
+    SourceUnreadableError,
+    SupplyRefusedError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +74,10 @@ class MirrorStore:
     @staticmethod
     def lock_name(name: str) -> str:
         return f"locks/{normalise_name(name)}.lock"
+
+    @staticmethod
+    def failure_name(name: str) -> str:
+        return f"failed/{normalise_name(name)}.json"
 
     def gdal_path(self, name: str) -> str:
         """What to hand GDAL to open a tile's COG."""
@@ -212,6 +227,12 @@ class SftpFetcher:
 
 # Added to the name of a source file on disk that GDAL couldn't read, so it isn't offered again.
 UNREADABLE_SUFFIX = ".unreadable"
+# How long a tile isn't fetched again after every copy of it was unreadable: a
+# corrupt file upstream is rarely replaced within the day, and each try
+# downloads 40 to 90 MB.
+UNREADABLE_RETRY_S = 6 * 3600.0
+# How long one process waits before fetching a tile again after its download failed.
+FETCH_RETRY_S = 300.0
 
 
 def _set_aside(fetched: Fetched) -> None:
@@ -234,6 +255,10 @@ class Mirror:
         max_fetches: int = 2,
         convert: Callable[[Path, Path], object] = to_cog,
         lock: ObjectLock | None = None,
+        unreadable_retry_s: float = UNREADABLE_RETRY_S,
+        fetch_retry_s: float = FETCH_RETRY_S,
+        clock: Callable[[], float] = time.monotonic,
+        now: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         assert max_fetches >= 1, "at least one fetch must be allowed"
         self.catalogue = catalogue
@@ -249,6 +274,12 @@ class Mirror:
         # Tiles once seen in the store. A mirror file is never removed, so this
         # saves asking a bucket again for every read.
         self._present: set[str] = set()
+        self._unreadable_retry_s = unreadable_retry_s
+        self._fetch_retry_s = fetch_retry_s
+        self._clock = clock
+        self._now = now
+        # Tiles this process failed to add, with the `clock` time before which they aren't tried again.
+        self._failed: dict[str, float] = {}
 
     @property
     def edition(self) -> str:
@@ -269,13 +300,18 @@ class Mirror:
         """The tile's GDAL path if the mirror holds it, without adding it."""
         return self.store.gdal_path(name) if self.has(name) else None
 
-    def ensure(self, name: str) -> str | None:
-        """The tile's GDAL path, adding it to the mirror first if needed. None when no such tile exists."""
+    def ensure(self, name: str, *, retry_failed: bool = False) -> str | None:
+        """The tile's GDAL path, adding it to the mirror first if needed. None when no such tile exists.
+
+        A tile that failed recently is refused without a fetch unless `retry_failed`.
+        """
         tile = self.catalogue.get(name)
         if tile is None:
             return None
         if self.has(tile.name):
             return self.store.gdal_path(tile.name)
+        if not retry_failed:
+            self._refuse_if_failed(tile.name)
         with self._tile_lock(tile.name):
             # Whoever held the lock before us may have added it.
             if not self.has(tile.name):
@@ -283,16 +319,56 @@ class Mirror:
         assert self.has(tile.name), f"{tile.name} should be in the mirror now"
         return self.store.gdal_path(tile.name)
 
+    def _refuse_if_failed(self, name: str) -> None:
+        """Raise `ElevationUnavailableError` when this process or the folder says the tile failed lately."""
+        until = self._failed.get(name)
+        if until is not None and self._clock() < until:
+            raise ElevationUnavailableError(f"{name} couldn't be added a short while ago.")
+        since = self._failed_since(name)
+        if since is not None:
+            age = (self._now() - since).total_seconds()
+            if age < self._unreadable_retry_s:
+                self._failed[name] = self._clock() + self._unreadable_retry_s - age
+                raise ElevationUnavailableError(f"Every copy of {name} was unreadable when last fetched.")
+
+    def _failed_since(self, name: str) -> datetime | None:
+        """When the folder's record says every copy of the tile was found unreadable, if it has one."""
+        data = self.store.folder.read(self.store.failure_name(name))
+        if data is None:
+            return None
+        try:
+            return datetime.fromisoformat(json.loads(data)["since"])
+        except (ValueError, KeyError, TypeError):
+            logger.warning("Ignoring the malformed failure record of %s", name)
+            return None
+
+    def _record_failure(self, name: str, exc: SourceUnreadableError | FetchFailedError) -> None:
+        unreadable = isinstance(exc, SourceUnreadableError)
+        wait = self._unreadable_retry_s if unreadable else self._fetch_retry_s
+        self._failed[name] = self._clock() + wait
+        if unreadable:
+            body = json.dumps({"tile": name, "since": self._now().isoformat(), "code": exc.code})
+            self.store.folder.write(self.store.failure_name(name), body.encode(), "application/json")
+        logger.warning("Not fetching %s again for %.0f s", name, wait)
+
     def _add_once(self, tile: SourceTile) -> None:
         """Add the tile, under the folder's lock when other machines share the mirror."""
-        if self._shared_lock is None:
-            self._add(tile)
-            return
-        lock_name = self.store.lock_name(tile.name)
-        with self._shared_lock.hold(lock_name, done=lambda: self.has(tile.name)) as held:
-            # Not held means another machine added it while this one waited.
-            if held and not self.has(tile.name):
+        try:
+            if self._shared_lock is None:
                 self._add(tile)
+            else:
+                lock_name = self.store.lock_name(tile.name)
+                with self._shared_lock.hold(lock_name, done=lambda: self.has(tile.name)) as held:
+                    # Not held means another machine added it while this one waited.
+                    if held and not self.has(tile.name):
+                        self._add(tile)
+        except SupplyRefusedError:
+            # The supply refused us, not this tile: `SftpFetcher` pauses every fetch instead.
+            raise
+        except (SourceUnreadableError, FetchFailedError) as exc:
+            self._record_failure(tile.name, exc)
+            raise
+        self._failed.pop(tile.name, None)
 
     def _add(self, tile: SourceTile) -> None:
         """Convert and publish the tile from the first source that has a readable copy."""
@@ -308,13 +384,16 @@ class Mirror:
             try:
                 try:
                     self._convert(fetched.path, staged)
-                except (RasterioError, DataIntegrityError) as exc:
+                except UNREADABLE_ERRORS as exc:
                     # The right size but not a raster GDAL can read: try the next source.
-                    logger.warning("%s from %s can't be read (%s)", tile.name, fetched.path, exc)
+                    logger.warning(
+                        "%s from %s can't be read (%s: %s)", tile.name, fetched.path, type(exc).__name__, exc
+                    )
                     unreadable += 1
                     _set_aside(fetched)
                     continue
                 self.store.publish(staged, tile.name)
+                self.store.folder.delete(self.store.failure_name(tile.name))
             finally:
                 staged.unlink(missing_ok=True)
                 if fetched.temporary:
@@ -323,7 +402,7 @@ class Mirror:
             logger.info("Added %s to the mirror in %.1f s", tile.name, time.perf_counter() - started)
             return
         if unreadable:
-            raise DataIntegrityError(f"Every copy of {tile.name} that could be found was unreadable.")
+            raise SourceUnreadableError(f"Every copy of {tile.name} that could be found was unreadable.")
         raise ElevationUnavailableError(f"No source could provide {tile.name}.")
 
     @contextlib.contextmanager

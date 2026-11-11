@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fieldclub.errors import AppError, UpstreamError
+from fieldclub.errors import AppError, DataIntegrityError, UpstreamError
 
 
 class ElevationUnavailableError(AppError):
@@ -25,6 +25,10 @@ class FetchFailedError(UpstreamError):
 
 class SupplyRefusedError(FetchFailedError):
     """The bulk supply refused the login or showed the wrong host key. Asking again won't help."""
+
+
+class SourceUnreadableError(DataIntegrityError):
+    """Every copy of a source tile that could be found was the right size but couldn't be decoded."""
 
 
 class ReadTooLargeError(AppError):

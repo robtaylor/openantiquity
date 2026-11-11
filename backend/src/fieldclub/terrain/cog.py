@@ -23,6 +23,7 @@ import numpy as np
 import rasterio
 import rasterio.shutil
 from affine import Affine
+from rasterio._err import CPLE_AppDefinedError, CPLE_NotSupportedError, CPLE_OpenFailedError
 from rasterio.errors import RasterioError
 from rasterio.transform import from_origin
 
@@ -34,6 +35,17 @@ BLOCK_SIZE = 512
 MAX_Z_ERROR_M = 0.01
 # Bumped when the encoding changes, because it changes the values read back.
 COG_FORMAT = "c1"
+# What GDAL raises for a file it can't decode. A decode error part-way through
+# the data is a `CPLE_AppDefinedError`, which isn't a `RasterioError`. Errors
+# of the machine rather than the file (out of memory, a full disk) are left
+# out, so they never get a good source set aside.
+UNREADABLE_ERRORS: tuple[type[Exception], ...] = (
+    RasterioError,
+    CPLE_AppDefinedError,
+    CPLE_OpenFailedError,
+    CPLE_NotSupportedError,
+    DataIntegrityError,
+)
 
 
 @lru_cache(maxsize=1)
@@ -101,8 +113,10 @@ def to_cog(
     tmp = dst.with_name(f".{dst.name}.{uuid.uuid4().hex[:8]}.tmp.tif")
     try:
         with rasterio.open(src) as source:
-            assert source.count == 1, f"{src} has {source.count} bands, expected one"
-            assert source.dtypes[0] == "float32", f"{src} is {source.dtypes[0]}, expected float32"
+            if source.count != 1:
+                raise DataIntegrityError(f"{src} has {source.count} bands, expected one.")
+            if source.dtypes[0] != "float32":
+                raise DataIntegrityError(f"{src} is {source.dtypes[0]}, expected float32.")
             shape = (source.height, source.width)
             transform = source.transform
         rasterio.shutil.copy(

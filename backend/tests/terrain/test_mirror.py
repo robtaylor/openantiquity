@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +17,12 @@ from fieldclub.errors import DataIntegrityError
 from fieldclub.terrain.blobs import GcsFolder, LocalFolder
 from fieldclub.terrain.catalogue import SourceTile
 from fieldclub.terrain.cog import check_cog
-from fieldclub.terrain.errors import CredentialsMissingError, ElevationUnavailableError, SupplyRefusedError
+from fieldclub.terrain.errors import (
+    CredentialsMissingError,
+    ElevationUnavailableError,
+    FetchFailedError,
+    SupplyRefusedError,
+)
 from fieldclub.terrain.mirror import (
     Fetched,
     GcsMirrorStore,
@@ -282,6 +288,149 @@ def test_a_tile_whose_every_copy_is_unreadable_is_a_data_integrity_error(
         mirror.ensure("SU16ne")
     assert str(tmp_path) not in raised.value.message
     assert not mirror.has("SU16ne")
-    # Set aside, so the next request doesn't convert it again.
+    # Set aside, so even a request that retries failed tiles doesn't convert it again.
     with pytest.raises(ElevationUnavailableError):
-        mirror.ensure("SU16ne")
+        mirror.ensure("SU16ne", retry_failed=True)
+
+
+def corrupt_inside(sources: Path, folder: Path, name: str) -> Path:
+    """A copy of the real source, the right size, whose header is sound and whose data isn't."""
+    real = sources / f"{name}_DTM_1m.tif"
+    data = bytearray(real.read_bytes())
+    third = len(data) // 3
+    data[third : 2 * third] = b"\x5a" * third
+    folder.mkdir(parents=True, exist_ok=True)
+    bad = folder / real.name
+    bad.write_bytes(bytes(data))
+    with rasterio.open(bad) as ds:
+        # It opens: only reading its blocks fails.
+        assert ds.count == 1
+    return bad
+
+
+def test_a_source_corrupt_part_way_through_its_data_is_set_aside_and_the_next_tried(
+    sources: Path, tmp_path: Path
+) -> None:
+    bad = corrupt_inside(sources, tmp_path / "local", "SU16nw")
+    mirror = make_mirror(sources, tmp_path, [LocalSourceFetcher(bad.parent), LocalSourceFetcher(sources)])
+    path = mirror.ensure("SU16nw")
+    assert path is not None
+    check_cog(path)
+    assert not bad.exists()
+    assert bad.with_name(bad.name + ".unreadable").is_file()
+
+
+def test_a_source_of_the_wrong_type_is_unreadable_not_an_assertion(sources: Path, tmp_path: Path) -> None:
+    folder = tmp_path / "local"
+    real = sources / "SU16nw_DTM_1m.tif"
+    folder.mkdir()
+    bad = folder / real.name
+    with rasterio.open(real) as src:
+        profile = src.profile | {"dtype": "int16", "nodata": None}
+        with rasterio.open(bad, "w", **profile) as out:
+            out.write(src.read(1).astype("int16"), 1)
+    catalogue = catalogue_of([bad])
+    mirror = Mirror(
+        catalogue, LocalMirrorStore(tmp_path / "mirror"), [LocalSourceFetcher(folder)], tmp_path / "w"
+    )
+    with pytest.raises(DataIntegrityError):
+        mirror.ensure("SU16nw")
+    assert bad.with_name(bad.name + ".unreadable").is_file()
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.t = 1000.0
+        self.at = datetime(2026, 11, 11, 12, tzinfo=UTC)
+
+    def monotonic(self) -> float:
+        return self.t
+
+    def now(self) -> datetime:
+        return self.at
+
+    def advance(self, seconds: float) -> None:
+        self.t += seconds
+        self.at += timedelta(seconds=seconds)
+
+
+class CorruptFetcher:
+    """Hands out a fresh corrupt download every time, as a server holding a bad file would."""
+
+    def __init__(self, sources: Path) -> None:
+        self.sources = sources
+        self.calls = 0
+
+    def fetch(self, tile: SourceTile, work_dir: Path) -> Fetched:
+        self.calls += 1
+        work_dir.mkdir(parents=True, exist_ok=True)
+        path = corrupt_inside(self.sources, work_dir / "download", tile.name)
+        return Fetched(path, temporary=True)
+
+
+def test_a_tile_whose_every_copy_was_unreadable_isnt_fetched_again_for_a_while(
+    sources: Path, tmp_path: Path
+) -> None:
+    clock = Clock()
+    fetcher = CorruptFetcher(sources)
+
+    def server() -> Mirror:
+        return local_mirror(
+            tmp_path, sources=sources, fetchers=[fetcher], clock=clock.monotonic, now=clock.now
+        )
+
+    mirror = server()
+    with pytest.raises(DataIntegrityError):
+        mirror.ensure("SU16nw")
+    assert fetcher.calls == 1
+    for _ in range(5):
+        with pytest.raises(ElevationUnavailableError) as raised:
+            mirror.ensure("SU16nw")
+        assert raised.value.code == "elevation_unavailable"
+    assert fetcher.calls == 1
+    # Another server sharing the folder reads the record and waits too.
+    other = server()
+    with pytest.raises(ElevationUnavailableError):
+        other.ensure("SU16nw")
+    assert fetcher.calls == 1
+    assert mirror.store.folder.exists("failed/SU16nw.json")
+    # An operator's retry fetches at once, and so does anyone once the wait is over.
+    with pytest.raises(DataIntegrityError):
+        mirror.ensure("SU16nw", retry_failed=True)
+    assert fetcher.calls == 2
+    clock.advance(6 * 3600 + 1)
+    with pytest.raises(DataIntegrityError):
+        other.ensure("SU16nw")
+    assert fetcher.calls == 3
+
+
+def test_a_tile_that_is_added_in_the_end_clears_its_failure_record(sources: Path, tmp_path: Path) -> None:
+    clock = Clock()
+    bad = CorruptFetcher(sources)
+    mirror = local_mirror(tmp_path, sources=sources, fetchers=[bad], clock=clock.monotonic, now=clock.now)
+    with pytest.raises(DataIntegrityError):
+        mirror.ensure("SU16nw")
+    mirror.fetchers[:] = [LocalSourceFetcher(sources)]
+    assert mirror.ensure("SU16nw", retry_failed=True) is not None
+    assert not mirror.store.folder.exists("failed/SU16nw.json")
+
+
+def test_a_failed_download_waits_in_this_process_only(sources: Path, tmp_path: Path) -> None:
+    clock = Clock()
+    # Every read fails, so each try is a new connection.
+    server = FakeServer({SourceTile("SU17sw", 0).remote_path: b"x" * 1_000}, stuck_at=0)
+    fetcher = SftpFetcher(lambda: server.connect, max_failures=1)
+    mirror = local_mirror(
+        tmp_path, sources=sources, extra=["SU17sw"], fetchers=[fetcher], clock=clock.monotonic, now=clock.now
+    )
+    with pytest.raises(FetchFailedError):
+        mirror.ensure("SU17sw")
+    connections = server.connections
+    with pytest.raises(ElevationUnavailableError):
+        mirror.ensure("SU17sw")
+    assert server.connections == connections
+    assert not mirror.store.folder.exists("failed/SU17sw.json")
+    clock.advance(301)
+    with pytest.raises(FetchFailedError):
+        mirror.ensure("SU17sw")
+    assert server.connections > connections
