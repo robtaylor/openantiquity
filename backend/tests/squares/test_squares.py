@@ -310,3 +310,26 @@ def test_coverage_needs_a_modest_box(client: TestClient, bbox: str, code: str) -
 
 def test_the_coverage_box_cap_is_about_50_km_square() -> None:
     assert 2400 < squares.area_km2((-1.75, 51.0, -1.03, 51.45)) < 2600
+
+
+def test_a_banned_accounts_surveys_stop_counting_until_the_ban_is_lifted(
+    db: Session, client: TestClient, make_user: MakeUser
+) -> None:
+    from fieldclub.services import moderation
+
+    banned, moderator = make_user(handle="Ringleader"), make_user("moderator")
+    survey(db, banned, HENGE)
+    survey(db, make_user(), "SU1170")
+
+    def scanned() -> dict[str, int]:
+        features = client.get(f"{API}/coverage", params={"bbox": "-1.9,51.4,-1.8,51.45"}).json()["features"]
+        return {feature["id"]: feature["properties"]["scans"] for feature in features}
+
+    assert scanned() == {HENGE: 1, "SU1170": 1}
+    moderation.ban(db, banned.handle, moderator, "Marking squares it never looked at.")
+    db.commit()
+    assert scanned() == {"SU1170": 1}
+    assert squares._survey_counts(db, [HENGE]) == {}
+    moderation.unban(db, banned.handle, moderator, "Appeal upheld.")
+    db.commit()
+    assert scanned() == {HENGE: 1, "SU1170": 1}

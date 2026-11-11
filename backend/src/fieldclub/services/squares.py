@@ -19,6 +19,11 @@ An empty square is a result. "Nothing obvious" is how the map shows that an
 area was looked at and not ignored, so it counts towards coverage as much as
 a square where something was marked. A skip doesn't count as a scan.
 
+A banned account's results stop counting while the ban lasts, in coverage
+and in the ranking of the next square (`counted_clause`), as its second
+looks do: a few accounts could otherwise mark a stretch of country as done.
+Lifting the ban counts them again.
+
 Coverage counts each person's result as they gave it. A square somebody
 marked stays marked after the finding marked there is hidden, withdrawn or
 deleted, because a survey keeps only how many findings were marked, not
@@ -48,7 +53,7 @@ import random
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 
-from sqlalchemy import Select, func, literal_column, select, text
+from sqlalchemy import ColumnElement, Select, func, literal_column, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -230,6 +235,12 @@ def _ring_squares(
     return found
 
 
+def counted_clause() -> ColumnElement[bool]:
+    """Surveys that count: those of accounts that aren't banned. See the module docstring."""
+    banned = select(User.id).where(User.banned_at.is_not(None))
+    return SquareSurvey.user_id.not_in(banned)
+
+
 def _survey_counts(db: Session, names: Sequence[str]) -> dict[str, tuple[int, int]]:
     """For each square, how many people have had it and how many have scanned it."""
     if not names:
@@ -240,7 +251,7 @@ def _survey_counts(db: Session, names: Sequence[str]) -> dict[str, tuple[int, in
             func.count(),
             func.count().filter(SquareSurvey.result != SurveyResult.SKIPPED.value),
         )
-        .where(SquareSurvey.square.in_(names))
+        .where(SquareSurvey.square.in_(names), counted_clause())
         .group_by(SquareSurvey.square)
     )
     return {square: (surveys, scans) for square, surveys, scans in rows}
@@ -388,7 +399,7 @@ def coverage_query(bbox: tuple[float, float, float, float]) -> Select[str, int, 
     marked = func.count().filter(SquareSurvey.result == SurveyResult.MARKED.value)
     return (
         select(SquareSurvey.square, scans, marked)
-        .where(func.ST_Intersects(SquareSurvey.geom, geo.envelope(bbox)))
+        .where(func.ST_Intersects(SquareSurvey.geom, geo.envelope(bbox)), counted_clause())
         .group_by(SquareSurvey.square)
         .having(scans > 0)
         .order_by(SquareSurvey.square)
