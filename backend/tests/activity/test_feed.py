@@ -85,9 +85,8 @@ def test_filters(db: Session, make_user: MakeUser, client: TestClient) -> None:
     near = create(db, ann)
     far = create(db, bob, lon=-2.5, lat=53.0)
     comment(db, near, bob)
+    # Making a public investigation records investigation_published itself.
     survey = investigation(db, ann)
-    activity.record(db, ActivityKind.INVESTIGATION_PUBLISHED, ann, investigation=survey)
-    db.commit()
 
     assert {item["kind"] for item in feed(client, kind="comment_added")} == {"comment_added"}
     two_kinds = feed(client, kind=["comment_added", "investigation_published"])
@@ -193,9 +192,11 @@ def test_only_public_investigations_appear(
     owner = make_user()
     for visibility in Visibility:
         made = investigation(db, owner, visibility)
-        activity.record(db, ActivityKind.INVESTIGATION_PUBLISHED, owner, investigation=made)
-        db.commit()
         if visibility is not Visibility.PUBLIC:
+            # The service records the event only for a public one. A stray row for any other
+            # must still never show.
+            activity.record(db, ActivityKind.INVESTIGATION_PUBLISHED, owner, investigation=made)
+            db.commit()
             for viewer in (client, client_as(owner), client_as(make_user("moderator"))):
                 response = viewer.get(f"{API}/activity", params={"investigation": made.public_id})
                 assert error_code(response) == "investigation_not_found"
