@@ -266,7 +266,7 @@ export interface Meta {
      * settings. The backend doesn't send it yet, so the about pages say
      * where it will be given until it appears.
      */
-    contact?: string;
+    contact?: string | null;
   };
   /** Every provider, in the order the sign-in sheet shows them. Offer only the enabled ones. Saving anything needs an account. */
   auth: {

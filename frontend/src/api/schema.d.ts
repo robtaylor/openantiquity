@@ -1548,6 +1548,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/mod/users/{handle}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Person
+         * @description One person as a moderator sees them, a banned or deleted account included, and what this
+         *     moderator may do to them: ban, unban, and give each role.
+         */
+        get: operations["moderation_person"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/mod/users/{handle}/ban": {
         parameters: {
             query?: never;
@@ -2161,8 +2182,12 @@ export interface components {
         };
         /** AppInfo */
         AppInfo: {
+            /** Contact */
+            contact: string | null;
             /** Contribution Licence */
             contribution_licence: string;
+            /** Contribution Licence Url */
+            contribution_licence_url: string;
             /** Name */
             name: string;
             /** Version */
@@ -2295,8 +2320,7 @@ export interface components {
             title: string;
             /** Url */
             url: string;
-            /** Verified */
-            verified: string;
+            verified: components["schemas"]["LinkVerified"];
         };
         /** ContextLinks */
         ContextLinks: {
@@ -2327,6 +2351,20 @@ export interface components {
             kind: components["schemas"]["ContributionKind"];
             /** Subkind */
             subkind: string | null;
+        };
+        /**
+         * CorroboratedRule
+         * @description Corroborated: supporting desk strands, and agreement on the class.
+         */
+        CorroboratedRule: {
+            /** Class Agreement */
+            class_agreement: number;
+            /** Class People */
+            class_people: number;
+            /** Class Support */
+            class_support: number;
+            /** Strands */
+            strands: number;
         };
         /**
          * CoverageCollection
@@ -2439,6 +2477,12 @@ export interface components {
             kind: components["schemas"]["CreditKind"];
             user: components["schemas"]["PublicUser"];
         };
+        /**
+         * CreditPlacement
+         * @description Where a live source's credit must be shown (`GET /context/live-sources`).
+         * @enum {string}
+         */
+        CreditPlacement: "layer" | "record";
         /** DemSource */
         DemSource: {
             /** Attribution */
@@ -2492,6 +2536,18 @@ export interface components {
         DevOutbox: {
             /** Items */
             items: components["schemas"]["DevEmail"][];
+        };
+        /**
+         * DisputedRule
+         * @description Disputed: both weights at least `weight`, with the share of yes strictly inside the band.
+         */
+        DisputedRule: {
+            /** Ratio High */
+            ratio_high: number;
+            /** Ratio Low */
+            ratio_low: number;
+            /** Weight */
+            weight: number;
         };
         /**
          * Eligible
@@ -2598,6 +2654,7 @@ export interface components {
         EvidenceKind: "lidar_view" | "aerial" | "historic_map" | "record_link" | "document" | "photo" | "field_visit" | "geophysics" | "excavation" | "her_record" | "designation" | "publication";
         /** EvidenceKindOut */
         EvidenceKindOut: {
+            follow_up: components["schemas"]["FollowUp"];
             /** Group */
             group: string;
             /** Hint */
@@ -2665,6 +2722,17 @@ export interface components {
             view: components["schemas"]["ViewState"] | null;
             /** Vote Total */
             vote_total: number;
+        };
+        /**
+         * EvidenceRule
+         * @description What an evidence item needs: the endorsement weight that makes it independent and
+         *     checks it on the ground, and the weight that makes a matching record known.
+         */
+        EvidenceRule: {
+            /** Endorsement Weight */
+            endorsement_weight: number;
+            /** Known Weight */
+            known_weight: number;
         };
         /**
          * Explanation
@@ -2971,6 +3039,14 @@ export interface components {
             following: boolean;
         };
         /**
+         * FollowUp
+         * @description Whether an evidence kind is a follow-up, and of which sort: work at the site, or the official record.
+         *
+         *     `none` for the desk kinds. A follow-up is logged as `followup_logged`.
+         * @enum {string}
+         */
+        FollowUp: "field" | "official" | "none";
+        /**
          * GeoJSONGeometry
          * @description Any GeoJSON geometry in WGS84. Coordinates are longitude then latitude.
          */
@@ -3245,6 +3321,31 @@ export interface components {
             title?: string | null;
             view?: components["schemas"]["SavedView"] | null;
         };
+        /**
+         * Ladder
+         * @description The numbers of the confidence ladder, from the engine's own `Thresholds` and role weights.
+         */
+        Ladder: {
+            corroborated: components["schemas"]["CorroboratedRule"];
+            disputed: components["schemas"]["DisputedRule"];
+            evidence: components["schemas"]["EvidenceRule"];
+            probable: components["schemas"]["ProbableRule"];
+            ruled_out: components["schemas"]["RuledOutRule"];
+            seen: components["schemas"]["SeenRule"];
+            weights: components["schemas"]["LadderWeights"];
+        };
+        /**
+         * LadderWeights
+         * @description The weight one person's agreement carries. Moderators and admins count as trusted.
+         */
+        LadderWeights: {
+            /** Expert */
+            expert: number;
+            /** Member */
+            member: number;
+            /** Trusted */
+            trusted: number;
+        };
         /** Layers */
         Layers: {
             dem: components["schemas"]["DemSource"];
@@ -3300,6 +3401,23 @@ export interface components {
             label: string;
         };
         /**
+         * LinkVerified
+         * @description Whether the research found that a deep link opens where it should (`GET /context/links`).
+         * @enum {string}
+         */
+        LinkVerified: "yes" | "redirect_only" | "not_tested";
+        /**
+         * LinkVerifiedOut
+         * @description What the research found when it opened an external viewer, as `GET /context/links` gives `verified`.
+         */
+        LinkVerifiedOut: {
+            /** Description */
+            description: string;
+            id: components["schemas"]["LinkVerified"];
+            /** Label */
+            label: string;
+        };
+        /**
          * LinkedFinding
          * @description A finding whose evidence links a record, as listed on the record's page.
          *
@@ -3337,6 +3455,7 @@ export interface components {
             credit: string | null;
             /** Credit Field */
             credit_field: string | null;
+            credit_placement: components["schemas"]["CreditPlacement"] | null;
             /** Endpoint */
             endpoint: string;
             /** Homepage */
@@ -3643,12 +3762,45 @@ export interface components {
         Meta: {
             app: components["schemas"]["AppInfo"];
             auth: components["schemas"]["AuthInfo"];
+            ladder: components["schemas"]["Ladder"];
             layers: components["schemas"]["Layers"];
             notices: components["schemas"]["Notices"];
             /** Sources */
             sources: components["schemas"]["SourceOut"][];
             terrain: components["schemas"]["TerrainState"];
             vocab: components["schemas"]["Vocab"];
+        };
+        /**
+         * ModPerson
+         * @description One person as a moderator sees them, banned and deleted accounts included.
+         *
+         *     No email address and no sign-in identities: a moderator acts on the
+         *     account, and never needs to reach the person outside Open Antiquity.
+         */
+        ModPerson: {
+            actions: components["schemas"]["PersonActionsOut"];
+            /** Age Band */
+            age_band: string | null;
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Banned */
+            banned: boolean;
+            /** Banned At */
+            banned_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Deleted */
+            deleted: boolean;
+            /** Display Name */
+            display_name: string;
+            /** Handle */
+            handle: string;
+            /** Reputation */
+            reputation: number;
+            role: components["schemas"]["Role"];
         };
         /** ModSensitivityIn */
         ModSensitivityIn: {
@@ -3927,6 +4079,8 @@ export interface components {
             built: boolean | null;
             /** Built At */
             built_at: string | null;
+            /** Covers Mirror */
+            covers_mirror?: boolean | null;
             /** Tiles */
             tiles: number;
         };
@@ -4064,6 +4218,18 @@ export interface components {
             label: string;
         };
         /**
+         * PersonActionsOut
+         * @description What this moderator may do to the person, in the shape a finding page's actions take.
+         *
+         *     Each is `{allowed, reason}`, and `reason` is the code the route would
+         *     refuse with, or `current_role` for the role the person has now.
+         */
+        PersonActionsOut: {
+            ban: components["schemas"]["ActionOut"];
+            roles: components["schemas"]["RoleActionsOut"];
+            unban: components["schemas"]["ActionOut"];
+        };
+        /**
          * PointOut
          * @description One award of points, for the person themselves.
          */
@@ -4090,6 +4256,18 @@ export interface components {
             points: number;
             /** Reasons */
             reasons: string[];
+        };
+        /**
+         * ProbableRule
+         * @description Probable: each check cleared, and a reviewer's yes or enough weight without one.
+         */
+        ProbableRule: {
+            /** Check Margin */
+            check_margin: number;
+            /** Check Weight */
+            check_weight: number;
+            /** Seen Without Reviewer */
+            seen_without_reviewer: number;
         };
         /**
          * ProfileCounts
@@ -4704,11 +4882,34 @@ export interface components {
          * @enum {string}
          */
         Role: "member" | "trusted" | "expert" | "moderator" | "admin";
+        /**
+         * RoleActionsOut
+         * @description Whether the moderator may give the person each role, through `PUT /mod/users/{handle}/role`.
+         */
+        RoleActionsOut: {
+            admin: components["schemas"]["ActionOut"];
+            expert: components["schemas"]["ActionOut"];
+            member: components["schemas"]["ActionOut"];
+            moderator: components["schemas"]["ActionOut"];
+            trusted: components["schemas"]["ActionOut"];
+        };
         /** RoleIn */
         RoleIn: {
             /** Reason */
             reason: string;
             role: components["schemas"]["Role"];
+        };
+        /**
+         * RuledOutRule
+         * @description Ruled out: enough weight of no with a low share of yes, or one heavy explanation.
+         */
+        RuledOutRule: {
+            /** Explanation */
+            explanation: number;
+            /** Ratio */
+            ratio: number;
+            /** Unseen */
+            unseen: number;
         };
         /**
          * SavedView
@@ -4743,6 +4944,18 @@ export interface components {
          */
         Scope: "public" | "mine" | "invited" | "unlisted";
         /**
+         * SeenRule
+         * @description Seen by others: summed weight of yeses, distinct people saying yes, and the share of yes.
+         */
+        SeenRule: {
+            /** Observers */
+            observers: number;
+            /** Ratio */
+            ratio: number;
+            /** Weight */
+            weight: number;
+        };
+        /**
          * Sensitivity
          * @description How much of a finding's position each viewer sees (Decision 0005).
          *
@@ -4755,6 +4968,27 @@ export interface components {
         SensitivityChange: {
             level: components["schemas"]["Sensitivity"];
         };
+        /**
+         * SensitivityLevelOut
+         * @description The words for one location level (Decision 0005), true of `services.sensitivity`.
+         */
+        SensitivityLevelOut: {
+            /** Exact For */
+            exact_for: components["schemas"]["SensitivityViewer"][];
+            id: components["schemas"]["Sensitivity"];
+            /** Label */
+            label: string;
+            /** Square Sentence */
+            square_sentence: string | null;
+            /** Who Sees */
+            who_sees: string;
+        };
+        /**
+         * SensitivityViewer
+         * @description The kinds of viewer the sensitivity table tells apart. Admins count as moderators.
+         * @enum {string}
+         */
+        SensitivityViewer: "signed_out" | "member" | "finder" | "trusted" | "expert" | "moderator";
         /** SourceOut */
         SourceOut: {
             /** Access */
@@ -5099,6 +5333,8 @@ export interface components {
             catalogue_tiles: number;
             /** Fine Minzoom */
             fine_minzoom: number;
+            /** Mirrored Tiles */
+            mirrored_tiles?: number | null;
             overview: components["schemas"]["OverviewState"];
         };
         /**
@@ -5195,6 +5431,8 @@ export interface components {
             link_coverages: components["schemas"]["LinkCoverageOut"][];
             /** Link Shows */
             link_shows: components["schemas"]["LinkShowsOut"][];
+            /** Link Verified */
+            link_verified: components["schemas"]["LinkVerifiedOut"][];
             /** Mention Kinds */
             mention_kinds: components["schemas"]["MentionKindOut"][];
             /** Next Steps */
@@ -5205,6 +5443,8 @@ export interface components {
             record_categories: components["schemas"]["RecordCategoryOut"][];
             /** Report Reasons */
             report_reasons: components["schemas"]["ReportReasonOut"][];
+            /** Sensitivity Levels */
+            sensitivity_levels: components["schemas"]["SensitivityLevelOut"][];
             /** States */
             states: components["schemas"]["State"][];
             /** Tiers */
@@ -8012,6 +8252,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_Eligible_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    moderation_person: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                handle: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModPerson"];
                 };
             };
             /** @description Validation Error */

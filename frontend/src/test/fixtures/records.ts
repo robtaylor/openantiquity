@@ -328,6 +328,7 @@ export const WILTSHIRE_LIVE: LiveSourceOut = {
   credit_field: null,
   licence_field: null,
   preferred_credit_field: null,
+  credit_placement: "layer",
 };
 
 export const ADS_LIVE: LiveSourceOut = {
@@ -360,6 +361,7 @@ export const ADS_LIVE: LiveSourceOut = {
   credit_field: null,
   licence_field: null,
   preferred_credit_field: null,
+  credit_placement: "layer",
 };
 
 export const BRISTOL_LIVE: LiveSourceOut = {
@@ -389,6 +391,7 @@ export const BRISTOL_LIVE: LiveSourceOut = {
   credit_field: null,
   licence_field: null,
   preferred_credit_field: null,
+  credit_placement: "layer",
 };
 
 export const WOLVERHAMPTON_LIVE: LiveSourceOut = {
@@ -419,6 +422,7 @@ export const WOLVERHAMPTON_LIVE: LiveSourceOut = {
   credit_field: null,
   licence_field: null,
   preferred_credit_field: null,
+  credit_placement: "layer",
 };
 
 export const DARTMOOR_LIVE: LiveSourceOut = {
@@ -450,6 +454,7 @@ export const DARTMOOR_LIVE: LiveSourceOut = {
   credit_field: null,
   licence_field: null,
   preferred_credit_field: null,
+  credit_placement: "layer",
 };
 
 export const COMMONS_LIVE: LiveSourceOut = {
@@ -479,6 +484,7 @@ export const COMMONS_LIVE: LiveSourceOut = {
   credit_field: "imageinfo.0.extmetadata.Artist.value",
   licence_field: "imageinfo.0.extmetadata.LicenseShortName.value",
   preferred_credit_field: "imageinfo.0.extmetadata.Attribution.value",
+  credit_placement: "record",
 };
 
 /** Asks for one record by id, so it can't be asked about an area and is left out. */
@@ -491,6 +497,7 @@ export const SINGLE_RECORD_LIVE: LiveSourceOut = {
   limit_param: null,
   max_limit: null,
   min_zoom: null,
+  credit_placement: "layer",
 };
 
 export const LIVE_SOURCES: LiveSourceOut[] = [

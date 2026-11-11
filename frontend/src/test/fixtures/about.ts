@@ -32,6 +32,7 @@ export function liveSourceFixture(overrides: Partial<LiveSource> = {}): LiveSour
     min_zoom: null,
     response_fields: "",
     shown: true,
+    credit_placement: "layer",
     ...overrides,
   };
 }
