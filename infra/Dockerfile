@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# Open Antiquity: one image for the Cloud Run service and every Cloud Run job.
+# Open Antiquity: one image for the service and every job, run as Fly Machines.
 #
 #   docker buildx build -f infra/Dockerfile --platform linux/amd64 -t fieldclub .
 #
@@ -12,7 +12,7 @@
 #
 # The runtime stage has no compiler, no uv, no pnpm or Node, no tests and no
 # secrets. Settings come from FIELDCLUB_* variables at run time, and secrets
-# from Secret Manager through Cloud Run (see infra/terraform). The default
+# from the platform's secret store as environment variables. The default
 # command serves the API and the frontend; a job runs the same image with
 # another command, such as `fieldclub-ingest run <key>`.
 #
@@ -88,11 +88,10 @@ COPY --chown=root:root infra/jobs /app/jobs
 # the settings' "repository root" is /app/.venv/lib: their repository-relative
 # defaults, and any relative path given in FIELDCLUB_VAR_DIR or a terrain
 # setting, would point inside the virtualenv. Give every path as absolute.
-# Everything the process writes goes under /tmp, which on Cloud Run is memory:
-# nothing written there needs to outlive the instance. GDAL reads gs:// with
-# the identity Cloud Run lends the container only if it believes it is on
-# Google's machines, which it can't tell from inside a container, hence
-# CPL_MACHINE_IS_GCE.
+# Everything the process writes goes under /tmp: nothing written there needs
+# to outlive the machine. GDAL reads s3:// folders with
+# the AWS_* credentials and endpoint the platform sets, which the application
+# turns into GDAL's own options (fieldclub.terrain.blobs).
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -104,14 +103,15 @@ ENV PATH=/app/.venv/bin:$PATH \
     FIELDCLUB_ENV_FILE= \
     DEFRA_SFTP_KNOWN_HOSTS=/tmp/fieldclub/var/defra_known_hosts \
     GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR \
-    CPL_MACHINE_IS_GCE=YES \
     GDAL_HTTP_MAX_RETRY=3 \
-    GDAL_HTTP_RETRY_DELAY=1
+    GDAL_HTTP_RETRY_DELAY=1 \
+    PORT=8080
 
 USER fieldclub:fieldclub
 WORKDIR /home/fieldclub
-# Cloud Run sends PORT (8080 by default), which the settings read when
-# FIELDCLUB_PORT is unset.
+# The settings read PORT when FIELDCLUB_PORT is unset. The image says 8080,
+# the internal port Fly's configuration names; a platform that sends PORT of
+# its own replaces it.
 EXPOSE 8080
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["fieldclub-api"]

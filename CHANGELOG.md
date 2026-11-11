@@ -31,6 +31,19 @@ Nothing is live yet. When the first version opens, this is what it does for you.
 - A ground photo is shown to everyone only after a moderator, archaeologist or trusted member has approved it.
 - A guide shows how to read LIDAR, with real earthworks beside the modern things that look like them, and the about page gives the terms, the privacy notice and how to ask for something to be taken down. Those four notices are drafts until they have been checked.
 
+### Changed
+
+For whoever runs the service, as it moves to Fly.io (Decision 0018):
+
+- Buckets are reached through the S3 interface, such as Tigris, and no longer through Cloud Storage. `FIELDCLUB_STORAGE_BACKEND=s3` replaces `gcs`, `FIELDCLUB_S3_BUCKET`, `FIELDCLUB_S3_PREFIX` and `FIELDCLUB_S3_NAMESPACE_BUCKETS` replace the `FIELDCLUB_GCS_*` settings, and terrain folders are written `s3://bucket/prefix`. A `gs://` folder is refused at start-up.
+- Anything kept in a bucket needs `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_ENDPOINT_URL_S3`, as Fly sets them when a Tigris bucket is attached, and the settings refuse to load without them. `AWS_REGION` is `auto` when unset.
+- `DATABASE_URL`, as Fly attaches it, is read when `FIELDCLUB_DATABASE_URL` is unset. Either may be a plain `postgres://` address, and Fly's pooled host is replaced by its direct one. The address used is logged with its password masked.
+- `FIELDCLUB_CLIENT_IP_HEADER` names a header the proxy sets to the visitor's address. On Fly it must be `Fly-Client-IP`, and production accepts it in place of `FIELDCLUB_TRUSTED_PROXY_HOPS`.
+- On a Fly machine the settings refuse to start unless `FIELDCLUB_ENV=prod` and `FIELDCLUB_CLIENT_IP_HEADER` are set, as they refuse anything but production on Cloud Run.
+- The image listens on 8080 unless the platform sends another `PORT`, and no longer sets `CPL_MACHINE_IS_GCE`.
+- The live event stream finds a database connection that went silent, as one may while Fly has a machine suspended, within about ten seconds of the next visitor, and tells browsers to refresh what they show.
+- A full ingest run whose lock went with its database connection fails with `ingest_lock_lost` instead of deleting records.
+
 ### Added
 
 - `GET /meta` says whether the development sign-in is on, which age bands the welcome step accepts, the contributor terms, each feature class's starting sensitivity and, per nation, where to report a find.
