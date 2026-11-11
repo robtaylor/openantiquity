@@ -173,7 +173,7 @@ test.describe("desktop", () => {
     for (const [path, title] of [
       ["/scan", "Scan a square"],
       ["/help", "Help wanted"],
-      ["/f/abc123", "Finding"],
+      ["/f/abc123", "Finding abc123"],
       ["/r/42", "Heritage record"],
       ["/i/xyz", "Investigation"],
       ["/u/QuietBarrow42", "Profile"],

@@ -1,7 +1,13 @@
 import type { Page, Route } from "@playwright/test";
-import type { FindingCreate, FindingFeature } from "../../src/features/findings/types.js";
-import { createdFinding, findingSummary, findingsData, findingsMatching } from "../../src/test/fixtures/findings.js";
-import { apiRoute } from "./network.js";
+import type { FindingCreate, FindingDetail, FindingFeature } from "../../src/features/findings/types.js";
+import {
+  createdFinding,
+  findingDetail,
+  findingSummary,
+  findingsData,
+  findingsMatching,
+} from "../../src/test/fixtures/findings.js";
+import { apiRoute, FINDING_PAGE_ROUTE } from "./network.js";
 
 /**
  * A stand-in for the findings endpoints in fixture mode, answering both the
@@ -9,6 +15,7 @@ import { apiRoute } from "./network.js";
  * offset for a cursor) from one set of findings, with the filters applied
  * as the server applies them. `POST /findings` adds a spotted finding to
  * the set, so the map and the list then show it, unless a failure is queued.
+ * Each finding's page (`GET /findings/{id}`) is served from the same set.
  */
 export interface FakeFindings {
   /** Every body sent to `POST /findings`, in order, including refused ones. */
@@ -50,6 +57,16 @@ export async function fakeFindings(
   let failure: { status: number; code: string; message: string } | null = null;
   let hold: Promise<void> | null = null;
   let made = 0;
+  const details = new Map<string, FindingDetail>();
+
+  await page.route(FINDING_PAGE_ROUTE, (route) => {
+    const match = FINDING_PAGE_ROUTE.exec(route.request().url());
+    const publicId = decodeURIComponent(match?.[1] ?? "");
+    if (route.request().method() !== "GET" || match?.[2] !== undefined) return route.fallback();
+    const known = details.get(publicId) ?? features.find((feature) => feature.properties.public_id === publicId);
+    if (!known) return route.fallback();
+    return json(route, "assessment" in known ? known : findingDetail(findingSummary(known)));
+  });
 
   await page.route(apiRoute("/findings"), async (route) => {
     const request = route.request();
@@ -65,6 +82,7 @@ export async function fakeFindings(
       }
       made += 1;
       const finding = createdFinding(body, `new-${made}`);
+      details.set(finding.public_id, finding);
       features.unshift({
         type: "Feature",
         geometry: { type: "Point", coordinates: [finding.location.lon, finding.location.lat] },

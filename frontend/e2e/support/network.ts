@@ -1,5 +1,6 @@
 import type { Page, Route } from "@playwright/test";
 import { NO_FINDINGS } from "../../src/features/findings/types.js";
+import { pageFixture, suggestionsFixture } from "../../src/test/fixtures/findingPage.js";
 import { solidPng } from "./png.js";
 
 /**
@@ -75,6 +76,12 @@ export function apiRoute(path: string): RegExp {
   return new RegExp(`${backendRoute(`/api/v1${path}`).source}(?:\\?|$)`);
 }
 
+/**
+ * Requests for one finding's page or its parts, such as `/api/v1/findings/abc`
+ * or `/api/v1/findings/abc/comments`. The id and the part are the first two groups.
+ */
+export const FINDING_PAGE_ROUTE = /^https?:\/\/localhost(?::\d+)?\/api\/v1\/findings\/([^/?#]+)(\/[a-z-]+)?(?:\?|$)/;
+
 /** Requests under a backend tile path, such as `tilesRoute("/records/")`. */
 export function tilesRoute(prefix = "/"): RegExp {
   return backendRoute(`/tiles${prefix}`);
@@ -119,6 +126,20 @@ export async function stubBackend(page: Page, log: NetworkLog = newLog()): Promi
       // GeoJSON for the map, and an empty page for the Explore list.
       const geojson = new URL(route.request().url()).searchParams.get("format") === "geojson";
       const body = geojson ? NO_FINDINGS : { items: [], next_cursor: null };
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    }
+    const findingPage = FINDING_PAGE_ROUTE.exec(route.request().url());
+    if (findingPage && route.request().method() === "GET" && findingPage[1] !== "export") {
+      // Any finding asked for exists: a plain spotted one, with nothing said about it yet.
+      count("finding-page");
+      const publicId = decodeURIComponent(findingPage[1] ?? "");
+      const part = findingPage[2];
+      const body =
+        part === undefined
+          ? pageFixture({ public_id: publicId, title: `Finding ${publicId}` })
+          : part === "/suggested-records"
+            ? suggestionsFixture([])
+            : { items: [], next_cursor: null };
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
     }
     if (path === "/api/v1/auth/me") {
