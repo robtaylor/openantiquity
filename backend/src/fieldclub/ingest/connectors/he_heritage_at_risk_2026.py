@@ -5,7 +5,8 @@ about 5,000 polygons for scheduled monuments, registered parks and gardens, batt
 and wrecks that are at risk. The service name carries the year and says WGS84, but the
 layer is stored in Web Mercator. The reader asks the server for WGS84 either way.
 Each row is one assessment, so an asset can appear more than once. `uid` is the row's
-own GUID and is the external id.
+own GUID and is the external id. The two rows for one asset share a name and an outline, so the
+method is added to the name, "(archaeology)" or "(building or structure)", to tell them apart in a list.
 
 `List_Entry` is the National Heritage List number, but the register's own page for an
 entry has a different number, which is in `URL`. The work-list's address template fills
@@ -73,7 +74,7 @@ def to_record(feature: Feature) -> RecordIn:
     url = str(properties["URL"] or "").strip()
     return RecordIn(
         external_id=uid,
-        name=str(properties["EntryName"] or "").strip() or "Unnamed entry on the Heritage at Risk Register",
+        name=entry_name(str(properties["EntryName"] or ""), method),
         geom=feature.geometry,
         summary="On the Heritage at Risk Register 2026"
         + (f", assessed by the {method} method." if method else "."),
@@ -81,3 +82,9 @@ def to_record(feature: Feature) -> RecordIn:
         url=url if url.startswith(REGISTER_PAGE) else None,
         raw=json_ready(properties),
     )
+
+
+def entry_name(name: str, method: str) -> str:
+    """The entry's name with its assessment method after it, so the two rows for one asset differ."""
+    name = name.strip() or "Unnamed entry on the Heritage at Risk Register"
+    return f"{name} ({method.lower()})" if method else name

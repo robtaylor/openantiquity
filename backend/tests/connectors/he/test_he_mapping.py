@@ -5,17 +5,19 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
 import respx
 from shapely.geometry import Point
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fieldclub.ingest.connectors.he_aim_monument_extents import MonumentExtents
+from fieldclub.ingest.adapters.common import Feature, FeatureKeys
+from fieldclub.ingest.connectors.he_aim_monument_extents import MonumentExtents, extent_name
 from fieldclub.ingest.connectors.he_aim_project_areas import ProjectAreas
 from fieldclub.ingest.connectors.he_de_designated_sites import DeDesignatedSites
 from fieldclub.ingest.connectors.he_greater_london_apas import GreaterLondonApas
-from fieldclub.ingest.connectors.he_heritage_at_risk_2026 import HeritageAtRisk2026
-from fieldclub.ingest.connectors.he_research_spatial_reports import ResearchSpatialReports
+from fieldclub.ingest.connectors.he_heritage_at_risk_2026 import HeritageAtRisk2026, entry_name
+from fieldclub.ingest.connectors.he_research_spatial_reports import ResearchSpatialReports, to_record
 from fieldclub.ingest.connectors.he_turning_the_plough_2 import TurningThePlough2
 from fieldclub.ingest.runner import run_connector
 from fieldclub.models import Record
@@ -53,6 +55,15 @@ def test_a_monument_extent_is_named_for_its_historic_england_record(db: Session)
     assert extent.raw["HE_UID1"] == "1066506"
 
 
+def test_an_extent_without_a_record_number_is_named_for_its_project() -> None:
+    assert (
+        extent_name(None, "Stonehenge World Heritage Site")
+        == "Monument extent, Stonehenge World Heritage Site"
+    )
+    assert extent_name(None, "") == "Monument extent"
+    assert extent_name("1066506", "x") == "Monument extent (Historic England record 1066506)"
+
+
 @respx.mock
 def test_a_project_area_keeps_its_report_and_completion_date(db: Session) -> None:
     suffolk = stored(db, "he-aim-project-areas", ProjectAreas(), OBJECTID=3)
@@ -81,11 +92,18 @@ def test_two_project_polygons_with_the_same_name_keep_separate_ids(db: Session) 
 # ------------------------------------------------------------------ the smaller layers
 
 
+def test_an_asset_assessed_two_ways_has_two_names() -> None:
+    assert entry_name("Barrow", "Archaeology") != entry_name("Barrow", "Building or structure")
+    assert entry_name("Barrow", "Building or structure") == "Barrow (building or structure)"
+    assert entry_name(" ", "") == "Unnamed entry on the Heritage at Risk Register"
+
+
 @respx.mock
 def test_a_heritage_at_risk_entry_links_to_the_registers_own_page(db: Session) -> None:
     entry = stored(db, "he-heritage-at-risk-2026", HeritageAtRisk2026(), List_Entry=1008075)
     assert entry.external_id == "{84A31E09-9A55-4E28-9A07-036CA1171AF3}"
     assert entry.name.startswith("Pair of round barrows 400 metres west of the Ridgeway")
+    assert entry.name.endswith(" (archaeology)")
     assert entry.category == "designation"
     assert entry.record_type == "Scheduled Monument"
     assert entry.summary == "On the Heritage at Risk Register 2026, assessed by the Archaeology method."
@@ -112,6 +130,48 @@ def test_a_research_report_location_links_to_the_report(db: Session) -> None:
     assert report.raw is not None
     assert report.raw["Year"] == 1976
     assert report.raw["Keyword"] == "Charcoal; Plant Remains"
+
+
+def report_row(number: str, url: str) -> Feature:
+    return Feature(
+        {
+            "OBJECTID": 1,
+            "Report_Num": number,
+            "Report_title": "A title",
+            "Brief_description": None,
+            "Report_URL": url,
+            "Project_type": None,
+            "Year": 2025,
+        },
+        Point(-1.8, 51.2),
+        1,
+    )
+
+
+@pytest.mark.parametrize(
+    ("number", "given", "expected"),
+    [
+        # A series, not a number: the layer's link is the only one there is.
+        (
+            "Informed Conservation",
+            "https://historicengland.org.uk/images-books/publications/railway-goods-shed-and-warehouse-in-england",
+            "https://historicengland.org.uk/images-books/publications/railway-goods-shed-and-warehouse-in-england",
+        ),
+        # A plain number that the layer links to a different report: the layer wins.
+        (
+            "92-2025",
+            "https://historicengland.org.uk/research/results/reports/92-2026",
+            "https://historicengland.org.uk/research/results/reports/92-2026",
+        ),
+        # No link from the layer: a plain number builds one, anything else gives none.
+        ("2027", " ", "https://historicengland.org.uk/research/results/reports/2027"),
+        ("Informed Conservation", "", None),
+        # A link to some other host is not followed on the layer's word.
+        ("2027", "https://example.com/x", "https://historicengland.org.uk/research/results/reports/2027"),
+    ],
+)
+def test_a_research_report_keeps_the_layers_own_link(number: str, given: str, expected: str | None) -> None:
+    assert to_record(report_row(number, given), FeatureKeys()).url == expected
 
 
 @respx.mock

@@ -6,8 +6,13 @@ FeatureServer, layer 475 (not 0). About 13,500 rows for about 7,400 reports: a r
 with many sites has a row for each, and a project over a large area has a single point
 at its centre. `Report_Num` is mostly a report number, but also holds series numbers and
 a few words, and repeats across rows, so the external id is a hash of `Report_Num`, the
-title and the geometry. Each record links to the report's page. Historic England's pages
-answer 403 to scripts, so the link is only followed by a person.
+title and the geometry on the British National Grid (the layer is asked for
+EPSG:27700, to a tenth of a metre, so the id doesn't move with the reprojection).
+Each record links to the address in the layer's own `Report_URL`, which every row has.
+Building one from `Report_Num` would be wrong: it gave no link for 670 rows whose number
+is a series or a few words, and a different page from the layer's on 31 others.
+`REPORT_PAGE` is the fallback for a row whose `Report_URL` is blank. Historic England's
+pages answer 403 to scripts, so the link is only followed by a person.
 """
 
 from __future__ import annotations
@@ -38,6 +43,8 @@ FIELDS = (
 )
 # A report number is letters, digits and hyphens. Anything else would make an address that goes nowhere.
 REPORT_NUMBER = re.compile(r"[A-Za-z0-9-]+")
+# The only host the layer's own addresses are trusted to point at.
+REPORT_HOST = "https://historicengland.org.uk/"
 
 
 @register
@@ -57,7 +64,7 @@ class ResearchSpatialReports(Connector):
     )
 
     def fetch(self, *, bbox: BBox | None = None, limit: int | None = None) -> Iterator[RecordIn]:
-        layer = ArcGISLayer(LAYER_URL, client=self.http, geometry_precision=6)
+        layer = ArcGISLayer(LAYER_URL, client=self.http, out_sr=27700, geometry_precision=1)
         layer.require_shape(FIELDS, "esriGeometryPoint")
         keys = FeatureKeys()
         for feature in layer.features(bbox=bbox):
@@ -74,11 +81,19 @@ def to_record(feature: Feature, keys: FeatureKeys) -> RecordIn:
     if not title:
         raise UpstreamFormatError(f"Research report row {feature.id} has no title.")
     return RecordIn(
-        external_id=keys.key([number, title], feature.geometry),
+        external_id=keys.key([number, title], feature.geometry, native=feature.native),
         name=title,
         geom=feature.geometry,
         summary=str(properties["Brief_description"] or "").strip() or None,
         record_type=str(properties["Project_type"] or "").strip() or None,
-        url=REPORT_PAGE.format(Report_Num=number) if REPORT_NUMBER.fullmatch(number) else None,
+        url=report_url(properties["Report_URL"], number),
         raw=json_ready(properties),
     )
+
+
+def report_url(given: object, number: str) -> str | None:
+    """The layer's own link when it is a Historic England address, else one built from a plain number."""
+    text = given.strip() if isinstance(given, str) else ""
+    if text.startswith(REPORT_HOST):
+        return text
+    return REPORT_PAGE.format(Report_Num=number) if REPORT_NUMBER.fullmatch(number) else None
