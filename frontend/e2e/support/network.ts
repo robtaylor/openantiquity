@@ -1,6 +1,7 @@
 import type { Page, Route } from "@playwright/test";
 import { NO_FINDINGS } from "../../src/features/findings/types.js";
 import { pageFixture, suggestionsFixture } from "../../src/test/fixtures/findingPage.js";
+import { investigationFixture } from "../../src/test/fixtures/investigations.js";
 import { solidPng } from "./png.js";
 
 /**
@@ -10,7 +11,8 @@ import { solidPng } from "./png.js";
  * The API calls the app makes in fixture mode get stand-in answers too: no
  * findings (for the map and for the list), a fixed height for any spot,
  * one-metre elevation everywhere, nobody signed in, nothing waiting for a
- * second look, no help wanted, no mentions and no activity. A test can
+ * second look, no help wanted, no mentions, no activity, and no investigations
+ * listed, though any one asked for by its id is there, empty. A test can
  * answer any of them differently with a route of its own, which Playwright
  * tries first.
  */
@@ -169,6 +171,17 @@ export async function stubBackend(page: Page, log: NetworkLog = newLog()): Promi
           : part === "/suggested-records"
             ? suggestionsFixture([])
             : { items: [], next_cursor: null };
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    }
+    if (path.startsWith("/api/v1/investigations") && route.request().method() === "GET") {
+      // No investigations listed, and any one asked for exists: a public one with nothing in it yet.
+      count("investigations");
+      const part = /^\/api\/v1\/investigations\/([^/]+)(\/[a-z]+)?$/.exec(path);
+      const publicId = decodeURIComponent(part?.[1] ?? "");
+      const body =
+        part && part[2] === undefined
+          ? investigationFixture({ public_id: publicId, title: `Investigation ${publicId}` })
+          : { items: [], next_cursor: null };
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
     }
     if (path === "/api/v1/auth/me") {

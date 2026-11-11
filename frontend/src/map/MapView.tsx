@@ -12,6 +12,7 @@ import {
 } from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { type Meta, viewTitle } from "../api/meta.js";
+import { useAreaOnMap } from "../features/investigations/useAreaOnMap.js";
 import { useCoverageOnMap } from "../features/layers/coverage/useCoverageOnMap.js";
 import { ProfileCrosshair } from "../features/layers/MapNotices.js";
 import { useProfileOnMap } from "../features/layers/profile/useProfileOnMap.js";
@@ -104,6 +105,7 @@ function MapPanes({ meta, insets }: MapViewProps) {
   useRecordsOnMap(meta, mainMap, shownCompare);
   useCoverageOnMap(meta, mainMap, shownCompare);
   useProfileOnMap(mainMap, shownCompare);
+  useAreaOnMap(mainMap, shownCompare);
   useTerrainLoadingOnMap(meta, mainMap);
   useTileRefresh(meta, [mainMap, shownCompare]);
 

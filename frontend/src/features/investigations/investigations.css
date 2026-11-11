@@ -1,0 +1,535 @@
+/* Investigations: the list, a notebook's page, and the "Add to an investigation" dialog. */
+
+.fc-inv,
+.fc-inv-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fc-inv__intro,
+.fc-inv-head__meta,
+.fc-inv-item__by,
+.fc-inv-item__facts {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-inv__list-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 4px;
+}
+
+.fc-inv-start__row {
+  display: flex;
+  gap: 8px;
+}
+
+.fc-inv-start__row .fc-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.fc-inv-start__row .fc-button {
+  flex: none;
+}
+
+/* The lists of investigations. */
+.fc-inv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 -8px;
+  padding: 0;
+  list-style: none;
+}
+
+.fc-inv-list[aria-busy="true"] {
+  opacity: 0.6;
+}
+
+.fc-inv-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 0 8px;
+}
+
+.fc-inv-row + .fc-inv-row {
+  border-top: 1px solid var(--border);
+  padding-top: 2px;
+}
+
+.fc-inv-row__link {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 8px 4px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.fc-inv-row__link:hover {
+  background: var(--raised);
+}
+
+.fc-inv-row__title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.fc-inv-row__summary {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.fc-inv-row__meta,
+.fc-inv-head__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-inv-row__actions,
+.fc-inv-banner__actions,
+.fc-inv-tools,
+.fc-inv-add__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fc-inv-row__actions {
+  padding: 0 8px;
+}
+
+.fc-inv-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fc-inv-badge--warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.fc-inv-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.fc-inv-more {
+  display: flex;
+  justify-content: center;
+}
+
+/* A notebook's page. */
+.fc-inv-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.fc-inv-head__summary {
+  font-size: 16px;
+}
+
+.fc-inv-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-self: stretch;
+  padding: 12px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--raised);
+}
+
+.fc-inv-banner--warn {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  border-color: var(--warn);
+}
+
+.fc-inv-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.fc-inv-section h3 {
+  font-size: 18px;
+}
+
+.fc-inv-section > .fc-button {
+  align-self: flex-start;
+}
+
+.fc-inv-visibility svg {
+  margin-right: 6px;
+  vertical-align: -2px;
+  color: var(--accent-strong);
+}
+
+/* Notes written in Markdown. */
+.fc-markdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.fc-markdown h4,
+.fc-markdown h5,
+.fc-markdown h6 {
+  margin: 6px 0 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.fc-markdown h4 {
+  font-size: 17px;
+}
+
+.fc-markdown h5 {
+  font-size: 15px;
+}
+
+.fc-markdown h6 {
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+
+.fc-markdown ul,
+.fc-markdown ol {
+  margin: 0;
+  padding-left: 22px;
+}
+
+.fc-markdown li + li {
+  margin-top: 2px;
+}
+
+/* The items, in order. */
+.fc-inv-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fc-inv-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  transition:
+    opacity var(--duration) var(--ease),
+    border-color var(--duration) var(--ease);
+}
+
+.fc-inv-item[aria-busy="true"] {
+  opacity: 0.7;
+}
+
+.fc-inv-item--lifted {
+  border-color: var(--accent);
+  opacity: 0.6;
+}
+
+/* Where a dragged item would land: a bar in the gap above or below. */
+.fc-inv-item--drop-before::before,
+.fc-inv-item--drop-after::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent-strong);
+}
+
+.fc-inv-item--drop-before::before {
+  top: -7px;
+}
+
+.fc-inv-item--drop-after::after {
+  bottom: -7px;
+}
+
+.fc-inv-items[data-dragging="true"] {
+  user-select: none;
+}
+
+.fc-inv-item__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+}
+
+.fc-inv-item__handle {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 32px;
+  margin-left: -6px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: grab;
+  touch-action: none;
+}
+
+.fc-inv-item__handle:hover:not(:disabled) {
+  background: var(--raised);
+  color: var(--text);
+}
+
+.fc-inv-items[data-dragging="true"] .fc-inv-item__handle {
+  cursor: grabbing;
+}
+
+.fc-inv-item__kind {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.fc-inv-item__saving {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-inv-item__tools {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  margin-right: -6px;
+}
+
+.fc-inv-item__title {
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+
+.fc-inv-item__label {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* A finding's row sits flush in its card. */
+.fc-inv-item > .fc-explore__row {
+  margin: 0 -8px;
+}
+
+.fc-inv-item__gone {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.fc-inv-item__gone svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--warn);
+}
+
+.fc-inv-item__record,
+.fc-inv-item__view,
+.fc-inv-item__profile,
+.fc-inv-item__reference {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.fc-inv-item__profile {
+  align-items: stretch;
+}
+
+.fc-inv-item__profile > .fc-button {
+  align-self: flex-start;
+}
+
+.fc-inv-item__record-link {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.fc-inv-item__record-link svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.fc-inv-item__facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.fc-inv-item__reference a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+.fc-inv-item__note {
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+}
+
+.fc-inv-add {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* People. */
+.fc-inv-people {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fc-inv-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fc-inv-person__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fc-inv-person__name {
+  overflow-wrap: anywhere;
+}
+
+.fc-inv-person__role {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-inv-invite {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.fc-inv-invite > .fc-button {
+  align-self: flex-start;
+}
+
+.fc-inv-notes-input {
+  min-height: 180px;
+}
+
+/* Choosing an investigation to add to. */
+.fc-inv-chooser__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 0;
+}
+
+.fc-inv-chooser__list legend {
+  margin-bottom: 6px;
+}
+
+.fc-inv-chooser__option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--raised);
+  cursor: pointer;
+}
+
+.fc-inv-chooser__option:has(input:checked) {
+  border-color: var(--accent);
+}
+
+.fc-inv-chooser__option input {
+  margin-top: 4px;
+  accent-color: var(--accent);
+}
+
+.fc-inv-chooser__option > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fc-inv-chooser__title {
+  overflow-wrap: anywhere;
+}
+
+.fc-inv-chooser__meta {
+  color: var(--text-muted);
+  font-size: 13px;
+}

@@ -38,6 +38,9 @@ import { ExploreLayer } from "../explore/ExploreLayer.js";
 import { ExplorePanel } from "../explore/ExplorePanel.js";
 import { FindingPanel } from "../finding/FindingPanel.js";
 import { HELP_PATH, HelpKindPanel, HelpPanel } from "../help/HelpPanel.js";
+import { INVESTIGATIONS_PATH } from "../investigations/api.js";
+import { InvestigationPage } from "../investigations/InvestigationPage.js";
+import { InvestigationsPanel } from "../investigations/InvestigationsPanel.js";
 import { CoverageNotice } from "../layers/MapNotices.js";
 import { PROFILE_PATH } from "../layers/profile/line.js";
 import { ProfilePanel } from "../layers/profile/ProfilePanel.js";
@@ -325,6 +328,8 @@ function ReadyShell({ meta }: { meta: Meta }) {
             <Route path={ELSEWHERE_PATH} element={<OpenElsewherePanel />} />
             <Route path={PROFILE_PATH} element={<ProfilePanel />} />
             <Route path={RECENT_MENTIONS_PATH} element={<RecentMentionsPanel meta={meta} />} />
+            <Route path={INVESTIGATIONS_PATH} element={<InvestigationsPanel />} />
+            <Route path="/i/:id" element={<InvestigationPage meta={meta} />} />
             {PLACEHOLDER_ROUTES.map((route) => (
               <Route key={route.path} path={route.path} element={<PlaceholderPanel route={route} />} />
             ))}

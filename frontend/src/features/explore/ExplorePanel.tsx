@@ -28,40 +28,51 @@ function labelOf(list: ReadonlyArray<{ id: string; label: string }>, id: string)
   return list.find((entry) => entry.id === id)?.label ?? id;
 }
 
-function FindingRow({ meta, finding }: { meta: Meta; finding: FindingSummary }) {
+/**
+ * A finding as a link to its page, with its pictogram, title, step and
+ * class, and its square when this viewer may not see it exactly. Choosing
+ * it marks it on the map. Other lists of findings show them the same way.
+ */
+export function FindingLink({ meta, finding }: { meta: Meta; finding: FindingSummary }) {
   const navigate = useNavigate();
   const select = useSelectedFinding((state) => state.select);
   const { location } = finding;
   const tier = { id: finding.tier, label: labelOf(meta.vocab.tiers, finding.tier) };
   const state = { id: finding.state, label: labelOf(meta.vocab.states, finding.state) };
   return (
-    <li>
-      <a
-        className="fc-explore__row"
-        href={findingPath(finding.public_id)}
-        onClick={(event) => {
-          if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
-          event.preventDefault();
-          select(finding.public_id, [location.lon, location.lat], location.obscured);
-          navigate(findingPath(finding.public_id));
-        }}
-      >
-        <span className="fc-explore__icon">
-          <FeatureIcon classId={finding.feature_class} size={22} />
+    <a
+      className="fc-explore__row"
+      href={findingPath(finding.public_id)}
+      onClick={(event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+        event.preventDefault();
+        select(finding.public_id, [location.lon, location.lat], location.obscured);
+        navigate(findingPath(finding.public_id));
+      }}
+    >
+      <span className="fc-explore__icon">
+        <FeatureIcon classId={finding.feature_class} size={22} />
+      </span>
+      <span className="fc-explore__text">
+        <span className="fc-explore__title">{finding.title}</span>
+        <span className="fc-explore__meta">
+          <TierBadge tier={tier} state={state} size="sm" />
+          <span className="fc-explore__class">{labelOf(meta.vocab.feature_classes, finding.feature_class)}</span>
         </span>
-        <span className="fc-explore__text">
-          <span className="fc-explore__title">{finding.title}</span>
-          <span className="fc-explore__meta">
-            <TierBadge tier={tier} state={state} size="sm" />
-            <span className="fc-explore__class">{labelOf(meta.vocab.feature_classes, finding.feature_class)}</span>
+        {location.obscured ? (
+          <span className="fc-explore__where">
+            Somewhere in square <span className="fc-mono">{whereRef(location)}</span>
           </span>
-          {location.obscured ? (
-            <span className="fc-explore__where">
-              Somewhere in square <span className="fc-mono">{whereRef(location)}</span>
-            </span>
-          ) : null}
-        </span>
-      </a>
+        ) : null}
+      </span>
+    </a>
+  );
+}
+
+function FindingRow({ meta, finding }: { meta: Meta; finding: FindingSummary }) {
+  return (
+    <li>
+      <FindingLink meta={meta} finding={finding} />
     </li>
   );
 }

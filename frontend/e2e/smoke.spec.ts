@@ -175,7 +175,7 @@ test.describe("desktop", () => {
       ["/scan", "Scan a square"],
       ["/help", "Help wanted"],
       ["/f/abc123", "Finding abc123"],
-      ["/i/xyz", "Investigation"],
+      ["/i/xyz", "Investigation xyz"],
       ["/u/QuietBarrow42", "Profile"],
       ["/about", "About Field Club"],
       ["/guide", "Guide"],
@@ -255,7 +255,7 @@ test.describe("phone", () => {
     await tabs.getByRole("button", { name: "More" }).click();
     await tabs.getByRole("link", { name: "Investigations" }).click();
     await expect(page).toHaveURL(/\/investigations#/);
-    await expect(page.getByRole("heading", { name: "Investigations" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Investigations", exact: true })).toBeVisible();
     await expect(tabs.getByRole("link", { name: "Investigations" })).toHaveCount(0);
   });
 });

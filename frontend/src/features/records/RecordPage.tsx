@@ -11,6 +11,7 @@ import { useMapStore, useViewAreaStore } from "../../map/store.js";
 import { Button } from "../../ui/Button.js";
 import { EmptyState } from "../../ui/EmptyState.js";
 import { Skeleton } from "../../ui/Skeleton.js";
+import { AddToInvestigation } from "../investigations/AddToInvestigation.js";
 import { useDocumentTitle } from "../placeholders.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { fetchRecord, parseRecordId, type RecordOut, recordKeys } from "./api.js";
@@ -100,6 +101,7 @@ function RecordBody({ record, meta }: { record: RecordOut; meta: Meta }) {
           <Link className="fc-button fc-button--ghost fc-button--sm" to={elsewherePath(record.lon, record.lat)}>
             Open this spot elsewhere
           </Link>
+          <AddToInvestigation item={() => ({ kind: "record", record_id: record.id })} what="This record" />
         </div>
       </section>
 

@@ -9,10 +9,19 @@ import { Button } from "../../../ui/Button.js";
 import { copyWithToast } from "../../../ui/clipboard.js";
 import { EmptyState } from "../../../ui/EmptyState.js";
 import { Skeleton } from "../../../ui/Skeleton.js";
+import { AddToInvestigation } from "../../investigations/AddToInvestigation.js";
 import { useDocumentTitle } from "../../placeholders.js";
 import { PanelFrame } from "../../shell/PanelFrame.js";
 import type { ProfileOut } from "./api.js";
-import { distanceText, framingFor, lineLengthM, MAX_LINE_POINTS, PROFILE_PATH, profilePath } from "./line.js";
+import {
+  distanceText,
+  framingFor,
+  lineLengthM,
+  MAX_LINE_POINTS,
+  PROFILE_PATH,
+  profilePath,
+  sampleCount,
+} from "./line.js";
 import { ProfileChart } from "./ProfileChart.js";
 import { useProfileCross, useProfileHover } from "./store.js";
 import { useProfileLine, useProfileQuery } from "./useProfile.js";
@@ -219,14 +228,23 @@ export function ProfilePanel() {
         ) : null}
         {body}
         {profile.data ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={<Link2 size={16} aria-hidden />}
-            onClick={() => void copyWithToast(window.location.href, "Link to this profile copied")}
-          >
-            Copy a link to this profile
-          </Button>
+          <div className="fc-profile__tools">
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<Link2 size={16} aria-hidden />}
+              onClick={() => void copyWithToast(window.location.href, "Link to this profile copied")}
+            >
+              Copy a link to this profile
+            </Button>
+            <AddToInvestigation
+              item={() => ({
+                kind: "profile",
+                profile: { line: { type: "LineString", coordinates: points }, samples: sampleCount(length) },
+              })}
+              what="This height profile"
+            />
+          </div>
         ) : null}
       </div>
     </PanelFrame>

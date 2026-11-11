@@ -1,13 +1,4 @@
-import {
-  Activity,
-  BookOpen,
-  Info,
-  type LucideIcon,
-  MapPinned,
-  NotebookText,
-  ScanSearch,
-  UserRound,
-} from "lucide-react";
+import { Activity, BookOpen, Info, type LucideIcon, MapPinned, ScanSearch, UserRound } from "lucide-react";
 import { useEffect } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { EmptyState } from "../ui/EmptyState.js";
@@ -40,19 +31,6 @@ export const PLACEHOLDER_ROUTES: PlaceholderRoute[] = [
     title: "Scan a square",
     icon: ScanSearch,
     body: "You'll be sent to a one-kilometre square that few people have looked at, to mark what you see or to say there's nothing obvious.",
-  },
-  {
-    path: "/investigations",
-    title: "Investigations",
-    icon: NotebookText,
-    body: "Investigations are shared notebooks tied to the map. Yours, and the public ones, will be listed here.",
-  },
-  {
-    path: "/i/:id",
-    title: "Investigation",
-    subtitle: (params) => `Investigation ${params.id ?? ""}`,
-    icon: NotebookText,
-    body: "An investigation gathers findings, records, saved views and notes for one piece of work, and exports them when you're ready.",
   },
   {
     path: "/activity",

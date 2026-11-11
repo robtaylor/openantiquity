@@ -9,6 +9,7 @@ import { toast } from "../../ui/toastStore.js";
 import { useFocusLater } from "../../ui/useFocusLater.js";
 import { findingPath } from "../findings/selection.js";
 import { SENSITIVITIES, type Sensitivity } from "../findings/types.js";
+import { AddToInvestigation } from "../investigations/AddToInvestigation.js";
 import { changeSensitivity, exportUrl, lowerSensitivity, updateFinding, withdrawFinding } from "./api.js";
 import { type ViewerPosition, whoSees } from "./describe.js";
 import { reasonOf, toastFailure } from "./feedback.js";
@@ -399,6 +400,9 @@ export function Tools({ meta, finding, position, onApplied }: ToolsProps) {
           <Button size="sm" icon={<Link2 size={15} aria-hidden />} onClick={() => void copyLink(finding.public_id)}>
             Copy link
           </Button>
+          {finding.state === "withdrawn" ? null : (
+            <AddToInvestigation item={() => ({ kind: "finding", finding: finding.public_id })} what="This finding" />
+          )}
           <a
             className="fc-button fc-button--secondary fc-button--sm"
             href={exportUrl(finding.public_id, "geojson")}

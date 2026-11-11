@@ -246,7 +246,7 @@ describe("Shell", () => {
     ["/r/42", "Heritage record", null],
     ["/scan", "Scan a square", null],
     ["/help", "Help wanted", null],
-    ["/i/xyz", "Investigation", "Investigation xyz"],
+    ["/i/xyz", "Investigation", null],
     ["/u/QuietBarrow42", "Profile", "@QuietBarrow42"],
     ["/about", "About Field Club", null],
     ["/guide", "Guide", null],

@@ -9,6 +9,8 @@ import {
   type ViewGroup,
   viewTitle,
 } from "../api/meta.js";
+import { AddToInvestigation } from "../features/investigations/AddToInvestigation.js";
+import { currentView } from "../features/investigations/savedView.js";
 import { TerrainTools } from "../features/layers/TerrainTools.js";
 import { ViewPreview } from "../features/layers/ViewPreview.js";
 import { LiveSourceControls, RecordFilterControls } from "../features/records/RecordLayerControls.js";
@@ -20,6 +22,7 @@ import { Attribution, parseAttribution, safeHref, useAttributions } from "./attr
 import { LIMITS } from "./permalink.js";
 import { useMapStore } from "./store.js";
 import { overlayTroubleKey } from "./trouble.js";
+import { useMapCover } from "./visibleArea.js";
 
 /** Headings for the view groups. The groups themselves come from /meta. */
 const GROUP_LABELS: Record<ViewGroup, string> = {
@@ -335,6 +338,19 @@ export const LayerPanel = memo(function LayerPanel({ meta }: { meta: Meta }) {
       </section>
 
       <TerrainTools />
+
+      <section className="fc-layers__section">
+        <h3 className="fc-layers__heading">Keep this view</h3>
+        <p className="fc-field__hint">
+          An investigation can keep where the map is, with its layers and light, to come back to this picture.
+        </p>
+        <div>
+          <AddToInvestigation
+            item={() => ({ kind: "view", view: currentView(meta, useMapCover.getState().cover) })}
+            what="This view of the map"
+          />
+        </div>
+      </section>
 
       <section className="fc-layers__section">
         <h3 className="fc-layers__heading">Overlays</h3>
