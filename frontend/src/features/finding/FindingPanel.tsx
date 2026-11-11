@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { MapPinned, Unplug } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { Button } from "../../ui/Button.js";
 import { EmptyState } from "../../ui/EmptyState.js";
@@ -22,6 +22,7 @@ import { NextSteps } from "./NextSteps.js";
 import { Answers, Credits } from "./People.js";
 import { FollowUpTimelineSlot, MentionsSlot } from "./Slots.js";
 import { SecondLook } from "./secondLook/SecondLook.js";
+import { actionForStep, STEP_PARAM, STRAND_PARAM, stepFromAddress } from "./stepLink.js";
 import { copyLink, Tools } from "./Tools.js";
 import type { FindingDetail, Reveal } from "./types.js";
 import { isNotFound, useApplyFinding, useFinding } from "./useFinding.js";
@@ -126,6 +127,27 @@ function FindingPage({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
         return;
     }
   }
+
+  // A link from help wanted names a next step: open its form once, then take it out of the address.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const stepAsked = useRef(false);
+  const sessionKnown = session.status !== "loading";
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs once, when the finding and the session are known
+  useEffect(() => {
+    const request = stepFromAddress(searchParams);
+    if (stepAsked.current || request === null || !sessionKnown) return;
+    stepAsked.current = true;
+    setSearchParams(
+      (params) => {
+        params.delete(STEP_PARAM);
+        params.delete(STRAND_PARAM);
+        return params;
+      },
+      { replace: true },
+    );
+    const action = actionForStep(finding, meta, position, request);
+    if (action) act(action);
+  }, [searchParams, sessionKnown]);
 
   const linked = finding.evidence.some((item) => item.kind === "record_link");
   const displayName = session.me?.display_name ?? "You";

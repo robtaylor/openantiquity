@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { findOverlay, type Meta } from "../api/meta.js";
 import { useFindingsInBox } from "../features/findings/useFindingsInBox.js";
 import { type FindingsMapData, findingsMapData } from "./findingsData.js";
+import { useFindingsHidden } from "./hiddenFindings.js";
 import { useMapStore, useViewAreaStore } from "./store.js";
 import { overlayShown } from "./style.js";
 import { overlayTroubleKey } from "./trouble.js";
@@ -31,8 +32,10 @@ export function useFindingsOverlay(meta: Meta): FindingsMapData {
   const attempt = useMapStore((state) => (key === null ? 0 : (state.retries[key] ?? 0)));
   const bounds = useViewAreaStore((state) => state.bounds);
   const zoom = useViewAreaStore((state) => state.zoom);
+  // A blind second look holds the overlay back, so nothing about the findings near it is fetched or drawn.
+  const hidden = useFindingsHidden();
 
-  const wanted = shown && zoom >= FINDINGS_MIN_ZOOM;
+  const wanted = shown && !hidden && zoom >= FINDINGS_MIN_ZOOM;
   const { findings, error, errorAt } = useFindingsInBox(wanted ? bounds : null, attempt);
 
   // A failure already acted on comes back when the same box is asked for again, so each is handled once.

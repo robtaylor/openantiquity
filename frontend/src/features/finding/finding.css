@@ -235,6 +235,7 @@
 }
 
 .fc-answers__button {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -255,6 +256,30 @@
 
 .fc-answers__button:hover:not(:disabled) {
   border-color: #4a505b;
+}
+
+/* The key that gives an answer, where the page listens for 1, 2 and 3. */
+.fc-answers__key {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* No physical keyboard to press them on. */
+@media (hover: none) and (pointer: coarse) {
+  .fc-answers__key {
+    display: none;
+  }
 }
 
 .fc-answers__button--chosen {
@@ -297,13 +322,15 @@
   font-size: 13px;
 }
 
-/* Stays in sight at the foot of the panel while the optional detail is filled in. */
+/* Stays in sight at the foot of the panel while the optional detail is filled in.
+   A sticky box stops at the panel body's padding, so it reaches down over
+   that padding (24 px, `.fc-panel__body`), or the detail shows through below it. */
 .fc-second-look__send {
   position: sticky;
-  bottom: 0;
+  bottom: -24px;
   z-index: 1;
   margin: 0 -4px;
-  padding: 10px 4px 12px;
+  padding: 10px 4px 36px;
   border-top: 1px solid var(--border);
   background: var(--surface);
 }
@@ -342,6 +369,12 @@
 
 .fc-reveal__moved {
   color: var(--accent-strong);
+}
+
+.fc-reveal__class > svg,
+.fc-reveal__moved > svg {
+  flex: none;
+  margin-top: 2px;
 }
 
 /* Evidence. */

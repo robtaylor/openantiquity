@@ -145,6 +145,12 @@ export type StepAction =
 
 /** Steps that a second look meets. */
 const ANSWER_CODES = new Set(["need_observers", "need_class_agreement", "need_check", "need_trusted_review"]);
+
+/** True for a step that a second look meets, and so is offered only blind (Decision 0008). */
+export function isAnswerStep(code: string): boolean {
+  return ANSWER_CODES.has(code);
+}
+
 /** Which group of evidence kinds in `/meta` meets each evidence step. */
 const STEP_GROUPS: Record<string, string> = { need_ground: "field", need_official: "official" };
 

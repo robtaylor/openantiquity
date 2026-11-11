@@ -104,7 +104,14 @@ export function goToFinding(finding: FindingDetail): void {
  * as they are, and a layer the catalogue no longer has is skipped.
  */
 export function seeAsFinderDid(meta: Meta, finding: FindingDetail): void {
-  const view: ViewState = finding.view_state;
+  seeViewAt(meta, [finding.location.lon, finding.location.lat], finding.view_state);
+}
+
+/**
+ * Restore a finder's view at a place, with nothing else about the finding:
+ * how a blind second-look card is shown (Decision 0008).
+ */
+export function seeViewAt(meta: Meta, point: [number, number], view: ViewState): void {
   const store = useMapStore.getState();
   if (view.layer && findView(meta, view.layer)) store.setMainView(view.layer);
   const raking = view.layer ? findView(meta, view.layer)?.type === "raking" : false;
@@ -121,7 +128,6 @@ export function seeAsFinderDid(meta: Meta, finding: FindingDetail): void {
   if (pitch > 0 !== store.terrain.enabled) store.setTerrainEnabled(pitch > 0);
   const zoom = bounded(view.zoom, LIMITS.zoom) ?? Math.max(store.camera.zoom, FINDING_ZOOM);
   const bearing = bounded(view.bearing, { min: -360, max: 360 }) ?? 0;
-  const point: [number, number] = [finding.location.lon, finding.location.lat];
   const [lng, lat] = centreFor(point, zoom, bearing, uncoveredOffset());
   useMapStore.getState().requestCamera({ lng, lat, zoom, bearing, pitch });
 }

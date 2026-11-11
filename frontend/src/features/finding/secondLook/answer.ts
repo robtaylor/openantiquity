@@ -72,6 +72,17 @@ export function answerBody(meta: Meta, answer: AnswerDraft): ObservationIn {
   return body;
 }
 
+/** An answer kept as its request body, read back as the person gave it: `answerBody` the other way. */
+export function answerFromBody(meta: Meta, body: ObservationIn): AnswerDraft {
+  const checks: Record<string, CheckAnswer> = {};
+  for (const check of meta.vocab.checks) {
+    if (isCheckField(check.id) && body[check.id] === true) checks[check.id] = "no";
+    const explanation = explanationFor(meta, check.id);
+    if (explanation !== null && body.explanation === explanation) checks[check.id] = "yes";
+  }
+  return { visible: body.visible, featureClass: body.feature_class ?? null, checks, note: body.note ?? "" };
+}
+
 /** The body that keeps an answer as given and changes only its note, or restores a withdrawn one. */
 export function sameAnswer(observation: Observation, note: string | null = observation.note): ObservationIn {
   const body: ObservationIn = { visible: observation.visible };

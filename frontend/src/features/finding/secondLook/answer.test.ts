@@ -2,7 +2,15 @@
 import { describe, expect, it } from "vitest";
 import { observationFixture } from "../../../test/fixtures/findingPage.js";
 import { metaFixture as meta } from "../../../test/fixtures/meta.js";
-import { type AnswerDraft, answerBody, explanationFor, newAnswer, sameAnswer, withCheck } from "./answer.js";
+import {
+  type AnswerDraft,
+  answerBody,
+  answerFromBody,
+  explanationFor,
+  newAnswer,
+  sameAnswer,
+  withCheck,
+} from "./answer.js";
 import { othersSentence } from "./RevealSummary.js";
 
 describe("answerBody", () => {
@@ -33,6 +41,16 @@ describe("answerBody", () => {
   it("matches each check in /meta to its explanation", () => {
     expect(meta.vocab.checks.map((check) => explanationFor(meta, check.id))).toEqual(["modern", "natural", "artefact"]);
     expect(explanationFor(meta, "is_old")).toBeNull();
+  });
+});
+
+describe("answerFromBody", () => {
+  it("reads a kept answer back as it was given, so a draft can be changed before it is saved", () => {
+    let answer: AnswerDraft = { ...newAnswer("yes"), featureClass: "round_barrow", note: "clear in slope" };
+    answer = withCheck(answer, "not_modern", "no");
+    answer = withCheck(answer, "not_artefact", "yes");
+    expect(answerFromBody(meta, answerBody(meta, answer))).toEqual(answer);
+    expect(answerFromBody(meta, { visible: "no" })).toEqual(newAnswer("no"));
   });
 });
 
