@@ -2,7 +2,7 @@
 
 A connector reads one external source and yields `RecordIn` objects. The runner in `fieldclub/ingest/runner.py` does everything else: it stores the source's licence and attribution first, validates each record, upserts in batches, deletes what vanished upstream after a full run, and writes an `ingest_runs` row. A connector holds no credentials and never touches the database.
 
-Most connectors are a class with a `SourceInfo` and a `fetch()` of a few lines, because the reading is done by a shared adapter in `fieldclub/ingest/adapters/`. The reference connector is `he_nhle_scheduled_monuments.py`. Copy it.
+Most connectors are a class with a `SourceInfo` and a `fetch()` of a few lines, because the reading is done by a shared adapter in `fieldclub/ingest/adapters/`. The reference connector is `he_nhle_hub.py` with the layers built on it, such as `he_nhle_scheduled_monuments.py`, which is only its class attributes. Copy the shape of `NhleLayer.fetch` for a new kind of file, or subclass `NhleLayer` for another National Heritage List layer.
 
 ## 1. Find the source in the work-list
 
@@ -31,7 +31,7 @@ The ArcGIS and WFS readers count first and raise `IncompleteReadError` when fewe
 
 ## 3. Write the class
 
-The reference connector, cut to its parts:
+A connector that does its own reading, cut to its parts. It is the scheduled monuments as they were before they moved onto `NhleLayer`, which does the same in `fetch()` and `to_record()`:
 
 ```python
 @register

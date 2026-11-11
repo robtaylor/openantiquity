@@ -7,16 +7,21 @@ Scotland, Wales and Ireland. See `support.py` for how it was recorded.
 from __future__ import annotations
 
 import copy
+import json
 
 import pytest
 import respx
+from shapely.geometry import Point
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fieldclub.ingest import registry
+from fieldclub.ingest.adapters.common import Feature
 from fieldclub.ingest.connectors.oxford_edinburgh_atlas_of_hillforts import (
     DATING_PERIODS,
+    NOT_KEPT,
     AtlasOfHillforts,
+    to_record,
 )
 from fieldclub.ingest.runner import IngestFailedError, run_connector
 from fieldclub.models import Record, Source
@@ -114,6 +119,31 @@ def test_the_raw_payload_keeps_what_is_there_and_drops_blanks(db: Session) -> No
     assert carghidown.raw["Dating_Evidence__Reliability"] == "B - Medium"
     assert "Alternative_Name_s_" not in carghidown.raw  # blank for this hillfort
     assert all(value is not None and value != "" for value in carghidown.raw.values())
+
+
+def test_the_raw_payload_never_keeps_the_names_of_volunteer_recorders() -> None:
+    """`Individual_Group` names the people or group who recorded a citizen-science entry.
+
+    They are private people who said nothing about being shown on a map, and
+    their names say nothing about the hillfort, so they are not kept, as the
+    parklands connector drops its creator and editor.
+    """
+    feature = Feature(
+        properties={
+            "Atlas_Number": 4001,
+            "Name": "Hill camp",
+            "Citizen_Science": "Yes",
+            "Individual_Group": "Jane Walker and the Upland Survey Group",
+            "Summary_Description": "A small univallate fort.",
+        },
+        geometry=Point(-2.7, 52.0),
+    )
+    record = to_record(feature)
+    assert record.raw is not None
+    assert "Individual_Group" not in record.raw
+    assert "Jane Walker" not in json.dumps(record.raw)
+    assert record.raw["Citizen_Science"] == "Yes"
+    assert set(NOT_KEPT) == {"Individual_Group"}
 
 
 @respx.mock

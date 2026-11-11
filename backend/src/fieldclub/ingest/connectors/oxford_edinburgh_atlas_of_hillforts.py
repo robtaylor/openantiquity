@@ -15,6 +15,11 @@ Hillfort types and dating evidence are columns of "Yes" and "No", one per type
 and one per span of years. They become `monument_types` and `periods`. The
 spans are wider than the periods in `vocab.Period` and do not line up with
 them, so a span that straddles two periods gives both.
+
+`Individual_Group` names the volunteers, people or groups, who recorded a
+citizen-science entry. Their names say nothing about the hillfort and they
+never agreed to be shown on a map, so they are not kept, as the parklands
+connector drops its creator and editor fields.
 """
 
 from __future__ import annotations
@@ -54,6 +59,8 @@ DATING_PERIODS = {
     "Dating_Evidence__Post_AD800": (Period.EARLY_MEDIEVAL, Period.MEDIEVAL, Period.POST_MEDIEVAL),
     "Dating_Evidence__Unknown": (Period.UNKNOWN,),
 }
+# Fields left out of `raw`: see the module docstring.
+NOT_KEPT = ("Individual_Group",)
 FIELDS = (
     "Atlas_Number",
     "Name",
@@ -131,6 +138,6 @@ def to_record(feature: Feature) -> RecordIn:
         raw={
             key: value
             for key, value in json_ready(properties).items()
-            if value is not None and (not isinstance(value, str) or value.strip())
+            if key not in NOT_KEPT and value is not None and (not isinstance(value, str) or value.strip())
         },
     )

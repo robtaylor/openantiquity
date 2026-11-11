@@ -24,7 +24,6 @@ from fieldclub.ingest.adapters.common import Feature, json_ready
 from fieldclub.ingest.adapters.download import download
 from fieldclub.ingest.adapters.files import read_vector, vector_info
 from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo
-from fieldclub.ingest.connectors.he_nhle_scheduled_monuments import CURRENCY_STATEMENT, LIST_ENTRY_URL
 from fieldclub.vocab import RecordCategory, SourceAccess, SourceReuse
 
 NHLE_ITEM = "767f279327a24845bf47dfe5eae9862b"
@@ -33,6 +32,13 @@ OGL_URL = "https://www.nationalarchives.gov.uk/doc/open-government-licence/versi
 NHLE_LICENCE = "Open Government Licence v3.0, via Historic England Open Data Hub Terms and Conditions"
 NHLE_ATTRIBUTION = (
     "© Historic England [year]. Contains Ordnance Survey data © Crown copyright and database right [year]."
+)
+LIST_ENTRY_URL = "https://historicengland.org.uk/listing/the-list/list-entry/{ListEntry}"
+# Historic England recommends this statement with its data. The work-list keeps it among the gotchas.
+CURRENCY_STATEMENT = (
+    "The Historic England Data contained in this material was obtained on [date]. "
+    "The most publicly available up to date Historic England Data can be obtained from "
+    "HistoricEngland.org.uk."
 )
 _SLUG = re.compile(r"[^a-z0-9]+")
 
