@@ -562,8 +562,8 @@ def suggest_for_finding(
         db, origin.lon, origin.lat, radius_m=SUGGEST_RADIUS_M, limit=SUGGEST_CANDIDATES, area=area
     )
     classes = [finding.feature_class]
-    answered = findings.my_observation(db, finding, viewer) is not None
-    if finding.community_class and findings.answers_visible(finding, viewer, answered):
+    mine = findings.my_observation(db, finding, viewer)
+    if finding.community_class and findings.answers_visible(finding, viewer, mine):
         classes.append(finding.community_class)
     scored = []
     for result in candidates:

@@ -15,6 +15,7 @@ tier does, so the people who answered aren't credited to this viewer at all
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
@@ -30,7 +31,8 @@ from fieldclub.schemas.common import (
     geojson_geometry,
     geojson_point,
 )
-from fieldclub.services import review, sensitivity
+from fieldclub.services import actions, review, sensitivity
+from fieldclub.services.actions import Action
 from fieldclub.services.confidence import (
     ANSWER_CREDIT_KINDS,
     Assessment,
@@ -311,6 +313,40 @@ class CreditOut(ApiModel):
     evidence_id: int | None = None
 
 
+class ActionOut(ApiModel):
+    """Whether this viewer may do something, and if not, the code the route would refuse with."""
+
+    allowed: bool
+    # Null when allowed. Otherwise an error code, or `already_answered`,
+    # `highest_level` or `lowest_level` when there is nothing to do.
+    reason: str | None
+
+    @classmethod
+    def build(cls, action: Action) -> ActionOut:
+        return cls(allowed=action.allowed, reason=action.reason)
+
+
+class FindingActionsOut(ApiModel):
+    """What this viewer may do on the finding, from the rules its routes enforce (`services.actions`)."""
+
+    answer: ActionOut
+    add_evidence: ActionOut
+    comment: ActionOut
+    edit: ActionOut
+    withdraw: ActionOut
+    # To the next level up, through `PUT /findings/{public_id}/sensitivity`.
+    raise_level: ActionOut
+    # To the next level down, through `PUT /mod/findings/{public_id}/sensitivity`.
+    lower_level: ActionOut
+    # An official item someone else added. Each item's own `actions.verify` says which.
+    verify: ActionOut
+
+
+class EvidenceActionsOut(ApiModel):
+    vote: ActionOut
+    verify: ActionOut
+
+
 class EvidenceOut(ApiModel):
     """One evidence item.
 
@@ -347,6 +383,7 @@ class EvidenceOut(ApiModel):
     independent: bool
     my_vote: int | None
     redacted: bool
+    actions: EvidenceActionsOut
 
 
 class ObservationOut(ApiModel):
@@ -363,6 +400,8 @@ class ObservationOut(ApiModel):
     updated_at: datetime
     # True once taken back. It no longer counts, and can't be replaced by another answer.
     withdrawn: bool
+    # False while an answer given with `detail_follows` waits for its detail or its reveal.
+    revealed: bool
 
     @classmethod
     def build(cls, observation: Observation, user: User) -> ObservationOut:
@@ -380,6 +419,7 @@ class ObservationOut(ApiModel):
             created_at=observation.created_at,
             updated_at=observation.updated_at,
             withdrawn=observation.withdrawn_at is not None,
+            revealed=observation.revealed_at is not None,
         )
 
 
@@ -396,6 +436,7 @@ class FindingDetail(FindingSummary):
     answers_visible: bool
     my_observation: ObservationOut | None
     following: bool
+    actions: FindingActionsOut
 
     @classmethod
     def from_view(cls, view: FindingView, viewer: User | None) -> FindingDetail:
@@ -422,7 +463,10 @@ class FindingDetail(FindingSummary):
                 ],
                 tallies=tallies,
             ),
-            evidence=[_evidence_out(item, statuses, exact=exact, viewer=viewer) for item in view.evidence],
+            evidence=[
+                _evidence_out(item, statuses, finding=finding, exact=exact, viewer=viewer)
+                for item in view.evidence
+            ],
             credits=_credits(view),
             answers_visible=view.answers_visible,
             my_observation=(
@@ -431,6 +475,7 @@ class FindingDetail(FindingSummary):
                 else None
             ),
             following=view.following,
+            actions=_finding_actions(actions.finding_actions(finding, viewer, view.my_observation)),
         )
 
 
@@ -451,13 +496,25 @@ def _credits(view: FindingView) -> list[CreditOut]:
     ]
 
 
+def _finding_actions(found: actions.FindingActions) -> FindingActionsOut:
+    return FindingActionsOut(
+        **{f.name: ActionOut.build(getattr(found, f.name)) for f in dataclasses.fields(found)}
+    )
+
+
 def _evidence_out(
-    item: EvidenceView, statuses: dict[int, EvidenceStatus], *, exact: bool, viewer: User | None
+    item: EvidenceView,
+    statuses: dict[int, EvidenceStatus],
+    *,
+    finding: Finding,
+    exact: bool,
+    viewer: User | None,
 ) -> EvidenceOut:
     evidence = item.evidence
     status = statuses.get(evidence.id)
     data = evidence.data or {}
     shows_media = item.media is not None and may_see_media(item.media, viewer)
+    allowed = actions.evidence_actions(finding, evidence, viewer)
     return EvidenceOut(
         id=evidence.id,
         kind=EvidenceKind(evidence.kind),
@@ -484,6 +541,9 @@ def _evidence_out(
         independent=status.independent if status is not None else False,
         my_vote=item.my_vote,
         redacted=not exact,
+        actions=EvidenceActionsOut(
+            vote=ActionOut.build(allowed.vote), verify=ActionOut.build(allowed.verify)
+        ),
     )
 
 
@@ -548,15 +608,13 @@ def finding_feature(finding: Finding, viewer: User | None) -> FindingFeature:
 # --------------------------------------------------------------------------
 
 
-class ObservationIn(RequestModel):
-    """A second look: can you see it, and optionally what do you think it is.
+class ObservationDetailIn(RequestModel):
+    """What you think it is, beyond whether you can see it. Every part is optional.
 
-    It is final once given: only `note` can change afterwards. A check can't
-    be asserted together with its matching explanation, such as `not_modern`
-    with `explanation: modern`.
+    A check can't be asserted together with its matching explanation, such
+    as `not_modern` with `explanation: modern`.
     """
 
-    visible: Visible
     feature_class: FeatureClass | None = None
     period: Period | None = None
     explanation: Explanation | None = None
@@ -566,10 +624,31 @@ class ObservationIn(RequestModel):
     note: str | None = Field(default=None, max_length=TEXT_MAX)
 
     @model_validator(mode="after")
-    def _consistent(self) -> ObservationIn:
+    def _consistent(self) -> ObservationDetailIn:
         check = review.contradicted_check(self)
         if check is not None:
             raise ValueError(f"An answer can't say both {check.value} and {CHECK_EXPLANATIONS[check].value}.")
+        return self
+
+
+class ObservationIn(ObservationDetailIn):
+    """A second look: can you see it, and optionally what do you think it is.
+
+    It is final once given: only `note` can change afterwards. With
+    `detail_follows`, it carries `visible` alone. It is stored and counts at
+    once, the reply reveals nothing, and the detail or the reveal alone
+    follows through `POST /findings/{public_id}/observation/reveal`.
+    """
+
+    visible: Visible
+    detail_follows: bool = False
+
+    @model_validator(mode="after")
+    def _detail_later(self) -> ObservationIn:
+        if self.detail_follows and any(
+            getattr(self, name) is not None for name in ObservationDetailIn.model_fields
+        ):
+            raise ValueError("An answer whose detail follows carries only `visible`. Send the detail next.")
         return self
 
 
@@ -590,9 +669,22 @@ class ComparisonOut(ApiModel):
     others: AnswerCounts
 
 
-class Reveal(ApiModel):
-    """What answering a second look shows you: the finding in full, and whether it moved."""
+class AnswerHeld(ApiModel):
+    """An answer given with `detail_follows`: stored and counted, and nothing shown yet."""
 
+    revealed: Literal[False] = False
+    observation: ObservationOut
+
+
+class Reveal(ApiModel):
+    """What answering a second look shows you: the finding in full, and whether it moved.
+
+    The tiers and states are those before and after this request. After an
+    answer given in two steps, the reveal compares the tier before and after
+    the detail, so a move the answer made on its own isn't shown as one.
+    """
+
+    revealed: Literal[True] = True
     observation: ObservationOut
     finding: FindingDetail
     comparison: ComparisonOut

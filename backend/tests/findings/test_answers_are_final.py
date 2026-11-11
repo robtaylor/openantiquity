@@ -63,6 +63,7 @@ def test_the_comparison_counts_only_other_people_s_standing_answers(db: Session,
     db.commit()
 
     result = answer(db, finding, make_user(), Visible.UNSURE)
+    assert result.comparison is not None
     assert result.comparison.others == {Visible.YES: 1, Visible.NO: 1, Visible.UNSURE: 0}
 
 

@@ -141,6 +141,7 @@ from fieldclub.schemas.common import PublicUser, int_from_cursor, paginate
 from fieldclub.services import findings, ids, investigations, media, sensitivity
 from fieldclub.services.reputation import OBSERVATION_CORROBORATED, OBSERVATION_RULED_OUT, TRUSTED_AT
 from fieldclub.vocab import (
+    MODERATOR_ROLES,
     REPORT_DUE_HOURS,
     ModerationActionKind,
     ReportReason,
@@ -272,6 +273,25 @@ def _now() -> datetime:
 
 # One rule for who counts as a moderator, beside the rule for who sees a hidden finding.
 is_moderator = findings.is_moderator
+
+
+class ModeratorsOnlyError(ForbiddenError):
+    code = "moderators_only"
+    message = "Only moderators can do that."
+
+
+def check_moderator(user: User) -> None:
+    """Refuse anyone who isn't a moderator or an admin, as every `/mod` route does."""
+    if Role(user.role) not in MODERATOR_ROLES:
+        raise ModeratorsOnlyError()
+
+
+def check_may_set_sensitivity(finding: Finding, moderator: User, level: Sensitivity) -> None:
+    """Refuse what `set_sensitivity` refuses, once the route has let a moderator through."""
+    if moderator.has_id(finding.author_id):
+        raise OwnContentError()
+    if not sensitivity.may_change_sensitivity(finding, moderator, level):
+        raise sensitivity.SensitivityChangeForbiddenError()
 
 
 def _require_moderator(user: User) -> User:
@@ -880,8 +900,7 @@ def set_sensitivity(db: Session, public_id: str, moderator: User, level: Sensiti
     """A moderator sets a finding's level, lower as well as higher (Decision 0005)."""
     _require_moderator(moderator)
     finding = findings.lock_finding(db, public_id, moderator)
-    if moderator.has_id(finding.author_id):
-        raise OwnContentError()
+    check_may_set_sensitivity(finding, moderator, level)
     before = finding.sensitivity
     sensitivity.change_sensitivity(db, finding, moderator, level)
     if finding.sensitivity != before:
@@ -1107,14 +1126,15 @@ class EligibleMember:
 def _answers_seen(db: Session, found: Iterable[Finding], viewer: User) -> set[int]:
     """The findings whose answers `viewer` may see: those they found or answered (Decision 0008)."""
     found = list(found)
-    answered = set(
-        db.scalars(
-            select(Observation.finding_id).where(
+    mine = {
+        obs.finding_id: obs
+        for obs in db.scalars(
+            select(Observation).where(
                 Observation.user_id == viewer.id, Observation.finding_id.in_([f.id for f in found])
             )
         )
-    )
-    return {f.id for f in found if findings.answers_visible(f, viewer, f.id in answered)}
+    }
+    return {f.id for f in found if findings.answers_visible(f, viewer, mine.get(f.id))}
 
 
 def _people_on(db: Session, finding_ids: set[int], answers_seen: set[int]) -> dict[int, set[int]]:

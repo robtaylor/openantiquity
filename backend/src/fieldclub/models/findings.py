@@ -212,6 +212,10 @@ class Observation(Base):
     # Set when the person takes their answer back. The row stays, so an answer
     # given after the reveal can't replace it (Decision 0008).
     withdrawn_at: Mapped[datetime | None] = mapped_column(TimestampTz)
+    # When the person was shown the finding and the other answers. Null between
+    # an answer given with "detail follows" and its detail or reveal: until then
+    # they are someone who hasn't seen the answers (Decision 0008).
+    revealed_at: Mapped[datetime | None] = mapped_column(TimestampTz)
 
 
 class Evidence(Base):

@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, Path, Query, Response
 
 from fieldclub.api.deps import Contributor, CursorQuery, Db, PageQuery, private, rate_limit
 from fieldclub.api.findings import detail
-from fieldclub.errors import BadRequestError, ForbiddenError
+from fieldclub.errors import BadRequestError
 from fieldclub.models import User
 from fieldclub.schemas.common import Page
 from fieldclub.schemas.findings import FindingDetail
@@ -33,7 +33,7 @@ from fieldclub.schemas.moderation import (
     RoleIn,
 )
 from fieldclub.services import moderation
-from fieldclub.vocab import MODERATOR_ROLES, ReportReason, ReportStatus, ReportTarget, Role
+from fieldclub.vocab import ReportReason, ReportStatus, ReportTarget
 
 
 def require_moderator(user: Contributor) -> User:
@@ -42,8 +42,7 @@ def require_moderator(user: Contributor) -> User:
     Every route here needs the welcome step, reads included, since that step
     is where a person accepts the terms they moderate by.
     """
-    if Role(user.role) not in MODERATOR_ROLES:
-        raise ForbiddenError("Only moderators can do that.", code="moderators_only")
+    moderation.check_moderator(user)
     return user
 
 

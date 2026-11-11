@@ -141,6 +141,9 @@ ROUTES: dict[tuple[str, str], Expect] = {
     ("PUT", "/api/v1/findings/{public_id}/observation"): Expect(
         "test_writes_answer_with_what_the_writer_may_see", CONTRIBUTOR
     ),
+    ("POST", "/api/v1/findings/{public_id}/observation/reveal"): Expect(
+        "test_writes_answer_with_what_the_writer_may_see", CONTRIBUTOR
+    ),
     ("DELETE", "/api/v1/findings/{public_id}/observation"): Expect(writer=CONTRIBUTOR),
     ("GET", "/api/v1/findings/{public_id}/observations"): Expect(
         "test_comments_and_answers_carry_no_position", sample=F + "/observations", hidden_test=HIDDEN

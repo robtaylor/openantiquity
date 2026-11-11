@@ -314,6 +314,12 @@ def check_open(finding: Finding) -> None:
         raise FindingClosedError()
 
 
+def check_finder(finding: Finding, actor: User) -> None:
+    """Refuse anyone but the finder: editing and withdrawing are theirs alone."""
+    if not actor.has_id(finding.author_id):
+        raise NotFinderError()
+
+
 def require_exact(finding: Finding, user: User) -> None:
     """Refuse a contribution from someone who sees the finding only as a 1 km square."""
     if not sensitivity.sees_exact(finding, user):
@@ -649,8 +655,7 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
     feature class can raise the level (`sensitivity.level_after_class_change`,
     applied on save) and is reassessed, because the finder's class counts.
     """
-    if not actor.has_id(finding.author_id):
-        raise NotFinderError()
+    check_finder(finding, actor)
     unknown = set(changes) - _EDITABLE
     assert not unknown, f"not editable: {sorted(unknown)}"
     location: Point = changes.get("location") or Point(point_lon_lat(finding.location))
@@ -686,11 +691,14 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
     return finding
 
 
+def check_may_withdraw(finding: Finding, actor: User) -> None:
+    check_finder(finding, actor)
+    check_open(finding)
+
+
 def withdraw_finding(db: Session, finding: Finding, actor: User) -> Reassessment:
     """The finder takes the finding back. Hold the lock."""
-    if not actor.has_id(finding.author_id):
-        raise NotFinderError()
-    check_open(finding)
+    check_may_withdraw(finding, actor)
     return reassess(db, finding, actor, state=FindingState.WITHDRAWN)
 
 
@@ -913,6 +921,12 @@ def check_evidence_fields(db: Session, user: User, fields: EvidenceFields, *, to
             raise InvalidEvidenceError("Attach a photo you uploaded yourself.")
 
 
+def check_may_add_evidence(finding: Finding, user: User) -> None:
+    """Refuse evidence that `add_evidence` refuses whatever it holds."""
+    check_open(finding)
+    require_exact(finding, user)
+
+
 def add_evidence(
     db: Session, finding: Finding, user: User, fields: EvidenceFields
 ) -> tuple[Evidence, Reassessment]:
@@ -924,8 +938,7 @@ def add_evidence(
     longer has, which empties `record_id`, and the evidence stays a working
     reference.
     """
-    check_open(finding)
-    require_exact(finding, user)
+    check_may_add_evidence(finding, user)
     check_evidence_fields(db, user, fields, today=datetime.now(UTC).date())
     data: dict[str, Any] = {}
     if fields.view is not None:
@@ -1007,14 +1020,18 @@ def delete_evidence(db: Session, evidence_id: int, user: User) -> Reassessment:
     return reassess(db, finding, user)
 
 
-def vote(db: Session, evidence_id: int, user: User, value: int) -> Reassessment:
-    """Endorse (+1), object to (-1) or take back (0) a vote on evidence, and reassess."""
-    assert value in (-1, 0, 1), "a vote is -1, 0 or 1"
-    evidence, finding = _locked_evidence(db, evidence_id, user)
+def check_may_vote(finding: Finding, evidence: Evidence, user: User) -> None:
     check_open(finding)
     require_exact(finding, user)
     if user.has_id(evidence.user_id) or user.has_id(finding.author_id):
         raise VoteNotAllowedError()
+
+
+def vote(db: Session, evidence_id: int, user: User, value: int) -> Reassessment:
+    """Endorse (+1), object to (-1) or take back (0) a vote on evidence, and reassess."""
+    assert value in (-1, 0, 1), "a vote is -1, 0 or 1"
+    evidence, finding = _locked_evidence(db, evidence_id, user)
+    check_may_vote(finding, evidence, user)
     if value == 0:
         db.execute(
             delete(EvidenceVote).where(
@@ -1031,6 +1048,22 @@ def vote(db: Session, evidence_id: int, user: User, value: int) -> Reassessment:
     return reassess(db, finding, user)
 
 
+def check_may_verify(finding: Finding, user: User, evidence: Evidence | None = None) -> None:
+    """Refuse a verification `verify` refuses: of `evidence`, or of any item on the finding when None."""
+    check_open(finding)
+    if (
+        Role(user.role) not in VERIFIER_ROLES
+        or user.has_id(finding.author_id)
+        or (evidence is not None and user.has_id(evidence.user_id))
+    ):
+        raise VerifyNotAllowedError()
+    require_exact(finding, user)
+    if evidence is not None and EvidenceKind(evidence.kind) not in OFFICIAL_KINDS:
+        raise InvalidEvidenceError(
+            "Only an HER entry, a designation or a publication is verified.", code="not_official"
+        )
+
+
 def verify(db: Session, evidence_id: int, user: User) -> Reassessment:
     """An archaeologist or moderator verifies an official item, which can put a finding on record.
 
@@ -1038,18 +1071,7 @@ def verify(db: Session, evidence_id: int, user: User) -> Reassessment:
     person who added the item can do it.
     """
     evidence, finding = _locked_evidence(db, evidence_id, user)
-    check_open(finding)
-    if (
-        Role(user.role) not in VERIFIER_ROLES
-        or user.has_id(finding.author_id)
-        or user.has_id(evidence.user_id)
-    ):
-        raise VerifyNotAllowedError()
-    require_exact(finding, user)
-    if EvidenceKind(evidence.kind) not in OFFICIAL_KINDS:
-        raise InvalidEvidenceError(
-            "Only an HER entry, a designation or a publication is verified.", code="not_official"
-        )
+    check_may_verify(finding, user, evidence)
     if evidence.verified_by is None:
         evidence.verified_by = user.id
         evidence.verified_at = datetime.now(UTC)
@@ -1200,10 +1222,19 @@ def my_observation(db: Session, finding: Finding, viewer: User | None) -> Observ
     )
 
 
-def answers_visible(finding: Finding, viewer: User | None, answered: bool) -> bool:
-    """Whether `viewer` may see other people's answers (Decision 0008): the finder or an answerer."""
+def answers_visible(finding: Finding, viewer: User | None, mine: Observation | None) -> bool:
+    """Whether `viewer` may see other people's answers (Decision 0008).
+
+    The finder may, and so may someone whose own answer, `mine`, has been
+    revealed, even if they later took it back. An answer waiting for its
+    detail hasn't been: until its reveal its author is still someone who
+    hasn't seen the answers.
+    """
     active = sensitivity.active_viewer(viewer)
-    return active is not None and (active.has_id(finding.author_id) or answered)
+    if active is None:
+        return False
+    assert mine is None or active.has_id(mine.user_id), "`mine` is the viewer's own answer"
+    return active.has_id(finding.author_id) or (mine is not None and mine.revealed_at is not None)
 
 
 @dataclass(frozen=True)
@@ -1233,7 +1264,7 @@ def finding_view(db: Session, finding: Finding, viewer: User | None) -> FindingV
         assessment=assessment,
         evidence=evidence_for(db, finding, viewer, known=people),
         people=people,
-        answers_visible=answers_visible(finding, viewer, mine is not None),
+        answers_visible=answers_visible(finding, viewer, mine),
         my_observation=mine,
         following=is_following(db, viewer, finding),
         nation=sensitivity.visible_nation(db, finding, viewer),

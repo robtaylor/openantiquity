@@ -20,6 +20,14 @@ Blindness:
   given, only its note can change. Taking it back marks it withdrawn and it
   stops counting, but the row stays, so a new answer can't replace it. The
   same answer given again restores it.
+- An answer can come in two steps, so the optional detail is asked for after
+  the answer, never before it (docs/UI.md). The answer is sent saying that
+  detail follows: it is stored and counts at once, and the reply reveals
+  nothing. Then the detail (class, period, explanation, checks, note) is
+  added once, or skipped, and that reply is the reveal (`reveal`). Until
+  then the person hasn't seen the answers, on every route: `revealed_at` is
+  empty, and `findings.answers_visible` turns on it. The detail was given
+  blind, so it counts exactly as detail sent with the answer does.
 - Activity doesn't say who answered. `observation_added`, and any tier or
   state change an answer causes, are recorded with no actor, so a follower
   can't read someone's answer from the event that follows it.
@@ -100,9 +108,8 @@ class ObservationNotFoundError(NotFoundError):
 # --------------------------------------------------------------------------
 
 
-# Everything in an answer but its note: the part that can't change once given.
-_FINAL_COLUMNS = (
-    "visible",
+# The optional detail of an answer, but its note.
+_DETAIL_COLUMNS = (
     "feature_class",
     "period",
     "explanation",
@@ -110,6 +117,8 @@ _FINAL_COLUMNS = (
     "not_natural",
     "not_artefact",
 )
+# Everything in an answer but its note: the part that can't change once given.
+_FINAL_COLUMNS = ("visible", *_DETAIL_COLUMNS)
 
 
 def contradicted_check(answer: Any) -> Check | None:
@@ -125,8 +134,9 @@ def contradicted_check(answer: Any) -> Check | None:
 
 
 @dataclass(frozen=True)
-class Answer:
-    visible: Visible
+class Detail:
+    """What someone thinks a feature is, beyond whether they can see it. Every part is optional."""
+
     feature_class: FeatureClass | None = None
     period: Period | None = None
     explanation: Explanation | None = None
@@ -138,9 +148,29 @@ class Answer:
     def __post_init__(self) -> None:
         assert contradicted_check(self) is None, "an answer can't assert a check and its explanation"
 
+    def detail_columns(self) -> dict[str, Any]:
+        """The detail as `Observation` columns, without the note."""
+        return {name: _column(getattr(self, name)) for name in _DETAIL_COLUMNS}
+
+    @property
+    def is_empty(self) -> bool:
+        return self.note is None and all(value is None for value in self.detail_columns().values())
+
+
+@dataclass(frozen=True, kw_only=True)
+class Answer(Detail):
+    """A second look. With `detail_follows` it carries no detail, which `reveal` adds later."""
+
+    visible: Visible
+    detail_follows: bool = False
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        assert not (self.detail_follows and not self.is_empty), "an answer whose detail follows has none yet"
+
     def columns(self) -> dict[str, Any]:
         """The answer as `Observation` columns, without the note."""
-        return {name: _column(getattr(self, name)) for name in _FINAL_COLUMNS}
+        return {"visible": _column(self.visible), **self.detail_columns()}
 
 
 def _column(value: StrEnum | bool | None) -> str | bool | None:
@@ -165,7 +195,20 @@ class Comparison:
 class AnswerResult:
     observation: Observation
     reassessment: Reassessment
-    comparison: Comparison
+    # None while the answer waits for its detail: the reply then shows nothing.
+    comparison: Comparison | None
+
+    @property
+    def revealed(self) -> bool:
+        return self.observation.revealed_at is not None
+
+
+def check_may_answer(finding: Finding, user: User) -> None:
+    """Refuse a second look, or a change to one, that `put_observation` would refuse before reading it."""
+    findings.check_open(finding)
+    if user.has_id(finding.author_id):
+        raise OwnFindingError()
+    findings.require_exact(finding, user)
 
 
 def put_observation(db: Session, finding: Finding, user: User, answer: Answer) -> AnswerResult:
@@ -174,30 +217,104 @@ def put_observation(db: Session, finding: Finding, user: User, answer: Answer) -
     The answer itself is final once given (see the module docstring):
     anything but the note that differs from the stored answer is refused
     with `AnswerFinalError`, and so is the same answer given again after
-    it was taken back, unless it matches.
+    it was taken back, unless it matches. An answer sent with
+    `detail_follows` is stored, counts and isn't revealed. Sent again
+    without it, with the same `visible`, its detail is added as `reveal`
+    adds it.
     """
     findings.lock(db, finding)
-    findings.check_open(finding)
-    if user.has_id(finding.author_id):
-        raise OwnFindingError()
-    findings.require_exact(finding, user)
+    check_may_answer(finding, user)
     observation = findings.my_observation(db, finding, user)
-    is_new = observation is None
-    if observation is None:
-        observation = Observation(finding_id=finding.id, user_id=user.id, **answer.columns())
-        db.add(observation)
-    elif _stored(observation) != answer.columns():
-        raise AnswerFinalError()
-    observation.note = answer.note
-    observation.withdrawn_at = None
+    if observation is not None and observation.revealed_at is None:
+        if observation.visible != answer.visible.value:
+            raise AnswerFinalError()
+        observation.withdrawn_at = None
+        if not answer.detail_follows:
+            return _add_detail(db, finding, user, observation, answer)
+        db.flush()
+        return _held(db, finding, user, observation)
+    if observation is not None:
+        if answer.detail_follows:
+            # Already revealed: nothing to hold back, and nothing changes.
+            if observation.visible != answer.visible.value:
+                raise AnswerFinalError()
+        elif _stored(observation) != answer.columns():
+            raise AnswerFinalError()
+        else:
+            observation.note = answer.note
+        observation.withdrawn_at = None
+        db.flush()
+        return _revealed(db, finding, user, observation)
+
+    observation = Observation(
+        finding_id=finding.id,
+        user_id=user.id,
+        note=answer.note,
+        revealed_at=None if answer.detail_follows else datetime.now(UTC),
+        **answer.columns(),
+    )
+    db.add(observation)
     db.flush()
-    if is_new:
-        # No actor and no data: followers learn that someone answered, not who
-        # or how. The answerer is left out of the notifications instead.
-        activity.record(db, ActivityKind.OBSERVATION_ADDED, None, finding, quiet_for=user)
+    # No actor and no data: followers learn that someone answered, not who
+    # or how. The answerer is left out of the notifications instead.
+    activity.record(db, ActivityKind.OBSERVATION_ADDED, None, finding, quiet_for=user)
+    if answer.detail_follows:
+        return _held(db, finding, user, observation)
+    return _revealed(db, finding, user, observation)
+
+
+def reveal(db: Session, finding: Finding, user: User, detail: Detail) -> AnswerResult:
+    """Add the detail to an answer given with "detail follows", or skip it, and reveal the finding.
+
+    The detail is added once. Asked again after the reveal, it answers the
+    same as long as the detail matches what is stored (`AnswerFinalError`
+    otherwise), and the note can change, as `put_observation` allows. An
+    answer taken back has nothing to reveal until it is restored.
+    """
+    findings.lock(db, finding)
+    observation = findings.my_observation(db, finding, user)
+    if observation is None or observation.withdrawn_at is not None:
+        raise ObservationNotFoundError()
+    if observation.revealed_at is None:
+        return _add_detail(db, finding, user, observation, detail)
+    given = {name: value for name, value in detail.detail_columns().items() if value is not None}
+    if any(getattr(observation, name) != value for name, value in given.items()):
+        raise AnswerFinalError()
+    if detail.note is not None:
+        observation.note = detail.note
+    db.flush()
+    return _revealed(db, finding, user, observation)
+
+
+def _add_detail(
+    db: Session, finding: Finding, user: User, observation: Observation, detail: Detail
+) -> AnswerResult:
+    """Store an unrevealed answer's detail, which is a contribution, and reveal it."""
+    assert observation.revealed_at is None, "the detail is added once, before the reveal"
+    if not detail.is_empty:
+        check_may_answer(finding, user)
+    for name, value in detail.detail_columns().items():
+        setattr(observation, name, value)
+    observation.note = detail.note
+    observation.revealed_at = datetime.now(UTC)
+    db.flush()
+    return _revealed(db, finding, user, observation)
+
+
+def _reassessed(db: Session, finding: Finding, user: User, observation: Observation) -> Reassessment:
     findings.follow(db, user, finding)
     result = findings.reassess(db, finding, None, quiet_for=user)
     db.refresh(observation)
+    return result
+
+
+def _held(db: Session, finding: Finding, user: User, observation: Observation) -> AnswerResult:
+    return AnswerResult(observation, _reassessed(db, finding, user, observation), None)
+
+
+def _revealed(db: Session, finding: Finding, user: User, observation: Observation) -> AnswerResult:
+    assert observation.revealed_at is not None, "only a revealed answer is compared"
+    result = _reassessed(db, finding, user, observation)
     return AnswerResult(observation, result, compare(result, user, observation))
 
 
@@ -243,13 +360,13 @@ class ObservationPage:
 def list_observations(
     db: Session, finding: Finding, viewer: User | None, *, limit: int, cursor: str | None = None
 ) -> ObservationPage:
-    """Everyone's standing answers, oldest first, or `AnswerFirstError` for someone who hasn't answered.
+    """Everyone's standing answers, oldest first, or `AnswerFirstError` for someone who hasn't seen them.
 
-    Someone who answered and took it back has seen the answers already, so
-    they still may.
+    Someone whose answer was revealed and who took it back has seen the
+    answers already, so they still may. Someone whose answer waits for its
+    detail hasn't.
     """
-    answered = findings.my_observation(db, finding, viewer) is not None
-    if not findings.answers_visible(finding, viewer, answered):
+    if not findings.answers_visible(finding, viewer, findings.my_observation(db, finding, viewer)):
         raise AnswerFirstError()
     query = (
         select(Observation)

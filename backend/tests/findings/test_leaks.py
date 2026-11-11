@@ -303,14 +303,24 @@ def test_writes_answer_with_what_the_writer_may_see(world: World, viewer: str, l
         assert evidence.json()["error"]["code"] == "location_hidden"
         check(evidence.text, set(), where="refused evidence")
 
-    looked = client.put(f"{API}/findings/{finding.public_id}/observation", json={"visible": "yes"})
+    path = f"{API}/findings/{finding.public_id}/observation"
+    held = client.put(path, json={"visible": "yes", "detail_follows": True})
+    revealed = client.post(f"{path}/reveal", json={"feature_class": "enclosure"})
+    looked = client.put(path, json={"visible": "yes", "feature_class": "enclosure"})
     if level in SEES[viewer]:
+        assert held.status_code == 200
+        check(held.text, set(), where="answer whose detail follows")
+        assert revealed.status_code == 200
+        check(revealed.text, allowed, allowed, where="reveal after the detail")
         assert looked.status_code == 200
         check(looked.text, allowed, allowed, where="reveal")
     else:
-        assert looked.status_code == 403
-        assert looked.json()["error"]["code"] == "location_hidden"
-        check(looked.text, set(), where="refused answer")
+        for refused in (held, looked):
+            assert refused.status_code == 403
+            assert refused.json()["error"]["code"] == "location_hidden"
+            check(refused.text, set(), where="refused answer")
+        assert revealed.json()["error"]["code"] == "observation_not_found"
+        check(revealed.text, set(), where="refused reveal")
 
 
 def test_activity_and_notifications_never_hold_an_exact_position(world: World, db: Session) -> None:

@@ -41,6 +41,7 @@ FOR_THE_CALLER = {
     ("PUT", f"{API}/evidence/{{evidence_id}}/vote"): "the caller's own vote",
     ("POST", f"{API}/evidence/{{evidence_id}}/verify"): "the caller's own check, which experts make too",
     ("PUT", f"{API}/findings/{{public_id}}/observation"): "the caller's own answer",
+    ("POST", f"{API}/findings/{{public_id}}/observation/reveal"): "the caller's own answer",
     ("DELETE", f"{API}/findings/{{public_id}}/observation"): "the caller's own answer",
     ("POST", f"{API}/media"): "uploads as the caller",
     ("POST", f"{API}/reports"): "reports as the caller",
