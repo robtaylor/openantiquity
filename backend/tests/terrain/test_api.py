@@ -10,11 +10,16 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
+from pydantic import SecretStr
 from sqlalchemy.orm import Session
 
+from fieldclub.config import DefraSftpSettings
+from fieldclub.ingest.adapters.common import Polite
 from fieldclub.layers import LIDAR_STYLES, build_layers, default_tile_version
 from fieldclub.schemas.meta import RasterView
+from fieldclub.terrain import sftp
 from fieldclub.terrain.grid import tile_at
+from fieldclub.terrain.mirror import SftpFetcher
 from fieldclub.terrain.render import terrarium_decode
 from fieldclub.terrain.service import Terrain, get_terrain
 from tests.helpers import admin_area, error_code
@@ -410,3 +415,35 @@ def test_a_point_off_the_grids_has_nulls(api: TestClient) -> None:
         "sources": [],
     }
     assert error_code(api.get("/api/v1/geo/point", params={"lon": 200, "lat": 0})) == "validation_error"
+
+
+def test_a_refused_bulk_supply_never_puts_its_address_in_the_log(
+    app: FastAPI, client: TestClient, mirror_dir: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # The API logs a 5xx error with its traceback, chained exceptions included.
+    known_hosts = tmp_path / "known_hosts"
+    known_hosts.write_text("")
+    settings = DefraSftpSettings(
+        defra_sftp_host="127.0.0.1",
+        defra_sftp_port=1,
+        defra_sftp_user="someone-secret",
+        defra_sftp_password=SecretStr("not-a-real-password"),
+        defra_sftp_known_hosts=known_hosts,
+    )
+    no_wait = Polite(delay_s=0, backoff_s=1.0, sleep=lambda seconds: None)
+    fetcher = SftpFetcher(lambda: sftp.defra_connector(settings), max_failures=2, backoff=no_wait)
+    mirror = local_mirror(tmp_path, sources=mirror_dir / "src", extra=["SU16ne"], fetchers=[fetcher])
+    app.dependency_overrides[get_terrain] = lambda: local_terrain(mirror, tmp_path / "tiles")
+    start = TO_LONLAT.transform(414_900, 167_000)
+    end = TO_LONLAT.transform(415_100, 167_000)
+    with caplog.at_level("DEBUG"):
+        response = client.post(
+            "/api/v1/terrain/profile",
+            json={"line": {"type": "LineString", "coordinates": [list(start), list(end)]}, "samples": 5},
+        )
+    assert response.status_code == 502
+    assert error_code(response) == "elevation_fetch_failed"
+    assert "Traceback" in caplog.text
+    for secret in ("127.0.0.1", "port 1", "someone-secret", "not-a-real-password", "composite/2022"):
+        assert secret not in caplog.text, secret
+        assert secret not in response.text, secret

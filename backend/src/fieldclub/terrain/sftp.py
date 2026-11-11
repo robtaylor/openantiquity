@@ -19,7 +19,9 @@ The host key is pinned: a host whose key isn't in the known-hosts file is
 refused. Neither the credentials nor the server's address reach a log line
 or an error: an error names only the file being read, and a log line the
 file, the kind of failure and its error number, because the transport's own
-text can carry the host and port.
+text can carry the host and port. For the same reason no error raised here
+chains the transport's exception (`from None`): the API logs a 5xx error
+with its traceback, which would print the chained one too.
 """
 
 from __future__ import annotations
@@ -124,8 +126,8 @@ def download(
                     part.unlink()
                     have = 0
                 _copy_windows(session, remote, part, have, size, window, on_progress)
-            except FileNotFoundError as exc:
-                raise FetchFailedError(f"{file} isn't on the bulk supply.") from exc
+            except FileNotFoundError:
+                raise FetchFailedError(f"{file} isn't on the bulk supply.") from None
             except transient as exc:
                 gained = (part.stat().st_size if part.is_file() else 0) > have
                 failures = 1 if gained else failures + 1
@@ -139,7 +141,7 @@ def download(
                 _discard(session)
                 session = None
                 if failures >= max_failures:
-                    raise FetchFailedError(f"Reading {file} failed {failures} times in a row.") from exc
+                    raise FetchFailedError(f"Reading {file} failed {failures} times in a row.") from None
                 sleep(min(retry_delay * 2 ** (failures - 1), RETRY_DELAY_CAP))
                 continue
             got = part.stat().st_size
@@ -329,16 +331,16 @@ def defra_connector(credentials: DefraSftpSettings) -> Connect:
             assert channel is not None, "an open SFTP session has a channel"
             # Without this a read from a server that has gone quiet blocks for ever.
             channel.settimeout(READ_TIMEOUT)
-        except paramiko.AuthenticationException as exc:
+        except paramiko.AuthenticationException:
             client.close()
             logger.error("The bulk supply refused the login")
-            raise SupplyRefusedError("Defra's bulk supply rejected the user name or password.") from exc
-        except paramiko.BadHostKeyException as exc:
+            raise SupplyRefusedError("Defra's bulk supply rejected the user name or password.") from None
+        except paramiko.BadHostKeyException:
             client.close()
             logger.error("The bulk supply's host key isn't the one pinned in %s", known_hosts)
             raise SupplyRefusedError(
                 "Defra's bulk supply presented a host key that isn't the pinned one."
-            ) from exc
+            ) from None
         except BaseException:
             client.close()
             raise
