@@ -2,7 +2,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useViewAreaStore } from "../../map/store.js";
+import { overlayTroubleKey, useMapStore, useViewAreaStore } from "../../map/store.js";
 import { FINDINGS_MIN_ZOOM } from "../../map/useFindingsOverlay.js";
 import { apiError, routeApi } from "../../test/apiRoutes.js";
 import { findingCollection, findingPage, findingsData, offset } from "../../test/fixtures/findings.js";
@@ -200,6 +200,34 @@ describe("the Explore panel", () => {
     if (!bounds) throw new Error("The map has not said what it shows");
     act(() => useViewAreaStore.getState().setArea(bounds, FINDINGS_MIN_ZOOM - 1));
     expect(await explore().findByRole("heading", { name: "Zoom in to see findings" })).toBeInTheDocument();
+  });
+
+  it.each([
+    ["the list's", "list"],
+    ["the layer's", "layer"],
+  ] as const)("tries the list and the map's findings layer again together, from %s Try again", async (_, from) => {
+    const user = userEvent.setup();
+    let fail = true;
+    routeApi(harness.fetchMock(), {
+      "GET /findings": (call) =>
+        fail
+          ? apiError(500, "internal", "The database isn't answering.")
+          : call.url.searchParams.get("format") === "geojson"
+            ? json(findingCollection([]))
+            : json(findingPage(findingCollection([]))),
+    });
+    renderShell("/");
+    await mapReady();
+    expect(
+      await explore().findByRole("heading", { name: "The findings couldn't be loaded" }, { timeout: 4000 }),
+    ).toBeInTheDocument();
+    const layerKey = overlayTroubleKey("findings");
+    await waitFor(() => expect(useMapStore.getState().failing[layerKey]).toBe(true), { timeout: 4000 });
+    fail = false;
+    if (from === "list") await user.click(explore().getByRole("button", { name: "Try again" }));
+    else act(() => useMapStore.getState().retrySource(layerKey));
+    expect(await explore().findByRole("heading", { name: "No findings here yet" })).toBeInTheDocument();
+    expect(useMapStore.getState().failing[layerKey]).toBe(false);
   });
 
   it("puts itself away for the bare map", async () => {

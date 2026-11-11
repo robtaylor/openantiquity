@@ -130,8 +130,14 @@ describe("useFindingsInBox", () => {
     });
     const { rerender } = render(AVEBURY);
     await waitFor(() => expect(signals).toHaveLength(1));
+    // The new box waits out the pause on a clock of the test's own, so a busy machine can't make it late.
+    vi.useFakeTimers();
     rerender({ bbox: [AVEBURY[0] + 0.05, AVEBURY[1], AVEBURY[2] + 0.05, AVEBURY[3]] });
-    await waitFor(() => expect(signals).toHaveLength(2));
+    expect(signals).toHaveLength(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FINDINGS_DEBOUNCE_MS + 50);
+    });
+    expect(signals).toHaveLength(2);
     expect(signals[0]?.aborted).toBe(true);
     expect(signals[1]?.aborted).toBe(false);
   });

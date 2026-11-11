@@ -1,6 +1,8 @@
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { isEndpointMissing, isTransient } from "../../api/client.js";
-import { useViewAreaStore } from "../../map/store.js";
+import { findOverlay } from "../../api/meta.js";
+import { overlayTroubleKey, useMapStore, useViewAreaStore } from "../../map/store.js";
 import { FINDINGS_MIN_ZOOM } from "../../map/useFindingsOverlay.js";
 import { useDebounced } from "../../ui/useDebounced.js";
 import { bboxParam, fetchFindingsPage, parseBboxParam, snapBbox } from "../findings/api.js";
@@ -59,6 +61,22 @@ export function useFindingsList(): FindingsList {
     retry: (failureCount, error) => failureCount < 1 && isTransient(error),
   });
 
+  // The list and the map's findings layer fail together, and each says so
+  // with a "Try again". Either one tries both, so one press is enough.
+  const layerKey = useMapStore((state) => {
+    const id = state.meta ? findOverlay(state.meta, "findings")?.id : undefined;
+    return id === undefined ? null : overlayTroubleKey(id);
+  });
+  const layerAttempt = useMapStore((state) => (layerKey === null ? 0 : (state.retries[layerKey] ?? 0)));
+  const lastAttempt = useRef(layerAttempt);
+  const { isError, isFetching, refetch } = query;
+  useEffect(() => {
+    if (layerAttempt === lastAttempt.current) return;
+    lastAttempt.current = layerAttempt;
+    // Already being asked again when the list's own button was pressed.
+    if (isError && !isFetching) void refetch();
+  }, [layerAttempt, isError, isFetching, refetch]);
+
   const items = query.data?.pages.flatMap((page) => page.items) ?? [];
   let status: FindingsListStatus;
   if (zoomedOut) status = "zoomed-out";
@@ -78,6 +96,9 @@ export function useFindingsList(): FindingsList {
     loadMore: () => {
       if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
     },
-    retry: () => void query.refetch(),
+    retry: () => {
+      void query.refetch();
+      if (layerKey !== null) useMapStore.getState().retrySource(layerKey);
+    },
   };
 }
