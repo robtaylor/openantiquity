@@ -50,6 +50,7 @@ Write all three in the same present tense and a reader can't tell *why we did it
 | [0010](0010-people-who-answered-are-named-only-to-those-who-may-see-answers.md) | People who answered are named only to those who may see answers | Proposed |
 | [0011](0011-the-wikidata-cross-walk-is-stored-but-kept-off-the-map.md) | The Wikidata cross-walk is stored but kept off the map | Proposed |
 | [0012](0012-the-national-overview-is-built-from-our-own-mirror.md) | The national overview is built from our own mirror | Proposed |
+| [0013](0013-moderators-hide-what-others-posted-and-every-moderation-route-needs-the-welcome-step.md) | Moderators hide what others posted and every moderation route needs the welcome step | Proposed |
 
 (`new decision` appends rows for you. `uv run docs/scripts/doctool.py lint` checks this table against the files.)
 
