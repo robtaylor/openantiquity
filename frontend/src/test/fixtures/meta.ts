@@ -640,6 +640,11 @@ export const metaFixture: Meta = {
       { id: "osm", label: "OpenStreetMap", enabled: true },
       { id: "email", label: "Email link", enabled: true },
     ],
+    terms: {
+      summary:
+        "You're 16 or over. What you add is public and published under CC BY 4.0, so anyone may reuse it with credit. If you leave, it stays on the map, credited to “Former member”.",
+      url: "/about#terms",
+    },
   },
   vocab,
   layers: {

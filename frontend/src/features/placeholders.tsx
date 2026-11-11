@@ -1,4 +1,4 @@
-import { BookOpen, Info, type LucideIcon, MapPinned } from "lucide-react";
+import { type LucideIcon, MapPinned } from "lucide-react";
 import { useEffect } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { EmptyState } from "../ui/EmptyState.js";
@@ -25,20 +25,7 @@ export interface PlaceholderRoute {
   built?: { to: string; label: string };
 }
 
-export const PLACEHOLDER_ROUTES: PlaceholderRoute[] = [
-  {
-    path: "/about",
-    title: `About ${APP_NAME}`,
-    icon: Info,
-    body: "A shared map for finding and checking archaeological earthworks in LIDAR data. The full story, the data sources and their licences will be set out here.",
-  },
-  {
-    path: "/guide",
-    title: "Guide",
-    icon: BookOpen,
-    body: "How to read LIDAR, what the different layers are good for, and how a finding climbs from spotted to on record.",
-  },
-];
+export const PLACEHOLDER_ROUTES: PlaceholderRoute[] = [];
 
 /** Sets the window title to `title · Field Club` while the page is shown. */
 export function useDocumentTitle(title: string): void {

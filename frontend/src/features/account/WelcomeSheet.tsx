@@ -16,6 +16,9 @@ import { signedIn, signedOut, useSession } from "./session.js";
 import "./account.css";
 
 const UNDER_16 = "under_16";
+
+/** Where the contributor terms are when `/meta` doesn't say: the terms' own page. */
+const TERMS_FALLBACK_URL = "/about/terms";
 type BandChoice = AgeBand | typeof UNDER_16;
 
 /** The bands, from the generated `AgeBand` type, and the answer that can't join. */
@@ -206,7 +209,11 @@ function WelcomeForm({ me, meta }: { me: Me; meta: Meta }) {
             </label>
             <p className="fc-field__hint" id="welcome-terms-hint">
               What you add is public and published under {meta.app.contribution_licence}, so anyone may reuse it with
-              credit. If you leave, it stays on the map, credited to “Former member”.
+              credit. If you leave, it stays on the map, credited to “Former member”.{" "}
+              <a href={meta.auth.terms?.url ?? TERMS_FALLBACK_URL} target="_blank" rel="noopener noreferrer">
+                Read the contributor terms
+                <span className="fc-visually-hidden"> (opens in a new tab)</span>
+              </a>
             </p>
             {errors.terms ? (
               <p className="fc-field__error" role="alert">

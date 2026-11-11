@@ -1,0 +1,164 @@
+/* The about page and the notices. They share the guide's sections (guide.css). */
+.fc-about {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fc-about__muted {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-about__external {
+  margin-left: 3px;
+  vertical-align: -1px;
+}
+
+.fc-about__draft {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--warn) 60%, var(--border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warn) 10%, var(--raised));
+}
+
+.fc-about__draft > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--warn);
+}
+
+.fc-about__draft strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.fc-about__notice {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fc-about__notice h4 {
+  margin-top: 8px;
+  font-size: 17px;
+}
+
+.fc-about__notice ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.fc-about__notice code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.fc-about__notices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fc-about__notice-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--raised);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.fc-about__notice-link:hover {
+  border-color: var(--text-muted);
+}
+
+.fc-about__notice-link > span {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fc-about__notice-link > svg {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.fc-about__more ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--border);
+  list-style: none;
+}
+
+.fc-about__credits {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fc-about__group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.fc-about__group > :not(summary) {
+  margin: 10px 12px;
+}
+
+.fc-about__group-title {
+  min-height: 40px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fc-about__group[open] > .fc-about__group-title {
+  border-bottom: 1px solid var(--border);
+}
+
+.fc-about__status {
+  padding: 10px 12px;
+}
+
+.fc-about__credit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fc-about__credit {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--raised);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.fc-about__credit-line {
+  color: var(--text-muted);
+  font-size: 13px;
+}

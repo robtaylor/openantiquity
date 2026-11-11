@@ -40,6 +40,9 @@ interface ViewBase extends LayerTerms {
   description: string;
   group: ViewGroup;
   attribution: string;
+  /** The licence the layer is published under, and where it is, as the backend sends them for every layer. */
+  licence?: string;
+  licence_url?: string;
   default?: boolean;
 }
 
@@ -68,6 +71,8 @@ export interface DemLayer extends LayerTerms {
   minzoom: number;
   maxzoom: number;
   attribution: string;
+  licence?: string;
+  licence_url?: string;
 }
 
 interface OverlayBase {
@@ -75,6 +80,8 @@ interface OverlayBase {
   title: string;
   default_opacity?: number;
   attribution?: string;
+  licence?: string;
+  licence_url?: string;
 }
 
 /** An OpenMapTiles-schema vector source that the frontend styles itself. */
@@ -215,6 +222,8 @@ export interface SourceSummary {
   name: string;
   publisher: string;
   licence: string;
+  /** Where the licence is published, when the source says. */
+  licence_url?: string | null;
   attribution: string;
   homepage: string | null;
   category: string;
@@ -240,8 +249,25 @@ export interface FindReporting {
   text: string;
 }
 
+/** The contributor terms the welcome step asks people to accept: a short summary, and where the full terms are. */
+export interface ContributorTerms {
+  summary: string;
+  /** A path on this site, such as "/about#terms", or a full https address. */
+  url: string;
+}
+
 export interface Meta {
-  app: { name: string; version: string; contribution_licence: string };
+  app: {
+    name: string;
+    version: string;
+    contribution_licence: string;
+    /**
+     * Who to write to about Field Club: `FIELDCLUB_CONTACT` in the backend's
+     * settings. The backend doesn't send it yet, so the about pages say
+     * where it will be given until it appears.
+     */
+    contact?: string;
+  };
   /** Every provider, in the order the sign-in sheet shows them. Offer only the enabled ones. Saving anything needs an account. */
   auth: {
     providers: SignInProvider[];
@@ -251,6 +277,8 @@ export interface Meta {
      * the sign-in sheet offers the development sign-in only when it appears.
      */
     dev_login?: boolean;
+    /** The contributor terms. Always sent by the backend; optional here because older fixtures lack it. */
+    terms?: ContributorTerms;
   };
   vocab: Vocab;
   layers: MetaLayers;

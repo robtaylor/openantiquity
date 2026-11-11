@@ -29,6 +29,7 @@ import { SHEET_PEEK_HEIGHT, type SheetStop, sheetHeights } from "../../ui/Sheet.
 import { Skeleton } from "../../ui/Skeleton.js";
 import { ToastViewport } from "../../ui/Toast.js";
 import { LAYOUT } from "../../ui/tokens.js";
+import { ABOUT_PATH, AboutPanel, NOTICE_ROUTE, NoticePanel } from "../about/AboutPanel.js";
 import { AccountLayer } from "../account/AccountLayer.js";
 import { AccountPage } from "../account/AccountPage.js";
 import { EmailLinkPage } from "../account/EmailLinkPage.js";
@@ -39,6 +40,7 @@ import { DraftsBar } from "../drafts/DraftsBar.js";
 import { ExploreLayer } from "../explore/ExploreLayer.js";
 import { ExplorePanel } from "../explore/ExplorePanel.js";
 import { FindingPanel } from "../finding/FindingPanel.js";
+import { GUIDE_PATH, GuidePanel } from "../guide/GuidePanel.js";
 import { HELP_PATH, HelpKindPanel, HelpPanel } from "../help/HelpPanel.js";
 import { INVESTIGATIONS_PATH } from "../investigations/api.js";
 import { InvestigationPage } from "../investigations/InvestigationPage.js";
@@ -342,6 +344,9 @@ function ReadyShell({ meta }: { meta: Meta }) {
             <Route path={RECENT_MENTIONS_PATH} element={<RecentMentionsPanel meta={meta} />} />
             <Route path={INVESTIGATIONS_PATH} element={<InvestigationsPanel />} />
             <Route path="/i/:id" element={<InvestigationPage meta={meta} />} />
+            <Route path={GUIDE_PATH} element={<GuidePanel meta={meta} />} />
+            <Route path={ABOUT_PATH} element={<AboutPanel meta={meta} />} />
+            <Route path={NOTICE_ROUTE} element={<NoticePanel meta={meta} />} />
             {PLACEHOLDER_ROUTES.map((route) => (
               <Route key={route.path} path={route.path} element={<PlaceholderPanel route={route} />} />
             ))}

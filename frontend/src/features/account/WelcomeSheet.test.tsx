@@ -39,6 +39,13 @@ describe("the welcome sheet", () => {
     expect(sheet.querySelectorAll("input, textarea, select")).toHaveLength(2);
   });
 
+  it("links to the full contributor terms at the address /meta gives, in a new tab", async () => {
+    const { w } = await openWelcome();
+    const link = w.getByRole("link", { name: /Read the contributor terms/ });
+    expect(link).toHaveAttribute("href", "/about#terms");
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
   it("draws another handle from the server", async () => {
     const { api, w } = await openWelcome({ "GET /auth/handle-suggestion": () => json({ handle: "MossyLynchet7" }) });
     await userEvent.click(w.getByRole("button", { name: "Suggest another" }));
