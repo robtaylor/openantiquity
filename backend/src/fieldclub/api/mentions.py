@@ -49,7 +49,9 @@ def list_mentions(public_id: str, page: PageQuery, db: Db, viewer: OptionalUser)
     found = mentions.for_finding(db, finding, viewer, limit=page.limit, cursor=page.cursor)
     return Page[MentionOut](
         items=[
-            MentionOut.build(m, found.adders[m.user_id] if m.user_id is not None else None)
+            MentionOut.build(
+                m, found.adders[m.user_id] if m.user_id is not None else None, finding=finding, viewer=viewer
+            )
             for m in found.mentions
         ],
         next_cursor=found.next_cursor,
@@ -77,7 +79,7 @@ def add_mention(public_id: str, body: MentionIn, user: Contributor, db: Db) -> M
         before_fetch=db.commit,
     )
     db.commit()
-    return MentionOut.build(mention, user)
+    return MentionOut.build(mention, user, finding=finding, viewer=user)
 
 
 @router.delete(
@@ -103,7 +105,7 @@ def recent(page: PageQuery, db: Db, viewer: OptionalUser, response: Response) ->
         items.append(
             RecentMention(
                 # dict(), not model_dump(), so `added_by` stays a PublicUser.
-                **dict(MentionOut.build(mention, adder)),
+                **dict(MentionOut.build(mention, adder, finding=finding, viewer=viewer)),
                 finding=MentionedFinding.build(finding, found.finders[finding.author_id], viewer),
             )
         )

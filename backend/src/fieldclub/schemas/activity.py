@@ -16,6 +16,7 @@ from pydantic import Field, model_validator
 from fieldclub.models import Activity, Finding, Investigation, Notification, User
 from fieldclub.schemas.common import ApiModel, Page, PublicUser, RequestModel
 from fieldclub.schemas.findings import Location, location_out
+from fieldclub.services import sensitivity
 from fieldclub.vocab import ActivityKind, EvidenceKind, FeatureClass, FindingState, StateReason, Tier
 
 # How many notifications one request may mark read by id.
@@ -37,7 +38,7 @@ class ActivityFinding(ApiModel):
     def build(cls, finding: Finding, viewer: User | None) -> ActivityFinding:
         return cls(
             public_id=finding.public_id,
-            title=finding.title,
+            title=sensitivity.visible_text(finding, viewer, finding.title) or "",
             feature_class=FeatureClass(finding.feature_class),
             tier=Tier(finding.tier),
             state=FindingState(finding.state),

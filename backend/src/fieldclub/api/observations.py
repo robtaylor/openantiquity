@@ -28,7 +28,7 @@ ANSWER_LIMIT = Depends(rate_limit("observations", 600, per_seconds=3600))
 
 
 def _reply(db: Db, finding: Finding, user: User, result: review.AnswerResult) -> Reveal | AnswerHeld:
-    observation = ObservationOut.build(result.observation, user)
+    observation = ObservationOut.build(result.observation, user, finding=finding, viewer=user)
     comparison = result.comparison
     if comparison is None:
         assert not result.revealed, "a revealed answer is compared"
@@ -115,6 +115,9 @@ def list_observations(
     found = review.list_observations(db, finding, viewer, limit=page.limit, cursor=page.cursor)
     private(response)
     return Page[ObservationOut](
-        items=[ObservationOut.build(obs, found.people[obs.user_id]) for obs in found.observations],
+        items=[
+            ObservationOut.build(obs, found.people[obs.user_id], finding=finding, viewer=viewer)
+            for obs in found.observations
+        ],
         next_cursor=found.next_cursor,
     )

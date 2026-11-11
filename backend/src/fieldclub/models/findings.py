@@ -91,6 +91,10 @@ class Finding(Base):
     public_id: Mapped[str] = mapped_column(Text, unique=True)
     author_id: Mapped[int] = fk("users.id", index=True)
     title: Mapped[str] = mapped_column(Text)
+    # The title with every position written in it replaced (`services.text_positions`),
+    # which a search for someone who doesn't see the exact position matches. Written
+    # on save, as `location_public` is.
+    title_public: Mapped[str | None] = mapped_column(Text)
     description: Mapped[str | None] = mapped_column(Text)
     feature_class: Mapped[str] = mapped_column(Text)
     community_class: Mapped[str | None] = mapped_column(Text)
@@ -150,6 +154,7 @@ def _before_insert_finding(_mapper: Mapper[Finding], _conn: Connection, finding:
         finding.sensitivity = sensitivity.default_sensitivity(finding.feature_class).value
     sensitivity.refresh_location_public(finding)
     _refresh_grid_ref(finding)
+    sensitivity.refresh_title_public(finding)
 
 
 @event.listens_for(Finding, "before_update")
@@ -173,6 +178,8 @@ def _before_update_finding(_mapper: Mapper[Finding], _conn: Connection, finding:
         sensitivity.refresh_location_public(finding)
     if state.attrs.location.history.has_changes():
         _refresh_grid_ref(finding)
+    if state.attrs.title.history.has_changes() or finding.title_public is None:
+        sensitivity.refresh_title_public(finding)
 
 
 def _refresh_grid_ref(finding: Finding) -> None:

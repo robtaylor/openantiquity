@@ -173,7 +173,7 @@ def as_finding(db: Session, text: str, viewer: User | None) -> GeoHit | None:
     zoom = 14 if seen.obscured else exact_zoom
     return GeoHit(
         type="finding",
-        label=finding.title,
+        label=sensitivity.visible_text(finding, viewer, finding.title) or "",
         detail=f"Finding {finding.public_id}",
         lon=seen.lon,
         lat=seen.lat,

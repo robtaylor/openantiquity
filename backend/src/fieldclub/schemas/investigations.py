@@ -25,8 +25,26 @@ from fieldclub.schemas.common import (
 )
 from fieldclub.schemas.findings import FindingSummary, ViewState
 from fieldclub.schemas.records import RecordSummary, record_summary
+from fieldclub.services import sensitivity
 from fieldclub.services.investigations import ItemView, Listed, MemberView, Unavailable
 from fieldclub.vocab import InvestigationItemKind, InvestigationRole, Visibility
+
+
+def item_text(view: ItemView, reader: User | None) -> tuple[str | None, str | None]:
+    """An item's title and note as `reader` may read them.
+
+    What a member writes on a finding item is about that finding, so a
+    position written in it is hidden as the finding's own text is
+    (`sensitivity.visible_text`), and from everyone once the finding isn't shown.
+    """
+    item = view.item
+    if InvestigationItemKind(item.kind) is not InvestigationItemKind.FINDING:
+        return item.title, item.note
+    return (
+        sensitivity.visible_text(view.finding, reader, item.title),
+        sensitivity.visible_text(view.finding, reader, item.note),
+    )
+
 
 TITLE_MAX = 120
 SUMMARY_MAX = 1000
@@ -334,12 +352,13 @@ class InvestigationItemOut(ApiModel):
             contents["finding"] = FindingSummary.build(view.finding, view.finding_author, viewer)
         if view.record is not None:
             contents["record"] = record_summary(view.record)
+        title, note = item_text(view, viewer)
         return cls(
             id=item.id,
             kind=kind,
             position=item.position,
-            title=item.title,
-            note=item.note,
+            title=title,
+            note=note,
             unavailable=view.unavailable,
             added_by=PublicUser.from_user(view.added_by),
             created_at=item.created_at,

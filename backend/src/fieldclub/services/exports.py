@@ -21,7 +21,7 @@ from __future__ import annotations
 import csv
 import io
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -94,12 +94,15 @@ class Exported:
     location: sensitivity.VisibleLocation
 
 
-def _evidence_summary(items: Sequence[Evidence]) -> str:
-    """`Aerial photo (2); Old map: OS 6-inch 1888`, counting standing items by kind."""
+def _evidence_summary(items: Sequence[Evidence], shown: Callable[[str | None], str | None]) -> str:
+    """`Aerial photo (2); Old map: OS 6-inch 1888`, counting standing items by kind.
+
+    `shown` is how the download shows free text (`sensitivity.visible_text`).
+    """
     counted = Counter(item.kind for item in items)
     parts = []
     for kind, number in sorted(counted.items(), key=lambda pair: _KINDS[pair[0]]):
-        titled = [item.title for item in items if item.kind == kind and item.title]
+        titled = [shown(item.title) or "" for item in items if item.kind == kind and item.title]
         label = _KINDS[kind] + (f" ({number})" if number > 1 else "")
         parts.append(f"{label}: {', '.join(titled)}" if titled else label)
     return "; ".join(parts)
@@ -121,9 +124,14 @@ def export_rows(db: Session, chosen: Sequence[Finding], viewer: User | None) -> 
     exported = []
     for finding in chosen:
         where = export_location(finding, viewer)
+        reader = viewer if downloads_exact(finding, viewer) else None
+
+        def shown(text: str | None, finding: Finding = finding, reader: User | None = reader) -> str | None:
+            return sensitivity.visible_text(finding, reader, text)
+
         system, easting, northing = gridref.to_grid(where.lon, where.lat)
         row = ExportRow(
-            name=finding.title,
+            name=shown(finding.title) or "",
             grid_reference=where.grid_ref,
             # Rounded, not truncated: a square's centre is a whole number of metres.
             easting=round(easting),
@@ -131,8 +139,8 @@ def export_rows(db: Session, chosen: Sequence[Finding], viewer: User | None) -> 
             grid=system.value,
             monument_type=_FISH[finding.feature_class],
             period=_PERIODS[finding.period],
-            description=finding.description or "",
-            evidence_summary=_evidence_summary(evidence[finding.id]),
+            description=shown(finding.description) or "",
+            evidence_summary=_evidence_summary(evidence[finding.id], shown),
             compiler=PublicUser.from_user(authors[finding.author_id]).display_name,
             date=finding.created_at.date().isoformat(),
             licence=CONTRIBUTION_LICENCE,

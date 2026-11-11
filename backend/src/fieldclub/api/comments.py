@@ -22,7 +22,8 @@ def list_comments(
     found = findings.list_comments(db, finding, limit=page.limit, cursor=page.cursor)
     return Page[CommentOut](
         items=[
-            CommentOut.build(comment, found.authors[comment.user_id], viewer) for comment in found.comments
+            CommentOut.build(comment, found.authors[comment.user_id], viewer, finding=finding)
+            for comment in found.comments
         ],
         next_cursor=found.next_cursor,
     )
@@ -39,7 +40,7 @@ def add_comment(public_id: str, body: CommentIn, user: Contributor, db: Db) -> C
     finding = findings.get_finding(db, public_id, user)
     comment = findings.add_comment(db, finding, user, body.body, body.parent_id)
     db.commit()
-    return CommentOut.build(comment, user)
+    return CommentOut.build(comment, user, user, finding=finding)
 
 
 @router.delete(

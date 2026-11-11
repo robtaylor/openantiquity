@@ -34,6 +34,10 @@ Things callers must not do:
   the attribute on a loaded `Finding`. A trigger in `models/extras.sql` refuses
   an open finding whose public position differs from its location, and a change
   from open to a higher level that leaves the public position exact.
+- Don't serve free text about a finding as it was typed. Pass it through
+  `visible_text`, which hides positions written in it from anyone who
+  doesn't see the exact position. A search over titles matches
+  `title_public` for them.
 - Don't copy an exact position into another table, a cache or a tile, even
   while the finding is open. Store `square_centre(finding)`, which is the
   same at every level, and resolve the position to show through
@@ -56,7 +60,7 @@ from fieldclub import gridref
 from fieldclub.errors import DataIntegrityError, ForbiddenError
 from fieldclub.models import Finding, User
 from fieldclub.models.common import db_point, point_lon_lat
-from fieldclub.services import geo
+from fieldclub.services import geo, text_positions
 from fieldclub.vocab import (
     EXACT_LOCATION_ROLES,
     MODERATOR_ROLES,
@@ -244,6 +248,28 @@ def visible_location(finding: Finding, viewer: User | None) -> VisibleLocation:
         square=square.format(compact=True),
         square_ref=square,
     )
+
+
+def visible_text(finding: Finding | None, viewer: User | None, text: str | None) -> str | None:
+    """Free text about `finding` as `viewer` may read it: with every position in it hidden,
+    unless they see the exact position. `finding` is None for one this viewer isn't shown
+    (hidden, withdrawn or gone), whose text keeps its positions from everyone.
+
+    A title, description, note, comment, evidence or mention is typed by a
+    person, who can write a grid reference, coordinates or a three-word
+    address into it (`services.text_positions`). Text written while a
+    finding was open, before it was raised, is hidden the same way. Pass the
+    viewer a download is for as `exports.export_location` does, so a download
+    hides what its position hides.
+    """
+    if text is None or (finding is not None and sees_exact(finding, viewer)):
+        return text
+    return text_positions.redact(text)
+
+
+def refresh_title_public(finding: Finding) -> None:
+    """Set `finding.title_public`, the title a search matches for those who don't see it exactly."""
+    finding.title_public = text_positions.redact(finding.title)
 
 
 def visible_nation(db: Session, finding: Finding, viewer: User | None) -> str | None:

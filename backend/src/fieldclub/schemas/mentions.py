@@ -13,6 +13,7 @@ from pydantic import Field
 from fieldclub.models import Finding, Mention, User
 from fieldclub.schemas.common import ApiModel, PublicUser, RequestModel
 from fieldclub.schemas.findings import Location, location_out
+from fieldclub.services import sensitivity
 from fieldclub.services.mentions import NOTE_MAX, Preview
 from fieldclub.services.unfurl import MAX_START_SECONDS, URL_MAX, FetchStatus
 from fieldclub.vocab import FeatureClass, FindingState, MentionKind, Tier
@@ -84,7 +85,12 @@ class MentionOut(ApiModel):
     hidden: bool = False
 
     @classmethod
-    def build(cls, mention: Mention, adder: User | None) -> MentionOut:
+    def build(
+        cls, mention: Mention, adder: User | None, *, finding: Finding, viewer: User | None
+    ) -> MentionOut:
+        """The mention as `viewer` reads it: positions in its title and note hidden unless they see
+        `finding` exactly. The title is the page's, which its author wrote."""
+        assert mention.finding_id == finding.id, "the mention is on another finding"
         assert (adder is None) == (mention.user_id is None), "pass the adder exactly when there is one"
         assert adder is None or adder.has_id(mention.user_id), "the adder passed did not add this mention"
         return cls(
@@ -93,12 +99,12 @@ class MentionOut(ApiModel):
             url=mention.url,
             canonical_url=mention.canonical_url,
             provider=mention.provider,
-            title=mention.title,
+            title=sensitivity.visible_text(finding, viewer, mention.title),
             author_name=mention.author_name,
             thumbnail_url=mention.thumbnail_url,
             published_at=mention.published_at,
             start_seconds=mention.start_seconds,
-            note=mention.note,
+            note=sensitivity.visible_text(finding, viewer, mention.note),
             auto_detected=mention.auto_detected,
             added_by=PublicUser.from_user(adder) if adder is not None else None,
             created_at=mention.created_at,
@@ -122,7 +128,7 @@ class MentionedFinding(ApiModel):
         assert author.has_id(finding.author_id), "the author passed is not the finding's author"
         return cls(
             public_id=finding.public_id,
-            title=finding.title,
+            title=sensitivity.visible_text(finding, viewer, finding.title) or "",
             feature_class=FeatureClass(finding.feature_class),
             tier=Tier(finding.tier),
             state=FindingState(finding.state),

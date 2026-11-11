@@ -236,7 +236,7 @@ def _summary_fields(finding: Finding, author: User, viewer: User | None) -> dict
     assert author.has_id(finding.author_id), "the author passed is not the finding's author"
     return {
         "public_id": finding.public_id,
-        "title": finding.title,
+        "title": sensitivity.visible_text(finding, viewer, finding.title),
         "feature_class": finding.feature_class,
         "period": finding.period,
         "tier": finding.tier,
@@ -404,8 +404,12 @@ class ObservationOut(ApiModel):
     revealed: bool
 
     @classmethod
-    def build(cls, observation: Observation, user: User) -> ObservationOut:
+    def build(
+        cls, observation: Observation, user: User, *, finding: Finding, viewer: User | None
+    ) -> ObservationOut:
+        """`user` gave the answer and `viewer` reads it, whose view of `finding` its note follows."""
         assert user.has_id(observation.user_id), "the user passed did not give this observation"
+        assert observation.finding_id == finding.id, "the answer is on another finding"
         return cls(
             user=PublicUser.from_user(user),
             visible=Visible(observation.visible),
@@ -415,7 +419,7 @@ class ObservationOut(ApiModel):
             not_modern=observation.not_modern,
             not_natural=observation.not_natural,
             not_artefact=observation.not_artefact,
-            note=observation.note,
+            note=sensitivity.visible_text(finding, viewer, observation.note),
             created_at=observation.created_at,
             updated_at=observation.updated_at,
             withdrawn=observation.withdrawn_at is not None,
@@ -448,7 +452,7 @@ class FindingDetail(FindingSummary):
         )
         return cls(
             **_summary_fields(finding, view.author, viewer),
-            description=finding.description,
+            description=sensitivity.visible_text(finding, viewer, finding.description),
             nation=view.nation,
             view_state=ViewState.from_stored(finding.view_state),
             assessment=AssessmentOut(
@@ -470,7 +474,7 @@ class FindingDetail(FindingSummary):
             credits=_credits(view),
             answers_visible=view.answers_visible,
             my_observation=(
-                ObservationOut.build(view.my_observation, viewer)
+                ObservationOut.build(view.my_observation, viewer, finding=finding, viewer=viewer)
                 if view.my_observation is not None and viewer is not None
                 else None
             ),
@@ -519,8 +523,8 @@ def _evidence_out(
         id=evidence.id,
         kind=EvidenceKind(evidence.kind),
         stance=Stance(evidence.stance),
-        title=evidence.title,
-        note=evidence.note,
+        title=sensitivity.visible_text(finding, viewer, evidence.title),
+        note=sensitivity.visible_text(finding, viewer, evidence.note),
         url=evidence.url if exact else None,
         record_id=evidence.record_id if exact else None,
         source_key=data.get("source_key") if exact else None,
@@ -589,7 +593,7 @@ def finding_feature(finding: Finding, viewer: User | None) -> FindingFeature:
         geometry=geojson_point(where.lon, where.lat),
         properties=FindingFeatureProperties(
             public_id=finding.public_id,
-            title=finding.title,
+            title=sensitivity.visible_text(finding, viewer, finding.title) or "",
             feature_class=FeatureClass(finding.feature_class),
             period=Period(finding.period),
             tier=Tier(finding.tier),
@@ -801,9 +805,13 @@ class CommentOut(ApiModel):
     hidden: bool = False
 
     @classmethod
-    def build(cls, comment: Comment, author: User, viewer: User | None = None) -> CommentOut:
-        """The comment as `viewer` may see it. A hidden one reads as deleted unless they may see it."""
+    def build(cls, comment: Comment, author: User, viewer: User | None, *, finding: Finding) -> CommentOut:
+        """The comment as `viewer` may see it. A hidden one reads as deleted unless they may see it.
+
+        Positions written in it are hidden from a viewer who doesn't see `finding` exactly.
+        """
         assert author.has_id(comment.user_id), "the author passed did not write this comment"
+        assert comment.finding_id == finding.id, "the comment is on another finding"
         hidden = comment.hidden_at is not None
         shows_hidden = hidden and may_see_hidden_comment(comment, viewer)
         removed = comment.deleted_at is not None or (hidden and not shows_hidden)
@@ -811,7 +819,7 @@ class CommentOut(ApiModel):
             id=comment.id,
             parent_id=comment.parent_id,
             author=None if removed else PublicUser.from_user(author),
-            body=None if removed else comment.body,
+            body=None if removed else sensitivity.visible_text(finding, viewer, comment.body),
             created_at=comment.created_at,
             edited_at=comment.edited_at,
             deleted=removed,

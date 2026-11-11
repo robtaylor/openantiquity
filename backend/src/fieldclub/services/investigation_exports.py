@@ -31,6 +31,7 @@ from fieldclub import gridref
 from fieldclub.config import get_settings
 from fieldclub.models import Investigation, User
 from fieldclub.schemas.common import GeoJSONFeature, GeoJSONGeometry, PublicUser, geojson_point
+from fieldclub.schemas.investigations import item_text
 from fieldclub.schemas.records import record_feature
 from fieldclub.services import exports, investigations
 from fieldclub.services.investigations import ItemView, MemberView, Unavailable
@@ -54,6 +55,9 @@ _UNAVAILABLE_TEXT = {
 @dataclass(frozen=True)
 class Entry:
     view: ItemView
+    # The item's title and note as the download may carry them (`schemas.investigations.item_text`).
+    title: str | None
+    note: str | None
     # The download's row for a finding the viewer may see.
     finding: exports.Exported | None = None
 
@@ -80,7 +84,12 @@ def gather(
     shown = [view.finding for view in views if view.finding is not None]
     rows = {item.row.fieldclub_id: item for item in exports.export_rows(db, shown, viewer)}
     entries = [
-        Entry(view, rows[view.finding.public_id] if view.finding is not None else None) for view in views
+        Entry(
+            view,
+            *item_text(view, _reader(view, viewer)),
+            rows[view.finding.public_id] if view.finding is not None else None,
+        )
+        for view in views
     ]
     members, _ = investigations.list_members(db, investigation, limit=investigations.MAX_MEMBERS)
     owner = next(member.user for member in members if member.user.has_id(investigation.owner_id))
@@ -96,6 +105,13 @@ def gather(
     )
 
 
+def _reader(view: ItemView, viewer: User | None) -> User | None:
+    """Whose view of a finding item's text the download takes: stricter than the page's (Decision 0005)."""
+    if view.finding is None or exports.downloads_exact(view.finding, viewer):
+        return viewer
+    return None
+
+
 def _available(export: InvestigationExport) -> Iterator[Entry]:
     return (entry for entry in export.entries if entry.view.unavailable is None)
 
@@ -106,8 +122,8 @@ def _item_properties(entry: Entry) -> dict[str, Any]:
         "item_id": item.id,
         "item_kind": item.kind,
         "item_position": item.position,
-        "item_title": item.title,
-        "item_note": item.note,
+        "item_title": entry.title,
+        "item_note": entry.note,
         "item_added_by": PublicUser.from_user(entry.view.added_by).display_name,
     }
 
@@ -217,7 +233,7 @@ def _csv_row(entry: Entry) -> list[Any] | None:
         row = _record_row(entry.view.record)
     else:
         return None
-    row |= {"item_kind": item.kind, "item_note": item.note}
+    row |= {"item_kind": item.kind, "item_note": entry.note}
     assert set(row) == set(CSV_COLUMNS), f"columns differ: {set(row) ^ set(CSV_COLUMNS)}"
     return [row[column] for column in CSV_COLUMNS]
 
@@ -353,10 +369,10 @@ _KIND_LABELS = {
 
 
 def _item_html(entry: Entry) -> str:
-    item, view = entry.view.item, entry.view
+    view = entry.view
     label = f'<p class="kind">{_e(_KIND_LABELS[entry.kind])}</p>'
     if view.unavailable is not None:
-        title = f"<h3>{_e(item.title)}</h3>" if item.title else ""
+        title = f"<h3>{_e(entry.title)}</h3>" if entry.title else ""
         why = _UNAVAILABLE_TEXT[entry.kind, view.unavailable]
         return f'<li>{label}{title}<p class="unavailable">{_e(why)}</p></li>'
     if entry.finding is not None:
@@ -365,8 +381,8 @@ def _item_html(entry: Entry) -> str:
         default, body = _record_html(view.record)
     else:
         default, body = _other_html(entry)
-    heading = item.title or default
-    note = f'<p class="text">{_e(item.note)}</p>' if item.note else ""
+    heading = entry.title or default
+    note = f'<p class="text">{_e(entry.note)}</p>' if entry.note else ""
     added = PublicUser.from_user(view.added_by).display_name
     return f'<li>{label}<h3>{_e(heading)}</h3>{body}{note}<p class="meta">Added by {_e(added)}</p></li>'
 

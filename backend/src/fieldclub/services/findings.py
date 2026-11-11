@@ -74,7 +74,7 @@ from fieldclub.models import (
 )
 from fieldclub.models.common import point_lon_lat, to_db_geometry
 from fieldclub.schemas.common import cursor_int, decode_cursor, int_from_cursor, is_bbox, paginate
-from fieldclub.services import activity, geo, ids, reputation, sensitivity
+from fieldclub.services import activity, geo, ids, reputation, sensitivity, text_positions
 from fieldclub.services.confidence import (
     SECOND_LOOK_CODES,
     VERIFIER_ROLES,
@@ -116,6 +116,14 @@ logger = logging.getLogger(__name__)
 class OutsideBritishIslesError(ValidationFailedError):
     code = "outside_british_isles"
     message = "Field Club covers Great Britain, Ireland and their islands. That position is outside them."
+
+
+class PositionInTextError(ValidationFailedError):
+    code = "position_in_text"
+    message = (
+        "A protected or restricted finding's title and description can't say where it is more closely "
+        "than its 1 km square: take out the grid reference, coordinates or three-word address."
+    )
 
 
 class NotFinderError(ForbiddenError):
@@ -552,6 +560,33 @@ def current_assessment(finding: Finding) -> Assessment:
 # Creating and editing
 # --------------------------------------------------------------------------
 
+# The free text of a finding that is checked when it is saved, by request field.
+_CHECKED_TEXT = ("title", "description")
+
+
+def check_text_for_level(level: Sensitivity | str, texts: Mapping[str, str | None]) -> None:
+    """Refuse a title or description that writes down a position, unless the finding is open.
+
+    The text would otherwise say more than the 1 km square that everyone
+    but members (or trusted people) may see (Decision 0005). `texts` maps
+    each request field to its value. Text that slips through, written while
+    the finding was open, is hidden on the way out (`sensitivity.visible_text`).
+    """
+    if Sensitivity(level) is Sensitivity.OPEN:
+        return
+    found = [name for name, text in texts.items() if text_positions.holds_position(text)]
+    if found:
+        raise PositionInTextError(
+            details=[
+                {
+                    "field": f"body.{name}",
+                    "message": f"The {name} gives a position finer than the 1 km square.",
+                }
+                for name in found
+            ]
+        )
+
+
 _CLASS_LABELS = {info.id: info.label for info in FEATURE_CLASSES}
 PUBLIC_ID_CONSTRAINT = "uq_findings_public_id"
 
@@ -587,6 +622,7 @@ def create_finding(
         check_outline(outline, location)
     lon, lat = _point_parts(location)
     level = sensitivity.starting_sensitivity(feature_class, requested_sensitivity, author)
+    check_text_for_level(level, {"title": title, "description": description})
     nation = geo.nation_of(db, Point(lon, lat))
 
     finding = ids.insert_with_public_id(
@@ -683,7 +719,13 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
     if changes.get("feature_class") is not None and changes["feature_class"] != finding.feature_class:
         finding.feature_class = FeatureClass(changes["feature_class"]).value
         class_changed = True
+    level_before = finding.sensitivity
     db.flush()
+    # The flush applies a level a new class raises. A raised level checks the
+    # text kept as well as the text sent.
+    raised = finding.sensitivity != level_before
+    checked = [name for name in _CHECKED_TEXT if raised or name in changes]
+    check_text_for_level(finding.sensitivity, {name: getattr(finding, name) for name in checked})
     if "location" in changes:
         activity.relocate(db, finding)
     if class_changed:
@@ -780,8 +822,15 @@ def findings_query(viewer: User | None, filters: FindingFilters) -> Select[Findi
         )
     if filters.q:
         pattern = f"%{_escape_like(filters.q)}%"
+        # Someone who doesn't see a finding exactly searches its title with
+        # positions hidden, or a search could read one out a figure at a time.
+        exact = sensitivity.as_sql(sensitivity.sees_exact_clause(viewer))
         query = query.where(
-            or_(Finding.title.ilike(pattern, escape="\\"), Finding.public_id == filters.q.upper())
+            or_(
+                exact & Finding.title.ilike(pattern, escape="\\"),
+                ~exact & Finding.title_public.ilike(pattern, escape="\\"),
+                Finding.public_id == filters.q.upper(),
+            )
         )
     column, descending, _ = _SORT_COLUMNS[filters.sort]
     order = (column.desc(), Finding.id.desc()) if descending else (column.asc(), Finding.id.asc())
