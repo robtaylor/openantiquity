@@ -39,6 +39,7 @@ from fieldclub.terrain import sftp
 from fieldclub.terrain.blobs import ObjectLock, folder
 from fieldclub.terrain.catalogue import Catalogue, england_catalogue
 from fieldclub.terrain.cog import COG_FORMAT
+from fieldclub.terrain.errors import ElevationUnavailableError
 from fieldclub.terrain.mirror import Fetcher, LocalSourceFetcher, Mirror, SftpFetcher, mirror_store
 from fieldclub.terrain.national import NationalStore
 from fieldclub.terrain.overview import Overview, overview_edition
@@ -157,14 +158,11 @@ class Terrain:
 
         Like `url_versions`, it still answers when the overview's manifest
         can't be read, with `built` as None. The mirror's tiles come from the
-        listing the overview keeps, which is refreshed at most once a
-        `refresh_s`, so asking on every page load lists no bucket.
+        listing the overview keeps, which is tried at most once a `refresh_s`
+        whether or not it succeeds, so asking on every page load lists no
+        bucket. Until a listing has succeeded `mirrored_tiles` is None.
         """
-        try:
-            mirrored: frozenset[str] | None = self.overview.mirrored()
-        except Exception:
-            logger.exception("Couldn't list the mirror; /meta says how much it holds is unknown")
-            mirrored = None
+        mirrored = self.overview.mirrored()
         try:
             manifest = self.overview.snapshot().manifest
         except Exception:
@@ -227,8 +225,14 @@ class Terrain:
         return "not_mirrored"
 
     def mirrored(self) -> frozenset[str]:
-        """The 5 km tiles in the mirror now, as listed at most once a minute."""
-        return self.overview.mirrored()
+        """The 5 km tiles in the mirror now, as listed at most once a minute.
+
+        Raises `ElevationUnavailableError` while the mirror has never been listed.
+        """
+        mirrored = self.overview.mirrored()
+        if mirrored is None:
+            raise ElevationUnavailableError()
+        return mirrored
 
     def profile(self, coordinates: list[tuple[float, float]], samples: int) -> Profile:
         """Heights at `samples` evenly spaced points along a line of WGS84 positions."""

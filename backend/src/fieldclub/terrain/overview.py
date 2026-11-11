@@ -161,7 +161,8 @@ class Overview:
         self._guard = threading.Lock()
         self._snapshot: OverviewSnapshot | None = None
         self._checked = -float("inf")
-        self._mirrored: frozenset[str] = frozenset()
+        # The mirror's last good listing, or None before one has succeeded.
+        self._mirrored: frozenset[str] | None = None
         self._listed = -float("inf")
 
     def snapshot(self) -> OverviewSnapshot:
@@ -192,14 +193,23 @@ class Overview:
     def edition(self) -> str:
         return self.snapshot().edition
 
-    def mirrored(self) -> frozenset[str]:
-        """The tiles the mirror holds, listed at most once a `refresh_s`."""
-        return self._mirror_names()
+    def mirrored(self) -> frozenset[str] | None:
+        """The tiles the mirror holds, or None when it hasn't yet been listed.
 
-    def _mirror_names(self) -> frozenset[str]:
-        """The tiles the mirror holds, listed at most once a `refresh_s`."""
+        The mirror is listed at most once a `refresh_s`, and a listing that
+        fails waits as long before it is tried again, keeping the last good
+        one meanwhile. A bucket that can't be listed costs a /meta request or
+        a map tile one attempt a minute, not one each.
+        """
         with self._guard:
             if self._clock() - self._listed >= self.refresh_s:
-                self._mirrored = frozenset(self.mirror.store.names())
                 self._listed = self._clock()
+                try:
+                    self._mirrored = frozenset(self.mirror.store.names())
+                except Exception:
+                    logger.exception("Couldn't list the mirror; trying again in %.0f s", self.refresh_s)
             return self._mirrored
+
+    def _mirror_names(self) -> frozenset[str]:
+        """What a snapshot draws from the mirror: none of it until a listing has succeeded."""
+        return self.mirrored() or frozenset()

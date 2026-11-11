@@ -348,6 +348,17 @@ def test_coverage_lists_the_catalogue_tiles_as_geojson(api: TestClient) -> None:
     assert feature["properties"]["resolution_m"] == 1
 
 
+def test_coverage_is_unavailable_while_the_mirror_cannot_be_listed(
+    api: TestClient, terrain: Terrain, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def names() -> list[str]:
+        raise OSError("the bucket is down")
+
+    monkeypatch.setattr(terrain.mirror.store, "names", names)
+    response = api.get("/api/v1/terrain/coverage")
+    assert (response.status_code, error_code(response)) == (503, "elevation_unavailable")
+
+
 def test_coverage_can_be_limited_to_a_box(api: TestClient) -> None:
     west, south = TO_LONLAT.transform(410_100, 165_100)
     east, north = TO_LONLAT.transform(410_200, 165_200)

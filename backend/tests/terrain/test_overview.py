@@ -246,6 +246,52 @@ def test_meta_says_whether_the_overview_holds_every_mirrored_tile(
     assert len(listings) == listed_by_the_build + 1
 
 
+def test_a_mirror_that_cannot_be_listed_is_tried_once_a_minute(
+    app: FastAPI,
+    client: TestClient,
+    terrain: Terrain,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failing listing waits a `refresh_s` like a good one, so a bucket outage can't stall `/meta`."""
+    now = [0.0]
+    overview = Overview(terrain.mirror, terrain.overview.store, refresh_s=60, clock=lambda: now[0])
+    app.dependency_overrides[get_terrain] = lambda: Terrain(
+        terrain.mirror, overview, terrain.renderer.storage
+    )
+    listings: list[int] = []
+    real_names = terrain.mirror.store.names
+    failing = [True]
+
+    def names() -> list[str]:
+        listings.append(1)
+        if failing[0]:
+            raise OSError("the bucket is down")
+        return real_names()
+
+    monkeypatch.setattr(terrain.mirror.store, "names", names)
+
+    def mirrored_tiles() -> int | None:
+        response = client.get("/api/v1/meta")
+        assert response.status_code == 200
+        return response.json()["terrain"]["mirrored_tiles"]
+
+    for _ in range(10):
+        assert mirrored_tiles() is None
+    assert len(listings) == 1, "every /meta request listed the failing mirror again"
+    assert caplog.text.count("Couldn't list the mirror") == 1
+    now[0] = 61.0
+    failing[0] = False
+    assert mirrored_tiles() == len(TILES) - 1
+    assert len(listings) == 2
+    # A later failure keeps the last good listing, and is retried a minute on.
+    failing[0] = True
+    now[0] = 122.0
+    for _ in range(5):
+        assert mirrored_tiles() == len(TILES) - 1
+    assert len(listings) == 3
+
+
 def test_only_tiles_mirrored_since_the_build_count_against_the_fallback_cap(
     terrain: Terrain, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
