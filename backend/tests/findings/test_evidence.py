@@ -164,6 +164,31 @@ def test_votes_count_from_others_but_not_from_the_contributor_or_finder(
     assert (status["vote_total"], status["standing"]) == (0.0, True)
 
 
+def test_evidence_counts_endorsements_and_disputes_as_the_engine_does(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    finder, helper = make_user(), make_user()
+    finding = create(db, finder)
+    evidence, _ = add_desk_evidence(db, finding, helper)
+    for value in (1, 1, -1):
+        findings.vote(db, evidence.id, make_user(), value)
+    expert = make_user("expert")
+    findings.vote(db, evidence.id, expert, -1)
+    # A banned voter stops counting, as their vote does in the total.
+    banned = make_user()
+    findings.vote(db, evidence.id, banned, 1)
+    db.commit()
+    banned.banned_at = datetime.now(UTC)
+    db.commit()
+    findings.reassess(db, findings.lock(db, finding), None)
+    db.commit()
+
+    (item,) = client_as(make_user()).get(f"{API}/findings/{finding.public_id}").json()["evidence"]
+    assert (item["endorsements"], item["disputes"]) == (2, 2)
+    # Two members for, a member and an archaeologist against: 2 - 1 - 3.
+    assert item["vote_total"] == -2.0
+
+
 def test_evidence_endorsed_by_two_others_earns_its_contributor_a_point(
     db: Session, make_user: MakeUser
 ) -> None:

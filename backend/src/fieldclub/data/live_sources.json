@@ -16,7 +16,13 @@
   "name_field": "data.title.text",
   "limit_param": "size",
   "max_limit": 50,
-  "min_zoom": 14
+  "min_zoom": 14,
+  "shown": false,
+  "credit": null,
+  "licence_label": null,
+  "homepage": "https://archaeologydataservice.ac.uk/",
+  "credit_field": null,
+  "licence_field": null
  },
  {
   "key": "ads-catalogue-map",
@@ -35,7 +41,13 @@
   "name_field": null,
   "limit_param": null,
   "max_limit": null,
-  "min_zoom": 10
+  "min_zoom": 10,
+  "shown": false,
+  "credit": null,
+  "licence_label": null,
+  "homepage": "https://archaeologydataservice.ac.uk/",
+  "credit_field": null,
+  "licence_field": null
  },
  {
   "key": "ads-catalogue-record",
@@ -54,7 +66,13 @@
   "name_field": "data.title.text",
   "limit_param": null,
   "max_limit": null,
-  "min_zoom": null
+  "min_zoom": null,
+  "shown": false,
+  "credit": null,
+  "licence_label": null,
+  "homepage": "https://archaeologydataservice.ac.uk/",
+  "credit_field": null,
+  "licence_field": null
  },
  {
   "key": "he-aerial-photos-obliques",
@@ -73,7 +91,13 @@
   "name_field": null,
   "limit_param": "resultRecordCount",
   "max_limit": 2000,
-  "min_zoom": 13
+  "min_zoom": 13,
+  "shown": true,
+  "credit": "Historic England Archive",
+  "licence_label": "No licence stated",
+  "homepage": "https://historicengland.org.uk/",
+  "credit_field": "Copyright",
+  "licence_field": null
  },
  {
   "key": "he-aerial-photos-verticals",
@@ -92,7 +116,13 @@
   "name_field": null,
   "limit_param": "resultRecordCount",
   "max_limit": 2000,
-  "min_zoom": 13
+  "min_zoom": 13,
+  "shown": true,
+  "credit": "Historic England Archive",
+  "licence_label": "No licence stated",
+  "homepage": "https://historicengland.org.uk/",
+  "credit_field": "Copyright",
+  "licence_field": null
  },
  {
   "key": "bristol-kyp-devon-hist-2021-v2",
@@ -111,7 +141,13 @@
   "name_field": "NAME",
   "limit_param": "resultRecordCount",
   "max_limit": 1000,
-  "min_zoom": 13
+  "min_zoom": 13,
+  "shown": false,
+  "credit": null,
+  "licence_label": null,
+  "homepage": "https://maps.bristol.gov.uk/kyp/",
+  "credit_field": null,
+  "licence_field": null
  },
  {
   "key": "bristol-kyp-som-hist-2022",
@@ -130,7 +166,13 @@
   "name_field": "NAME",
   "limit_param": "resultRecordCount",
   "max_limit": 1000,
-  "min_zoom": 13
+  "min_zoom": 13,
+  "shown": false,
+  "credit": null,
+  "licence_label": null,
+  "homepage": "https://maps.bristol.gov.uk/kyp/",
+  "credit_field": null,
+  "licence_field": null
  },
  {
   "key": "bristol-kyp-glo-hist-2021",
@@ -149,7 +191,13 @@
   "name_field": null,
   "limit_param": "resultRecordCount",
   "max_limit": 1000,
-  "min_zoom": 13
+  "min_zoom": 13,
+  "shown": false,
+  "credit": null,
+  "licence_label": null,
+  "homepage": "https://maps.bristol.gov.uk/kyp/",
+  "credit_field": null,
+  "licence_field": null
  },
  {
   "key": "bristol-kyp-wilts-her-2022-v2",
@@ -168,7 +216,13 @@
   "name_field": null,
   "limit_param": "resultRecordCount",
   "max_limit": 1000,
-  "min_zoom": 13
+  "min_zoom": 13,
+  "shown": false,
+  "credit": null,
+  "licence_label": null,
+  "homepage": "https://maps.bristol.gov.uk/kyp/",
+  "credit_field": null,
+  "licence_field": null
  },
  {
   "key": "bristol-kyp-banes-hist-2024",
@@ -187,7 +241,13 @@
   "name_field": "NAME",
   "limit_param": "resultRecordCount",
   "max_limit": 1000,
-  "min_zoom": 13
+  "min_zoom": 13,
+  "shown": false,
+  "credit": null,
+  "licence_label": null,
+  "homepage": "https://maps.bristol.gov.uk/kyp/",
+  "credit_field": null,
+  "licence_field": null
  },
  {
   "key": "bristol-kyp-nsom-hist-2022-v2",
@@ -206,7 +266,13 @@
   "name_field": null,
   "limit_param": "resultRecordCount",
   "max_limit": 1000,
-  "min_zoom": 13
+  "min_zoom": 13,
+  "shown": false,
+  "credit": null,
+  "licence_label": null,
+  "homepage": "https://maps.bristol.gov.uk/kyp/",
+  "credit_field": null,
+  "licence_field": null
  },
  {
   "key": "bristol-kyp-sgc-hist-2020-v2",
@@ -225,7 +291,13 @@
   "name_field": null,
   "limit_param": "resultRecordCount",
   "max_limit": 1000,
-  "min_zoom": 13
+  "min_zoom": 13,
+  "shown": false,
+  "credit": null,
+  "licence_label": null,
+  "homepage": "https://maps.bristol.gov.uk/kyp/",
+  "credit_field": null,
+  "licence_field": null
  },
  {
   "key": "bristol-kyp-her-2026",
@@ -244,7 +316,13 @@
   "name_field": null,
   "limit_param": "resultRecordCount",
   "max_limit": 1000,
-  "min_zoom": 13
+  "min_zoom": 13,
+  "shown": false,
+  "credit": null,
+  "licence_label": null,
+  "homepage": "https://maps.bristol.gov.uk/kyp/",
+  "credit_field": null,
+  "licence_field": null
  },
  {
   "key": "bristol-kyp-worcester-city",
@@ -263,7 +341,13 @@
   "name_field": null,
   "limit_param": "resultRecordCount",
   "max_limit": 1000,
-  "min_zoom": 13
+  "min_zoom": 13,
+  "shown": false,
+  "credit": null,
+  "licence_label": null,
+  "homepage": "https://maps.bristol.gov.uk/kyp/",
+  "credit_field": null,
+  "licence_field": null
  },
  {
   "key": "enpa-exmoor-her",
@@ -282,7 +366,13 @@
   "name_field": "Name",
   "limit_param": "resultRecordCount",
   "max_limit": 2000,
-  "min_zoom": 13
+  "min_zoom": 13,
+  "shown": false,
+  "credit": null,
+  "licence_label": null,
+  "homepage": "https://www.exmoorher.co.uk/",
+  "credit_field": null,
+  "licence_field": null
  },
  {
   "key": "dnpa-dartmoor-her",
@@ -301,7 +391,13 @@
   "name_field": "name",
   "limit_param": "resultRecordCount",
   "max_limit": 2000,
-  "min_zoom": 13
+  "min_zoom": 13,
+  "shown": true,
+  "credit": "Dartmoor National Park Authority; © Crown copyright and database rights 2026 OS AC0000823576",
+  "licence_label": "No licence stated",
+  "homepage": null,
+  "credit_field": null,
+  "licence_field": null
  },
  {
   "key": "wiltshire-her-monuments",
@@ -320,7 +416,13 @@
   "name_field": "Name",
   "limit_param": "resultRecordCount",
   "max_limit": 1000,
-  "min_zoom": 13
+  "min_zoom": 13,
+  "shown": true,
+  "credit": "Wiltshire Council Archaeology Service (Wiltshire and Swindon HER)",
+  "licence_label": "No licence stated",
+  "homepage": "https://services.wiltshire.gov.uk/HistoryEnvRecord/Home/Index",
+  "credit_field": null,
+  "licence_field": null
  },
  {
   "key": "wolverhampton-walsall-her",
@@ -339,7 +441,13 @@
   "name_field": "Name",
   "limit_param": "resultRecordCount",
   "max_limit": 2000,
-  "min_zoom": 13
+  "min_zoom": 13,
+  "shown": true,
+  "credit": "City of Wolverhampton Council / Wolverhampton and Walsall HER",
+  "licence_label": "No licence stated",
+  "homepage": null,
+  "credit_field": null,
+  "licence_field": null
  },
  {
   "key": "cambridge-cucap-pois",
@@ -358,7 +466,13 @@
   "name_field": "name",
   "limit_param": "limit",
   "max_limit": 250,
-  "min_zoom": 14
+  "min_zoom": 14,
+  "shown": true,
+  "credit": "Cambridge University Collection of Aerial Photography",
+  "licence_label": "No open licence",
+  "homepage": "https://www.cambridgeairphotos.com/",
+  "credit_field": null,
+  "licence_field": null
  },
  {
   "key": "wikimedia-commons-geosearch",
@@ -377,7 +491,13 @@
   "name_field": "title",
   "limit_param": "ggslimit",
   "max_limit": 500,
-  "min_zoom": 14
+  "min_zoom": 14,
+  "shown": true,
+  "credit": "Wikimedia Commons",
+  "licence_label": "Licensed file by file",
+  "homepage": "https://commons.wikimedia.org/",
+  "credit_field": "imageinfo.0.extmetadata.Artist.value",
+  "licence_field": "imageinfo.0.extmetadata.LicenseShortName.value"
  },
  {
   "key": "wikimedia-wikipedia-geosearch",
@@ -396,7 +516,13 @@
   "name_field": "title",
   "limit_param": "ggslimit",
   "max_limit": 500,
-  "min_zoom": 12
+  "min_zoom": 12,
+  "shown": true,
+  "credit": "Wikipedia",
+  "licence_label": "CC BY-SA 4.0",
+  "homepage": "https://en.wikipedia.org/",
+  "credit_field": null,
+  "licence_field": null
  },
  {
   "key": "aberdeenshire-her",
@@ -415,6 +541,12 @@
   "name_field": "Name",
   "limit_param": "resultRecordCount",
   "max_limit": 1000,
-  "min_zoom": 13
+  "min_zoom": 13,
+  "shown": true,
+  "credit": "Aberdeenshire Council",
+  "licence_label": "Copyright reserved, for personal research only",
+  "homepage": "https://her.aberdeenshire.gov.uk/",
+  "credit_field": null,
+  "licence_field": null
  }
 ]

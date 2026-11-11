@@ -65,6 +65,29 @@ class Profile:
     resolution_m: float
 
 
+@dataclass(frozen=True)
+class OverviewStatus:
+    """Whether the national overview has been built, and over how much of the catalogue."""
+
+    # None when its manifest can't be read just now.
+    built: bool | None
+    # When the current build was made, as `national.json` records it.
+    built_at: str | None
+    # How many 5 km tiles the build holds.
+    tiles: int
+
+
+@dataclass(frozen=True)
+class TerrainStatus:
+    """What `/meta` says about the terrain tiles, so the map can explain an empty or coarse view."""
+
+    # From this zoom up, tiles are drawn from the 1 m mirror. Below it, from the overview.
+    fine_minzoom: int
+    # How many 5 km tiles of 1 m elevation exist (`terrain/catalogue.py`).
+    catalogue_tiles: int
+    overview: OverviewStatus
+
+
 class Terrain:
     def __init__(self, mirror: Mirror, overview: Overview, storage: Storage) -> None:
         self.mirror = mirror
@@ -97,6 +120,27 @@ class Terrain:
             )
             editions = default_editions()
         return lambda kind: tile_version(kind, editions)
+
+    def status(self) -> TerrainStatus:
+        """Where the 1 m data starts and how far the overview has been built.
+
+        Like `url_versions`, it still answers when the overview's manifest
+        can't be read, with `built` as None.
+        """
+        try:
+            manifest = self.overview.snapshot().manifest
+        except Exception:
+            logger.exception("Couldn't read the overview's build; /meta says its state is unknown")
+            overview = OverviewStatus(built=None, built_at=None, tiles=0)
+        else:
+            overview = OverviewStatus(
+                built=manifest is not None,
+                built_at=manifest.created if manifest is not None else None,
+                tiles=len(manifest.tiles) if manifest is not None else 0,
+            )
+        return TerrainStatus(
+            fine_minzoom=FINE_MINZOOM, catalogue_tiles=len(self.catalogue), overview=overview
+        )
 
     def select(self, zoom: int) -> Selection:
         snapshot = self.overview.snapshot()

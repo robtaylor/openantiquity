@@ -165,6 +165,8 @@ class LiveSource(BaseModel):
     # by the browser. It carries no cap: add `limit_param` for that.
     query_pattern: str
     response_fields: str
+    # The research's notes on the licence and the credit, for people working on
+    # the catalogue. Not for showing: a visitor sees `credit` and `licence_label`.
     licence: str
     attribution: str
     link_template: str | None
@@ -180,6 +182,20 @@ class LiveSource(BaseModel):
     # The lowest map zoom at which to ask, so one viewport's answer stays
     # under the cap. Null for a request by record id.
     min_zoom: int | None
+    # False while the research hasn't settled how the source must be credited.
+    # The browser doesn't query or show a source that isn't shown.
+    shown: bool
+    # The credit and licence to show a visitor beside what the source gives.
+    # Null when the source isn't shown.
+    credit: str | None
+    licence_label: str | None
+    # The publisher's home page, where the catalogue names one.
+    homepage: str | None
+    # Where the terms ask for a credit or licence taken from each record: the
+    # dot path, inside one item of the answer, to the field that carries it.
+    # Show it with that record. A part that is a number indexes a list.
+    credit_field: str | None
+    licence_field: str | None
 
 
 class LiveSources(BaseModel):
@@ -188,7 +204,9 @@ class LiveSources(BaseModel):
 
 class ContextLink(BaseModel):
     key: str
+    # The catalogue's working name. `title` is the one to show.
     name: str
+    title: str
     url: str
     coverage: str
     # What the viewer shows at the place.

@@ -2,6 +2,7 @@
  {
   "key": "he-nhle-list-entry",
   "name": "NHLE list entry",
+  "title": "NHLE list entry",
   "template": "https://historicengland.org.uk/listing/the-list/list-entry/{id}?section=official-list-entry",
   "coverage": "england",
   "shows": "records",
@@ -15,6 +16,7 @@
  {
   "key": "he-aerial-photo-record",
   "name": "Historic England Archive aerial photo record",
+  "title": "Historic England Archive aerial photo record",
   "template": "https://historicengland.org.uk/images-books/archive/collections/aerial-photos/record/{id}",
   "coverage": "england",
   "shows": "aerial_photographs",
@@ -28,6 +30,7 @@
  {
   "key": "he-apex-viewer",
   "name": "Historic England Aerial Photo Explorer at a point",
+  "title": "Historic England Aerial Photo Explorer",
   "template": "https://historicengland.maps.arcgis.com/apps/webappviewer/index.html?id=2626ed0c37484d96b8954dd33187084e&center={lon},{lat}&level={zoom}",
   "coverage": "england",
   "shows": "aerial_photographs",
@@ -41,6 +44,7 @@
  {
   "key": "he-research-report",
   "name": "Historic England research report",
+  "title": "Historic England research report",
   "template": "https://historicengland.org.uk/research/results/reports/{id}",
   "coverage": "england",
   "shows": "other",
@@ -54,6 +58,7 @@
  {
   "key": "he-heritage-at-risk-entry",
   "name": "Heritage at Risk register entry",
+  "title": "Heritage at Risk register entry",
   "template": "https://historicengland.org.uk/advice/heritage-at-risk/search-register/list-entry/{id}",
   "coverage": "england",
   "shows": "records",
@@ -67,6 +72,7 @@
  {
   "key": "he-heritage-gateway-research-records",
   "name": "Heritage Gateway record: Historic England research records (ex-NRHE)",
+  "title": "Heritage Gateway record: Historic England research records (ex-NRHE)",
   "template": "https://historicengland.org.uk/listing/heritage-gateway/results/record/0d636742-8028-4a8c-8b7c-e1f9aaf2d338/{id}",
   "coverage": "england",
   "shows": "records",
@@ -80,6 +86,7 @@
  {
   "key": "he-heritage-gateway-devon-dartmoor",
   "name": "Heritage Gateway record: Devon and Dartmoor HER",
+  "title": "Heritage Gateway record: Devon and Dartmoor HER",
   "template": "https://historicengland.org.uk/listing/heritage-gateway/results/record/c39bc47e-3b72-4a06-9863-681629e456a2/{id}",
   "coverage": "england",
   "shows": "records",
@@ -93,6 +100,7 @@
  {
   "key": "he-heritage-gateway-bedford",
   "name": "Heritage Gateway record: Bedford Borough HER",
+  "title": "Heritage Gateway record: Bedford Borough HER",
   "template": "https://historicengland.org.uk/listing/heritage-gateway/results/record/00514065-b008-44ba-a64b-c2fc78241ee5/{id}",
   "coverage": "england",
   "shows": "records",
@@ -106,6 +114,7 @@
  {
   "key": "he-heritage-gateway-wiltshire",
   "name": "Heritage Gateway record: Wiltshire and Swindon HER",
+  "title": "Heritage Gateway record: Wiltshire and Swindon HER",
   "template": "https://historicengland.org.uk/listing/heritage-gateway/results/record/327e063c-c604-4fab-b973-b2566fb68559/{id}",
   "coverage": "england",
   "shows": "records",
@@ -119,6 +128,7 @@
  {
   "key": "he-heritage-gateway-cornwall",
   "name": "Heritage Gateway record: Cornwall and Scilly HER",
+  "title": "Heritage Gateway record: Cornwall and Scilly HER",
   "template": "https://historicengland.org.uk/listing/heritage-gateway/results/record/1642254c-0359-4e5e-b197-59c0cc5509c8/{id}",
   "coverage": "england",
   "shows": "records",
@@ -132,6 +142,7 @@
  {
   "key": "he-heritage-gateway-york",
   "name": "Heritage Gateway record: City of York HER",
+  "title": "Heritage Gateway record: City of York HER",
   "template": "https://historicengland.org.uk/listing/heritage-gateway/results/record/8962707c-eed5-4e59-beb1-dce060dc26ba/{id}",
   "coverage": "england",
   "shows": "records",
@@ -145,6 +156,7 @@
  {
   "key": "he-heritage-gateway-wolverhampton-walsall",
   "name": "Heritage Gateway record: Wolverhampton and Walsall HER",
+  "title": "Heritage Gateway record: Wolverhampton and Walsall HER",
   "template": "https://historicengland.org.uk/listing/heritage-gateway/results/record/49695de2-09c7-4769-98de-0c3ce0ee96dc/{id}",
   "coverage": "england",
   "shows": "records",
@@ -158,6 +170,7 @@
  {
   "key": "he-heritage-gateway-norfolk",
   "name": "Heritage Gateway record: Norfolk HER",
+  "title": "Heritage Gateway record: Norfolk HER",
   "template": "https://historicengland.org.uk/listing/heritage-gateway/results/record/47e876d1-227a-40b9-af73-135787c45ed2/{id}",
   "coverage": "england",
   "shows": "records",
@@ -171,6 +184,7 @@
  {
   "key": "he-heritage-gateway-legacy-nrhe",
   "name": "Heritage Gateway legacy NRHE link by HOB UID (lands on a search)",
+  "title": "Heritage Gateway legacy NRHE link by HOB UID (lands on a search)",
   "template": "https://www.heritagegateway.org.uk/Gateway/Results_Single.aspx?uid={id}&resourceID=19191",
   "coverage": "england",
   "shows": "records",
@@ -184,6 +198,7 @@
  {
   "key": "pas-recorded-find",
   "name": "Portable Antiquities Scheme record",
+  "title": "Portable Antiquities Scheme record",
   "template": "https://finds.org.uk/pas/recorded-find/{id}",
   "coverage": "england",
   "shows": "records",
@@ -197,6 +212,7 @@
  {
   "key": "pas-legacy-numeric",
   "name": "PAS legacy numeric record URL (redirect)",
+  "title": "PAS legacy numeric record URL (redirect)",
   "template": "https://finds.org.uk/database/artefacts/record/id/{id}",
   "coverage": "england",
   "shows": "records",
@@ -210,6 +226,7 @@
  {
   "key": "trove-place",
   "name": "trove.scot place record (NRHE)",
+  "title": "trove.scot place record (NRHE)",
   "template": "https://www.trove.scot/place/{id}",
   "coverage": "scotland",
   "shows": "records",
@@ -223,6 +240,7 @@
  {
   "key": "trove-map-at-point",
   "name": "trove.scot map search at a point",
+  "title": "trove.scot map",
   "template": "https://www.trove.scot/search/map?q=*&page_type=Places&coords={easting},{northing},{zoom}",
   "coverage": "scotland",
   "shows": "records",
@@ -236,6 +254,7 @@
  {
   "key": "trove-designation",
   "name": "trove.scot designation record",
+  "title": "trove.scot designation record",
   "template": "https://www.trove.scot/designation/{id}",
   "coverage": "scotland",
   "shows": "records",
@@ -249,6 +268,7 @@
  {
   "key": "hes-portal-designation",
   "name": "HES Portal designation record",
+  "title": "HES Portal designation record",
   "template": "https://portal.historicenvironment.scot/designation/{id}",
   "coverage": "scotland",
   "shows": "records",
@@ -262,6 +282,7 @@
  {
   "key": "coflein-site",
   "name": "Coflein site record (NMRW)",
+  "title": "Coflein site record (NMRW)",
   "template": "https://coflein.gov.uk/en/site/{id}",
   "coverage": "wales",
   "shows": "records",
@@ -275,6 +296,7 @@
  {
   "key": "cadw-report-sam",
   "name": "Cadw full report: sam",
+  "title": "Cadw full report: sam",
   "template": "https://cadwpublic-api.azurewebsites.net/reports/sam/FullReport?lang=en&id={id}",
   "coverage": "wales",
   "shows": "records",
@@ -288,6 +310,7 @@
  {
   "key": "cadw-report-listedbuilding",
   "name": "Cadw full report: listedbuilding",
+  "title": "Cadw full report: listedbuilding",
   "template": "https://cadwpublic-api.azurewebsites.net/reports/listedbuilding/FullReport?lang=en&id={id}",
   "coverage": "wales",
   "shows": "records",
@@ -301,6 +324,7 @@
  {
   "key": "cadw-report-parkgarden",
   "name": "Cadw full report: parkgarden",
+  "title": "Cadw full report: parkgarden",
   "template": "https://cadwpublic-api.azurewebsites.net/reports/parkgarden/FullReport?lang=en&id={id}",
   "coverage": "wales",
   "shows": "records",
@@ -314,6 +338,7 @@
  {
   "key": "cadw-report-historiclandscape",
   "name": "Cadw full report: historiclandscape",
+  "title": "Cadw full report: historiclandscape",
   "template": "https://cadwpublic-api.azurewebsites.net/reports/historiclandscape/FullReport?lang=en&id={id}",
   "coverage": "wales",
   "shows": "records",
@@ -327,6 +352,7 @@
  {
   "key": "cadw-report-worldheritagesite",
   "name": "Cadw full report: worldheritagesite",
+  "title": "Cadw full report: worldheritagesite",
   "template": "https://cadwpublic-api.azurewebsites.net/reports/worldheritagesite/FullReport?lang=en&id={id}",
   "coverage": "wales",
   "shows": "records",
@@ -340,6 +366,7 @@
  {
   "key": "cadw-report-wreck",
   "name": "Cadw full report: wreck",
+  "title": "Cadw full report: wreck",
   "template": "https://cadwpublic-api.azurewebsites.net/reports/wreck/FullReport?lang=en&id={id}",
   "coverage": "wales",
   "shows": "records",
@@ -353,6 +380,7 @@
  {
   "key": "archwilio-record",
   "name": "Archwilio (Welsh HER) record",
+  "title": "Archwilio (Welsh HER) record",
   "template": "https://archwilio.org.uk/arch/query/page.php?watprn={id}",
   "coverage": "wales",
   "shows": "records",
@@ -366,6 +394,7 @@
  {
   "key": "dfc-nismr-record",
   "name": "NI Sites and Monuments Record",
+  "title": "NI Sites and Monuments Record",
   "template": "https://apps.communities-ni.gov.uk/NISMR-public/Details.aspx?MonID={id}",
   "coverage": "northern_ireland",
   "shows": "records",
@@ -379,6 +408,7 @@
  {
   "key": "dfc-ni-buildings-record",
   "name": "NI Buildings Database record",
+  "title": "NI Buildings Database record",
   "template": "https://apps.communities-ni.gov.uk/Buildings/buildview.aspx?id={id}&js=false",
   "coverage": "northern_ireland",
   "shows": "records",
@@ -392,6 +422,7 @@
  {
   "key": "dfc-ni-heritage-at-risk-record",
   "name": "NI Heritage at Risk record",
+  "title": "NI Heritage at Risk record",
   "template": "https://apps.communities-ni.gov.uk/HARNI/barniview.aspx?id={id}&js=false",
   "coverage": "northern_ireland",
   "shows": "records",
@@ -405,6 +436,7 @@
  {
   "key": "ads-catalogue-resource",
   "name": "ADS Data Catalogue record",
+  "title": "ADS Data Catalogue record",
   "template": "https://archaeologydataservice.ac.uk/data-catalogue/resource/{id}",
   "coverage": "uk",
   "shows": "records",
@@ -418,6 +450,7 @@
  {
   "key": "ads-doi",
   "name": "ADS archive or report by DOI",
+  "title": "ADS archive or report by DOI",
   "template": "https://doi.org/10.5284/{id}",
   "coverage": "uk",
   "shows": "other",
@@ -431,6 +464,7 @@
  {
   "key": "ads-archsearch-legacy",
   "name": "ADS legacy Archsearch link",
+  "title": "ADS legacy Archsearch link",
   "template": "https://archaeologydataservice.ac.uk/archsearch/record?titleId={id}",
   "coverage": "uk",
   "shows": "records",
@@ -444,6 +478,7 @@
  {
   "key": "nt-heritage-record",
   "name": "National Trust Heritage Records Online",
+  "title": "National Trust Heritage Records Online",
   "template": "https://heritagerecords.nationaltrust.org.uk/HBSMR/MonRecord.aspx?uid={id}",
   "coverage": "uk",
   "shows": "records",
@@ -457,6 +492,7 @@
  {
   "key": "coe-church-heritage-record",
   "name": "Church Heritage Record",
+  "title": "Church Heritage Record",
   "template": "https://heritage.churchofengland.org/buildings/{id}",
   "coverage": "england",
   "shows": "records",
@@ -470,6 +506,7 @@
  {
   "key": "keys-to-the-past",
   "name": "Keys to the Past (Durham and Northumberland HERs)",
+  "title": "Keys to the Past (Durham and Northumberland HERs)",
   "template": "https://keystothepast.info/search-records/results-of-search/results-of-search-2/site-details/?PRN={id}",
   "coverage": "england",
   "shows": "records",
@@ -483,6 +520,7 @@
  {
   "key": "suffolk-her",
   "name": "Suffolk HER record",
+  "title": "Suffolk HER record",
   "template": "https://heritage.suffolk.gov.uk/Monument/{id}",
   "coverage": "england",
   "shows": "records",
@@ -496,6 +534,7 @@
  {
   "key": "norfolk-her",
   "name": "Norfolk HER record",
+  "title": "Norfolk HER record",
   "template": "https://www.heritage.norfolk.gov.uk/record-details?{id}",
   "coverage": "england",
   "shows": "records",
@@ -509,6 +548,7 @@
  {
   "key": "lincs-her",
   "name": "Lincolnshire HER record",
+  "title": "Lincolnshire HER record",
   "template": "https://heritage-explorer.lincolnshire.gov.uk/Monument/{id}",
   "coverage": "england",
   "shows": "records",
@@ -522,6 +562,7 @@
  {
   "key": "york-her",
   "name": "City of York HER record",
+  "title": "City of York HER record",
   "template": "https://her.york.gov.uk/monument/{id}",
   "coverage": "england",
   "shows": "records",
@@ -535,6 +576,7 @@
  {
   "key": "exmoor-her",
   "name": "Exmoor HER record",
+  "title": "Exmoor HER record",
   "template": "https://www.exmoorher.co.uk/Monument/{id}",
   "coverage": "england",
   "shows": "records",
@@ -548,6 +590,7 @@
  {
   "key": "tyne-wear-her",
   "name": "Tyne and Wear HER record",
+  "title": "Tyne and Wear HER record",
   "template": "https://twsitelines.info/SMR/{id}",
   "coverage": "england",
   "shows": "records",
@@ -561,6 +604,7 @@
  {
   "key": "somerset-her",
   "name": "Somerset HER record",
+  "title": "Somerset HER record",
   "template": "https://somersetheritage.org.uk/record/{id}",
   "coverage": "england",
   "shows": "records",
@@ -574,6 +618,7 @@
  {
   "key": "highland-her",
   "name": "Highland HER record",
+  "title": "Highland HER record",
   "template": "https://her.highland.gov.uk/monument/{id}",
   "coverage": "scotland",
   "shows": "records",
@@ -587,6 +632,7 @@
  {
   "key": "isle-of-man-her",
   "name": "Isle of Man HER report",
+  "title": "Isle of Man HER report",
   "template": "https://isleofmanher.im/report/{id}",
   "coverage": "wider",
   "shows": "records",
@@ -600,6 +646,7 @@
  {
   "key": "jersey-her",
   "name": "Jersey HER report",
+  "title": "Jersey HER report",
   "template": "https://her.jerseyheritage.org/report/{id}",
   "coverage": "wider",
   "shows": "records",
@@ -613,6 +660,7 @@
  {
   "key": "treasure-trove-scotland-object",
   "name": "Treasure Trove Scotland object",
+  "title": "Treasure Trove Scotland object",
   "template": "https://treasuretrovescotland.co.uk/search/object-detail?id={id}",
   "coverage": "scotland",
   "shows": "records",
@@ -626,6 +674,7 @@
  {
   "key": "cucap-location",
   "name": "Cambridge air photo record",
+  "title": "Cambridge air photo record",
   "template": "https://www.cambridgeairphotos.com/location/{id}/",
   "coverage": "uk",
   "shows": "aerial_photographs",
@@ -639,6 +688,7 @@
  {
   "key": "britain-from-above-map",
   "name": "Britain from Above map at a point",
+  "title": "Britain from Above",
   "template": "https://www.britainfromabove.org.uk/en/map?country=global&view=map#{zoom},{easting},{northing}",
   "coverage": "uk",
   "shows": "aerial_photographs",
@@ -652,6 +702,7 @@
  {
   "key": "ncap-air-photo-finder",
   "name": "NCAP Air Photo Finder at a point",
+  "title": "NCAP Air Photo Finder",
   "template": "https://airphotofinder.ncap.org/map?c={northing}:{easting}&z={zoom}",
   "coverage": "uk",
   "shows": "aerial_photographs",
@@ -665,6 +716,7 @@
  {
   "key": "nls-explore-at-point",
   "name": "NLS georeferenced maps viewer at a point",
+  "title": "National Library of Scotland maps",
   "template": "https://maps.nls.uk/geo/explore/#zoom={zoom}&lat={lat}&lon={lon}&layers=6&b=1",
   "coverage": "gb",
   "shows": "historic_maps",
@@ -678,6 +730,7 @@
  {
   "key": "nls-side-by-side-lidar",
   "name": "NLS side-by-side viewer, LIDAR against CVAT",
+  "title": "National Library of Scotland LIDAR and maps, side by side",
   "template": "https://maps.nls.uk/geo/explore/side-by-side/#zoom={zoom}&lat={lat}&lon={lon}&layers=LIDAR_DTM_1m&right=vat",
   "coverage": "gb",
   "shows": "lidar",
@@ -691,6 +744,7 @@
  {
   "key": "google-earth-web",
   "name": "Google Earth web at a point",
+  "title": "Google Earth",
   "template": "https://earth.google.com/web/@{lat},{lon},160a,1500d,35y,0h,0t,0r",
   "coverage": "wider",
   "shows": "aerial_photographs",
@@ -704,6 +758,7 @@
  {
   "key": "know-your-place-wilts",
   "name": "Know Your Place (Wiltshire edition) at a point",
+  "title": "Know Your Place: Wiltshire",
   "template": "https://maps.bristol.gov.uk/kyp/?edition=wilts&layer=Community%20layer&x={easting}&y={northing}&extent=1500",
   "coverage": "england",
   "shows": "historic_maps",
@@ -722,6 +777,7 @@
  {
   "key": "open-domesday-place",
   "name": "Open Domesday place page",
+  "title": "Open Domesday place page",
   "template": "https://opendomesday.org/place/{gridref}/{id}/",
   "coverage": "england",
   "shows": "other",
@@ -735,6 +791,7 @@
  {
   "key": "megalithic-portal-site",
   "name": "Megalithic Portal site",
+  "title": "Megalithic Portal site",
   "template": "https://www.megalithic.co.uk/article.php?sid={id}",
   "coverage": "wider",
   "shows": "records",
@@ -748,6 +805,7 @@
  {
   "key": "gatehouse-site",
   "name": "Gatehouse Gazetteer site (England)",
+  "title": "Gatehouse Gazetteer site (England)",
   "template": "https://www.gatehouse-gazetteer.info/English%20sites/{id}.html",
   "coverage": "england",
   "shows": "records",
@@ -761,6 +819,7 @@
  {
   "key": "vision-of-britain-place",
   "name": "Vision of Britain place page",
+  "title": "Vision of Britain place page",
   "template": "https://www.visionofbritain.org.uk/place/place_page.jsp?p_id={id}",
   "coverage": "gb",
   "shows": "other",
@@ -774,6 +833,7 @@
  {
   "key": "rib-site",
   "name": "Roman Inscriptions of Britain site page",
+  "title": "Roman Inscriptions of Britain site page",
   "template": "https://romaninscriptionsofbritain.org/sites/{id}",
   "coverage": "uk",
   "shows": "records",
@@ -787,6 +847,7 @@
  {
   "key": "itinere-route-segment",
   "name": "Itiner-e road segment",
+  "title": "Itiner-e road segment",
   "template": "https://itiner-e.org/route-segment/{id}",
   "coverage": "wider",
   "shows": "records",
@@ -800,6 +861,7 @@
  {
   "key": "pleiades-place",
   "name": "Pleiades place page",
+  "title": "Pleiades place page",
   "template": "https://pleiades.stoa.org/places/{id}",
   "coverage": "wider",
   "shows": "records",
@@ -813,6 +875,7 @@
  {
   "key": "geograph-photo",
   "name": "Geograph photo page",
+  "title": "Geograph photo page",
   "template": "https://www.geograph.org.uk/photo/{id}",
   "coverage": "wider",
   "shows": "photographs",
@@ -826,6 +889,7 @@
  {
   "key": "as-corpus-catalogue",
   "name": "Corpus of Anglo-Saxon Stone Sculpture catalogue page",
+  "title": "Corpus of Anglo-Saxon Stone Sculpture catalogue page",
   "template": "https://chacklepie.com/ascorpus/catvol1.php?pageNum_urls={id}&totalRows_urls=532",
   "coverage": "england",
   "shows": "records",

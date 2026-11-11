@@ -23,7 +23,7 @@ def meta(client: TestClient) -> dict:
 
 
 def test_top_level_keys(meta: dict) -> None:
-    assert list(meta) == ["app", "auth", "vocab", "layers", "sources", "notices"]
+    assert list(meta) == ["app", "auth", "vocab", "layers", "sources", "notices", "terrain"]
 
 
 def test_app(meta: dict) -> None:
@@ -83,6 +83,7 @@ def test_vocab_has_exactly_the_documented_vocabularies(meta: dict) -> None:
         "mention_kinds",
         "record_categories",
         "report_reasons",
+        "next_steps",
     ]
 
 
@@ -351,3 +352,41 @@ def test_each_nation_has_its_route_for_reporting_a_find(meta: dict) -> None:
 
 def test_meta_may_be_cached_by_anyone_for_a_short_while(client: TestClient) -> None:
     assert client.get("/api/v1/meta").headers["cache-control"] == "public, max-age=300"
+
+
+def test_each_next_step_says_what_meets_it(meta: dict) -> None:
+    rules = {rule["id"]: rule for rule in meta["vocab"]["next_steps"]}
+    assert list(rules) == list(vocab.NextStepCode)
+    second_looks = {code for code, rule in rules.items() if rule["met_by"] == "second_look"}
+    assert second_looks == {"need_observers", "need_class_agreement", "need_check", "need_trusted_review"}
+    for code in second_looks:
+        assert rules[code]["evidence_kinds"] == []
+    strand = rules["need_strand"]
+    assert strand["evidence_kinds"] == ["lidar_view", "aerial", "historic_map", "record_link", "document"]
+    assert (strand["record_relations"], strand["stance"]) == (["part_of", "related"], "supports")
+    ground = rules["need_ground"]
+    assert ground["evidence_kinds"] == ["photo", "field_visit", "geophysics", "excavation"]
+    assert (ground["outcome"], ground["needs_verification"]) == ("supports", False)
+    official = rules["need_official"]
+    assert official["evidence_kinds"] == ["her_record", "designation", "publication"]
+    assert official["needs_verification"] is True
+
+
+def test_the_next_step_kinds_are_the_engine_s_strands(meta: dict) -> None:
+    """Each kind listed for a step is one whose strand the engine counts for it."""
+    rules = {rule["id"]: rule for rule in meta["vocab"]["next_steps"]}
+    strands = {kind: vocab.strand_for(kind, vocab.Relation.RELATED) for kind in vocab.EvidenceKind}
+    assert {strands[kind] for kind in rules["need_strand"]["evidence_kinds"]} == set(vocab.DESK_STRANDS)
+    assert {strands[kind] for kind in rules["need_ground"]["evidence_kinds"]} == {
+        vocab.Strand.GROUND,
+        vocab.Strand.SURVEY,
+    }
+    assert {strands[kind] for kind in rules["need_official"]["evidence_kinds"]} == {vocab.Strand.OFFICIAL}
+
+
+def test_meta_says_where_the_one_metre_data_starts_and_whether_the_overview_is_built(meta: dict) -> None:
+    assert meta["terrain"] == {
+        "fine_minzoom": 13,
+        "catalogue_tiles": 5877,
+        "overview": {"built": False, "built_at": None, "tiles": 0},
+    }

@@ -10,7 +10,17 @@ from fieldclub.schemas.common import ApiModel
 
 # One shape for a source, in `/meta` as in `GET /sources`.
 from fieldclub.schemas.records import SourceOut
-from fieldclub.vocab import AgeBand, Sensitivity, SourceReuse
+from fieldclub.services.confidence import MetBy
+from fieldclub.vocab import (
+    AgeBand,
+    EvidenceKind,
+    NextStepCode,
+    Outcome,
+    Relation,
+    Sensitivity,
+    SourceReuse,
+    Stance,
+)
 
 # --------------------------------------------------------------------------
 # Vocabularies
@@ -84,6 +94,22 @@ class ReportReasonOut(ApiModel):
     due_hours: int | None
 
 
+class NextStepRuleOut(ApiModel):
+    """What meets one next step, from `services.confidence.STEP_RULES`. `id` is the step's code."""
+
+    id: NextStepCode
+    met_by: MetBy
+    # For a step met by evidence: the kinds that count, and what the item must say.
+    evidence_kinds: list[EvidenceKind]
+    # The relations with which a `record_link` counts. Empty when no record link does.
+    record_relations: list[Relation]
+    # What a field item's outcome must be, or null where its stance decides.
+    outcome: Outcome | None
+    stance: Stance | None
+    # True when the item counts only once an archaeologist or moderator verifies it.
+    needs_verification: bool
+
+
 class Vocab(BaseModel):
     feature_classes: list[FeatureClassOut]
     periods: list[PeriodOut]
@@ -95,6 +121,7 @@ class Vocab(BaseModel):
     mention_kinds: list[MentionKindOut]
     record_categories: list[RecordCategoryOut]
     report_reasons: list[ReportReasonOut]
+    next_steps: list[NextStepRuleOut]
 
 
 # --------------------------------------------------------------------------
@@ -281,6 +308,25 @@ class Notices(BaseModel):
     find_reporting: FindReportingNotices
 
 
+class OverviewState(BaseModel):
+    # Null when the overview's state couldn't be read just now.
+    built: bool | None
+    # When the current build was made, as an ISO 8601 time, or null before the first.
+    built_at: str | None
+    # How many of the 5 km tiles of 1 m elevation the build holds.
+    tiles: int
+
+
+class TerrainState(BaseModel):
+    """Facts for the map's terrain messages: "zoom in for detail", "the overview is still being prepared"."""
+
+    # From this zoom up, terrain tiles are drawn from the 1 m data. Below it, from the national overview.
+    fine_minzoom: int
+    # How many 5 km tiles of 1 m elevation exist.
+    catalogue_tiles: int
+    overview: OverviewState
+
+
 class Meta(BaseModel):
     app: AppInfo
     auth: AuthInfo
@@ -288,3 +334,4 @@ class Meta(BaseModel):
     layers: Layers
     sources: list[SourceOut]
     notices: Notices
+    terrain: TerrainState

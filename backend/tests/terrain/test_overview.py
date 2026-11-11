@@ -184,6 +184,21 @@ def test_meta_offers_the_token_of_the_current_build(
     assert dem.endswith(f"?v={terrain.renderer.version('dem')}")
 
 
+def test_meta_says_whether_the_overview_is_built_and_how_much_it_holds(
+    app: FastAPI, client: TestClient, terrain: Terrain
+) -> None:
+    app.dependency_overrides[get_terrain] = lambda: terrain
+    state = client.get("/api/v1/meta").json()["terrain"]
+    manifest = terrain.overview.store.manifest()
+    assert manifest is not None
+    assert state == {
+        "fine_minzoom": 13,
+        "catalogue_tiles": len(terrain.catalogue),
+        "overview": {"built": True, "built_at": manifest.created, "tiles": len(manifest.tiles)},
+    }
+    assert 0 < state["overview"]["tiles"] < state["catalogue_tiles"]
+
+
 def test_only_tiles_mirrored_since_the_build_count_against_the_fallback_cap(
     terrain: Terrain, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -229,3 +244,4 @@ def test_meta_still_answers_when_the_overview_cannot_be_read(
     assert views["composite"]["tiles"][0].endswith(f"?v={default_tile_version('composite')}")
     assert response.json()["layers"]["dem"]["tiles"][0].endswith(f"?v={default_tile_version('dem')}")
     assert "Couldn't read the overview's build" in caplog.text
+    assert response.json()["terrain"]["overview"] == {"built": None, "built_at": None, "tiles": 0}

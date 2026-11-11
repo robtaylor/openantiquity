@@ -70,7 +70,8 @@ def test_the_live_sources_endpoint(client: TestClient) -> None:
     assert set(ads) == {
         "key", "name", "publisher", "coverage", "endpoint", "query_pattern", "response_fields",
         "licence", "attribution", "link_template", "limits", "answer_format", "id_field",
-        "name_field", "limit_param", "max_limit", "min_zoom",
+        "name_field", "limit_param", "max_limit", "min_zoom", "shown", "credit", "licence_label",
+        "homepage", "credit_field", "licence_field",
     }  # fmt: skip
     assert (ads["answer_format"], ads["id_field"], ads["name_field"]) == (
         "ads_search",
@@ -106,6 +107,44 @@ def test_each_live_source_says_how_to_read_it_without_guessing() -> None:
         assert item["min_zoom"] is None or 0 <= item["min_zoom"] <= 20
 
 
+def test_each_live_source_says_how_to_credit_it_or_is_not_shown() -> None:
+    worklist = json.loads((context_data.WORKLISTS / "sources.json").read_text(encoding="utf-8"))
+    entries = {entry["key"]: entry for entry in worklist["live"]}
+    shapes = {key: entry["response_shape"] + entry["attribution"] for key, entry in entries.items()}
+    items = {item["key"]: item for item in context.live_sources()}
+    for key, item in items.items():
+        if not item["shown"]:
+            assert (item["credit"], item["licence_label"], item["credit_field"]) == (None, None, None), key
+            continue
+        assert item["credit"], key
+        assert item["licence_label"], key
+        # Not the research notes, which the browser used to show.
+        assert item["licence_label"] != item["licence"], key
+        assert item["homepage"] is None or item["homepage"].startswith("https://"), key
+        for field in (item["credit_field"], item["licence_field"]):
+            if field is not None:
+                named = [part for part in field.split(".") if not part.isdigit() and part != "value"]
+                assert named[-1] in shapes[key], (key, field)
+    shown = {key for key, item in items.items() if item["shown"]}
+    assert shown == {
+        "he-aerial-photos-obliques",
+        "he-aerial-photos-verticals",
+        "dnpa-dartmoor-her",
+        "wiltshire-her-monuments",
+        "wolverhampton-walsall-her",
+        "cambridge-cucap-pois",
+        "wikimedia-commons-geosearch",
+        "wikimedia-wikipedia-geosearch",
+        "aberdeenshire-her",
+    }
+    # The publisher's words where it prescribes them, and the per-record credit where it asks for one.
+    assert (
+        "© Crown copyright and database rights 2026 OS AC0000823576" in items["dnpa-dartmoor-her"]["credit"]
+    )
+    assert items["he-aerial-photos-obliques"]["credit_field"] == "Copyright"
+    assert items["wikimedia-commons-geosearch"]["credit_field"].endswith("extmetadata.Artist.value")
+
+
 def test_each_deep_link_says_what_its_viewer_shows(client: TestClient) -> None:
     worklist = json.loads((context_data.WORKLISTS / "deep-links.json").read_text(encoding="utf-8"))
     assert all(entry["shows"] in set(LinkShows) for entry in worklist)
@@ -118,6 +157,19 @@ def test_each_deep_link_says_what_its_viewer_shows(client: TestClient) -> None:
     items = client.get("/api/v1/context/links", params={"lon": AVEBURY[0], "lat": AVEBURY[1]}).json()["items"]
     assert items
     assert all(item["shows"] == shows[item["key"]] for item in items)
+
+
+def test_each_link_has_a_name_fit_to_show(client: TestClient) -> None:
+    for link in context.deep_links():
+        assert "at a point" not in link["title"], link["key"]
+        assert link["title"], link["key"]
+        assert link["title"].strip() == link["title"], link["key"]
+    titles = {link["key"]: link["title"] for link in context.deep_links()}
+    assert titles["he-apex-viewer"] == "Historic England Aerial Photo Explorer"
+    assert titles["know-your-place-wilts"] == "Know Your Place: Wiltshire"
+    items = client.get("/api/v1/context/links", params={"lon": AVEBURY[0], "lat": AVEBURY[1]}).json()["items"]
+    assert all(item["title"] == titles[item["key"]] for item in items)
+    assert "Google Earth" in {item["title"] for item in items}
 
 
 def by_key(found: context.PointLinks) -> dict[str, str]:

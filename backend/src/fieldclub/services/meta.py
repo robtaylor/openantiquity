@@ -1,4 +1,4 @@
-"""Builds the `/meta` document: vocabularies, tiers, layers, providers and sources."""
+"""Builds the `/meta` document: vocabularies, tiers, layers, providers, sources and terrain."""
 
 from __future__ import annotations
 
@@ -11,6 +11,10 @@ from fieldclub.config import Settings
 from fieldclub.layers import TileVersion, build_layers, default_tile_version
 from fieldclub.schemas import meta as schema
 from fieldclub.services import record_tiles, records, sensitivity
+from fieldclub.services.confidence import STEP_RULES
+from fieldclub.terrain.catalogue import england_catalogue
+from fieldclub.terrain.service import TerrainStatus
+from fieldclub.terrain.styles import FINE_MINZOOM
 
 
 def build_vocab() -> schema.Vocab:
@@ -34,6 +38,18 @@ def build_vocab() -> schema.Vocab:
         mention_kinds=[schema.MentionKindOut.model_validate(item) for item in vocab.MENTION_KINDS],
         record_categories=[schema.RecordCategoryOut.model_validate(item) for item in vocab.RECORD_CATEGORIES],
         report_reasons=[schema.ReportReasonOut.model_validate(item) for item in vocab.REPORT_REASONS],
+        next_steps=[
+            schema.NextStepRuleOut(
+                id=rule.code,
+                met_by=rule.met_by,
+                evidence_kinds=list(rule.evidence_kinds),
+                record_relations=list(rule.record_relations),
+                outcome=rule.outcome,
+                stance=rule.stance,
+                needs_verification=rule.needs_verification,
+            )
+            for rule in STEP_RULES
+        ],
     )
 
 
@@ -72,10 +88,31 @@ def build_layers_for(db: Session, tile_version: TileVersion = default_tile_versi
     return layers
 
 
+def terrain_state(status: TerrainStatus | None) -> schema.TerrainState:
+    """The terrain facts `/meta` gives, or, without a terrain service, those of no build."""
+    if status is None:
+        return schema.TerrainState(
+            fine_minzoom=FINE_MINZOOM,
+            catalogue_tiles=len(england_catalogue()),
+            overview=schema.OverviewState(built=False, built_at=None, tiles=0),
+        )
+    overview = status.overview
+    return schema.TerrainState(
+        fine_minzoom=status.fine_minzoom,
+        catalogue_tiles=status.catalogue_tiles,
+        overview=schema.OverviewState(built=overview.built, built_at=overview.built_at, tiles=overview.tiles),
+    )
+
+
 def build_meta(
-    db: Session, settings: Settings, *, tile_version: TileVersion = default_tile_version
+    db: Session,
+    settings: Settings,
+    *,
+    tile_version: TileVersion = default_tile_version,
+    terrain: TerrainStatus | None = None,
 ) -> schema.Meta:
-    """`tile_version` gives the token terrain tile URLs carry, normally the terrain service's."""
+    """`tile_version` gives the token terrain tile URLs carry, and `terrain` the terrain's state,
+    normally both the terrain service's."""
     return schema.Meta(
         app=schema.AppInfo(
             name=APP_NAME, version=__version__, contribution_licence=vocab.CONTRIBUTION_LICENCE
@@ -93,4 +130,5 @@ def build_meta(
         layers=build_layers_for(db, tile_version),
         sources=list_sources(db),
         notices=build_notices(),
+        terrain=terrain_state(terrain),
     )

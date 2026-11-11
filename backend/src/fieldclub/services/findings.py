@@ -76,6 +76,7 @@ from fieldclub.models.common import point_lon_lat, to_db_geometry
 from fieldclub.schemas.common import cursor_int, decode_cursor, int_from_cursor, is_bbox, paginate
 from fieldclub.services import activity, geo, ids, reputation, sensitivity
 from fieldclub.services.confidence import (
+    SECOND_LOOK_CODES,
     VERIFIER_ROLES,
     Assessment,
     EvidenceInput,
@@ -345,16 +346,9 @@ def is_following(db: Session, user: User | None, finding: Finding) -> bool:
 # Assessing
 # --------------------------------------------------------------------------
 
-# Next steps that a second look can meet. The queue measures how many answers
-# a finding needs only when every open step is one of these.
-ANSWER_CODES = frozenset(
-    {
-        NextStepCode.NEED_OBSERVERS,
-        NextStepCode.NEED_CLASS_AGREEMENT,
-        NextStepCode.NEED_CHECK,
-        NextStepCode.NEED_TRUSTED_REVIEW,
-    }
-)
+# Next steps that a second look can meet (`confidence.STEP_RULES`). The queue
+# measures how many answers a finding needs only when every open step is one of these.
+ANSWER_CODES = SECOND_LOOK_CODES
 # The cap on `answers_to_next`, the largest smallint. The queue sorts a
 # finding with no count after every stored one by using this.
 ANSWERS_TO_NEXT_MAX = 32767

@@ -337,7 +337,12 @@ class EvidenceOut(ApiModel):
     contributor: PublicUser
     created_at: datetime
     verified_by: PublicUser | None
+    # The weighted sum of the votes the engine counts, and how many people cast
+    # them each way: neither the contributor's nor the finder's votes count,
+    # nor those of a banned account.
     vote_total: float
+    endorsements: int
+    disputes: int
     standing: bool
     independent: bool
     my_vote: int | None
@@ -473,6 +478,8 @@ def _evidence_out(
         created_at=evidence.created_at,
         verified_by=PublicUser.from_user(item.verifier) if item.verifier is not None else None,
         vote_total=status.vote_total if status is not None else 0.0,
+        endorsements=len(status.endorsers) if status is not None else 0,
+        disputes=len(status.disputers) if status is not None else 0,
         standing=status.standing if status is not None else True,
         independent=status.independent if status is not None else False,
         my_vote=item.my_vote,

@@ -14,6 +14,10 @@ Left out on purpose:
 - any live entry whose `cors` doesn't start with "yes", because the browser
   couldn't read it,
 - the deep links in `EXCLUDED_LINKS`, with the reason for each.
+
+Added here, because the work-lists hold research notes rather than words for
+visitors: how each live source is credited (`LIVE_CREDITS`), and the name each
+link opened at a point shows (`LINK_TITLES`).
 """
 
 from __future__ import annotations
@@ -54,6 +58,21 @@ LINK_GRID_BOUNDS = {
 }
 
 POINT_PLACEHOLDERS = ("{lat}", "{lon}", "{easting}", "{northing}")
+
+# The name each link opened at a point shows a visitor. The work-list names
+# carry working suffixes such as "at a point". Every link for a point needs
+# one here, and the other links show their work-list name.
+LINK_TITLES = {
+    "he-apex-viewer": "Historic England Aerial Photo Explorer",
+    "trove-map-at-point": "trove.scot map",
+    "britain-from-above-map": "Britain from Above",
+    "ncap-air-photo-finder": "NCAP Air Photo Finder",
+    "nls-explore-at-point": "National Library of Scotland maps",
+    # The viewer sets LIDAR beside a choice of old maps, of which CVAT is the first offered.
+    "nls-side-by-side-lidar": "National Library of Scotland LIDAR and maps, side by side",
+    "google-earth-web": "Google Earth",
+    "know-your-place-wilts": "Know Your Place: Wiltshire",
+}
 
 
 # How the browser reads each live source, taken from the work-list entry:
@@ -141,6 +160,122 @@ LIVE_READING: dict[str, dict[str, Any]] = {
 }
 
 
+def _credit(
+    credit: str,
+    licence: str,
+    homepage: str | None,
+    credit_field: str | None = None,
+    licence_field: str | None = None,
+) -> dict[str, Any]:
+    """How a source the browser may show is credited to a visitor."""
+    return {
+        "shown": True,
+        "credit": credit,
+        "licence_label": licence,
+        "homepage": homepage,
+        "credit_field": credit_field,
+        "licence_field": licence_field,
+    }
+
+
+def _withheld(homepage: str | None) -> dict[str, Any]:
+    """A source the work-list doesn't say how to credit, which the browser must not show yet."""
+    return {
+        "shown": False,
+        "credit": None,
+        "licence_label": None,
+        "homepage": homepage,
+        "credit_field": None,
+        "licence_field": None,
+    }
+
+
+NO_LICENCE = "No licence stated"
+ADS_HOME = "https://archaeologydataservice.ac.uk/"
+KYP_HOME = "https://maps.bristol.gov.uk/kyp/"
+HE_HOME = "https://historicengland.org.uk/"
+# The parts of a credit a MediaWiki answer gives per file. Each `extmetadata`
+# entry is an object whose `value` holds the text, which may carry HTML.
+COMMONS_ARTIST = "imageinfo.0.extmetadata.Artist.value"
+COMMONS_LICENCE = "imageinfo.0.extmetadata.LicenseShortName.value"
+
+# How each live source is credited to a visitor, from the work-list's
+# `licence` and `attribution` and the catalogue pages in `docs/sources/`,
+# word for word where the publisher prescribes the words. The work-list's own
+# `licence` and `attribution` are research notes, served as they are, and are
+# not for showing. A source is withheld where the work-list doesn't settle how
+# it must be credited:
+#
+# - The ADS asks that each record's original depositor and funder be
+#   credited beside "Archaeology Data Service (distributor)". The work-list
+#   lists `data.publisher[]` in the answer but doesn't say it is the
+#   depositor or what each entry holds, and names no field for the funder.
+#   The map mode's hits carry only an id.
+# - Know Your Place credits each layer to its source HER, which the work-list
+#   doesn't name per layer and no field carries. The service's
+#   `copyrightText`, "Bristol City Council", is the host's, not the HER's.
+# - Exmoor asks for a statement on each record that holds National Record of
+#   the Historic Environment data, with the date it was provided. Nothing in
+#   the answer says which records those are, nor the date.
+LIVE_CREDITS: dict[str, dict[str, Any]] = {
+    "ads-catalogue-search": _withheld(ADS_HOME),
+    "ads-catalogue-map": _withheld(ADS_HOME),
+    "ads-catalogue-record": _withheld(ADS_HOME),
+    "he-aerial-photos-obliques": _credit(
+        "Historic England Archive", NO_LICENCE, HE_HOME, credit_field="Copyright"
+    ),
+    "he-aerial-photos-verticals": _credit(
+        "Historic England Archive", NO_LICENCE, HE_HOME, credit_field="Copyright"
+    ),
+    "bristol-kyp-devon-hist-2021-v2": _withheld(KYP_HOME),
+    "bristol-kyp-som-hist-2022": _withheld(KYP_HOME),
+    "bristol-kyp-glo-hist-2021": _withheld(KYP_HOME),
+    "bristol-kyp-wilts-her-2022-v2": _withheld(KYP_HOME),
+    "bristol-kyp-banes-hist-2024": _withheld(KYP_HOME),
+    "bristol-kyp-nsom-hist-2022-v2": _withheld(KYP_HOME),
+    "bristol-kyp-sgc-hist-2020-v2": _withheld(KYP_HOME),
+    "bristol-kyp-her-2026": _withheld(KYP_HOME),
+    "bristol-kyp-worcester-city": _withheld(KYP_HOME),
+    "enpa-exmoor-her": _withheld("https://www.exmoorher.co.uk/"),
+    # The items' own credit. The catalogue names no home page.
+    "dnpa-dartmoor-her": _credit(
+        "Dartmoor National Park Authority; © Crown copyright and database rights 2026 OS AC0000823576",
+        NO_LICENCE,
+        None,
+    ),
+    "wiltshire-her-monuments": _credit(
+        "Wiltshire Council Archaeology Service (Wiltshire and Swindon HER)",
+        NO_LICENCE,
+        "https://services.wiltshire.gov.uk/HistoryEnvRecord/Home/Index",
+    ),
+    # The catalogue names no home page.
+    "wolverhampton-walsall-her": _credit(
+        "City of Wolverhampton Council / Wolverhampton and Walsall HER", NO_LICENCE, None
+    ),
+    # Each record's `copyright` reads "Subject to confirmation", which is no credit.
+    "cambridge-cucap-pois": _credit(
+        "Cambridge University Collection of Aerial Photography",
+        "No open licence",
+        "https://www.cambridgeairphotos.com/",
+    ),
+    "wikimedia-commons-geosearch": _credit(
+        "Wikimedia Commons",
+        "Licensed file by file",
+        "https://commons.wikimedia.org/",
+        credit_field=COMMONS_ARTIST,
+        licence_field=COMMONS_LICENCE,
+    ),
+    # "Link to the article and state the licence". The thumbnails are licensed
+    # file by file, and the answer doesn't say how.
+    "wikimedia-wikipedia-geosearch": _credit("Wikipedia", "CC BY-SA 4.0", "https://en.wikipedia.org/"),
+    "aberdeenshire-her": _credit(
+        "Aberdeenshire Council",
+        "Copyright reserved, for personal research only",
+        "https://her.aberdeenshire.gov.uk/",
+    ),
+}
+
+
 def _degrees(bounds: tuple[int, int, int, int] | None) -> list[float] | None:
     """British grid bounds as west, south, east, north in degrees, to 4 places."""
     if bounds is None:
@@ -153,6 +288,7 @@ def live_sources(worklist: dict[str, Any]) -> list[dict[str, Any]]:
     unconfirmed = {entry["key"] for entry in worklist["live_unconfirmed"]}
     readable = {entry["key"] for entry in worklist["live"] if str(entry["cors"]).lower().startswith("yes")}
     assert readable == set(LIVE_READING), "every live source the browser reads says how to read it"
+    assert readable == set(LIVE_CREDITS), "every live source the browser reads says how it is credited"
     items = []
     for entry in worklist["live"]:
         assert entry["key"] not in unconfirmed, f"{entry['key']} is both live and unconfirmed"
@@ -172,6 +308,7 @@ def live_sources(worklist: dict[str, Any]) -> list[dict[str, Any]]:
                 "link_template": entry["record_link_template"],
                 "limits": entry["limits"],
                 **LIVE_READING[entry["key"]],
+                **LIVE_CREDITS[entry["key"]],
             }
         )
     return items
@@ -180,22 +317,28 @@ def live_sources(worklist: dict[str, Any]) -> list[dict[str, Any]]:
 def deep_links(worklist: list[dict[str, Any]]) -> list[dict[str, Any]]:
     keys = {entry["key"] for entry in worklist}
     assert set(EXCLUDED_LINKS) <= keys, "an excluded link is no longer in the work-list"
+    assert set(LINK_TITLES) <= keys, "a link with a title is no longer in the work-list"
     items = []
     for entry in worklist:
         if entry["key"] in EXCLUDED_LINKS:
             continue
         template = entry["template"]
+        for_point = any(mark in template for mark in POINT_PLACEHOLDERS) and "{id}" not in template
+        assert not for_point or entry["key"] in LINK_TITLES, (
+            f"{entry['key']} opens at a point but has no title"
+        )
         items.append(
             {
                 "key": entry["key"],
                 "name": entry["name"],
+                "title": LINK_TITLES.get(entry["key"], entry["name"]),
                 "template": template,
                 "coverage": entry["coverage"],
                 "shows": entry["shows"],
                 "placeholders_crs": (entry["placeholders_crs"] or "").split(" ")[0] or None,
                 "verified": entry["verified"],
                 "no_frame": entry["no_frame"],
-                "for_point": any(mark in template for mark in POINT_PLACEHOLDERS) and "{id}" not in template,
+                "for_point": for_point,
                 "zoom": FIXED_ZOOM.get(entry["key"]),
                 "bounds": _degrees(LINK_GRID_BOUNDS.get(entry["key"])),
             }

@@ -253,6 +253,28 @@ def test_the_assessment_survives_a_trip_through_json() -> None:
         assert load_assessment(stored) == assessment, f"seed {seed}"
 
 
+def test_an_assessment_stored_before_a_field_with_a_default_loads_with_the_default() -> None:
+    for seed, _, assessment in assessed():
+        if not assessment.evidence:
+            continue
+        stored = json.loads(json.dumps(assessment.to_json()))
+        for status in stored["evidence"]:
+            del status["disputers"]
+        loaded = load_assessment(stored)
+        assert loaded is not None
+        assert all(status.disputers == () for status in loaded.evidence), f"seed {seed}"
+        # A field the type doesn't have, or a missing one with no default, still fails.
+        stored["evidence"][0]["surprise"] = 1
+        with pytest.raises(AssertionError):
+            load_assessment(stored)
+        del stored["evidence"][0]["surprise"]
+        del stored["evidence"][0]["vote_total"]
+        with pytest.raises(AssertionError):
+            load_assessment(stored)
+        return
+    raise AssertionError("no generated assessment has evidence")
+
+
 def test_the_next_steps_load_on_their_own_as_in_the_whole_assessment() -> None:
     for seed, _, assessment in assessed():
         stored = json.loads(json.dumps(assessment.to_json()))

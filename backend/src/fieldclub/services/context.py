@@ -61,6 +61,7 @@ def deep_links() -> tuple[dict[str, Any], ...]:
 class Link:
     key: str
     name: str
+    title: str
     url: str
     coverage: str
     shows: str
@@ -144,6 +145,7 @@ def links_for(db: Session, lon: float, lat: float, zoom: int = DEFAULT_ZOOM) -> 
                 Link(
                     link["key"],
                     link["name"],
+                    link["title"],
                     url,
                     link["coverage"],
                     link["shows"],

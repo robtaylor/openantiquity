@@ -130,7 +130,7 @@ import types
 import typing
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import MISSING, dataclass, fields, is_dataclass
 from enum import StrEnum
 from functools import cache
 from typing import Any
@@ -141,6 +141,7 @@ from fieldclub.vocab import (
     DESK_STRANDS,
     EVIDENCE_KINDS,
     MODERATOR_ROLES,
+    RECORD_STRAND_RELATIONS,
     REVIEWER_ROLES,
     TIER_BASE_SCORES,
     TIER_ORDER,
@@ -169,7 +170,9 @@ from fieldclub.vocab import (
 # not exact, so comparisons allow for rounding.
 _EPS = 1e-9
 
-# Bumped whenever the shape of `Assessment.to_json()` changes.
+# Bumped whenever the shape of `Assessment.to_json()` changes, except for a
+# field added with a default: a stored assessment without it reads with the
+# default until the finding is next reassessed (`_decode`).
 ASSESSMENT_VERSION = 1
 
 FIELD_STRANDS: frozenset[Strand] = frozenset(
@@ -184,6 +187,75 @@ _OUTCOME_DIRECTION: dict[Outcome, Stance] = {
     Outcome.INCONCLUSIVE: Stance.NEUTRAL,
     Outcome.CONTRADICTS: Stance.CONTRADICTS,
 }
+
+
+class MetBy(StrEnum):
+    """What kind of help meets a next step."""
+
+    SECOND_LOOK = "second_look"
+    EVIDENCE = "evidence"
+
+
+@dataclass(frozen=True)
+class StepRule:
+    """What meets one next step, as `_next_steps` and `_evidence_status` count it.
+
+    A step met by evidence names the kinds that count, the relations a
+    record link needs, and the stance or outcome the item must point. Items
+    the finder added count once someone else endorses them, and an official
+    item once an archaeologist or moderator verifies it (`pending_evidence`).
+    """
+
+    code: NextStepCode
+    met_by: MetBy
+    evidence_kinds: tuple[EvidenceKind, ...] = ()
+    # The relations a `record_link` counts with. Empty where no record link counts.
+    record_relations: tuple[Relation, ...] = ()
+    # What a field item's outcome must say, or None where the stance decides.
+    outcome: Outcome | None = None
+    stance: Stance | None = None
+    # True when the item counts only once an archaeologist or moderator verifies it.
+    needs_verification: bool = False
+
+
+def _kinds_in(strands: Iterable[Strand]) -> tuple[EvidenceKind, ...]:
+    wanted = frozenset(strands)
+    return tuple(info.id for info in EVIDENCE_KINDS if info.strand in wanted)
+
+
+# Every next step and what meets it. `/meta` serves this, and the queue and
+# the blind steps use the second-look ones (`services.findings.ANSWER_CODES`).
+STEP_RULES: tuple[StepRule, ...] = (
+    StepRule(NextStepCode.NEED_OBSERVERS, MetBy.SECOND_LOOK),
+    StepRule(
+        NextStepCode.NEED_STRAND,
+        MetBy.EVIDENCE,
+        evidence_kinds=_kinds_in(DESK_STRANDS),
+        record_relations=tuple(r for r in Relation if r in RECORD_STRAND_RELATIONS),
+        stance=Stance.SUPPORTS,
+    ),
+    StepRule(NextStepCode.NEED_CLASS_AGREEMENT, MetBy.SECOND_LOOK),
+    StepRule(NextStepCode.NEED_CHECK, MetBy.SECOND_LOOK),
+    StepRule(NextStepCode.NEED_TRUSTED_REVIEW, MetBy.SECOND_LOOK),
+    StepRule(
+        NextStepCode.NEED_GROUND,
+        MetBy.EVIDENCE,
+        evidence_kinds=_kinds_in(FIELD_STRANDS),
+        outcome=Outcome.SUPPORTS,
+    ),
+    StepRule(
+        NextStepCode.NEED_OFFICIAL,
+        MetBy.EVIDENCE,
+        evidence_kinds=_kinds_in({Strand.OFFICIAL}),
+        stance=Stance.SUPPORTS,
+        needs_verification=True,
+    ),
+)
+assert [rule.code for rule in STEP_RULES] == list(NextStepCode), "every next step says what meets it"
+SECOND_LOOK_CODES: frozenset[NextStepCode] = frozenset(
+    rule.code for rule in STEP_RULES if rule.met_by is MetBy.SECOND_LOOK
+)
+
 
 # Closed states: they offer nobody a next step, and earn no reputation.
 CLOSED_STATES = frozenset({FindingState.RULED_OUT, FindingState.WITHDRAWN})
@@ -434,6 +506,9 @@ class EvidenceStatus:
     puts_on_record: bool  # qualifies the finding for On record
     matches_record: bool  # a same_as record link with enough weight for `known`
     awaiting: bool  # would count for a tier once someone else endorses or verifies it
+    # People other than the contributor and the finder who voted -1. Added
+    # after the first stored assessments, so it has a default (see `_decode`).
+    disputers: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -762,6 +837,7 @@ def _evidence_status(item: EvidenceInput, finder: int, t: Thresholds) -> Evidenc
     )
     vote_total = sum(role_weight(v.role) * v.value for v in votes)
     endorsers = tuple(v.user_id for v in votes if v.value > 0)
+    disputers = tuple(v.user_id for v in votes if v.value < 0)
     endorsement = sum(role_weight(v.role) for v in votes if v.value > 0)
     endorsed = _ge(endorsement, t.endorsement_weight)
     standing = _ge(vote_total, 0.0)
@@ -809,6 +885,7 @@ def _evidence_status(item: EvidenceInput, finder: int, t: Thresholds) -> Evidenc
         puts_on_record=puts_on_record,
         matches_record=matches_record,
         awaiting=awaiting,
+        disputers=disputers,
     )
 
 
@@ -1050,8 +1127,10 @@ def _decode(tp: Any, value: Any) -> Any:
         return {_decode(key_type, key): _decode(item_type, item) for key, item in value.items()}
     if isinstance(tp, type) and is_dataclass(tp):
         hints = _type_hints(tp)
-        assert set(value) == {f.name for f in fields(tp)}, f"stored {tp.__name__} has the wrong fields"
-        return tp(**{f.name: _decode(hints[f.name], value[f.name]) for f in fields(tp)})
+        names = {f.name for f in fields(tp)}
+        required = {f.name for f in fields(tp) if f.default is MISSING and f.default_factory is MISSING}
+        assert required <= set(value) <= names, f"stored {tp.__name__} has the wrong fields"
+        return tp(**{name: _decode(hints[name], item) for name, item in value.items()})
     if isinstance(tp, type) and issubclass(tp, StrEnum):
         return tp(value)
     if tp is float:
