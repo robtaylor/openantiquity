@@ -864,6 +864,56 @@ def create_finding_once(db: Session, author: User, client_ref: str, **fields: An
     return create_finding(db, author, client_ref=client_ref, **fields), True
 
 
+def _move_anchor(db: Session, finding: Finding, location: Point) -> None:
+    """Put the finding's anchor at `location`. The ORM keeps `grid_ref` and the public position in step."""
+    finding.location = to_db_geometry(location)
+    finding.nation = geo.nation_of(db, Point(*_point_parts(location)))
+
+
+def change_shape(
+    db: Session,
+    finding: Finding,
+    by: User,
+    *,
+    path: shapes.Path | None,
+    outline: BaseGeometry | None = None,
+    revision: int | None,
+    placed: Point | None = None,
+) -> ShapeChangeKind | None:
+    """Apply a change to a finding's shape made by `by`, and say what kind it was. Hold the lock.
+
+    This doesn't decide who may change the finding: the caller does, with
+    `check_finder`. `by` is recorded as the person who made the change.
+
+    `path` (or `outline`, read as one) replaces the whole shape, and None for
+    both removes it. `revision` must be the shape's revision now. A shape
+    sent unchanged changes nothing and returns None. Otherwise it is held to
+    the limits and the British Isles, the anchor follows `_anchor_for` (with
+    `placed`, a point placed with the change, which the shape must come near),
+    the change row is written and the revision raised. Nothing is
+    reassessed: every answer stands, at the weight it was given with.
+    """
+    _check_revision(finding, revision)
+    new_shape = shape_from_request(path, outline)
+    old_path = stored_path(finding)
+    kind = _classify(finding, old_path, new_shape)
+    if kind is None:
+        return None
+    current = Point(point_lon_lat(finding.location))
+    anchor = _anchor_for(finding, new_shape, placed or current, placed=placed is not None)
+    if new_shape is not None:
+        check_in_british_isles(new_shape.geometry)
+    _record_shape_change(db, finding, by, kind, old_path, new_shape)
+    for name, value in _shape_columns(new_shape).items():
+        setattr(finding, name, value)
+    finding.shape_revision += 1
+    if new_shape is None:
+        finding.location_derived = False
+    if _point_parts(anchor) != _point_parts(current):
+        _move_anchor(db, finding, anchor)
+    return kind
+
+
 _EDITABLE = frozenset(
     {
         "location",
@@ -888,12 +938,8 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
     A title that is still the `suggested_title` follows a move or a new class
     when no title is sent, so it never names a square the finding has left.
 
-    A `path` (or an `outline`, read as one) replaces the whole shape, and
-    `path: None` removes it. It must name the `path_revision` it started from.
-    A change raises `shape_revision` and is recorded (`_record_shape_change`),
-    and a shape sent unchanged changes nothing. The anchor follows the rules
-    of `_anchor_for`. No shape change reassesses the finding: every answer
-    stands, at the weight it was given with.
+    A `path` (or an `outline`, read as one) with its `path_revision` goes to
+    `change_shape`, with the finder as the one who made the change.
     """
     check_finder(finding, actor)
     unknown = set(changes) - _EDITABLE
@@ -905,34 +951,29 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
     if placed:
         check_in_british_isles(location)
 
-    kind: ShapeChangeKind | None = None
-    new_shape: shapes.Shape | None = None
-    old_path: shapes.Path | None = None
+    changed_shape = False
     if "path" in changes or "outline" in changes:
-        _check_revision(finding, changes.get("path_revision"))
-        new_shape = shape_from_request(changes.get("path"), changes.get("outline"))
-        old_path = stored_path(finding)
-        kind = _classify(finding, old_path, new_shape)
-    if kind is not None:
-        location = _anchor_for(finding, new_shape, location, placed=placed)
-        if new_shape is not None:
-            check_in_british_isles(new_shape.geometry)
-    elif placed and finding.outline is not None:
-        shapes.check_shape(to_shape(finding.outline), location)
-    moved = _point_parts(location) != before
-
-    if placed or moved:
-        finding.location = to_db_geometry(location)
-        finding.nation = geo.nation_of(db, Point(*_point_parts(location)))
+        changed_shape = (
+            change_shape(
+                db,
+                finding,
+                actor,
+                path=changes.get("path"),
+                outline=changes.get("outline"),
+                revision=changes.get("path_revision"),
+                placed=location if placed else None,
+            )
+            is not None
+        )
+    if placed and not changed_shape:
+        if finding.outline is not None:
+            shapes.check_shape(to_shape(finding.outline), location)
+        _move_anchor(db, finding, location)
     if placed:
         finding.location_derived = False
-    if kind is not None:
-        _record_shape_change(db, finding, actor, kind, old_path, new_shape)
-        for name, value in _shape_columns(new_shape).items():
-            setattr(finding, name, value)
-        finding.shape_revision += 1
-        if new_shape is None:
-            finding.location_derived = False
+    location = Point(point_lon_lat(finding.location))
+    moved = _point_parts(location) != before
+
     for name in ("title", "view_state"):
         if changes.get(name) is not None:
             setattr(finding, name, changes[name])

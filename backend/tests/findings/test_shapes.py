@@ -19,6 +19,7 @@ from fieldclub.models import Activity, Finding, FindingShapeChange
 from fieldclub.models.common import to_db_geometry
 from fieldclub.services import findings, sensitivity, shapes
 from fieldclub.services.findings import NotFinderError
+from fieldclub.vocab import ShapeChangeKind
 from tests.findings.support import LAT, LON
 from tests.helpers import MakeUser, lon_lat
 
@@ -321,3 +322,19 @@ def test_an_outline_saved_before_paths_is_extended_as_an_all_corner_path(
     assert change.kind == "extended"
     assert change.path_before == meridian(0, 0.004).to_json()
     assert change.length_before_m == pytest.approx(shapes.length_m(old))
+
+
+def test_a_shape_change_records_whoever_made_it_and_leaves_permission_to_the_caller(
+    db: Session, make_user: MakeUser
+) -> None:
+    """`change_shape` is what accepting someone else's suggestion will call, with them as its maker."""
+    finder, suggester = make_user(), make_user()
+    finding = drawn(db, finder, meridian(0, 0.006, 0.012))
+    kind = findings.change_shape(
+        db, findings.lock(db, finding), suggester, path=meridian(0, 0.006, 0.012, 0.02), revision=0
+    )
+    db.commit()
+    assert kind is ShapeChangeKind.EXTENDED
+    (change,) = changes_of(db, finding)
+    assert change.user_id == suggester.id
+    assert finding.shape_revision == 1
