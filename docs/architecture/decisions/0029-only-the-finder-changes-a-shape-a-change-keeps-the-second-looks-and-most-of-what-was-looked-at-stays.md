@@ -17,7 +17,7 @@ The owner answered on 2026-11-12:
 - On how far a finding with second looks may move: "I think the best thing here is that you can only move points, not the whole shape".
 - Told that this would stop a finder shortening a looked-at line: "I'd also suggest that users should be able to make small tweaks to points, e.g. shortening lines."
 
-The owner later raised other people's changes as suggestions the owner accepts or declines, ownership that can be handed on, and a way for admins to remove orphaned markings that cause trouble. That isn't decided here. The plan leaves it to a later plan of its own.
+The owner later raised other people's changes as suggestions the owner accepts or declines, ownership that can be handed on, and a way for admins to remove orphaned markings that cause trouble. That isn't decided here. The owner confirmed it as a second phase with a plan of its own, in which "found by" stays the credit and "kept by" is who may change a marking.
 
 ## Decision
 
@@ -44,7 +44,7 @@ The owner later raised other people's changes as suggestions the owner accepts o
 - An answer about a road's first stretch counts for the whole road. The owner accepted this, and the invitation asks for looks at what was added.
 - The quarter is spent over the finding's life, not per edit, because the looked-at ground doesn't shrink.
 - A marker placed 300 m out and already answered about can't be put right by its finder, who has to mark it again.
-- 250 m and three-quarters are judgements. They allow fixing points against the terrain and trimming a line.
+- 250 m and three-quarters are judgements, which the owner agreed. They allow fixing points against the terrain and trimming a line.
 - The looked-at ground stays when every second look is withdrawn, so a finding stays held to ground nobody now vouches for.
 - Only the finder can change a marking, so a finding whose finder has left can't be changed until the later plan for suggestions and ownership lands.
 
