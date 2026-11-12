@@ -632,7 +632,9 @@ def position_guards(
 
     The findings each holds or has held decide, hidden and withdrawn ones
     included, and so does every finding near what was drawn in it, whatever
-    holds it (`sensitivity.PositionGuard`, Decision 0023).
+    holds it (`sensitivity.PositionGuard`, Decision 0023). A finding a
+    moderator has hidden counts only where it is or was held: near anything
+    else it is left out (`sensitivity.hidden_near`, Decision 0032).
     """
     held = held_findings(db, (investigation.id for investigation in investigations))
     drawn = _drawn(db, investigations)

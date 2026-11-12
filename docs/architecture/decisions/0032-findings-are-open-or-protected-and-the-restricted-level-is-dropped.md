@@ -26,8 +26,9 @@ The owner was given the recorded reasons for the level and what dropping it woul
 2. No request may set `restricted`, and the interface doesn't offer it. This was done first, by itself, because it closed the fault on the live site.
 3. The level's code and tests come out in one sweep after lines and curves lands, with any finding stored as `restricted` becoming `protected`.
 4. A site that shouldn't be shown at all is hidden by a moderator, which takes it off the map for everyone but its finder and the moderators. Withdrawing a finding doesn't do this: a withdrawn finding is left out of lists by default and can still be asked for.
-5. Decision 0023's distance rule stays as it was, measured to the exact place. It is safe while everyone who can add or draw anything sees every finding exactly, and a test pins that.
-6. The fix that judged by the public square was stopped and not landed.
+5. A hidden finding takes no part in judging what is drawn near it. A review of the first step found that views near a hidden protected finding were still held back from signed-out readers, which told a member that something hidden was there and how near. An investigation that holds or has held the finding still counts it, as Decision 0023's second point has it.
+6. Decision 0023's distance rule stays as it was, measured to the exact place. It is safe while everyone who can add or draw anything sees every finding exactly, and a test pins that.
+7. The fix that judged by the public square was stopped and not landed.
 
 ## Alternatives considered
 
@@ -41,6 +42,8 @@ The owner was given the recorded reasons for the level and what dropping it woul
 - Nobody who can add or draw anything is kept from a finding's exact place, so nothing they draw can be used to find one.
 - A protected finding's place is one free sign-up away from anyone. Sign-in still gives an identity to limit, log and ban.
 - A finder or a moderator can no longer keep one site from members while it stays on the map. The choices are `protected`, or hidden.
+- A view saved beside a hidden finding by someone who knew of it is shown as it was saved. Nothing says a finding is there.
+- In an investigation that held a finding before it was hidden, what is drawn near it is still held back from signed-out readers. Someone who can edit that investigation and joined after the hide could read the guard's answer there. The investigation's other editors were shown the place while it was held.
 - Trusted members and experts no longer see anything on the page that a member doesn't. A trusted member's downloads still carry exact places (Decision 0005, point 8).
 - Decision 0005's first walk-back option, raising a finding to `restricted` when a heritage body reports damage, is gone. The answer to such a report is to hide the finding.
 - Lines and curves keeps its guard measured along a line's whole length, and the question of a hidden road's far parts no longer arises for members.

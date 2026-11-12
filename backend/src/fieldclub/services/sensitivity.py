@@ -572,6 +572,10 @@ def hidden_near(
 
     A first test, generous by `NEAR_HIDDEN_DEGREES`, whatever investigation
     or none holds them: `PositionGuard.near` decides.
+
+    A finding a moderator has hidden is left out. Nobody this guard works
+    for can see it at all, so holding back what is drawn near it would say
+    that something is there, and how near (Decision 0032).
     """
     exact = exact_clause(viewer, download=download)
     collected = [shape for shape in shapes if not shape.is_empty]
@@ -582,6 +586,7 @@ def hidden_near(
         db.scalars(
             select(Finding).where(
                 not_(as_sql(exact)),
+                Finding.hidden_at.is_(None),
                 func.ST_DWithin(
                     Finding.location, func.ST_GeomFromText(everything.wkt, 4326), NEAR_HIDDEN_DEGREES
                 ),
@@ -624,7 +629,8 @@ def near_hidden_clause(viewer: User | None, geometry: Any) -> ColumnElement[bool
 
     The distance is a little longer than `PositionGuard.near`'s, whose metres
     are approximate, so SQL never treats as far a shape that a response
-    treats as near.
+    treats as near. A finding a moderator has hidden is left out, as in
+    `hidden_near`.
     """
     exact = sees_exact_clause(viewer)
     if exact is True:
@@ -633,6 +639,7 @@ def near_hidden_clause(viewer: User | None, geometry: Any) -> ColumnElement[bool
         select(Finding.id)
         .where(
             not_(as_sql(exact)),
+            Finding.hidden_at.is_(None),
             func.ST_DWithin(Finding.location, geometry, NEAR_HIDDEN_DEGREES),
             func.ST_DWithin(func.geography(geometry), func.geography(Finding.location), NEAR_HIDDEN_M * 1.05),
         )
