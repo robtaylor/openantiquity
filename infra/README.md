@@ -4,7 +4,7 @@ This is the runbook for the deployment on Fly.io: what the owner does once, what
 
 Everything lives in the Fly organisation `openantiquity`, in London (`lhr`). Every command that acts on an app names it with `--app`, so the directory a command runs in never chooses the app, with three exceptions: `fly deploy` reads the web app's name from `fly.toml`, `fly_jobs.py build` names the jobs app itself, and the `fly mpg` commands name the cluster. Commands run from the main checkout, at the repository root, because the secrets script reads the untracked `.env` and `var/` there. What has been done so far is recorded in `docs/plans/v1-england.md`, WS8.
 
-Step 1, the elevation bucket of step 3 and the copy in step 8 were carried out on 2026-11-12. Nothing else in this folder has been run against Fly. Each remaining command was written from Fly's and Tigris's documentation, cited beside it, or from the spike. Check each one with `--help` before running it, and correct this file where the platform differs.
+Steps 1, 2 and 4, the two `fly storage create` commands of step 3 and the copy in step 8 were carried out on 2026-11-12. Nothing else in this folder has been run against Fly. Each remaining command was written from Fly's and Tigris's documentation, cited beside it, or from the spike. Check each one with `--help` before running it, and correct this file where the platform differs.
 
 ## What is in this folder
 
@@ -55,16 +55,17 @@ fly mpg create --name openantiquity --org openantiquity --region lhr --plan basi
 
 Every flag is in `fly mpg create --help` of flyctl 0.5.7. The cluster starts with 10 GB and grows by itself.
 
-PostGIS has to be enabled through Fly, because the app's login can't create it (the spike, Q3 step 1). `--enable-postgis-support` asks for it when the cluster is made. If `SELECT postgis_version()` then fails in the schema command, enable it on the database the way the spike did, with the second command below.
+PostGIS has to be enabled through Fly, because the app's login can't create it (the spike, Q3 step 1). `--enable-postgis-support` makes it available on the cluster but doesn't install it in the database. On 2026-11-12 the extension list showed it absent until the `enable` command below was run, which installed PostGIS 3.6.4.
 
 ```
 fly mpg list --org openantiquity               # note the cluster's id
-fly mpg databases extensions enable postgis --cluster <cluster-id> --database fly-db    # only if it is missing
+fly mpg databases extensions list <cluster-id> --database fly-db
+fly mpg databases extensions enable postgis --cluster <cluster-id> --database fly-db
 fly mpg attach <cluster-id> --app openantiquity
 fly mpg attach <cluster-id> --app openantiquity-jobs
 ```
 
-Each attach sets the secret `DATABASE_URL` on its app, with the pooled address, and restarts the app, which has no machines yet. The application turns it into the direct one, and reads `DATABASE_URL` only on a Fly machine. The schema command creates `pg_trgm` and `citext` itself.
+Each attach sets the secret `DATABASE_URL` on its app, with the pooled address, and restarts the app, which has no machines yet. It prints the secret it adds, so clear the terminal and its scrollback afterwards. The cluster starts with one login, `fly-user`, whose role is `schema_admin`, and both apps connect as it. The application turns it into the direct one, and reads `DATABASE_URL` only on a Fly machine. The schema command creates `pg_trgm` and `citext` itself.
 
 ### 3. The buckets and their keys
 
@@ -75,7 +76,7 @@ fly storage create -a openantiquity-jobs -n openantiquity-elevation
 fly storage create -a openantiquity -n openantiquity-cache
 ```
 
-The first of the two was run on 2026-11-12, so `openantiquity-elevation` exists and the jobs app holds its key: don't run it again. The command asks whether Tigris's terms are accepted, and `--yes` answers it.
+Both were run on 2026-11-12, so the two buckets exist and each app holds its key: don't run either again. The command asks whether Tigris's terms are accepted, and `--yes` answers it.
 
 Make the third bucket, `openantiquity-photos`, private, in Tigris's dashboard (`fly storage dashboard openantiquity-cache`, then Buckets), with no key of its own. Then give the web app's key its two other buckets: find it under Access Keys and give it Editor on `openantiquity-cache` and `openantiquity-photos` and ReadOnly on `openantiquity-elevation`. With Tigris's own CLI the same is
 
@@ -95,10 +96,10 @@ The application ignores `BUCKET_NAME`: the buckets are named in `fly.toml` and `
 
 ```
 bash infra/fly-secrets.sh web --session-key
-bash infra/fly-secrets.sh jobs --session-key --defra
+bash infra/fly-secrets.sh jobs --defra
 ```
 
-Each app gets its own session key; the jobs never sign anyone in, but production refuses to start without one. `--defra` reads `DEFRA_SFTP_HOST`, `DEFRA_SFTP_USER` and `DEFRA_SFTP_PASSWORD` from `.env` and the pinned host key from `var/defra_known_hosts`, and is refused for the web app. The host key is stored base64-encoded as `DEFRA_KNOWN_HOSTS_B64`, and `fly_jobs.py` has Fly write it as a file into each copy machine (`fly machine run --file-secret`, [flags](https://docs.fly.io/flyctl/machine-run/)).
+Only the web app gets a session key. The jobs sign nobody in, and the settings ask for the key only when the service starts, so the jobs app is never given one. `--defra` reads `DEFRA_SFTP_HOST`, `DEFRA_SFTP_USER` and `DEFRA_SFTP_PASSWORD` from `.env` and the pinned host key from `var/defra_known_hosts`, and is refused for the web app. The host key is stored base64-encoded as `DEFRA_KNOWN_HOSTS_B64`, and `fly_jobs.py` has Fly write it as a file into each copy machine (`fly machine run --file-secret`, [flags](https://docs.fly.io/flyctl/machine-run/)).
 
 The sign-in providers' secrets and the mail password go in an untracked file, one `NAME=VALUE` a line, such as `var/web-secrets.env`, and are set from it once they exist:
 
@@ -318,7 +319,7 @@ Fly's shared CPUs are guaranteed 6.25% of a core each, may run at 100% while the
 
 2 GB holds the 320 MB in use at idle that the spike measured, a photo decode of up to about 400 MB (`services/media.py`) and renders at once. On Cloud Run 1.5 GiB was needed for a source tile fetched from Defra at the same time, about 1.1 GiB in all; the Fly service doesn't fetch. 2 GB is also the most a machine may have and still be suspended, with no swap ([suspend and resume](https://docs.fly.io/reference/suspend-resume/)), and the spike measured a suspended machine answering in 0.53 s against 20.8 s from stopped. A memory peak during a real upload hasn't been measured on Fly.
 
-Concurrency counts requests (`type = "requests"`): past the soft limit of 20 the proxy prefers another machine and starts it if it is suspended, and it never sends one machine more than the hard limit of 30 ([configuration](https://docs.fly.io/reference/configuration)). Most requests wait rather than compute: cached tiles, JSON, and open event streams that each hold one. An event stream ends itself after 540 s (`FIELDCLUB_EVENTS_MAX_STREAM_S`); the spike held one open through the proxy for 600 s. A machine takes at most 26 streams (`FIELDCLUB_EVENTS_MAX_STREAMS`, the hard limit less four), so tiles and JSON always have four slots, and at most 6 from one address (`FIELDCLUB_EVENTS_MAX_PER_ADDRESS`, a quarter of 26 rounded down, the most the application allows); a stream refused with `too_many_streams` makes the web client poll instead. Three machines of 30 are 90 requests at once, about 78 open tabs. Raise the count before that, minding the database connections below.
+Concurrency counts requests (`type = "requests"`): past the soft limit of 20 the proxy prefers another machine and starts it if it is suspended, and it never sends one machine more than the hard limit of 30 ([configuration](https://docs.fly.io/reference/configuration)). Most requests wait rather than compute: cached tiles, JSON, and open event streams that each hold one. An event stream ends itself after 540 s (`FIELDCLUB_EVENTS_MAX_STREAM_S`); the spike held one open through the proxy for 600 s. A machine takes at most 26 streams (`FIELDCLUB_EVENTS_MAX_STREAMS`, the hard limit less four), so tiles and JSON always have four slots, and at most 6 from one address (`FIELDCLUB_EVENTS_MAX_PER_ADDRESS`, a quarter of 26 rounded down, the most the application allows); a stream refused with `too_many_streams` makes the web client poll instead. Every tile being drawn or waiting holds a slot as well. The four tile workers and a queue of 16 (`FIELDCLUB_TERRAIN_RENDER_QUEUE`) make 20, the soft limit, so one screen of tiles fits, and a larger burst is answered `tiles_busy` before it takes the ten slots above the soft limit. Three machines of 30 are 90 requests at once, about 78 open tabs. Raise the count before that, minding the database connections below.
 
 Each machine holds up to 8 database connections, so 24 at most, and the jobs up to 4 each. The Basic plan's `max_connections` is 112, and sixty from one machine were all accepted during the spike.
 

@@ -63,6 +63,12 @@ kill_timeout = 10
   # The web app holds no supply login and only reads the elevation bucket, so
   # it adds nothing to the mirror: the jobs app does (infra/README.md).
   FIELDCLUB_TERRAIN_API_FETCH = "false"
+  # Every tile being drawn or waiting holds one of a machine's request slots.
+  # The tile workers and this queue together fit inside the soft limit below,
+  # so a burst of uncached tiles is answered tiles_busy before it takes the
+  # slots above it, which stay free for JSON and streams. One screen of tiles
+  # still fits (backend/tests/infra/test_fly_config.py checks both).
+  FIELDCLUB_TERRAIN_RENDER_QUEUE = "16"
   # Up to three machines of eight connections each, inside the 112 the Basic plan allows.
   FIELDCLUB_DB_POOL_SIZE = "4"
   FIELDCLUB_DB_MAX_OVERFLOW = "4"

@@ -60,6 +60,7 @@ For whoever runs the service, as it moves to Fly.io (Decision 0018):
 - `FIELDCLUB_REDIRECT_HOSTS` lists the site's other names. A request for one is answered 308 with the same path on `FIELDCLUB_PUBLIC_URL`.
 - `fieldclub-jobs due` deletes old sign-ins, then runs whichever of the channel scan and the source refresh is due, for a scheduler that can only start it every hour.
 - `FIELDCLUB_TERRAIN_API_FETCH=false` stops the API adding tiles to the mirror, for a web app that holds no supply login: a tile it lacks is answered `elevation_unavailable` without writing anything.
+- On Fly a machine draws four tiles at once and keeps 16 waiting, inside its soft limit of 20 requests, so a burst of uncached tiles is answered `tiles_busy` before it can hold every request slot. The jobs app is no longer given a session key.
 - The settings refuse a mirror and national overview folder that are the same or one inside the other, and an overview build removes only its own build files.
 - A misnamed or missing bucket is now an error at the first read or write, instead of an empty folder or an elevation lock that waits and then says "being prepared".
 - `infra/jobs/mirror_shard.py` takes the shares to run as `--shares 4 --share N`, one or more, in place of Cloud Run's task variables.

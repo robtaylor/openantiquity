@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 
 from fieldclub.config import Environment
+from fieldclub.terrain.workers import TileWorkers
 from tests.helpers import settings
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -23,7 +24,8 @@ WEB = tomllib.loads((REPO_ROOT / "fly.toml").read_text())
 JOBS = tomllib.loads((REPO_ROOT / "infra" / "fly" / "jobs.toml").read_text())
 
 # What a machine has besides the file's settings: Fly's own variables and the
-# app's secrets, with made-up values.
+# web app's secrets, with made-up values. A test of the jobs app removes what
+# that app lacks.
 ON_A_MACHINE = {
     "FLY_APP_NAME": "openantiquity",
     "FLY_MACHINE_ID": "e784079b449483",
@@ -32,6 +34,10 @@ ON_A_MACHINE = {
     "AWS_ACCESS_KEY_ID": "tid_test",
     "AWS_SECRET_ACCESS_KEY": "tsec_test",
 }
+
+
+# The most tiles one map asks for at once: a fresh screen is 12 to 20 of them.
+ONE_SCREEN_OF_TILES = 20
 
 
 @pytest.fixture
@@ -62,9 +68,13 @@ def test_the_web_app_s_settings_start_the_service(machine: pytest.MonkeyPatch) -
 
 
 def test_every_job_s_settings_start(machine: pytest.MonkeyPatch) -> None:
+    # The jobs sign nobody in, so the jobs app is never given the session key.
+    machine.delenv("FIELDCLUB_SECRET_KEY")
+
     config = start(machine, JOBS["env"])
 
     assert config.env is Environment.PROD
+    assert config.secret_key is None
     assert config.terrain_mirror == WEB["env"]["FIELDCLUB_TERRAIN_MIRROR"]
     assert config.terrain_national == WEB["env"]["FIELDCLUB_TERRAIN_NATIONAL"]
 
@@ -112,6 +122,15 @@ def test_streams_leave_room_for_everything_else() -> None:
     assert streams == limits["hard_limit"] - 4
     # The application refuses to start when one address may hold more than a quarter of them.
     assert int(WEB["env"]["FIELDCLUB_EVENTS_MAX_PER_ADDRESS"]) == streams // 4
+
+
+def test_tiles_alone_never_take_a_machine_past_its_soft_limit(machine: pytest.MonkeyPatch) -> None:
+    """The tiles in hand fit one screen and stay inside the soft limit (fly.toml says why)."""
+    config = start(machine, WEB["env"])
+    pool = TileWorkers(config.terrain_render_workers, config.terrain_render_queue)
+    pool.close()
+
+    assert ONE_SCREEN_OF_TILES <= pool.capacity <= WEB["http_service"]["concurrency"]["soft_limit"]
 
 
 def test_health_checks_ask_the_route_the_application_has() -> None:

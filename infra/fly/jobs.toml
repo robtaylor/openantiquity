@@ -18,8 +18,9 @@ volume = "jobs_var"
 mount = "/data"
 
 # Every non-secret setting, given to each job machine as --env. Secrets are
-# the app's own (infra/fly-secrets.sh): FIELDCLUB_SECRET_KEY, DATABASE_URL from
-# Managed Postgres, the Tigris key for the elevation bucket, and Defra's login.
+# the app's own: DATABASE_URL from Managed Postgres, the Tigris key for the
+# elevation bucket, and Defra's login (infra/fly-secrets.sh). The jobs sign
+# nobody in, so this app is never given the session key.
 [env]
 FIELDCLUB_ENV = "prod"
 FIELDCLUB_LOG_LEVEL = "INFO"
