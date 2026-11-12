@@ -12,17 +12,21 @@ When this was written the outline tool added straight corners only. A right clic
 
 On 2026-11-12 the owner said: "On computer it is fine to use shift+click, but on phones that could be a long click or increased pressure click." Both phone gestures were weighed. A long press on the map already meant "open elsewhere", would make every tap wait about half a second, and behaves differently on iOS Safari, which doesn't fire `contextmenu` for a long press on a canvas. A device without pressure reports 0.5 while pressed, so pressure can't be told from none. iPhones since the XR and 11 lack 3D Touch, and Android reports pressure inconsistently. The platform facts are inferences from platform knowledge and weren't checked here.
 
+The owner then asked that marking be one flow: "you should just go straight to selecting a point, which you can then extend into a shape". Until then a tap placed the mark, a second tap moved it, and an outline was a separate optional step. Asked what a second tap should do, they chose that a tap always adds a point and a drag moves one, and added: "We should probably offer some guidance in the side panel".
+
 The owner also asked: "how do users select when there are overlapping shapes?" They were offered picking by the edge, the more specific winning, a chooser for the rest, a hover hint on a computer, a wider reach for a finger and the Explore list for the keyboard, and replied: "that all sounds very sensible, lets record and go ahead with that". Fitting this to the code showed a gap: "the smaller of two alike wins" doesn't say when two are alike enough for the chooser.
 
 ## Decision
 
-1. Every way of choosing a point's kind has a visible control in the drawing bar or the selected-point bar. On a computer Shift-click does the same.
-2. On a phone a long press on a point's handle switches its kind. Handles sit above the map, so the gesture never reaches it. The tool uses neither a long press on the bare map nor pressure.
-3. While drawing, double-tap and box zoom are off so they don't act on taps meant for the tool, and taps belong to the tool, not to other findings.
-4. An area is picked by its edge, never its inside, so a point or record inside a large area stays reachable. A finger gets a wider reach than a mouse.
-5. Markers beat lines and lines beat area edges. Among candidates of one kind, the smaller wins only when it is under half the other's length or extent. Otherwise the chooser opens.
-6. The chooser lists the candidates and highlights each as its entry is hovered or focused. It's a popover on a computer and a sheet on a phone that never covers the spot tapped. On a computer the pointer shows what a click would open.
-7. Findings still win over records, obscured squares behave as before, and the Explore list stays the keyboard route to every finding in view. The controls and reaches are in the plan's sections "The drawing tool" and "Picking one of overlapping shapes".
+1. Marking is one flow. The first tap places a point, which alone is a finding at a spot. Further taps make it a line, and a tap on the first point closes it. A tap always adds a point, and a drag moves one. Placing a point under the cross stays as a button for the keyboard and for precision, not as the way marking begins.
+2. The mark panel carries guidance in plain text that says what a tap will do now, and changes as the marking grows.
+3. Every way of choosing a point's kind has a visible control in the drawing bar or the selected-point bar. On a computer Shift-click does the same.
+4. On a phone a long press on a point's handle switches its kind. Handles sit above the map, so the gesture never reaches it. The tool uses neither a long press on the bare map nor pressure.
+5. While drawing, double-tap and box zoom are off so they don't act on taps meant for the tool, and taps belong to the tool, not to other findings.
+6. An area is picked by its edge, never its inside, so a point or record inside a large area stays reachable. A finger gets a wider reach than a mouse.
+7. Markers beat lines and lines beat area edges. Among candidates of one kind, the smaller wins only when it is under half the other's length or extent. Otherwise the chooser opens.
+8. The chooser lists the candidates and highlights each as its entry is hovered or focused. It's a popover on a computer and a sheet on a phone that never covers the spot tapped. On a computer the pointer shows what a click would open.
+9. Findings still win over records, obscured squares behave as before, and the Explore list stays the keyboard route to every finding in view. The controls and reaches are in the plan's sections "The drawing tool" and "Picking one of overlapping shapes".
 
 ## Alternatives considered
 

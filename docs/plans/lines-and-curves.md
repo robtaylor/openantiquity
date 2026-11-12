@@ -40,6 +40,7 @@ Each claim here was checked by reading the code on `feat/lines-and-curves`.
 - An open line that passes near somebody else's protected finding is not generalised.
 - Points can be moved, never a whole shape. Small tweaks stay possible once a finding has second looks, shortening a line among them, while most of what was looked at stays where it was. The owner agreed the figures: three-quarters of it, within 250 m.
 - Later, as a second phase with a plan of its own: other people's changes to a marking handled as suggestions its keeper accepts or declines, a marking that can be handed on, and a way for admins to remove orphaned markings that cause trouble. The owner agreed that "found by" is the credit and never changes, and that "kept by" is who may change a marking and accept suggestions, and is what passes on. See "Left out of the first version".
+- Marking is one flow that starts with a tap. A tap always adds a point and a drag moves one, and the side panel carries guidance that changes as the marking grows.
 - The build goes ahead once the coordinator has checked this plan.
 
 ## Design
@@ -135,7 +136,7 @@ Lines have no "across" limit, so a 600 km road is fine. A length cap doesn't sto
 
 A finding keeps its required point, now called its anchor in the docs. Everything that places a finding by one point goes on using it: `location_public`, `grid_ref`, `nation`, the suggested title, the activity square, the obscured square, search and suggested records.
 
-- **When the finder places it.** The marking flow that starts with a tap on the map keeps working: the point is where they put it, and the shape must come within 1,000 m of it.
+- **When the finder places it.** A finding of one point is where the finder tapped. The API still takes a placed point with a shape, which must come within 1,000 m of it, for findings made before this tool. The new tool never sends both.
 - **When the line comes first.** A `POST /findings` with a `path` and no `location` gets an anchor from the server: for a line, the derived vertex nearest to half its length; for an area, its centroid when that lies inside, otherwise shapely's `point_on_surface`. `location_derived` is set.
 - **When the shape changes.** A derived anchor stays where it is while the new shape passes within 25 m of it. Extending a line at its ends never moves it, because the middle of the line doesn't change. When an edit moves the line away from it, the anchor moves to the point on the new shape nearest to where it was, not to the new middle. A placed anchor never moves by itself: the edit is refused with `outline_too_far` and the finder moves the point.
 
@@ -267,7 +268,9 @@ Points inside enclosures, crossing roads and roads through field systems will ov
 
 ### The drawing tool
 
-One tool replaces the outline step. It works on a computer by pointer and keyboard, and on a phone by touch, with the same visible controls on both.
+One tool marks a finding, whether it is a spot, a line or a shape. It replaces both the placing of a point under the cross and the outline step. It works on a computer by pointer and keyboard, and on a phone by touch, with the same visible controls on both.
+
+**One flow.** The owner asked that marking "just go straight to selecting a point, which you can then extend into a shape". The first tap places a point, and that alone is a finding at a spot. Each further tap adds a point, so it becomes a line, and a tap on the first point closes it into a shape. A tap always adds a point and never moves one: a point is moved by dragging its handle. Today a second tap moves the mark, and that goes.
 
 **The drawing bar**, a `ChipGroup` and buttons in the mark panel, shown above the sheet's peek stop on a phone:
 
@@ -306,7 +309,18 @@ A drag on a handle moves the point. The arrow keys nudge the selected point, wit
 - Handles are drawn only for points in view, and only while 150 or fewer are in view. With more, the ends and the selected point keep their handles and a hint says "Zoom in to change points".
 - "Continue from this end" moves the map to that end, so extending Watling Street from where you stopped is one press.
 
-**Starting.** The mark panel offers "Mark a spot" and "Draw a line or shape". The second starts the drawing tool before any point is placed, and the server derives the anchor. After a class from the linear group is chosen (`linear`, `trackway`, `road`), a finding with no shape is prompted to draw one, but it stays optional.
+**Starting.** "Mark a finding" starts the tool with nothing placed, and the map takes taps at once. There is no choice between a spot and a shape to make first. "Add a point at the cross" stays on the bar as the way to place a point by keyboard or switch, and for a precise point on a phone, but it is no longer how marking begins. After a class from the linear group is chosen (`linear`, `trackway`, `road`), a finding of one point is prompted to carry on into a line, and that stays optional.
+
+**What is sent.** One point is sent as `location` with no `path`. Two or more are sent as a `path` with no `location`, and the server chooses the anchor. The interface no longer sends a placed point together with a shape, though the API still takes both for findings made before.
+
+**Guidance in the panel.** The owner asked for guidance in the side panel. A short block at the top of the mark panel says what a tap will do now and what else is possible, and changes as the marking grows:
+
+- Nothing placed: tap the map where the feature is; one tap marks a spot.
+- One point: this is a spot; tap again to draw a line from it, or drag the point to move it.
+- An open line: tap to carry it on, or tap the first point to close it into a shape; drag a point to move it, and select one to change or delete it.
+- A closed shape: drag a point to move it, and select one to change or delete it.
+
+Each state adds one line for the device in hand: Shift-click for the other kind of point on a computer, a long press on a point to switch its kind on a phone, and the keys when the map has keyboard focus. The block is plain text in the panel, not a tooltip or a one-time tour, so it is there every time and is read by a screen reader. The status line below it still gives the count and the length.
 
 **Changing a saved finding.** The finding page's tools gain "Change the shape" for the finder (the existing `actions.edit`), which opens the same tool at `/mark/finding/:publicId` with the saved path and its `path_revision`. Saving sends `PATCH` with the whole path. A 409 `shape_changed` reloads the finding and says the shape was changed elsewhere.
 
@@ -351,7 +365,7 @@ The contract above is what the workstreams build against. WS-A comes first, beca
 1. **The curve.** `src/features/mark/curve.ts`, a port of `derive`, tested in Vitest against `docs/architecture/curve-vectors.json`.
 2. **The path model.** `src/features/mark/path.ts` replaces `outline.ts`: immutable operations to add at either end, insert, move, delete, switch kind, close, open, undo and redo, and the limits read from `/meta`. Vitest for each operation, the closing tolerance, and reading an old `outline` into a path.
 3. **Generated client.** `pnpm gen:api` once WS-A step 4 lands. Fix every type the change breaks.
-4. **The drawing tool.** `MarkLayer.tsx` and `MarkForm.tsx`: the drawing bar, handles with the roving tab stop, drag, long press on a handle, Shift-click, Alt-click, the selected-point bar, the MapLibre preview source, handle thinning, and double-tap and box zoom turned off while drawing. Tests in `MarkPanel.test.tsx` for keyboard-only drawing of a mixed path, closing, continuing from the start, and a long press switching a point's kind.
+4. **The drawing tool.** `MarkLayer.tsx` and `MarkForm.tsx`: the drawing bar, handles with the roving tab stop, drag, long press on a handle, Shift-click, Alt-click, the selected-point bar, the MapLibre preview source, handle thinning, and double-tap and box zoom turned off while drawing. Tests in `MarkPanel.test.tsx` for keyboard-only drawing of a mixed path, closing, continuing from the start, and a long press switching a point's kind; that a second tap adds a point and leaves the first where it was, and a drag moves a point; that one point is sent as `location` alone and two as a `path` with no `location`; and that the guidance block changes with each state and names the right gesture for the device.
 5. **Drafts.** `findingDrafts.ts` carries `path`. Tests that an old draft with an outline opens as an all-corner path and saves.
 6. **Changing a saved finding.** "Change the shape" in `Tools.tsx`, `/mark/finding/:publicId`, the 409 reload. The finding page's "added since the last second look" line, the timeline entries and the button to `added_view`.
 7. **Drawing findings.** Line and area layers in `overlayLayers.ts`, `findingsData.ts` building them from `properties.shape`, `zoom` sent with the box. Tests in `findingsData.test.ts` that an obscured finding never yields a line.
