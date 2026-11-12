@@ -1,6 +1,6 @@
 # Decision 0018 — Hosting moves to Fly.io with Managed Postgres and Tigris
 
-**Status:** Proposed.
+**Status:** Proposed. Its ninth point is replaced by Decision 0025.
 
 **Current architecture:** [infra/README.md](../../../infra/README.md).
 
