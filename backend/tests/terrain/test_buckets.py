@@ -290,15 +290,24 @@ def test_a_refresh_whose_answer_was_lost_is_still_ours(s3: FakeS3, monkeypatch: 
     assert lock.refresh("locks/x.lock", owner)
 
 
-@pytest.mark.parametrize("status", [404, 409, 412])
+@pytest.mark.parametrize(
+    ("status", "code"),
+    [
+        (404, "NoSuchKey"),
+        (409, "ConditionalRequestConflict"),
+        (412, "PreconditionFailed"),
+        # A store that names a refused condition otherwise is still refusing it.
+        (412, "Precondition Failed"),
+    ],
+)
 def test_a_refused_conditional_write_is_an_answer_not_an_error(
-    s3: FakeS3, monkeypatch: pytest.MonkeyPatch, status: int
+    s3: FakeS3, monkeypatch: pytest.MonkeyPatch, status: int, code: str
 ) -> None:
     folder = S3Folder("b", client=s3.client())
     folder.write("x.json", b"1", "application/json")
 
     def refuse(*args: Any, **kwargs: Any) -> Any:
-        raise client_error("PutObject", status, "Refused")
+        raise client_error("PutObject", status, code)
 
     monkeypatch.setattr(s3, "put", refuse)
     monkeypatch.setattr(s3, "remove", refuse)
@@ -306,6 +315,89 @@ def test_a_refused_conditional_write_is_an_answer_not_an_error(
     assert not folder.delete_if("x.json", '"etag"')
     if status != 404:
         assert not folder.create("x.json", b"2")
+
+
+def test_a_missing_bucket_is_an_error_not_a_refusal_or_an_empty_folder(
+    s3: FakeS3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from botocore.exceptions import ClientError
+
+    folder = S3Folder("misnamed", client=s3.client())
+
+    def no_bucket(*args: Any, **kwargs: Any) -> Any:
+        raise client_error("PutObject", 404, "NoSuchBucket")
+
+    monkeypatch.setattr(s3, "put", no_bucket)
+    monkeypatch.setattr(s3, "remove", no_bucket)
+    monkeypatch.setattr(s3, "get", no_bucket)
+    with pytest.raises(ClientError):
+        folder.create("locks/x.lock", b"{}")
+    with pytest.raises(ClientError):
+        folder.replace_if("locks/x.lock", b"{}", '"etag"')
+    with pytest.raises(ClientError):
+        folder.delete_if("locks/x.lock", '"etag"')
+    with pytest.raises(ClientError):
+        folder.read("national.json")
+    # So a lock reports the store's fault at once, not "being prepared" after its wait.
+    with pytest.raises(ClientError):
+        quick_lock(folder).acquire("locks/x.lock", done=lambda: False)
+
+
+def test_a_store_that_refuses_access_is_an_error(s3: FakeS3, monkeypatch: pytest.MonkeyPatch) -> None:
+    from botocore.exceptions import ClientError
+
+    folder = S3Folder("b", client=s3.client())
+
+    def denied(*args: Any, **kwargs: Any) -> Any:
+        raise client_error("PutObject", 403, "AccessDenied")
+
+    monkeypatch.setattr(s3, "put", denied)
+    with pytest.raises(ClientError):
+        folder.create("locks/x.lock", b"{}")
+
+
+def test_a_refresh_refused_by_a_racing_write_is_tried_again(
+    s3: FakeS3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = S3Folder("b", client=s3.client())
+    lock = quick_lock(folder)
+    owner = lock.acquire("locks/x.lock", done=lambda: False)
+    assert owner is not None
+    before = folder.read("locks/x.lock")
+    real_put = s3.put
+    conflicts = [1]
+
+    def conflict_once(*args: Any) -> Any:
+        if conflicts:
+            conflicts.pop()
+            # A waiter's create was under way on the same object: nothing was written.
+            raise client_error("PutObject", 409, "ConditionalRequestConflict")
+        return real_put(*args)
+
+    monkeypatch.setattr(s3, "put", conflict_once)
+    assert lock.refresh("locks/x.lock", owner)
+    after = folder.read("locks/x.lock")
+    assert after is not None
+    assert after != before, "the second attempt should have refreshed it"
+    assert json.loads(after)["owner"] == owner
+
+
+def test_a_lock_still_ours_is_kept_however_often_its_refresh_is_refused(
+    s3: FakeS3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = S3Folder("b", client=s3.client())
+    lock = quick_lock(folder)
+    owner = lock.acquire("locks/x.lock", done=lambda: False)
+    assert owner is not None
+
+    def conflict(*args: Any) -> Any:
+        raise client_error("PutObject", 409, "ConditionalRequestConflict")
+
+    monkeypatch.setattr(s3, "put", conflict)
+    # True, so the heartbeat carries on; only another owner, or none, ends it.
+    assert lock.refresh("locks/x.lock", owner)
+    s3.objects.clear()
+    assert not lock.refresh("locks/x.lock", owner)
 
 
 def test_an_unconditional_write_that_fails_is_an_error(s3: FakeS3, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -424,6 +516,47 @@ def test_twenty_servers_asking_for_one_missing_tile_cause_one_fetch(
     assert [name for name in s3.names(bucket) if "lock" in name] == []
     uploads = [call for call in s3.calls if call == ("put", "england/dtm-2022/SU16nw.tif")]
     assert len(uploads) == 1
+
+
+def test_a_server_that_adds_nothing_answers_a_missing_tile_without_writing(
+    s3: FakeS3,
+    bucket: str,
+    sources: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The web app on Fly: a key that only reads the elevation bucket, and no supply login."""
+    from fieldclub.terrain.prefetch import Prefetcher
+
+    mirror = bucket_mirror(s3, bucket, sources, tmp_path / "web", [])
+
+    def read_only(*args: Any, **kwargs: Any) -> Any:
+        raise client_error("PutObject", 403, "AccessDenied")
+
+    monkeypatch.setattr(s3, "put", read_only)
+    prefetch = Prefetcher(mirror, 1)
+    with caplog.at_level("WARNING"):
+        assert prefetch.request(["SU16nw"]) == ["SU16nw"]
+        prefetch.wait(10)
+    assert prefetch.failed() == {"SU16nw"}
+    assert not [call for call in s3.calls if call[0] == "put"], "nothing should be written"
+    assert not [record for record in caplog.records if record.levelname == "ERROR"]
+    prefetch.close()
+
+
+def test_the_api_s_fetching_can_be_turned_off(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from fieldclub.terrain.service import build_terrain
+
+    config = settings(terrain_api_fetch=False, var_dir=tmp_path)
+    api = build_terrain(config, storage=S3Storage("b", client=FakeS3().client()))
+    assert api.mirror.fetchers == []
+    assert api.prefetch is not None
+    api.close()
+    # The commands always fetch.
+    assert build_terrain(
+        config, storage=S3Storage("b", client=FakeS3().client()), background=False
+    ).mirror.fetchers
 
 
 def test_the_whole_s3_path_from_mirror_to_overview_to_cached_tiles(

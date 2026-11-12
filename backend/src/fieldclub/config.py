@@ -53,6 +53,21 @@ def on_fly() -> bool:
     return all(os.environ.get(name) for name in _FLY_MARKERS)
 
 
+# SQLAlchemy's own pattern for a URL (`sqlalchemy.engine.url._parse_url` in
+# 2.1), so the host found here is the host it connects to, whatever the
+# password holds. A test checks the two agree.
+_SQLALCHEMY_URL = re.compile(
+    r"""
+    (?P<name>[\w+]+)://
+    (?:(?P<username>[^:/]*)(?::(?P<password>[^@]*))?@)?
+    (?:(?:\[(?P<ipv6host>[^/?]+)\]|(?P<ipv4host>[^/:?]+))?(?::(?P<port>[^/?]*))?)?
+    (?:/(?P<database>[^?]*))?
+    (?:\?(?P<query>.*))?
+    """,
+    re.VERBOSE,
+)
+
+
 def database_address(url: str) -> str:
     """The URL to connect with: SQLAlchemy's psycopg driver, and Fly's direct address for its pooled one.
 
@@ -61,17 +76,39 @@ def database_address(url: str) -> str:
     Plain string work, because importing SQLAlchemy here would load it into
     every command that reads a setting.
     """
-    scheme, separator, rest = url.partition("://")
+    scheme, separator, _ = url.partition("://")
     backend, _, driver = scheme.lower().partition("+")
-    if not separator or backend not in ("postgres", "postgresql") or driver not in ("", "psycopg"):
+    found = _SQLALCHEMY_URL.match(url)
+    if (
+        found is None
+        or not separator
+        or backend not in ("postgres", "postgresql")
+        or driver not in ("", "psycopg")
+    ):
         raise ConfigError("The database address must be a postgresql:// or postgresql+psycopg:// URL.")
-    # A password with "/" or "@" in it is percent-encoded in a URL, so these splits are safe.
-    authority, slash, path = rest.partition("/")
-    credentials, at, host_port = authority.rpartition("@")
-    host, colon, port = host_port.partition(":")
-    if pooled := _FLY_POOLED_HOST.fullmatch(host):
-        host = f"direct.{pooled.group('cluster')}"
-    return f"postgresql+psycopg://{credentials}{at}{host}{colon}{port}{slash}{path}"
+    if (host := found.group("ipv4host")) and (pooled := _FLY_POOLED_HOST.fullmatch(host)):
+        start, end = found.span("ipv4host")
+        url = f"{url[:start]}direct.{pooled.group('cluster')}{url[end:]}"
+    address = "postgresql+psycopg" + url[len(scheme) :]
+    rewritten = _SQLALCHEMY_URL.match(address)
+    assert rewritten is not None, "a rewritten address still parses"
+    assert not _FLY_POOLED_HOST.fullmatch(rewritten.group("ipv4host") or ""), (
+        "the pooled address must never be the one connected to"
+    )
+    return address
+
+
+def same_or_nested(first: str, second: str) -> bool:
+    """Whether two folders, `s3://bucket/prefix` or local paths, are one folder or one inside the other."""
+
+    def parts(location: str) -> tuple[str, ...]:
+        if location.startswith(S3_SCHEME):
+            return ("s3", *(part for part in location[len(S3_SCHEME) :].split("/") if part))
+        return ("local", *Path(location).resolve().parts)
+
+    a, b = parts(first), parts(second)
+    shorter = min(len(a), len(b))
+    return a[:shorter] == b[:shorter]
 
 
 # A host name and nothing else: no scheme, port or path.
@@ -129,13 +166,11 @@ class Settings(BaseSettings):
     events_heartbeat_s: float = Field(default=15.0, gt=0)
     events_max_stream_s: float = Field(default=1800.0, gt=0)
 
-    # Database. DATABASE_URL, which Fly attaches, is read when the setting is
-    # unset. Either is turned into the address to connect with by
-    # `database_address`.
-    database_url: str = Field(
-        default="postgresql+psycopg://fieldclub:fieldclub@localhost:54329/fieldclub",
-        validation_alias=AliasChoices("FIELDCLUB_DATABASE_URL", "DATABASE_URL"),
-    )
+    # Database. On a Fly machine, DATABASE_URL, which Fly attaches, is read
+    # when this is unset (`_fly_database_url`); anywhere else it is ignored,
+    # so one exported for another project never replaces the default. Either
+    # is turned into the address to connect with by `database_address`.
+    database_url: str = "postgresql+psycopg://fieldclub:fieldclub@localhost:54329/fieldclub"
     db_pool_size: int = Field(default=5, ge=1)
     db_max_overflow: int = Field(default=5, ge=0)
     auto_create_schema: bool | None = None
@@ -237,6 +272,12 @@ class Settings(BaseSettings):
     # tile or a profile never waits for one: missing tiles are added in the
     # background on a pool of this many threads (`terrain/prefetch.py`).
     terrain_fetch_concurrency: int = Field(default=2, ge=1, le=8)
+    # Whether the API adds missing tiles to the mirror at all. Off where it
+    # can't (no supply login and a key that only reads the mirror, as on Fly):
+    # a map tile that needs one is then answered `elevation_unavailable` for a
+    # minute at a time, with a warning and no writes to the mirror's folder.
+    # The commands always fetch.
+    terrain_api_fetch: bool = True
     # Terrain map tiles drawn at once in one process, on threads of their own,
     # and how many more may wait for a turn before a tile is answered 503
     # `tiles_busy` (`terrain/workers.py`). Tiles never use the thread pool the
@@ -262,6 +303,14 @@ class Settings(BaseSettings):
     @classmethod
     def _var_dir_from_repo_root(cls, value: Path) -> Path:
         return value if value.is_absolute() else _REPO_ROOT / value
+
+    @model_validator(mode="before")
+    @classmethod
+    def _fly_database_url(cls, data: object) -> object:
+        attached = os.environ.get("DATABASE_URL")
+        if isinstance(data, dict) and "database_url" not in data and attached and on_fly():
+            return {**data, "database_url": attached}
+        return data
 
     @field_validator("database_url")
     @classmethod
@@ -341,6 +390,15 @@ class Settings(BaseSettings):
                     f"FIELDCLUB_{name.upper()} is {location!r}. A terrain folder is a local path or "
                     f"{S3_SCHEME}bucket/prefix."
                 )
+        mirror, national = self.terrain_path(self.terrain_mirror), self.terrain_path(self.terrain_national)
+        if mirror and national and same_or_nested(mirror, national):
+            # Building the overview removes every older build file in its
+            # folder, and on Fly the key that does it may write to the
+            # mirror too: nothing but this keeps the two apart.
+            raise ConfigError(
+                f"FIELDCLUB_TERRAIN_MIRROR ({self.terrain_mirror}) and FIELDCLUB_TERRAIN_NATIONAL "
+                f"({self.terrain_national}) must be separate folders, neither inside the other."
+            )
         missing = [name for name in S3_ENVIRONMENT if not os.environ.get(name)]
         if self.uses_s3 and missing:
             # boto3 and GDAL read these themselves. Without them a store would

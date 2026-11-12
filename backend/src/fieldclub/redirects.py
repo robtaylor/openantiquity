@@ -32,10 +32,14 @@ class CanonicalHostMiddleware:
         if scope["type"] != "http" or self._host(scope) not in self.hosts:
             await self.app(scope, receive, send)
             return
-        # raw_path keeps the request's own percent-encoding. It is always
-        # appended to the target, so it can never name another host.
+        # raw_path keeps the request's own percent-encoding. Appended to the
+        # target, a path that starts with "/" can never name another host.
+        # Anything else (`@evil.example/x`, which some HTTP parsers pass on) is
+        # sent to the site's front page.
         path = (scope.get("raw_path") or scope["path"].encode()).decode("latin-1")
         query = scope.get("query_string", b"").decode("latin-1")
+        if not path.startswith("/"):
+            path, query = "/", ""
         location = self.target + path + (f"?{query}" if query else "")
         await Response(status_code=308, headers={"Location": location})(scope, receive, send)
 

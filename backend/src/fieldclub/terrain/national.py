@@ -43,6 +43,7 @@ import hashlib
 import json
 import logging
 import math
+import re
 import time
 import uuid
 from collections import defaultdict
@@ -143,6 +144,11 @@ def filename_for(build: str) -> str:
     return f"england-{build}.tif"
 
 
+# Only a name `filename_for` makes is ever pruned, so a folder set to the
+# mirror's by mistake loses nothing (the settings refuse that as well).
+_BUILD_FILE = re.compile(r"england-[0-9a-f]{12}\.tif")
+
+
 class NationalStore:
     """The overview's folder: one COG per build and `national.json` naming the current one."""
 
@@ -162,8 +168,13 @@ class NationalStore:
         self.folder.write(MANIFEST, manifest.to_json(), "application/json")
 
     def prune(self, keep: set[str]) -> list[str]:
-        """Remove build files other than those named in `keep`. Returns what was removed."""
-        removed = [name for name in self.folder.names(".tif") if name not in keep]
+        """Remove build files other than those named in `keep`. Returns what was removed.
+
+        Any other file in the folder is left alone.
+        """
+        removed = [
+            name for name in self.folder.names(".tif") if _BUILD_FILE.fullmatch(name) and name not in keep
+        ]
         for name in removed:
             self.folder.delete(name)
         return removed

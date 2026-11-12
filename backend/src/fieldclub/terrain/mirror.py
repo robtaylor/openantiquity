@@ -281,6 +281,13 @@ class Mirror:
         # Tiles this process failed to add, with the `clock` time before which they aren't tried again.
         self._failed: dict[str, float] = {}
 
+    def close(self) -> None:
+        """Close what the fetchers hold open, such as Defra's SFTP sessions. Safe to call again."""
+        for fetcher in self.fetchers:
+            close = getattr(fetcher, "close", None)
+            if close is not None:
+                close()
+
     @property
     def edition(self) -> str:
         """The catalogue's edition and the mirror's encoding: what a cached tile was made from."""
@@ -312,6 +319,9 @@ class Mirror:
             return self.store.gdal_path(tile.name)
         if not retry_failed:
             self._refuse_if_failed(tile.name)
+        if not self.fetchers:
+            # Before the shared lock, which a process that only reads the folder can't write.
+            raise ElevationUnavailableError(f"{tile.name} isn't in the mirror, and this process adds none.")
         with self._tile_lock(tile.name):
             # Whoever held the lock before us may have added it.
             if not self.has(tile.name):

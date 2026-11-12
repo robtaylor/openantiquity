@@ -131,6 +131,12 @@ class Terrain:
     def catalogue(self) -> Catalogue:
         return self.mirror.catalogue
 
+    def close(self) -> None:
+        """Stop background fetches and close the mirror's connections to the supply."""
+        if self.prefetch is not None:
+            self.prefetch.close()
+        self.mirror.close()
+
     def editions(self) -> tuple[str, str]:
         """What the tiles are drawn from now: the 1 m mirror and the overview's current build."""
         return self.fine.edition, self.overview.edition
@@ -305,12 +311,16 @@ def national_store(settings: Settings) -> NationalStore:
 def build_terrain(
     settings: Settings | None = None, *, storage: Storage | None = None, background: bool = True
 ) -> Terrain:
-    """The terrain service. `background` (the API's) adds missing tiles without waiting for them.
+    """The terrain service. `background` (the API's) adds missing tiles without waiting for them,
+    unless `FIELDCLUB_TERRAIN_API_FETCH` is off, when it adds none.
 
     The commands pass `background=False`, so they fetch what they read in the foreground.
     """
     settings = settings or get_settings()
-    mirror = build_mirror(settings)
+    # A mirror with no fetchers adds nothing: it answers a missing tile as
+    # unavailable at once, and never writes a lock (`Mirror.ensure`).
+    adds = settings.terrain_api_fetch or not background
+    mirror = build_mirror(settings, fetchers=None if adds else [])
     prefetch = Prefetcher(mirror, settings.terrain_fetch_concurrency) if background else None
     return Terrain(
         mirror, Overview(mirror, national_store(settings)), storage or get_storage("tiles"), prefetch=prefetch
@@ -337,9 +347,7 @@ def close_terrain() -> None:
     `get_terrain` or `get_tile_workers` builds them afresh.
     """
     if get_terrain.cache_info().currsize:
-        prefetch = get_terrain().prefetch
-        if prefetch is not None:
-            prefetch.close()
+        get_terrain().close()
         get_terrain.cache_clear()
     if get_tile_workers.cache_info().currsize:
         get_tile_workers().close()

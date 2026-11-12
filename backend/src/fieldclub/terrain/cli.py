@@ -477,8 +477,11 @@ def main(argv: list[str] | None = None, *, terrain: Terrain | None = None) -> in
             )
             return 1
         print(f"sources rows written: {', '.join(keys)}")
+    built: Terrain | None = None
     try:
-        return COMMANDS[args.command](terrain or build_terrain(background=False), args)
+        if terrain is None:
+            terrain = built = build_terrain(background=False)
+        return COMMANDS[args.command](terrain, args)
     except AppError as exc:
         print(f"error: {exc.message}", file=sys.stderr)
         return 1
@@ -489,6 +492,12 @@ def main(argv: list[str] | None = None, *, terrain: Terrain | None = None) -> in
             file=sys.stderr,
         )
         return 130
+    finally:
+        # A caller that runs several commands in one process, such as
+        # infra/jobs/mirror_shard.py, would otherwise keep each one's SFTP
+        # sessions open alongside the next one's.
+        if built is not None:
+            built.close()
 
 
 if __name__ == "__main__":

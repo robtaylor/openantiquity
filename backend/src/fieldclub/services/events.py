@@ -29,7 +29,9 @@ How it is served (Decision 0001 makes every other endpoint synchronous):
   reconnect every client gets a `resync` signal and should refetch what it
   shows. Every `idle_check_s`, whatever arrives, and as soon as a client
   subscribes, the hub runs `SELECT 1` and gives up on the connection if no
-  answer comes within `check_timeout_s`. TCP keepalives (`db.KEEPALIVES`)
+  answer comes within `check_timeout_s`. Making a connection and its `LISTEN`
+  have the same limit, so a reconnect can't hang on a peer that accepts the
+  connection and never answers. TCP keepalives (`db.KEEPALIVES`)
   watch it in between. So a connection that died silently, as one may while
   Fly has the machine suspended, is noticed promptly and replaced. An event
   that can't be checked is skipped, never announced unchecked. Should the
@@ -50,10 +52,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, LiteralString
 
 import psycopg
 from psycopg.conninfo import make_conninfo
@@ -70,11 +73,14 @@ logger = logging.getLogger(__name__)
 # How long to wait before reconnecting after each failure in a row.
 RETRY_DELAYS_S: tuple[float, ...] = (0.25, 1.0, 2.0, 5.0, 10.0)
 IDLE_CHECK_S = 15.0
-# How long `SELECT 1` may take before the connection is given up for dead.
+# How long `SELECT 1`, the `LISTEN` and making the connection may each take
+# before the connection is given up for dead.
 CHECK_TIMEOUT_S = 10.0
 # The longest the listener waits for notifications before it looks whether a
 # check is due, so a client's request for one is answered within this.
 _SLICE_S = 1.0
+
+LISTEN: LiteralString = f"LISTEN {EVENT_CHANNEL}"
 
 _PAYLOAD_KEYS = frozenset({"id", "kind", "finding", "investigation", "actor"})
 
@@ -228,6 +234,8 @@ class EventHub:
         self.max_streams = max_streams
         self.idle_check_s = idle_check_s
         self.check_timeout_s = check_timeout_s
+        # libpq takes whole seconds, and treats anything below 2 as 2.
+        self.connect_timeout_s = max(2, math.ceil(check_timeout_s))
         self.retry_delays_s = tuple(retry_delays_s)
         self.loop = asyncio.get_running_loop()
         self.connected = asyncio.Event()
@@ -353,9 +361,9 @@ class EventHub:
         self.connected.clear()
         self.backend_pid = None
 
-    async def _check(self, conn: psycopg.AsyncConnection[Any]) -> None:
-        """Run `SELECT 1`, and raise `TimeoutError` when no answer comes within `check_timeout_s`."""
-        probe = asyncio.ensure_future(conn.execute("SELECT 1"))
+    async def _timed(self, conn: psycopg.AsyncConnection[Any], query: LiteralString) -> None:
+        """Run `query`, and raise `TimeoutError` when no answer comes within `check_timeout_s`."""
+        probe = asyncio.ensure_future(conn.execute(query))
         try:
             done, _ = await asyncio.wait([probe], timeout=self.check_timeout_s)
         finally:
@@ -369,16 +377,18 @@ class EventHub:
                 if not probe.cancelled():
                     probe.exception()
         if not done:
-            raise TimeoutError(f"The database didn't answer a check within {self.check_timeout_s:.1f} s")
+            raise TimeoutError(f"The database didn't answer {query!r} within {self.check_timeout_s:.1f} s")
         probe.result()
 
     async def _listen(self) -> None:
         failures = 0
         while True:
             try:
-                address = make_conninfo(self.conninfo, **KEEPALIVES)
+                address = make_conninfo(self.conninfo, **KEEPALIVES, connect_timeout=self.connect_timeout_s)
                 async with await psycopg.AsyncConnection.connect(address, autocommit=True) as conn:
-                    await conn.execute(f"LISTEN {EVENT_CHANNEL}")
+                    # Timed like the checks: a reconnect can reach a peer
+                    # that accepts the connection and then never answers.
+                    await self._timed(conn, LISTEN)
                     self.backend_pid = conn.info.backend_pid
                     if failures or self._lost:
                         logger.info("The event listener is back after %d failed attempts", failures)
@@ -392,7 +402,7 @@ class EventHub:
                         if self._check_soon or self.loop.time() - checked >= self.idle_check_s:
                             # Make sure the connection is still there, without waiting for traffic.
                             self._check_soon = False
-                            await self._check(conn)
+                            await self._timed(conn, "SELECT 1")
                             checked = self.loop.time()
             except Exception as exc:
                 # A lost connection, or anything else: either way, start again.

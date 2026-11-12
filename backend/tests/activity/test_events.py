@@ -515,7 +515,78 @@ def test_the_listener_asks_for_tcp_keepalives(db: Session) -> None:
         run(scenario())
     assert seen
     wanted = {name: str(value) for name, value in fieldclub_db.KEEPALIVES.items()}
+    wanted["connect_timeout"] = str(events.CHECK_TIMEOUT_S.__ceil__())
     assert all(params.items() >= wanted.items() for params in seen)
+
+
+def test_a_listen_that_gets_no_answer_is_given_up_and_retried(db: Session) -> None:
+    """A reconnect that reaches a peer which accepts the connection and then answers nothing."""
+    real = psycopg.AsyncConnection.connect
+    attempts: list[int] = []
+
+    async def connect(conninfo: str, **kwargs: Any) -> Any:
+        conn = await real(conninfo, **kwargs)
+        attempts.append(conn.info.backend_pid)
+        if len(attempts) == 1:
+            execute = conn.execute
+
+            async def unanswered(query: Any, *args: Any, **kw: Any) -> Any:
+                if str(query).startswith("LISTEN"):
+                    await asyncio.Event().wait()
+                return await execute(query, *args, **kw)
+
+            conn.execute = unanswered
+        return conn
+
+    async def scenario() -> None:
+        hub = EventHub(
+            events.conninfo(),
+            events.lookup_public,
+            queue_size=16,
+            max_per_address=4,
+            max_streams=20,
+            retry_delays_s=(0.05,),
+            check_timeout_s=0.5,
+        )
+        hub.start()
+        await asyncio.wait_for(hub.connected.wait(), TIMEOUT_S)
+        assert len(attempts) == 2, "the first connection's LISTEN should have been given up"
+        assert hub.backend_pid == attempts[1]
+        await hub.stop()
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(psycopg.AsyncConnection, "connect", connect)
+        run(scenario())
+
+
+def test_making_the_connection_has_a_time_limit(caplog: pytest.LogCaptureFixture) -> None:
+    # A server that completes the TCP handshake and never says anything.
+    silent = socket.create_server(("127.0.0.1", 0))
+    port = silent.getsockname()[1]
+
+    async def scenario() -> None:
+        hub = EventHub(
+            make_conninfo(events.conninfo(), host="127.0.0.1", port=str(port)),
+            events.lookup_public,
+            queue_size=16,
+            max_per_address=4,
+            max_streams=20,
+            retry_delays_s=(0.05,),
+            check_timeout_s=0.5,
+        )
+        assert hub.connect_timeout_s == 2, "libpq's shortest connect_timeout"
+        hub.start()
+        await asyncio.sleep(hub.connect_timeout_s * 2 + 1.5)
+        assert not hub.connected.is_set()
+        await hub.stop()
+
+    try:
+        with caplog.at_level("WARNING", logger="fieldclub.services.events"):
+            run(scenario())
+    finally:
+        silent.close()
+    failures = [r for r in caplog.records if "event listener failed" in r.getMessage()]
+    assert len(failures) >= 2, "each attempt should end at the time limit, not hang"
 
 
 def test_caps_per_address_and_per_process(db: Session) -> None:

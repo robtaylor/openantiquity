@@ -286,3 +286,32 @@ def test_a_box_is_held_to_the_one_rule_for_a_box(box: str, terrain: Terrain) -> 
     with pytest.raises(SystemExit) as raised:
         cli.main(["mirror", f"--bbox={box}"], terrain=terrain)
     assert raised.value.code == 2
+
+
+def test_a_command_closes_the_supply_sessions_of_the_terrain_it_built(
+    tmp_path: Path, sources: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.terrain.fakes import FakeServer, FakeSession
+
+    source = sources / "SU16ne_DTM_1m.tif"
+    server = FakeServer({SourceTile("SU16ne", 0).remote_path: source.read_bytes()})
+    opened: list[FakeSession] = []
+
+    def connect() -> FakeSession:
+        session = server.connect()
+        opened.append(session)
+        return session
+
+    def build_terrain(background: bool) -> Terrain:
+        assert background is False
+        fetcher = SftpFetcher(lambda: connect, window=1024 * 1024)
+        return local_terrain(
+            # Catalogued from the files, fetched only from the supply.
+            local_mirror(tmp_path, sources=sources, fetchers=[fetcher]),
+            tmp_path / "tiles",
+        )
+
+    monkeypatch.setattr(cli, "build_terrain", build_terrain)
+    assert cli.main(["mirror", "SU16ne", "--skip-sources"]) == 0
+    assert len(opened) == 1
+    assert not opened[0].alive, "the session should be closed when the command ends"

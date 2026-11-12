@@ -53,7 +53,18 @@ def test_the_site_itself_and_any_other_name_are_served(client: TestClient) -> No
         assert response.status_code == 200, host
 
 
-def test_a_path_that_looks_like_another_host_stays_on_the_site() -> None:
+@pytest.mark.parametrize(
+    ("raw_path", "location"),
+    [
+        (b"//elsewhere.example/x", b"https://openantiquity.org//elsewhere.example/x"),
+        # A request target that isn't a path, which h11 lets through: appended
+        # as it is, it would make `openantiquity.org@evil.example` the address.
+        (b"@evil.example/x", b"https://openantiquity.org/"),
+        (b"*", b"https://openantiquity.org/"),
+        (b".evil.example/x", b"https://openantiquity.org/"),
+    ],
+)
+def test_a_path_that_looks_like_another_host_stays_on_the_site(raw_path: bytes, location: bytes) -> None:
     # Sent as the raw request line, because an HTTP client would read `//host` as a host.
     sent: list[Message] = []
 
@@ -69,8 +80,8 @@ def test_a_path_that_looks_like_another_host_stays_on_the_site() -> None:
     scope: Scope = {
         "type": "http",
         "method": "GET",
-        "path": "//elsewhere.example/x",
-        "raw_path": b"//elsewhere.example/x",
+        "path": raw_path.decode(),
+        "raw_path": raw_path,
         "query_string": b"",
         "headers": [(b"host", b"openantiquity.com")],
     }
@@ -79,7 +90,7 @@ def test_a_path_that_looks_like_another_host_stays_on_the_site() -> None:
 
     headers = dict(sent[0]["headers"])
     assert sent[0]["status"] == 308
-    assert headers[b"location"] == b"https://openantiquity.org//elsewhere.example/x"
+    assert headers[b"location"] == location
 
 
 def test_no_names_means_no_redirects(env: Callable[..., None], db: Session) -> None:

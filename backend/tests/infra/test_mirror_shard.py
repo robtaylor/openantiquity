@@ -101,3 +101,37 @@ def test_bad_arguments_are_refused(mirror: Mirror, argv: list[str]) -> None:
 
     assert exited.value.code == 2
     assert mirror.runs == []
+
+
+class Built:
+    """Terrains `fieldclub-terrain` builds, each standing for one with its own SFTP session."""
+
+    def __init__(self) -> None:
+        self.open = 0
+        self.most_open = 0
+
+    def __call__(self, background: bool) -> object:
+        assert background is False
+        self.open += 1
+        self.most_open = max(self.most_open, self.open)
+        built = self
+
+        class Terrain:
+            def close(self) -> None:
+                built.open -= 1
+
+        return Terrain()
+
+
+def test_one_share_s_connection_is_closed_before_the_next_share_starts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    built = Built()
+    ran: list[int] = []
+    monkeypatch.setattr(shard, "england_catalogue", lambda: iter(TILES))
+    # The real command, with only the terrain it builds and the copy itself replaced.
+    monkeypatch.setattr(shard.cli, "build_terrain", built)
+    monkeypatch.setitem(shard.cli.COMMANDS, "mirror", lambda terrain, args: ran.append(built.open) or 0)
+    assert shard.main(["--shares", "4", "--share", "1", "--share", "3"]) == 0
+    assert ran == [1, 1], "each share should run with one terrain open"
+    assert (built.open, built.most_open) == (0, 1)

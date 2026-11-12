@@ -114,6 +114,16 @@ def test_a_tile_added_to_the_mirror_is_the_only_one_read_and_old_builds_are_prun
     assert folder.names(".tif") == sorted([f"england-{second.build}.tif", f"england-{third.build}.tif"])
 
 
+def test_pruning_removes_only_build_files(tmp_path: Path) -> None:
+    folder = LocalFolder(tmp_path / "national")
+    for name in ("england-0123456789ab.tif", "england-ba9876543210.tif", "SU16nw.tif", "england-x.tif"):
+        folder.write(name, b"x", "image/tiff")
+    store = NationalStore(folder)
+    # As if the folder were the mirror's: its tiles are never build files.
+    assert store.prune({"england-ba9876543210.tif"}) == ["england-0123456789ab.tif"]
+    assert folder.names(".tif") == ["SU16nw.tif", "england-ba9876543210.tif", "england-x.tif"]
+
+
 def test_an_interrupted_build_resumes_from_the_last_chunk_it_finished(
     tmp_path: Path, sources: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

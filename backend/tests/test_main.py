@@ -604,11 +604,11 @@ def test_run_logs_the_database_it_will_use_without_the_password(
     fake.Server = type("Server", (), {"__init__": lambda self, config: None, "run": lambda self: None})  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "uvicorn", fake)
     monkeypatch.setattr(main.logging, "basicConfig", lambda **options: None)
-    # What Fly attaches, which the settings turn into the direct address.
+    # The form Fly attaches, which the settings turn into the direct address.
+    # (DATABASE_URL itself is read only on a Fly machine; tests/test_config.py.)
     monkeypatch.setenv(
-        "DATABASE_URL", "postgres://fly-user:never-log-this@pgbouncer.abc123.flympg.net/fly-db"
+        "FIELDCLUB_DATABASE_URL", "postgres://fly-user:never-log-this@pgbouncer.abc123.flympg.net/fly-db"
     )
-    monkeypatch.delenv("FIELDCLUB_DATABASE_URL")
     monkeypatch.setattr(main, "get_settings", lambda: settings())
     with caplog.at_level("INFO", logger="fieldclub.main"):
         main.run()

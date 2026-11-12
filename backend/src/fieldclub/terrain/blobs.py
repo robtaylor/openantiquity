@@ -248,7 +248,8 @@ class S3Folder:
             )
         except Exception as exc:
             # 409 is S3's answer to a conditional write racing another on the
-            # same object; the caller looks again, as after a 412.
+            # same object; the caller looks again, as after a 412. A missing
+            # bucket is an error (`s3_refusal`).
             if condition and s3_refusal(exc) in (404, 409, 412):
                 return False
             raise
@@ -454,17 +455,26 @@ class ObjectLock:
                 # A bucket that can't be reached this time; the next beat tries again.
                 logger.exception("Couldn't refresh the lock %s", name)
 
-    def refresh(self, name: str, owner: str) -> bool:
-        """Rewrite a held lock so it is young again. False when it is no longer ours."""
-        info = self.folder.stat(name)
-        if info is None or not self._ours(name, owner):
-            return False
-        body = self._body(owner)
-        if self.folder.replace_if(name, body, info.token):
-            return True
-        # A retried write whose first attempt had in fact succeeded is refused
-        # by its own new token. Its unique bytes say it was ours.
-        return self.folder.read(name) == body
+    def refresh(self, name: str, owner: str, attempts: int = 3) -> bool:
+        """Rewrite a held lock so it is young again. False only when it is no longer ours."""
+        assert attempts >= 1, "a refresh tries at least once"
+        for _ in range(attempts):
+            info = self.folder.stat(name)
+            if info is None or not self._ours(name, owner):
+                return False
+            body = self._body(owner)
+            if self.folder.replace_if(name, body, info.token):
+                return True
+            # A retried write whose first attempt had in fact succeeded is
+            # refused by its own new token. Its unique bytes say it was ours.
+            if self.folder.read(name) == body:
+                return True
+            # Refused, yet the lock may still be ours: S3 answers 409 when
+            # another conditional write to the object, such as a waiter's
+            # create, was under way. The next look says which it is.
+            self.sleep(self.poll_s)
+        logger.warning("The lock %s is still ours but couldn't be refreshed; the next beat tries again", name)
+        return True
 
     def acquire(self, name: str, done: Callable[[], bool]) -> str | None:
         """The owner token once the lock is held, or None when `done()` became true while waiting."""

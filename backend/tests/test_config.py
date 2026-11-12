@@ -304,16 +304,108 @@ def test_a_database_address_that_isnt_postgresql_s_is_refused(given: str) -> Non
         database_address(given)
 
 
-def test_fly_s_database_url_is_read_when_the_setting_is_unset(clean_env: pytest.MonkeyPatch) -> None:
-    clean_env.setenv("DATABASE_URL", FLY_POOLED)
+@pytest.mark.parametrize(
+    "given",
+    [
+        FLY_POOLED,
+        # A raw "/" in the password, which SQLAlchemy reads as part of the password.
+        "postgresql://fly-user:pa/ss@pgbouncer.abc123.flympg.net/fly-db",
+        # Options with no database name.
+        "postgresql://u:pw@pgbouncer.abc123.flympg.net?sslmode=require",
+        "postgresql://u:pw@pgbouncer.abc123.flympg.net:5432?sslmode=require",
+        "postgresql://u:pw@pgbouncer.abc123.flympg.net",
+        "postgresql://u:p%40ss@PGBOUNCER.abc123.flympg.net/fly-db",
+        "postgresql://u:pw@pgbouncer.abc123.flympg.net/fly-db?options=a@b",
+    ],
+)
+def test_sqlalchemy_never_connects_to_the_pooled_address(given: str) -> None:
+    from sqlalchemy.engine import make_url
+
+    original, used = make_url(given), make_url(database_address(given))
+    assert original.host is not None
+    assert original.host.lower().startswith("pgbouncer.")
+    assert used.host is not None
+    assert used.host.startswith("direct.")
+    assert (used.username, used.password, used.port, used.database, dict(used.query)) == (
+        original.username,
+        original.password,
+        original.port,
+        original.database,
+        dict(original.query),
+    )
+
+
+@pytest.mark.parametrize(
+    "given",
+    [
+        "postgresql://u:p@pgbouncer.x.flympg.net.evil.example/db",
+        "postgresql://u:p@evilpgbouncer.x.flympg.net/db",
+        "postgresql://u:p@pgbouncer.a.b.flympg.net/db",
+        "postgresql://u:p@localhost/db?host=/tmp",
+    ],
+)
+def test_hosts_that_only_look_like_fly_s_pooler_are_left_alone(given: str) -> None:
+    from sqlalchemy.engine import make_url
+
+    assert make_url(database_address(given)).host == make_url(given).host
+
+
+def test_fly_s_database_url_is_read_on_fly_when_the_setting_is_unset(prod_env: pytest.MonkeyPatch) -> None:
+    on_fly(prod_env)
+    prod_env.setenv("FIELDCLUB_CLIENT_IP_HEADER", "Fly-Client-IP")
+    prod_env.setenv("DATABASE_URL", FLY_POOLED)
     assert settings().database_url == FLY_DIRECT
-    clean_env.setenv("FIELDCLUB_DATABASE_URL", "postgresql://fieldclub:fieldclub@db.internal/fieldclub")
+    prod_env.setenv("FIELDCLUB_DATABASE_URL", "postgresql://fieldclub:fieldclub@db.internal/fieldclub")
     assert settings().database_url == "postgresql+psycopg://fieldclub:fieldclub@db.internal/fieldclub"
+
+
+def test_a_database_url_exported_for_something_else_is_ignored_off_fly(clean_env: pytest.MonkeyPatch) -> None:
+    clean_env.setenv("DATABASE_URL", "postgresql://other:pw@shellhost/otherdb")
+    assert settings().database_url == "postgresql+psycopg://fieldclub:fieldclub@localhost:54329/fieldclub"
 
 
 # --------------------------------------------------------------------------
 # Platforms
 # --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("mirror", "national"),
+    [
+        ("s3://elevation/england/mirror", "s3://elevation/england/mirror"),
+        ("s3://elevation/england/mirror", "s3://elevation/england/mirror/"),
+        ("s3://elevation/england", "s3://elevation/england/national"),
+        ("s3://elevation/england/mirror/national", "s3://elevation/england/mirror"),
+        ("s3://elevation", "s3://elevation/national"),
+        ("var/lidar/england", "var/lidar/england/national"),
+        ("var/lidar/england/mirror", str(REPO_ROOT / "var/lidar/england/mirror")),
+    ],
+)
+def test_the_mirror_and_the_overview_must_be_separate_folders(
+    clean_env: pytest.MonkeyPatch, mirror: str, national: str
+) -> None:
+    for name, value in TIGRIS.items():
+        clean_env.setenv(name, value)
+    with pytest.raises(ConfigError, match="must be separate folders"):
+        settings(terrain_mirror=mirror, terrain_national=national)
+
+
+@pytest.mark.parametrize(
+    ("mirror", "national"),
+    [
+        ("s3://elevation/england/mirror", "s3://elevation/england/national"),
+        ("s3://elevation/england/mirror", "s3://elevation/england/mirror-national"),
+        ("s3://elevation/england/mirror", "s3://overview/england/mirror"),
+        ("s3://elevation/england/mirror", "var/lidar/england/mirror"),
+    ],
+)
+def test_separate_terrain_folders_are_accepted(
+    clean_env: pytest.MonkeyPatch, mirror: str, national: str
+) -> None:
+    for name, value in TIGRIS.items():
+        clean_env.setenv(name, value)
+    config = settings(terrain_mirror=mirror, terrain_national=national)
+    assert (config.terrain_mirror, config.terrain_national) == (mirror, national)
 
 
 def on_fly(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -196,16 +196,25 @@ def s3_client() -> Any:
 
 
 def s3_refusal(exc: BaseException) -> int | None:
-    """The HTTP status of an S3 error answer, such as 404 or 412, or None for anything else."""
+    """404, 409 or 412 when an S3 error is a missing object or a refused condition; None for any other.
+
+    412 and 409 can only be a refused or racing condition, whatever code the
+    store gives. A 404 is a missing object only when its code says so
+    (`NoSuchKey`): a missing bucket is also a 404, and is an error. A HEAD has
+    no body, so botocore gives its status as the code, and a HEAD can't tell
+    the two apart; every other request can, so a misnamed bucket is an error
+    at the first read or write, not an empty folder.
+    """
     response = getattr(exc, "response", None)
     if not isinstance(response, dict):
         return None
     status = response.get("ResponseMetadata", {}).get("HTTPStatusCode")
-    if isinstance(status, int):
-        return status
-    # A HEAD carries no body, so botocore puts the status in the code.
     code = str(response.get("Error", {}).get("Code", ""))
-    return int(code) if code.isdigit() else None
+    if status in (409, 412):
+        return status
+    if code in ("NoSuchKey", "404"):
+        return 404
+    return None
 
 
 def s3_get(client: Any, bucket: str, name: str) -> bytes | None:
