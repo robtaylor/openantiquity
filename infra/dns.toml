@@ -22,31 +22,31 @@ ttl = 3600
 values = ['0 issue "pki.goog"', '0 issue "letsencrypt.org"']
 
 # --- Pointing the names at Fly.io (infra/README.md, "The domain") -----------
-# Commented out until the web app has its addresses. `fly ips list -a
-# openantiquity` gives them after `fly ips allocate-v4 --shared` and
-# `fly ips allocate-v6`. An apex name can't be a CNAME, so each domain's @ gets
-# the A and AAAA records, and each www a CNAME to the app's own name. The
-# AAAA record also lets Fly check the domain is ours before it issues a
-# certificate. The .com, the .co.uk and every www are answered with a redirect
-# to openantiquity.org by the application (FIELDCLUB_REDIRECT_HOSTS in fly.toml).
-#
-# [[record]]
-# domains = ["openantiquity.org", "openantiquity.com", "openantiquity.co.uk"]
-# name = "@"
-# type = "A"
-# ttl = 3600
-# values = ["<the app's shared IPv4 address>"]
-#
-# [[record]]
-# domains = ["openantiquity.org", "openantiquity.com", "openantiquity.co.uk"]
-# name = "@"
-# type = "AAAA"
-# ttl = 3600
-# values = ["<the app's IPv6 address>"]
-#
-# [[record]]
-# domains = ["openantiquity.org", "openantiquity.com", "openantiquity.co.uk"]
-# name = "www"
-# type = "CNAME"
-# ttl = 3600
-# values = ["openantiquity.fly.dev."]
+# The web app's addresses, from `fly ips list -a openantiquity`: the shared
+# IPv4 address and the app's own IPv6 address. An apex name can't be a CNAME,
+# so each domain's @ gets the A and AAAA records, and each www a CNAME to the
+# app's own name. The AAAA record also lets Fly check the domain is ours
+# before it issues a certificate. The .com, the .co.uk and every www are
+# answered with a redirect to openantiquity.org by the application
+# (FIELDCLUB_REDIRECT_HOSTS in fly.toml).
+
+[[record]]
+domains = ["openantiquity.org", "openantiquity.com", "openantiquity.co.uk"]
+name = "@"
+type = "A"
+ttl = 3600
+values = ["66.241.124.216"]
+
+[[record]]
+domains = ["openantiquity.org", "openantiquity.com", "openantiquity.co.uk"]
+name = "@"
+type = "AAAA"
+ttl = 3600
+values = ["2a09:8280:1::1fe:8e38:0"]
+
+[[record]]
+domains = ["openantiquity.org", "openantiquity.com", "openantiquity.co.uk"]
+name = "www"
+type = "CNAME"
+ttl = 3600
+values = ["openantiquity.fly.dev."]

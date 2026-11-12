@@ -1,4 +1,4 @@
-# Handoff — Hosting on Fly.io (running on a private address with terrain and the hourly jobs, not yet open)
+# Handoff — Hosting on Fly.io (answering on openantiquity.org, with no sign-in yet)
 
 **Created:** 2026-11-12
 **Working tree:** clean
@@ -14,7 +14,7 @@ See docs/handoff-discipline.md for the migration table.
 
 ## Goal & next-up
 
-**Goal of this thread:** move the deployment from Google Cloud to Fly.io (Decision 0018). On 2026-11-12 steps 1 to 10 of the runbook were carried out. The web app runs on Fly on a private address, with Managed Postgres, the whole elevation mirror and the national overview, and it draws terrain. The hourly machine exists. Nothing is public, and only the scheduled monuments have been ingested.
+**Goal of this thread:** move the deployment from Google Cloud to Fly.io (Decision 0018). On 2026-11-12 steps 1 to 11 of the runbook were carried out. The web app runs on Fly and answers on `openantiquity.org`, with Managed Postgres, the whole elevation mirror and the national overview, and it draws terrain. The hourly machine exists. Nobody can sign in, and only the scheduled monuments have been ingested.
 
 **Next session should pick up:** follow-ups 1 to 3 in order. Do every cloud step in the main session: sub-agents and workflow agents don't touch Fly, Google or Gandi and don't read `.env`.
 
@@ -30,7 +30,7 @@ fly apps list --org openantiquity
 fly machine list --app openantiquity
 # Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit e7c0794 or later
 fly ips list --app openantiquity
-# Expect: one private address and no public one, until step 11
+# Expect: the private address, the shared IPv4 address 66.241.124.216 and the IPv6 address 2a09:8280:1::1fe:8e38:0
 fly machine list --app openantiquity-jobs
 # Expect: one machine, `due`, stopped, with the schedule hourly and the volume jobs_var at /data
 fly mpg list --org openantiquity
@@ -72,15 +72,19 @@ The owner made `openantiquity-photos` and set the keys' roles in Tigris's dashbo
 
 ### 3. Wake the machines after a deploy, or accept the first slow request (a choice, minutes)
 
-A deploy leaves the three web machines stopped, and the first request afterwards took 32 seconds on 2026-11-12. The runbook says to ask for `/healthz` once after a deploy. The deploy workflow doesn't do it yet, and can't reach the private address until step 11 gives the app a public one.
+A deploy leaves the three web machines stopped, and the first request afterwards took 32 seconds on 2026-11-12. The runbook says to ask for `/healthz` once after a deploy. The deploy workflow doesn't do it yet. Since step 11 it could: `curl --fail https://openantiquity.org/healthz` as its last step.
 
 ### 4. Step 12: the deploy workflow (minutes)
 
 The GitHub environment `production` and a deploy token for the web app alone. The repository is `robtaylor/openantiquity` on GitHub, public since 2026-11-12, and this checkout's `origin`.
 
-### 5. Point the domains and open the site (an hour, after the owner says so)
+### 5. Sign-in, and what opening to the public still needs (the owner)
 
-Step 11. The DNS records are commented in `infra/dns.toml` and applied with `infra/dns.py`. Check the certificates and that each of the five other names redirects. The sign-in providers have to be registered first with the callback `https://openantiquity.org/api/v1/auth/oauth/<provider>/callback` ([`owner-actions.md`](../plans/owner-actions.md), WS3), and the site stays closed until the owner opens it.
+The domains were pointed at Fly on 2026-11-12 at the owner's word ("noone will be looking yet"). The site answers on `openantiquity.org` and anyone can look at the map. Every sign-in method is off, so nobody can join or save.
+
+- The owner is registering the OpenStreetMap application. Its redirect address is `https://openantiquity.org/api/v1/auth/oauth/osm/callback`, it is confidential, and its only permission is `openid`. The client id goes in `fly.toml` as `FIELDCLUB_OSM_CLIENT_ID`. The secret goes in `var/web-secrets.env` and then `bash infra/fly-secrets.sh web --from var/web-secrets.env`, never in chat. Then deploy.
+- The app has no gate. Once a provider is configured, anyone with an account there can join and post. The owner was told on 2026-11-12, and that [`owner-actions.md`](../plans/owner-actions.md) holds a public launch until an operator is named and the terms, the privacy notice and the Online Safety Act assessment exist (WS14 to WS17). A setting that limits sign-up to named accounts was offered and not yet asked for.
+- The other providers and the mail relay are in `owner-actions.md`, WS3.
 
 ### 6. Take the Google project down (an hour)
 
@@ -105,7 +109,7 @@ How long Fly keeps backups wasn't found, and no restore has been tried. `fly mpg
 - The owner dislikes Terraform. `infra/terraform` stays only until Google is taken down, and nothing new is written in it.
 - The application refuses to start when `FIELDCLUB_EVENTS_MAX_PER_ADDRESS` is more than a quarter of `FIELDCLUB_EVENTS_MAX_STREAMS`. `fly.toml` sets 6 and 26. Change the two together, with the request limits and the tile render queue.
 - `fieldclub-jobs due`, on the hourly machine, deletes expired sessions and old sign-in links every run. The privacy notice says they are deleted, so the hourly machine has to exist before the site opens.
-- The private address answers plain HTTP with a redirect. Reach the app through `fly proxy 8443:443 openantiquity.flycast --app openantiquity` and `curl --resolve openantiquity.fly.dev:8443:127.0.0.1 https://openantiquity.fly.dev:8443/...`.
+- The site is public at `https://openantiquity.org`. The private address still works through `fly proxy 8443:443 openantiquity.flycast --app openantiquity` and `curl --resolve openantiquity.fly.dev:8443:127.0.0.1 https://openantiquity.fly.dev:8443/...`.
 
 ## References
 

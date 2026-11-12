@@ -4,7 +4,7 @@ This is the runbook for the deployment on Fly.io: what the owner does once, what
 
 Everything lives in the Fly organisation `openantiquity`, in London (`lhr`). Every command that acts on an app names it with `--app`, so the directory a command runs in never chooses the app, with three exceptions: `fly deploy` reads the web app's name from `fly.toml`, `fly_jobs.py build` names the jobs app itself, and the `fly mpg` commands name the cluster. Commands run from the main checkout, at the repository root, because the secrets script reads the untracked `.env` and `var/` there. What has been done so far is recorded in `docs/plans/v1-england.md`, WS8.
 
-Steps 1 to 10 were carried out on 2026-11-12. Steps 11 and 12 haven't been run against Fly. Each of their commands was written from Fly's and Tigris's documentation, cited beside it, or from the spike. Check each one with `--help` before running it, and correct this file where the platform differs.
+Steps 1 to 11 were carried out on 2026-11-12. Step 12 hasn't been run. Each of their commands was written from Fly's and Tigris's documentation, cited beside it, or from the spike. Check each one with `--help` before running it, and correct this file where the platform differs.
 
 ## What is in this folder
 
@@ -213,7 +213,7 @@ Fly's schedules run hourly, daily, weekly or monthly, at no fixed time ([`fly ma
 
 ### 11. Opening the site: point the domain
 
-Only once WS9's security review has passed (`docs/plans/v1-england.md`). Until then the app has no public address. The site is `openantiquity.org`. `www.openantiquity.org`, `openantiquity.com`, `openantiquity.co.uk` and their `www` names are answered by the application with a 308 to the same path on `openantiquity.org` (`FIELDCLUB_REDIRECT_HOSTS` in `fly.toml`, `backend/src/fieldclub/redirects.py`). Fly's proxy has no redirect setting of its own, so the application does it. `force_https` sends plain HTTP to HTTPS first, so every name needs a certificate: six, inside the ten free ones.
+Done on 2026-11-12, at the owner's word. The app's addresses are the shared IPv4 address 66.241.124.216 and the IPv6 address 2a09:8280:1::1fe:8e38:0, and the six certificates were issued within three minutes of the records changing. The site is `openantiquity.org`. `www.openantiquity.org`, `openantiquity.com`, `openantiquity.co.uk` and their `www` names are answered by the application with a 308 to the same path on `openantiquity.org` (`FIELDCLUB_REDIRECT_HOSTS` in `fly.toml`, `backend/src/fieldclub/redirects.py`). Fly's proxy has no redirect setting of its own, so the application does it. `force_https` sends plain HTTP to HTTPS first, so every name needs a certificate: six, inside the ten free ones.
 
 ```
 fly ips allocate-v4 --shared --app openantiquity
@@ -225,7 +225,7 @@ for name in openantiquity.org www.openantiquity.org openantiquity.com www.openan
 done
 ```
 
-An apex name can't be a CNAME, so each domain's `@` gets an `A` record for the shared IPv4 address and an `AAAA` record for the IPv6 address, and each `www` a `CNAME` to `openantiquity.fly.dev.` ([custom domains](https://docs.fly.io/networking/custom-domain/)). The `AAAA` record is also one of the ways Fly checks that the domain is ours before it issues a certificate. `infra/dns.toml` holds these records commented out. Put the two addresses `fly ips list` printed into them, uncomment them, then:
+An apex name can't be a CNAME, so each domain's `@` gets an `A` record for the shared IPv4 address and an `AAAA` record for the IPv6 address, and each `www` a `CNAME` to `openantiquity.fly.dev.` ([custom domains](https://docs.fly.io/networking/custom-domain/)). The `AAAA` record is also one of the ways Fly checks that the domain is ours before it issues a certificate. `infra/dns.toml` holds these records, with the two addresses `fly ips list` printed. To change them:
 
 ```
 uv run infra/dns.py plan
@@ -233,7 +233,7 @@ uv run infra/dns.py apply
 fly certs check openantiquity.org --app openantiquity
 ```
 
-`infra/dns.py` touches only what `dns.toml` lists, so Gandi's mail records stay as they are. Its token is `GANDI_DNS_SSL` in `.env`. The `CAA` records already allow Let's Encrypt, which Fly uses. A certificate is issued once its records resolve, which can take an hour.
+`infra/dns.py` touches only what `dns.toml` lists, so Gandi's mail records stay as they are. Its token is `GANDI_DNS_SSL` in `.env`. The `CAA` records already allow Let's Encrypt, which Fly uses. A certificate is issued once its records resolve, which can take an hour. The records Gandi made at registration had a time to live of three hours, so some resolvers kept sending visitors to Gandi's parking page that long after the change.
 
 Every answer over https carries `Strict-Transport-Security` with `includeSubDomains`, the redirects from the other names included, so a browser that has visited `openantiquity.com` or `openantiquity.co.uk` will use https for every name under them for a year. Never put anything that serves plain http, such as a mail provider's link-tracking name, under any of the three domains.
 
@@ -449,6 +449,7 @@ Each of these was written from documentation or inferred, and none was run:
 - Checked on 2026-11-12 while steps 2 to 7 were carried out, so no longer open: the release command's machine gets `[env]` and the secrets, and connects to the database's direct address; `fly deploy --build-only --push --app openantiquity-jobs --image-label <commit>` pushes to `registry.fly.io/openantiquity-jobs:<commit>` and starts nothing; a job under `timeout` and `tini` exits and its machine is removed when the job ends by itself; the jobs start without a session key; Tigris accepts boto3's lifecycle request and gives the rule back; and Tigris takes the national overview, 3.08 GB, as a multipart upload.
 - Found on the web app on 2026-11-12 and fixed: no terrain tile drew, though the mirror's listing was whole. GDAL had the Tigris endpoint only on the thread that set it, and tiles are drawn on others. The release command now reads a tile that way before every deploy.
 - Checked on 2026-11-12 with the fix deployed: the release command's mirror check passes and stops nothing when the mirror is whole; terrain tiles draw from the mirror in Tigris, a tile over a fresh area in about 4 seconds, a cached one in 0.4, and an overview tile in about 4; health checks don't keep idle machines awake; the hourly machine is made with its volume, runs `fieldclub-jobs due` and stops; and `fly deploy` without `--flycast` keeps the private address, though it prints that the app has none.
+- Checked on 2026-11-12 when the domains were pointed: the six certificates, the shared IPv4 address at each apex, and the 308 from each of the five other names to the same path on `openantiquity.org`.
 - Still to run for the first time: `fly machine update --schedule` and `--skip-start` on a scheduled machine, and `fly releases --image`.
 - That the web app's deploy token can't push to the jobs app's repository.
 - That `fly deploy --no-public-ips` on a later deploy leaves the addresses step 11 allocated alone, as "Do not allocate any new public IP addresses" suggests.
@@ -458,6 +459,5 @@ Each of these was written from documentation or inferred, and none was run:
 - That the database's `LISTEN` connection is found dead and replaced after a resume (the spike didn't test it).
 - Whether Tigris answers 409 to overlapping conditional writes and `NoSuchBucket` for a misnamed bucket, as AWS does. The code takes any 412 or 409, and a 404 only with the code `NoSuchKey`, as a refusal.
 - The flyctl the workflow pins, 0.5.8, was published on 2026-11-11 and its `setup-flyctl` commit was read through a summariser; check both against GitHub and prefer a release at least two weeks old.
-- The certificates for six names, the shared IPv4 at the apex, and the 308 from each other name.
 - Memory during a photo upload while tiles render, and tile latency under a real screen of tiles at once.
 - London's prices, and what Fly does when prepaid credit runs out.

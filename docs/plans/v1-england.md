@@ -21,7 +21,7 @@ A deployed Open Antiquity covering England. People explore 1 m LIDAR in archaeol
 - Decisions 0010 to 0024 were written during the build, each from a review finding, a seam between tracks or an owner's choice. All are Proposed until WS9 checks them against the code.
 - The security and privacy review of the finished code ran on 2026-11-12, and its fixes are on `main` (WS9).
 - The project was renamed from Field Club to Open Antiquity on 2026-11-11, and `openantiquity.org` was registered (Decision 0017). The internal identifier is still `fieldclub`.
-- The Google Cloud project `fieldclub-uk` runs the service and its jobs, held back from the public (`service_public = false`), since 2026-11-11. The tables exist, and the whole-country elevation copy finished at 01:58 UTC on 2026-11-12: 5,877 converted tiles, 126.4 GB. The deployment is moving to Fly.io (WS8), and an image built from `main` no longer runs on Google. On Fly, since 2026-11-12, the web app runs on a private address with its database, and the elevation and the national overview are in their Tigris bucket.
+- The Google Cloud project `fieldclub-uk` runs the service and its jobs, held back from the public (`service_public = false`), since 2026-11-11. The tables exist, and the whole-country elevation copy finished at 01:58 UTC on 2026-11-12: 5,877 converted tiles, 126.4 GB. The deployment is moving to Fly.io (WS8), and an image built from `main` no longer runs on Google. On Fly, since 2026-11-12, the web app answers on openantiquity.org with its database, and the elevation and the national overview are in their Tigris bucket. Nobody can sign in yet.
 - Defra supplied England's 2022 composite DTM in bulk on the day it was asked, ticket DSP3-11967. See `owner-actions.md` and `../sources/lidar-england-bulk-supply.md`. Eleven tiles around Avebury and Stonehenge are in the local mirror folder for development.
 
 ## Workstreams
@@ -181,7 +181,9 @@ The owner then weighed Managed Postgres against a Postgres on a machine of our o
 
 With the elevation readable, no terrain tile drew: GDAL had the Tigris endpoint on one thread only, and tiles are drawn on others. The fix went out the same day in commit `e7c0794`, with a check of the mirror that every deploy now runs first (Decision 0027). Tiles over Avebury then drew from the 1 m mirror, the overview and the height data. Step 10 followed: `he-nhle-scheduled-monuments` loaded 20,006 records in 19 seconds, and the hourly machine `due` exists with its 10 GB volume and ran once. Its first refresh of every bulk source is the 03:00 UTC run of 2026-11-13.
 
-Left: taking the jobs key's read access off the cache and the photos; reading the first nightly refresh's log; the deploy workflow (step 12); the sign-in providers' credentials (`owner-actions.md`, WS3), registered with the openantiquity.org redirect address; pointing the domains at Fly, with the records commented in `infra/dns.toml`; taking the Google project down with `infra/terraform` once the site on Fly has passed its checks; and opening the site, which waits on the owner.
+The same evening the owner had the domains pointed at Fly (step 11). `openantiquity.org` answers over https, and `www`, the `.com`, the `.co.uk` and their `www` names answer 308 to it, each with its certificate. Anyone can now look at the map. No sign-in method is configured, so nobody can join or save anything yet. The repository is public on GitHub under the AGPL version 3 (Decision 0026).
+
+Left: taking the jobs key's read access off the cache and the photos; reading the first nightly refresh's log; the deploy workflow (step 12); the sign-in providers' credentials (`owner-actions.md`, WS3), registered with the openantiquity.org redirect address; taking the Google project down with `infra/terraform` once the site on Fly has passed its checks; and opening the site, which waits on the owner.
 
 **Deliverables:**
 
