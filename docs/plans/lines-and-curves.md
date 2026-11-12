@@ -150,7 +150,7 @@ All under `/api/v1`. Mutating requests carry `X-OpenAntiquity-Client: web` as ev
 **`POST /findings`** adds `path: Path | null`. `location` becomes optional when a `path` is given.
 
 - `outline` is still accepted for a release, and a `LineString` or one-ring `Polygon` becomes an all-corner path, so the derived shape equals what was sent. Any other type is 422 `outline_not_a_path`. Sending both `outline` and `path` is 422 `outline_and_path`.
-- Without `path` and without `location`: 422 `location_required`, as `PATCH` already says.
+- Without `path` and without `location`: 400 `location_required`, the status and code `PATCH` already uses. One code has one status.
 - The limits above apply, then `outside_british_isles` for any point outside `BRITISH_ISLES`.
 
 **`PATCH /findings/{public_id}`** adds `path: Path | null` and `path_revision: int`.
@@ -322,7 +322,7 @@ The contract above is what the workstreams build against. WS-A comes first, beca
 
 ### WS-A — Backend
 
-**Status:** Not started.
+**Status:** In progress. Steps 1 to 4 landed on 2026-11-12 (`96e2ca4` to `7a712e8`): the curve and its shared vectors, the schema, create and edit, and the routes. Steps 5 to 8 are next.
 
 **Steps, in order, each test first:**
 
