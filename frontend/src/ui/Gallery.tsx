@@ -174,7 +174,6 @@ export function Gallery({ meta }: { meta: Meta }) {
           options={[
             { id: "open", label: "Everyone" },
             { id: "protected", label: "Members" },
-            { id: "restricted", label: "Trusted members" },
           ]}
         />
         <Switch

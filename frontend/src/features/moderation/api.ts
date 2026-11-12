@@ -8,7 +8,7 @@
 
 import { apiFetch } from "../../api/client.js";
 import type { components } from "../../api/schema.js";
-import type { FindingDetail, Sensitivity } from "../findings/types.js";
+import type { FindingDetail, OfferedSensitivity } from "../findings/types.js";
 
 type Schemas = components["schemas"];
 
@@ -75,7 +75,7 @@ export function setHidden(
 }
 
 /** Set a finding's level, lower as well as higher, with a reason for the log. */
-export function setLevel(publicId: string, level: Sensitivity, reason: string): Promise<FindingDetail> {
+export function setLevel(publicId: string, level: OfferedSensitivity, reason: string): Promise<FindingDetail> {
   return apiFetch<FindingDetail>(`/mod/findings/${encodeURIComponent(publicId)}/sensitivity`, {
     method: "PUT",
     body: { level, reason },

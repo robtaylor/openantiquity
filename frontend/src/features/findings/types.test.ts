@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { findingsData } from "../../test/fixtures/findings.js";
-import { FindingsResponseError, parseFindingCollection, SENSITIVITIES } from "./types.js";
+import { FindingsResponseError, OFFERED_SENSITIVITIES, parseFindingCollection, SENSITIVITIES } from "./types.js";
 
 function feature(properties: Record<string, unknown>, coordinates: unknown = [-1.85, 51.43]) {
   return { type: "Feature", geometry: { type: "Point", coordinates }, properties };
@@ -12,6 +12,10 @@ const BASE = { public_id: "f1", tier: "seen", state: "open" };
 describe("parseFindingCollection", () => {
   it("knows three levels of sensitivity", () => {
     expect(SENSITIVITIES).toEqual(["open", "protected", "restricted"]);
+  });
+
+  it("offers only open and protected to choose from", () => {
+    expect(OFFERED_SENSITIVITIES).toEqual(["open", "protected"]);
   });
 
   it("keeps each level as the server sent it", () => {

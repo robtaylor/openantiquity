@@ -824,6 +824,26 @@ describe("states of the page", () => {
     expect(panel.queryByRole("button", { name: "Protect it more" })).toBeNull();
   });
 
+  it("offers the finder protected, and nothing higher", async () => {
+    const user = userEvent.setup();
+    const { panel } = await open(finderView({ sensitivity: "open" }), THE_FINDER);
+    await user.click(panel.getByRole("button", { name: "Protect it more" }));
+    const dialog = within(screen.getByRole("dialog", { name: "Protect this finding" }));
+    const levels = within(dialog.getByRole("radiogroup", { name: "New level" }));
+    expect(levels.getAllByRole("radio").map((chip) => chip.textContent)).toEqual(["Protected"]);
+  });
+
+  it("offers a moderator open and protected only when they change a level", async () => {
+    const user = userEvent.setup();
+    const finding = pageFixture({ sensitivity: "open", actions: MODERATOR_ACTIONS });
+    const moderator = meFixture({ handle: "Keeper", role: "moderator" });
+    const { panel } = await open(finding, moderator, serve(finding, moderator));
+    await user.click(panel.getByRole("button", { name: "Change its level" }));
+    const dialog = within(screen.getByRole("dialog", { name: "Change its level" }));
+    const levels = within(dialog.getByRole("radiogroup", { name: "New level" }));
+    expect(levels.getAllByRole("radio").map((chip) => chip.textContent)).toEqual(["Protected"]);
+  });
+
   it("lets a moderator lower the level through the moderation route, with a reason for the log", async () => {
     const user = userEvent.setup();
     const finding = pageFixture({ sensitivity: "restricted", actions: MODERATOR_ACTIONS });

@@ -4,7 +4,7 @@
  */
 
 import { API_BASE, ApiError, apiFetch } from "../../api/client.js";
-import type { Sensitivity } from "../findings/types.js";
+import type { OfferedSensitivity } from "../findings/types.js";
 import type {
   AnswerHeld,
   Comment,
@@ -38,12 +38,12 @@ export function withdrawFinding(publicId: string): Promise<FindingDetail> {
   return apiFetch<FindingDetail>(findingUrl(publicId, "/withdraw"), { method: "POST" });
 }
 
-export function changeSensitivity(publicId: string, level: Sensitivity): Promise<FindingDetail> {
+export function changeSensitivity(publicId: string, level: OfferedSensitivity): Promise<FindingDetail> {
   return apiFetch<FindingDetail>(findingUrl(publicId, "/sensitivity"), { method: "PUT", body: { level } });
 }
 
 /** A moderator lowers a finding's level, with the reason the moderation log keeps. */
-export function lowerSensitivity(publicId: string, level: Sensitivity, reason: string): Promise<FindingDetail> {
+export function lowerSensitivity(publicId: string, level: OfferedSensitivity, reason: string): Promise<FindingDetail> {
   return apiFetch<FindingDetail>(`/mod${findingUrl(publicId, "/sensitivity")}`, {
     method: "PUT",
     body: { level, reason },

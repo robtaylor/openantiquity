@@ -2886,7 +2886,8 @@ export interface components {
             outline?: components["schemas"]["GeoJSONGeometry"] | null;
             /** @default unknown */
             period: components["schemas"]["Period"];
-            sensitivity?: components["schemas"]["Sensitivity"] | null;
+            /** Sensitivity */
+            sensitivity?: ("open" | "protected") | null;
             /** Title */
             title?: string | null;
             view_state?: components["schemas"]["ViewState"] | null;
@@ -3858,7 +3859,11 @@ export interface components {
         };
         /** ModSensitivityIn */
         ModSensitivityIn: {
-            level: components["schemas"]["Sensitivity"];
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "open" | "protected";
             /** Reason */
             reason: string;
         };
@@ -5015,7 +5020,11 @@ export interface components {
         Sensitivity: "open" | "protected" | "restricted";
         /** SensitivityChange */
         SensitivityChange: {
-            level: components["schemas"]["Sensitivity"];
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "open" | "protected";
         };
         /**
          * SensitivityLevelOut

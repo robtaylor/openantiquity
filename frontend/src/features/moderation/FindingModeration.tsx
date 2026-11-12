@@ -8,7 +8,7 @@ import { whoSees } from "../finding/describe.js";
 import { toastFailure } from "../finding/feedback.js";
 import { LEVEL_NAMES } from "../finding/Tools.js";
 import { useApplyFinding, useOptimisticFinding } from "../finding/useFinding.js";
-import { type FindingDetail, SENSITIVITIES, type Sensitivity } from "../findings/types.js";
+import { type FindingDetail, OFFERED_SENSITIVITIES, type OfferedSensitivity } from "../findings/types.js";
 import { isModerator } from "./access.js";
 import { fetchActions, setHidden, setLevel } from "./api.js";
 import { HIDING } from "./HideButton.js";
@@ -52,8 +52,8 @@ export function FindingModeration({ finding }: { finding: FindingDetail }) {
   const allowed = isModerator(session.role) && session.ready && session.me?.handle !== finding.author.handle;
   const state = useFindingHidden(finding.public_id, allowed);
   const [dialog, setDialog] = useState<"hide" | "level" | null>(null);
-  const others = SENSITIVITIES.filter((level) => level !== finding.sensitivity);
-  const [level, setChosen] = useState<Sensitivity | null>(null);
+  const others = OFFERED_SENSITIVITIES.filter((level) => level !== finding.sensitivity);
+  const [level, setChosen] = useState<OfferedSensitivity | null>(null);
   if (!allowed) return null;
 
   async function hide(reason: string): Promise<void> {
@@ -73,7 +73,7 @@ export function FindingModeration({ finding }: { finding: FindingDetail }) {
     }
   }
 
-  async function changeLevel(to: Sensitivity, reason: string): Promise<void> {
+  async function changeLevel(to: OfferedSensitivity, reason: string): Promise<void> {
     const undo = optimistic((current) => ({ ...current, sensitivity: to }));
     try {
       applyFinding(await setLevel(finding.public_id, to, reason));
@@ -137,7 +137,7 @@ export function FindingModeration({ finding }: { finding: FindingDetail }) {
           <ChipGroup
             label="New level"
             value={level}
-            onChange={(value) => setChosen(value as Sensitivity)}
+            onChange={(value) => setChosen(value as OfferedSensitivity)}
             options={others.map((id) => ({ id, label: LEVEL_NAMES[id] }))}
           />
           {level ? <p>{whoSees(level)}</p> : null}

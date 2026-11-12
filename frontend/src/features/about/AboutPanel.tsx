@@ -93,7 +93,7 @@ export function AboutPanel({ meta }: { meta: Meta }) {
           <p>{meta.notices.sensitivity}</p>
           <p>
             Some earthworks, such as burial mounds, could attract illegal metal detecting if their exact place were
-            public, so findings of those kinds start protected, and any finding can be made restricted.
+            public, so findings of those kinds start protected, and any other finding can be made protected.
           </p>
         </section>
 

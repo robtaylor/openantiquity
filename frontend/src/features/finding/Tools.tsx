@@ -8,7 +8,7 @@ import { Field } from "../../ui/Field.js";
 import { toast } from "../../ui/toastStore.js";
 import { useFocusLater } from "../../ui/useFocusLater.js";
 import { findingPath } from "../findings/selection.js";
-import { SENSITIVITIES, type Sensitivity } from "../findings/types.js";
+import { type OfferedSensitivity, offeredBeside, type Sensitivity } from "../findings/types.js";
 import { AddToInvestigation } from "../investigations/AddToInvestigation.js";
 import { changeSensitivity, exportUrl, lowerSensitivity, updateFinding, withdrawFinding } from "./api.js";
 import { type ViewerPosition, whoSees } from "./describe.js";
@@ -195,8 +195,8 @@ function RaiseDialog({
   onClose: () => void;
   onSaved: (finding: FindingDetail) => void;
 }) {
-  const above = SENSITIVITIES.slice(SENSITIVITIES.indexOf(finding.sensitivity) + 1);
-  const [level, setLevel] = useState<Sensitivity | null>(above[0] ?? null);
+  const above = offeredBeside(finding.sensitivity, 1);
+  const [level, setLevel] = useState<OfferedSensitivity | null>(above[0] ?? null);
   const [saving, setSaving] = useState(false);
 
   async function save(): Promise<void> {
@@ -234,7 +234,7 @@ function RaiseDialog({
         <ChipGroup
           label="New level"
           value={level}
-          onChange={(value) => setLevel(value as Sensitivity)}
+          onChange={(value) => setLevel(value as OfferedSensitivity)}
           options={above.map((id) => ({ id, label: LEVEL_NAMES[id] }))}
         />
         {level ? <p>{whoSees(level)}</p> : null}
@@ -259,8 +259,8 @@ function LowerDialog({
   onClose: () => void;
   onSaved: (finding: FindingDetail) => void;
 }) {
-  const below = SENSITIVITIES.slice(0, SENSITIVITIES.indexOf(finding.sensitivity)).reverse();
-  const [level, setLevel] = useState<Sensitivity | null>(below[0] ?? null);
+  const below = offeredBeside(finding.sensitivity, -1);
+  const [level, setLevel] = useState<OfferedSensitivity | null>(below[0] ?? null);
   const [reason, setReason] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -304,7 +304,7 @@ function LowerDialog({
         <ChipGroup
           label="New level"
           value={level}
-          onChange={(value) => setLevel(value as Sensitivity)}
+          onChange={(value) => setLevel(value as OfferedSensitivity)}
           options={below.map((id) => ({ id, label: LEVEL_NAMES[id] }))}
         />
         {level ? <p>{whoSees(level)}</p> : null}

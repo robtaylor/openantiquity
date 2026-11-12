@@ -286,7 +286,7 @@ const DONT = [
   "Don't take a marker on this map as permission to visit.",
   "Don't dig, probe or use a metal detector, and don't take anything away.",
   "Don't climb on banks or walls, or drive onto a site.",
-  "Don't post the exact place of a protected or restricted finding anywhere else.",
+  "Don't post the exact place of a protected finding anywhere else.",
 ];
 
 function Ground({ meta }: { meta: Meta }) {

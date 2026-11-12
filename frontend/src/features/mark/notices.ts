@@ -10,15 +10,13 @@ import type { FindReporting, Meta } from "../../api/meta.js";
  * Who will see exactly where a new finding of this class is, in one
  * sentence, or null for a class that starts open, or one `/meta` doesn't
  * say. Sensitivity is explained, never asked (Decision 0005): the finder
- * can raise it later from the finding's page.
+ * can raise it later from the finding's page. No class starts higher than
+ * protected, and restricted is dropped (Decision 0032).
  */
 export function sensitivityNotice(meta: Meta, featureClass: string | null): string | null {
   const level = meta.vocab.feature_classes.find((candidate) => candidate.id === featureClass)?.sensitivity;
   if (level === "protected") {
     return "To protect sites like this, only signed-in members will see exactly where it is, and everyone else will see the one-kilometre square around it.";
-  }
-  if (level === "restricted") {
-    return "To protect sites like this, only you, trusted members, archaeologists and moderators will see exactly where it is, and everyone else will see the one-kilometre square around it.";
   }
   return null;
 }

@@ -59,8 +59,8 @@ function RoleDialog({
       {role ? <p className="fc-mod__hint">{roleWords(role).hint}</p> : null}
       {role === "trusted" ? (
         <p className="fc-mod__hint">
-          A trusted member sees the exact place of restricted findings. Check that their points come from findings other
-          people checked, not from the same few accounts.
+          A trusted member's second looks count for more, and their downloads give the exact place of protected
+          findings. Check that their points come from findings other people checked, not from the same few accounts.
         </p>
       ) : null}
     </ReasonDialog>
@@ -212,7 +212,7 @@ function EligibleList({ meta }: { meta: Meta }) {
       <h3 id="fc-mod-eligible">Could be trusted</h3>
       <p className="fc-mod__hint">
         Members with {TRUSTED_AT} points or more. Points never make anyone trusted by themselves: a moderator decides,
-        because a few accounts working together could earn their way to restricted places.
+        because a few accounts working together could otherwise earn it.
       </p>
       {body}
       {query.hasNextPage ? (
