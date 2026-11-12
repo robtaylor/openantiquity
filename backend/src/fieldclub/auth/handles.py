@@ -11,14 +11,17 @@ underscores folded away, letters from other alphabets that look like Latin
 ones (a Cyrillic a, a Greek o) and digits that pass for letters (`0`, `1`)
 read as the Latin letter. A name whose skeleton holds either of the
 project's names is refused (`Open-Antiquity`, `OpenAntiquityTeam`), and so is
-one that is a staff word with nothing but a generic word or a number beside
-it (`Admin-Team`, `Staff_Account`, `Moderator2`), while names that merely
-contain one (`Badminton`, `Staffordshire`) are fine.
+one that is a staff word with nothing but generic words or a number beside
+it (`Admin-Team`, `Staff_Account`, `Moderator2`, `Site Moderator`), while
+names that merely contain one (`Badminton`, `Staffordshire`) are fine. A name
+that starts as a deleted account's label does (`Former member (deleted)`).
 
 A handle someone gives up, by changing it or deleting their account, is
 held back from everyone else for `HANDLE_COOLING_OFF` (`released_handles`),
 so old `@mentions` of it and links to `/u/<handle>` don't pass to a stranger
-at once. Whoever gave it up may take it back.
+at once. Whoever gave it up may take it back. An account holds back only
+its latest `MAX_HELD_BACK_PER_ACCOUNT`, so changing name again and again
+can't reserve names.
 """
 
 from __future__ import annotations
@@ -30,7 +33,7 @@ import unicodedata
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -101,18 +104,27 @@ RESERVED = frozenset(
 # they are fine here.
 RESERVED_DISPLAY_NAMES = (RESERVED - {"me", "eligible"}) | {"formermember"}
 
-# The project's names: refused anywhere in a name.
-PROJECT_NAMES = ("openantiquity", "fieldclub")
+# The project's names, by their stems so plurals count: refused anywhere in a name.
+PROJECT_NAMES = ("openantiquit", "fieldclub")
+# How a deleted account's display name starts. A name that starts the same
+# way is refused, whatever follows (`Former member (deleted)`).
+FORMER_STEM = "formermemb"
 # Words that read as staff, and what may stand beside one in a name that still
 # reads as staff. Other words beside them make an ordinary name.
 STAFF_WORDS = ("administrator", "admin", "moderator", "mod", "staff", "system", "root", "official")
 STAFF_AFFIXES = frozenset(
     {"", "s", "team", "account", "official", "support", "help", "desk", "the", "real", "uk", "main", "head",
-     "chief", "office", "openantiquity", "fieldclub"}
+     "chief", "office", "openantiquity", "fieldclub", "site", "web", "website", "project", "community",
+     "our", "your", "lead", "senior", "group", "service", "bot", "hq", "contact", "info", "news"}
 )  # fmt: skip
+# How many words from `STAFF_AFFIXES` may stand on each side of a staff word.
+_AFFIXES_EACH_SIDE = 2
 
 # How long a handle someone gave up is held back from everyone else.
 HANDLE_COOLING_OFF = timedelta(days=365)
+# How many given-up handles one account holds back at a time: its latest.
+# Without a cap, changing name over and over would reserve a name each time.
+MAX_HELD_BACK_PER_ACCOUNT = 3
 
 # Letters from other alphabets that are drawn like Latin ones, and digits used
 # as letters, each read as the Latin letter it passes for. Lower case only:
@@ -206,13 +218,29 @@ _PROJECT_SKELETONS = tuple(skeleton(word) for word in PROJECT_NAMES)
 _STAFF_SKELETONS = tuple(skeleton(word) for word in STAFF_WORDS)
 _AFFIX_SKELETONS = frozenset(skeleton(word) for word in STAFF_AFFIXES)
 _RESERVED_DISPLAY_SKELETONS = frozenset(skeleton(word) for word in RESERVED_DISPLAY_NAMES)
+_FORMER_SKELETON = skeleton(FORMER_STEM)
+assert skeleton(FORMER_MEMBER).startswith(_FORMER_SKELETON), "the stem is how the label starts"
+
+
+def _only_affixes(rest: str, words: int = _AFFIXES_EACH_SIDE) -> bool:
+    """Whether `rest` is nothing but up to `words` generic words run together (`theteam`, `site`)."""
+    if rest in _AFFIX_SKELETONS:
+        return True
+    return words > 1 and any(
+        rest.startswith(affix) and _only_affixes(rest[len(affix) :], words - 1)
+        for affix in _AFFIX_SKELETONS
+        if affix
+    )
 
 
 def _reads_as_staff(shape: str) -> bool:
+    """Whether a staff word stands in `shape` with only generic words before and after it."""
     for word in _STAFF_SKELETONS:
-        for rest in (shape.removeprefix(word), shape.removesuffix(word)):
-            if rest != shape and rest in _AFFIX_SKELETONS:
+        start = shape.find(word)
+        while start != -1:
+            if _only_affixes(shape[:start]) and _only_affixes(shape[start + len(word) :]):
                 return True
+            start = shape.find(word, start + 1)
     return False
 
 
@@ -233,7 +261,7 @@ def validate_handle(handle: str) -> str:
     if not HANDLE_PATTERN.fullmatch(handle):
         raise InvalidHandleError()
     shape = skeleton(handle)
-    former = handle.lower().startswith(FORMER_HANDLE_PREFIX.lower()) or shape == skeleton(FORMER_MEMBER)
+    former = handle.lower().startswith(FORMER_HANDLE_PREFIX.lower()) or shape.startswith(_FORMER_SKELETON)
     if former or shape in _RESERVED_SKELETONS or passes_for_the_project(handle):
         raise InvalidHandleError("That name is reserved. Please choose another.")
     return handle
@@ -271,6 +299,18 @@ def release_handle(db: Session, handle: str, user: User | None, *, now: datetime
             index_elements=[ReleasedHandle.handle], set_={"released_at": released_at, "user_id": owner}
         )
     )
+    if owner is not None:
+        latest = (
+            select(ReleasedHandle.handle)
+            .where(ReleasedHandle.user_id == owner)
+            .order_by(ReleasedHandle.released_at.desc(), ReleasedHandle.handle)
+            .limit(MAX_HELD_BACK_PER_ACCOUNT)
+        )
+        db.execute(
+            delete(ReleasedHandle).where(
+                ReleasedHandle.user_id == owner, ReleasedHandle.handle.not_in(latest)
+            )
+        )
 
 
 def validate_display_name(name: str) -> str:
@@ -287,6 +327,10 @@ def validate_display_name(name: str) -> str:
     if not 1 <= len(name) <= MAX_DISPLAY_NAME:
         raise InvalidDisplayNameError()
     shape = skeleton(name)
-    if shape in _RESERVED_DISPLAY_SKELETONS or passes_for_the_project(name):
+    if (
+        shape in _RESERVED_DISPLAY_SKELETONS
+        or shape.startswith(_FORMER_SKELETON)
+        or passes_for_the_project(name)
+    ):
         raise InvalidDisplayNameError("That name is reserved. Please choose another.")
     return name

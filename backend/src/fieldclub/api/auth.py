@@ -69,6 +69,9 @@ dev_router = APIRouter(prefix="/auth", tags=["auth"])
 # a stranger can send to it.
 _LINKS_PER_ADDRESS_AND_CALLER = ratelimit.get_limiter("auth_email_address_caller", 3, per_seconds=3600)
 _LINKS_PER_ADDRESS = ratelimit.get_limiter("auth_email_address", 20, per_seconds=3600)
+# A browser that has signed in to the address by link before asks from a
+# budget of its own, so strangers using up the shared one can't lock it out.
+_LINKS_FOR_KNOWN_BROWSER = ratelimit.get_limiter("auth_email_known_browser", 10, per_seconds=3600)
 
 # Settings are saved as people use the map, so the limit on the route is
 # generous. Changing handle is rare, and each change frees a name for someone
@@ -362,9 +365,12 @@ def email_start(
     mailer = get_mailer(settings)
     assert mailer is not None, "the emailed link is enabled only with a mail backend"
     mailbox = hash_token(email_link.rate_key(body.email))
-    caller = ratelimit.caller_key(request, None)
-    ratelimit.enforce_key(_LINKS_PER_ADDRESS_AND_CALLER, f"email:{mailbox}:{caller}")
-    ratelimit.enforce_key(_LINKS_PER_ADDRESS, f"email:{mailbox}")
+    if email_link.known_here(request.cookies.get(email_link.KNOWN_COOKIE), body.email):
+        ratelimit.enforce_key(_LINKS_FOR_KNOWN_BROWSER, f"email:{mailbox}:known")
+    else:
+        caller = ratelimit.caller_key(request, None, ipv6_prefix=ratelimit.IPV6_SITE_PREFIX)
+        ratelimit.enforce_key(_LINKS_PER_ADDRESS_AND_CALLER, f"email:{mailbox}:{caller}")
+        ratelimit.enforce_key(_LINKS_PER_ADDRESS, f"email:{mailbox}")
     # A browser keeps its link cookie across asks, so asking again spends what it asked for before.
     presented = request.cookies.get(email_link.LINK_COOKIE)
     browser = presented if presented is not None and hash_presented(presented) is not None else new_token()
@@ -399,6 +405,9 @@ def email_verify(
     db.commit()
     cookies.set_session_cookie(response, token)
     cookies.clear_link_cookie(response)
+    cookies.set_known_cookie(
+        response, email_link.remember_here(request.cookies.get(email_link.KNOWN_COOKIE), redeemed.email)
+    )
     return EmailSignedIn(**Me.from_user(redeemed.user).model_dump(), asked_here=redeemed.asked_here)
 
 

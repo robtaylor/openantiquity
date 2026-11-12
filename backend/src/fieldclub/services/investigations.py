@@ -67,7 +67,11 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
+from geoalchemy2.shape import to_shape
+from shapely.geometry import LineString, Point
+from shapely.geometry.base import BaseGeometry
 from sqlalchemy import case, delete, func, select, tuple_
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from fieldclub.auth import onboarding
@@ -87,6 +91,7 @@ from fieldclub.models import (
     Activity,
     Finding,
     Investigation,
+    InvestigationHeldFinding,
     InvestigationItem,
     InvestigationMember,
     Record,
@@ -96,7 +101,7 @@ from fieldclub.models import (
 from fieldclub.models.common import to_db_geometry
 from fieldclub.schemas.common import cursor_int, decode_cursor, offset_from_cursor, offset_page, paginate
 from fieldclub.schemas.text import has_unstorable_character
-from fieldclub.services import activity, findings, geo, ids, records, sensitivity
+from fieldclub.services import activity, findings, geo, ids, records, sensitivity, text_positions
 from fieldclub.services.records import RecordResult
 from fieldclub.vocab import ActivityKind, FindingState, InvestigationItemKind, InvestigationRole, Visibility
 
@@ -168,6 +173,14 @@ class TooManyItemsError(ConflictError):
     message = f"An investigation can hold at most {MAX_ITEMS} items."
 
 
+class HeldBackError(ConflictError):
+    code = "held_back"
+    message = (
+        "This holds a place hidden from you, near a protected finding. Only someone who sees that "
+        "finding exactly can change it. In text, keep each [position hidden] where you want it kept."
+    )
+
+
 class InvalidItemError(ValidationFailedError):
     code = "invalid_item"
     message = "That item is missing what its kind needs."
@@ -190,6 +203,15 @@ def _forget_published(db: Session, investigation: Investigation) -> None:
             Activity.kind == ActivityKind.INVESTIGATION_PUBLISHED.value,
         )
     )
+
+
+def _area_columns(area: BaseGeometry | None) -> dict[str, Any]:
+    """The area and its grid squares, which are always set together."""
+    if area is None:
+        return {"area": None, "area_squares": None}
+    squares = sensitivity.square_cover(area)
+    assert squares is not None, "an area is checked to be on the grids before it is saved"
+    return {"area": to_db_geometry(area), "area_squares": to_db_geometry(squares)}
 
 
 def create_investigation(
@@ -215,7 +237,7 @@ def create_investigation(
             title=title,
             summary=summary,
             notes=notes,
-            area=to_db_geometry(area) if area is not None else None,
+            **_area_columns(area),
             visibility=visibility.value,
         ),
         PUBLIC_ID_CONSTRAINT,
@@ -439,16 +461,75 @@ def update_investigation(db: Session, access: Access, actor: User, changes: dict
         raise InvestigationForbiddenError()
     if "visibility" in changes and changes["visibility"] != investigation.visibility and not access.is_owner:
         raise OwnerOnlyError()
+    changes = _seen_changes(changes, _shown_fields(investigation, position_guard(db, investigation, actor)))
     for name in ("title", "summary", "notes"):
         if name in changes:
             setattr(investigation, name, changes[name])
     if "area" in changes:
-        investigation.area = to_db_geometry(changes["area"]) if changes["area"] is not None else None
+        for name, value in _area_columns(changes["area"]).items():
+            setattr(investigation, name, value)
     if "visibility" in changes:
         change_visibility(db, investigation, actor, changes["visibility"])
     _touch(investigation)
     db.flush()
     return investigation
+
+
+# A shown area and one sent back are the same when they differ by less than this, in degrees.
+_SAME_SHAPE = 1e-6
+
+
+def _same(shown: Any, sent: Any) -> bool:
+    if isinstance(shown, BaseGeometry) or isinstance(sent, BaseGeometry):
+        return (
+            isinstance(shown, BaseGeometry)
+            and isinstance(sent, BaseGeometry)
+            and shown.normalize().equals_exact(sent.normalize(), tolerance=_SAME_SHAPE)
+        )
+    return shown == sent
+
+
+def _shown_fields(
+    investigation: Investigation, guard: sensitivity.PositionGuard
+) -> dict[str, tuple[Any, Any]]:
+    """Each editable field as stored and as the guard shows it."""
+    area = to_shape(investigation.area) if investigation.area is not None else None
+    squares = to_shape(investigation.area_squares) if investigation.area_squares is not None else None
+    return {
+        "title": (investigation.title, guard.text(investigation.title) or investigation.title),
+        "summary": (investigation.summary, guard.text(investigation.summary)),
+        "notes": (investigation.notes, guard.text(investigation.notes)),
+        "area": (area, guard.area(area, squares)),
+    }
+
+
+def _seen_changes(changes: dict[str, Any], fields: dict[str, tuple[Any, Any]]) -> dict[str, Any]:
+    """`changes` as they may be saved by an editor who was shown some of `fields` with a place hidden.
+
+    Saving what they were shown would replace what its writer wrote with the
+    placeholder. A field sent back as shown is left alone. Text they edited
+    keeps what each placeholder hid (`text_positions.restore`), and needs as
+    many placeholders as they were shown. Anything else they were shown
+    with a place hidden, an area as whole squares or a view held back, they
+    can't change, and `HeldBackError` names the field.
+    """
+    kept = dict(changes)
+    for name, (stored, shown) in fields.items():
+        if name not in changes or _same(stored, shown):
+            continue
+        sent = changes[name]
+        if _same(shown, sent):
+            del kept[name]
+            continue
+        restored = (
+            text_positions.restore(sent, stored)
+            if isinstance(sent, str) and isinstance(stored, str)
+            else None
+        )
+        if restored is None:
+            raise HeldBackError(details={"field": name})
+        kept[name] = restored
+    return kept
 
 
 def delete_investigation(db: Session, access: Access) -> None:
@@ -485,30 +566,92 @@ class Listed:
 
 
 def held_findings(db: Session, investigation_ids: Iterable[int]) -> dict[int, list[Finding]]:
-    """The findings each investigation holds, whether or not the viewer may see them, by investigation id."""
+    """The findings each investigation holds or has held, whether or not the viewer may see them.
+
+    A finding taken off the page still lies where the notes and views put
+    it, so `investigation_held_findings` keeps every finding ever added.
+    The items are read too, for one added before that table was kept.
+    """
     wanted = set(investigation_ids)
-    held: dict[int, list[Finding]] = {investigation_id: [] for investigation_id in wanted}
+    held: dict[int, dict[int, Finding]] = {investigation_id: {} for investigation_id in wanted}
     if wanted:
-        rows = db.execute(
+        current = (
             select(InvestigationItem.investigation_id, Finding)
             .join(Finding, Finding.id == InvestigationItem.finding_id)
             .where(InvestigationItem.investigation_id.in_(wanted))
         )
-        for investigation_id, finding in rows:
-            held[investigation_id].append(finding)
-    return held
+        earlier = (
+            select(InvestigationHeldFinding.investigation_id, Finding)
+            .join(Finding, Finding.id == InvestigationHeldFinding.finding_id)
+            .where(InvestigationHeldFinding.investigation_id.in_(wanted))
+        )
+        for query in (current, earlier):
+            for investigation_id, finding in db.execute(query):
+                held[investigation_id][finding.id] = finding
+    return {investigation_id: list(found.values()) for investigation_id, found in held.items()}
+
+
+def item_shape(kind: InvestigationItemKind | str, data: dict[str, Any] | None) -> BaseGeometry | None:
+    """Where a saved view or a height profile is, or None for an item that isn't drawn."""
+    if data is None:
+        return None
+    kind = InvestigationItemKind(kind)
+    if kind is InvestigationItemKind.VIEW:
+        return Point(data["centre"])
+    if kind is InvestigationItemKind.PROFILE:
+        return LineString(data["line"]["coordinates"])
+    return None
+
+
+def _drawn(db: Session, investigations: Sequence[Investigation]) -> dict[int, list[BaseGeometry]]:
+    """What was drawn in each investigation: its area, and its saved views and height profiles."""
+    drawn: dict[int, list[BaseGeometry]] = {
+        investigation.id: [to_shape(investigation.area)] if investigation.area is not None else []
+        for investigation in investigations
+    }
+    if drawn:
+        rows = db.execute(
+            select(InvestigationItem.investigation_id, InvestigationItem.kind, InvestigationItem.data).where(
+                InvestigationItem.investigation_id.in_(drawn),
+                InvestigationItem.kind.in_(
+                    [InvestigationItemKind.VIEW.value, InvestigationItemKind.PROFILE.value]
+                ),
+            )
+        )
+        for investigation_id, kind, data in rows:
+            shape = item_shape(kind, data)
+            if shape is not None:
+                drawn[investigation_id].append(shape)
+    return drawn
+
+
+def position_guards(
+    db: Session, investigations: Sequence[Investigation], viewer: User | None, *, download: bool = False
+) -> dict[int, sensitivity.PositionGuard]:
+    """What `viewer` may see of what was written and drawn in each investigation, by id.
+
+    The findings each holds or has held decide, hidden and withdrawn ones
+    included, and so does every finding near what was drawn in it, whatever
+    holds it (`sensitivity.PositionGuard`, Decision 0023).
+    """
+    held = held_findings(db, (investigation.id for investigation in investigations))
+    drawn = _drawn(db, investigations)
+    near = sensitivity.hidden_near(
+        db, viewer, (shape for shapes in drawn.values() for shape in shapes), download=download
+    )
+    return {
+        investigation.id: sensitivity.position_guard(
+            held[investigation.id], viewer, download=download, near=near, shapes=drawn[investigation.id]
+        )
+        for investigation in investigations
+    }
 
 
 def position_guard(
     db: Session, investigation: Investigation, viewer: User | None, *, download: bool = False
 ) -> sensitivity.PositionGuard:
-    """What `viewer` may see of what was written and drawn in `investigation` (`sensitivity.PositionGuard`).
-
-    The findings it holds decide, hidden and withdrawn ones included: a
-    finding taken off the page still lies where the notes and views put it.
-    """
-    held = held_findings(db, [investigation.id])[investigation.id]
-    return sensitivity.position_guard(held, viewer, download=download)
+    """`position_guards` for one investigation."""
+    return position_guards(db, [investigation], viewer, download=download)[investigation.id]
 
 
 def _item_count() -> Any:
@@ -532,8 +675,8 @@ def list_investigations(
     """A page of investigations, most recently changed first.
 
     `bbox` matches the area the investigation's editors drew, as this viewer
-    may see it: an area near a finding it holds that the viewer sees only as a
-    square is matched by its box widened to the area grid, as it is shown
+    may see it: an area near a finding the viewer sees only as a square is
+    matched by the whole grid squares it covers, as it is shown
     (`sensitivity.PositionGuard.area`), so narrowing the box can't find it out.
     A private investigation is only ever listed for its owner, and an unlisted
     one for its members, the people invited to it, and moderators.
@@ -564,11 +707,8 @@ def list_investigations(
                 # Someone only invited isn't a member yet, so a hidden one is gone for them.
                 query = query.where(Investigation.hidden_at.is_(None))
     if bbox is not None:
-        held = (InvestigationItem.investigation_id == Investigation.id) & (
-            InvestigationItem.finding_id == Finding.id
-        )
-        near = sensitivity.near_hidden_clause(viewer, Investigation.area, held)
-        shown = case((near, sensitivity.snapped_box_sql(Investigation.area)), else_=Investigation.area)
+        near = sensitivity.near_hidden_clause(viewer, Investigation.area)
+        shown = case((near, Investigation.area_squares), else_=Investigation.area)
         query = query.where(func.ST_Intersects(shown, geo.envelope(bbox)))
     if cursor is not None:
         value, last_id = decode_cursor(cursor, 2)
@@ -582,10 +722,9 @@ def list_investigations(
         query = query.where(tuple_(Investigation.updated_at, Investigation.id) < (after, last_id))
     query = query.order_by(Investigation.updated_at.desc(), Investigation.id.desc()).limit(limit + 1)
     found = list(db.execute(query))
-    held = held_findings(db, (investigation.id for investigation, _, _ in found))
+    guards = position_guards(db, [investigation for investigation, _, _ in found], viewer)
     rows = [
-        Listed(investigation, owner, count, sensitivity.position_guard(held[investigation.id], viewer))
-        for investigation, owner, count in found
+        Listed(investigation, owner, count, guards[investigation.id]) for investigation, owner, count in found
     ]
     return paginate(rows, limit, lambda row: [row.investigation.updated_at.isoformat(), row.investigation.id])
 
@@ -821,6 +960,12 @@ def add_item(db: Session, access: Access, actor: User, new: NewItem) -> Investig
         added_by=actor.id,
     )
     db.add(item)
+    if finding_id is not None:
+        db.execute(
+            insert(InvestigationHeldFinding)
+            .values(investigation_id=investigation.id, finding_id=finding_id)
+            .on_conflict_do_nothing()
+        )
     _touch(investigation)
     db.flush()
     return item
@@ -843,6 +988,7 @@ ITEM_EDITABLE = frozenset({"title", "note", "data"})
 def update_item(
     db: Session,
     access: Access,
+    actor: User,
     item_id: int,
     changes: dict[str, Any],
     content_kinds: Sequence[InvestigationItemKind] = (),
@@ -850,7 +996,8 @@ def update_item(
     """Change an item's title, note or data. Its kind and what it points at stay.
 
     `content_kinds` names the kinds of content the request sent, which must
-    be the item's own kind and nothing else.
+    be the item's own kind and nothing else. What `actor` was shown with a
+    place hidden can't be written over by them (`_seen_changes`).
     """
     assert set(changes) <= ITEM_EDITABLE, f"not editable: {set(changes) - ITEM_EDITABLE}"
     if not access.may_edit:
@@ -859,6 +1006,14 @@ def update_item(
     kind = InvestigationItemKind(item.kind)
     if content_kinds and list(content_kinds) != [kind]:
         raise InvalidItemError(f"A {kind} item takes only its own content.")
+    guard = position_guard(db, access.investigation, actor)
+    if guard.hidden:
+        (view,) = item_views(db, [item], actor)
+        title, note = item_text(view, actor, guard)
+        data = item_content(item, guard) if item.data is not None else None
+        changes = _seen_changes(
+            changes, {"title": (item.title, title), "note": (item.note, note), "data": (item.data, data)}
+        )
     merged = {"title": item.title, "note": item.note, "data": item.data} | changes
     _check_item(kind, title=merged["title"], note=merged["note"], data=merged["data"])
     for name, value in changes.items():
@@ -944,9 +1099,9 @@ class Unavailable(StrEnum):
     WITHDRAWN = "withdrawn"
     # A record that has left the index, or a finding that no longer exists.
     GONE = "gone"
-    # A saved map view or a height profile near a finding the investigation holds
-    # that the viewer sees only as a 1 km square: where it is would say where
-    # the finding is (`sensitivity.PositionGuard`).
+    # A saved map view or a height profile near a finding the viewer sees only
+    # as a 1 km square: where it is would say where the finding is
+    # (`sensitivity.PositionGuard`).
     NEAR_PROTECTED = "near_protected"
 
 
@@ -1019,6 +1174,62 @@ def item_views(db: Session, items: Sequence[InvestigationItem], viewer: User | N
         else:
             views.append(ItemView(item, added_by))
     return views
+
+
+def item_text(
+    view: ItemView, reader: User | None, guard: sensitivity.PositionGuard
+) -> tuple[str | None, str | None]:
+    """An item's title and note as `reader` may read them.
+
+    What a member writes on a finding item is about that finding, so a
+    position written in it is hidden as the finding's own text is
+    (`sensitivity.visible_text`), and from everyone once the finding isn't
+    shown. Every item's text goes through the investigation's `guard` too,
+    unless the reader added the item.
+    """
+    item = view.item
+    title, note = item.title, item.note
+    if InvestigationItemKind(item.kind) is InvestigationItemKind.FINDING:
+        title = sensitivity.visible_text(view.finding, reader, title)
+        note = sensitivity.visible_text(view.finding, reader, note)
+    guard = guard.for_item(item.added_by)
+    return guard.text(title), guard.text(note)
+
+
+def _identifier_address(url: str) -> str | None:
+    """A video's or a DOI's address made again from its identifier alone, or None for any other."""
+    # Imported here: `unfurl` needs the rate limiter, which needs the sign-in code, which needs this module.
+    from fieldclub.services import unfurl
+
+    try:
+        address = unfurl.canonical(url)
+    except ValidationFailedError:
+        return None
+    return address.canonical_url if address.provider in unfurl.IDENTIFIER_PROVIDERS else None
+
+
+def item_content(item: InvestigationItem, guard: sensitivity.PositionGuard) -> dict[str, Any] | None:
+    """A view's, reference's or profile's stored content as the guard lets it be read.
+
+    None for a view or profile held back because it lies near a finding the
+    reader sees only as a square. A reference keeps its citation without the
+    positions in it, and its link only as `sensitivity.visible_url` would
+    give it: rebuilt from a video's or a DOI's identifier, or not at all.
+    The reader's own items are shown as they made them.
+    """
+    data = dict(item.data or {})
+    guard = guard.for_item(item.added_by)
+    shape = item_shape(item.kind, data)
+    if shape is not None and guard.near(shape):
+        return None
+    if InvestigationItemKind(item.kind) is InvestigationItemKind.REFERENCE:
+        url = data.get("url")
+        if url is not None:
+            data["url"] = guard.url(url, rebuilt=_identifier_address(url) if guard.hidden else None)
+        if data.get("citation") is not None:
+            data["citation"] = guard.text(data["citation"])
+        return {name: value for name, value in data.items() if value is not None}
+    return data
 
 
 # --------------------------------------------------------------------------

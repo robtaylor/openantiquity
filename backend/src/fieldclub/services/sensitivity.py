@@ -44,8 +44,9 @@ Things callers must not do:
   one in any form.
 - Don't serve what people wrote or drew beside a finding, such as an
   investigation's notes, saved map views, height profiles and area, as it
-  was stored. Build a `PositionGuard` for the findings it holds and the
-  reader, and pass each through it.
+  was stored. Build a `PositionGuard` for the findings it holds or has held,
+  the findings near what was drawn in it (`hidden_near`), and the reader,
+  and pass each through it.
 - Don't copy an exact position into another table, a cache or a tile, even
   while the finding is open. Store `square_centre(finding)`, which is the
   same at every level, and resolve the position to show through
@@ -434,44 +435,61 @@ def raise_sensitivity(db: Session, finding: Finding, actor: User, level: Sensiti
 # --------------------------------------------------------------------------
 
 # A saved map view, a height profile or an area that comes this close to a
-# finding the reader sees only as a square is held back from them, or
-# coarsened. A view centred within this distance at any zoom, or a line or an
-# area reaching it, says where the finding is more closely than its square.
+# finding the reader sees only as a square is held back from them, or shown
+# as whole squares. A view centred within this distance at any zoom, or a
+# line or an area reaching it, says where the finding is more closely than
+# its square.
 NEAR_HIDDEN_M = 1500.0
-# The grid an area near such a finding is widened to: about a kilometre each way.
-AREA_GRID_LAT = 0.01
-AREA_GRID_LON = 0.016
+# How far, in degrees, a finding may be from a shape and still be within
+# `NEAR_HIDDEN_M` of it, generously: a cheap first test the index can answer.
+NEAR_HIDDEN_DEGREES = 0.05
 # Metres in a degree of latitude, and of longitude at the equator, near enough
 # for distances of a kilometre or two.
 _M_PER_DEG_LAT = 110_574.0
 _M_PER_DEG_LON = 111_320.0
+assert NEAR_HIDDEN_DEGREES * _M_PER_DEG_LON * math.cos(math.radians(61.5)) > NEAR_HIDDEN_M * 1.05, (
+    "the first test must take in everything near, as far north as the grids go"
+)
+# An area more than this many squares round is shown as the bounding box of
+# its squares' corners, which still holds every square whole, in place of an
+# outline with a corner every kilometre.
+_COVER_EDGE_MAX = 2000
 
 
-def snapped_box(geometry: BaseGeometry) -> Polygon:
-    """The bounding box of `geometry` widened to whole cells of the area grid.
+def square_cover(geometry: BaseGeometry) -> Polygon | None:
+    """The whole 1 km grid squares that `geometry`'s bounding box on the grid covers, in WGS84.
 
-    The box's edges are grid lines, so however a box search is narrowed it
-    can't find more than the cells the shape touches. `snapped_box_sql` is
-    the same in SQL.
+    The grid is the one under the shape's middle, the same grid a finding
+    there is generalised on. Every square of that grid the shape touches is
+    inside the result whole, and nothing else is, so set beside a finding's
+    public square it never says more than the square: it holds all of it or
+    none. Each kilometre along the edge is a corner of the outline, so the
+    squares on the edge share their edges with it exactly. None when the
+    shape is off both grids.
     """
-    west, south, east, north = geometry.bounds
-    # Cell numbers: the first is the one the west or south edge is in, the last
-    # is at least one further, so even a shape on a grid line has a whole cell.
-    x0, y0 = math.floor(west / AREA_GRID_LON), math.floor(south / AREA_GRID_LAT)
-    x1 = max(math.ceil(east / AREA_GRID_LON), x0 + 1)
-    y1 = max(math.ceil(north / AREA_GRID_LAT), y0 + 1)
-    return box(x0 * AREA_GRID_LON, y0 * AREA_GRID_LAT, x1 * AREA_GRID_LON, y1 * AREA_GRID_LAT)
-
-
-def snapped_box_sql(column: Any) -> ColumnElement[Any]:
-    """`snapped_box` of a geometry column, in SQL, for a box search on what a reader may see."""
-    x0 = func.floor(func.ST_XMin(column) / AREA_GRID_LON)
-    y0 = func.floor(func.ST_YMin(column) / AREA_GRID_LAT)
-    x1 = func.greatest(func.ceil(func.ST_XMax(column) / AREA_GRID_LON), x0 + 1)
-    y1 = func.greatest(func.ceil(func.ST_YMax(column) / AREA_GRID_LAT), y0 + 1)
-    return func.ST_MakeEnvelope(
-        x0 * AREA_GRID_LON, y0 * AREA_GRID_LAT, x1 * AREA_GRID_LON, y1 * AREA_GRID_LAT, 4326
-    )
+    lon, lat = geometry.representative_point().coords[0]
+    system = gridref.grid_system(lon, lat)
+    to_grid = gridref.transformer(4326, gridref.EPSG[system])
+    coords = shapely.get_coordinates(geometry)
+    xs, ys = (np.asarray(values) for values in to_grid.transform(coords[:, 0], coords[:, 1]))
+    if not (np.isfinite(xs).all() and np.isfinite(ys).all()):
+        return None
+    step = 1000
+    west, south = math.floor(xs.min() / step), math.floor(ys.min() / step)
+    east = max(math.ceil(xs.max() / step), west + 1)
+    north = max(math.ceil(ys.max() / step), south + 1)
+    edge = [(x, south) for x in range(west, east)]
+    edge += [(east, y) for y in range(south, north)]
+    edge += [(x, north) for x in range(east, west, -1)]
+    edge += [(west, y) for y in range(north, south, -1)]
+    to_lon_lat = gridref.transformer(gridref.EPSG[system], 4326)
+    corners = np.asarray(edge, dtype=float) * step
+    lons, lats = to_lon_lat.transform(corners[:, 0], corners[:, 1])
+    cover = Polygon(zip(lons, lats, strict=True))
+    if len(edge) > _COVER_EDGE_MAX:
+        # The box round every corner on the edge still holds every square whole.
+        cover = box(*cover.bounds)
+    return cover if cover.is_valid and not cover.is_empty else None
 
 
 def _in_metres(geometry: BaseGeometry, lon: float, lat: float) -> BaseGeometry:
@@ -485,22 +503,34 @@ def _in_metres(geometry: BaseGeometry, lon: float, lat: float) -> BaseGeometry:
 class PositionGuard:
     """What a reader may see of what people wrote and drew beside some findings.
 
-    `hidden` holds the exact points of the findings among them the reader
-    doesn't see exactly (or, for a download, doesn't download exactly). While
-    there is one, every piece of free text loses the positions written in it
-    (`text`), an address that holds one is dropped (`url`), a view or a line
-    that comes within `NEAR_HIDDEN_M` of one is held back (`near`), and an
-    area that does is widened to whole cells of the area grid (`area`).
-    Everything is left as it is for a reader who sees every finding exactly.
+    `hidden` holds the exact points of the findings the reader doesn't see
+    exactly (or, for a download, doesn't download exactly) that the writing
+    is about: those an investigation holds or has held, and those near
+    anything drawn in it. While there is one, every piece of free text loses
+    the positions written in it (`text`), an address is given only when it
+    is rebuilt from an identifier (`url`), a view or a line that comes
+    within `NEAR_HIDDEN_M` of one is held back (`near`), and an area that
+    does is shown as the whole grid squares it covers (`area`). What the
+    reader added themselves is theirs to see (`for_item`). Everything is left
+    as it is for a reader who sees every finding exactly.
     """
 
     hidden: tuple[tuple[float, float], ...] = ()
+    # The reader, whose own items are shown to them as they made them.
+    reader_id: int | None = None
+
+    def for_item(self, added_by: int) -> PositionGuard:
+        """The guard for an item added by `added_by`: none when the reader added it."""
+        return PositionGuard() if self.reader_id is not None and self.reader_id == added_by else self
 
     def text(self, value: str | None) -> str | None:
         return text_positions.redact(value) if value and self.hidden else value
 
-    def url(self, value: str | None) -> str | None:
-        return None if value and self.hidden and text_positions.holds_position(value) else value
+    def url(self, value: str | None, *, rebuilt: str | None = None) -> str | None:
+        """An address as `visible_url` gives it: as stored when nothing is hidden, else only `rebuilt`."""
+        if not value or not self.hidden:
+            return value
+        return rebuilt if rebuilt is not None and not text_positions.holds_position(rebuilt) else None
 
     def near(self, geometry: BaseGeometry) -> bool:
         """Whether `geometry` comes within `NEAR_HIDDEN_M` of a finding the reader sees only as a square."""
@@ -509,36 +539,101 @@ class PositionGuard:
                 return True
         return False
 
-    def area(self, geometry: BaseGeometry | None) -> BaseGeometry | None:
+    def area(self, geometry: BaseGeometry | None, squares: BaseGeometry | None) -> BaseGeometry | None:
+        """The area as drawn, or its `square_cover` when it comes near a hidden finding.
+
+        None when the squares aren't on the grid each nearby finding is
+        generalised on, which only a shape at the edge of both grids can be.
+        """
         if geometry is None or not self.near(geometry):
             return geometry
-        return snapped_box(geometry)
+        system = gridref.grid_system(*geometry.representative_point().coords[0])
+        if squares is None or any(gridref.grid_system(lon, lat) is not system for lon, lat in self.hidden):
+            return None
+        return squares
+
+
+def exact_clause(viewer: User | None, *, download: bool = False) -> ColumnElement[bool] | bool:
+    """SQL for `sees_exact`, or for `downloads_exact` when `download`."""
+    if not download:
+        return sees_exact_clause(viewer)
+    active = active_viewer(viewer)
+    if active is None:
+        return Finding.sensitivity == Sensitivity.OPEN.value
+    if Role(active.role) in TRUSTED_ROLES:
+        return True
+    return or_(Finding.sensitivity == Sensitivity.OPEN.value, Finding.author_id == active.id)
+
+
+def hidden_near(
+    db: Session, viewer: User | None, shapes: Iterable[BaseGeometry], *, download: bool = False
+) -> list[Finding]:
+    """Findings `viewer` doesn't see exactly (or download exactly) that may lie near any of `shapes`.
+
+    A first test, generous by `NEAR_HIDDEN_DEGREES`, whatever investigation
+    or none holds them: `PositionGuard.near` decides.
+    """
+    exact = exact_clause(viewer, download=download)
+    collected = [shape for shape in shapes if not shape.is_empty]
+    if exact is True or not collected:
+        return []
+    everything = shapely.GeometryCollection(collected)
+    return list(
+        db.scalars(
+            select(Finding).where(
+                not_(as_sql(exact)),
+                func.ST_DWithin(
+                    Finding.location, func.ST_GeomFromText(everything.wkt, 4326), NEAR_HIDDEN_DEGREES
+                ),
+            )
+        )
+    )
 
 
 def position_guard(
-    findings: Iterable[Finding], viewer: User | None, *, download: bool = False
+    findings: Iterable[Finding],
+    viewer: User | None,
+    *,
+    download: bool = False,
+    near: Iterable[Finding] = (),
+    shapes: Iterable[BaseGeometry] = (),
 ) -> PositionGuard:
-    """The guard for what was written beside `findings`, as `viewer` may read it or download it."""
+    """The guard for what was written beside `findings`, as `viewer` may read it or download it.
+
+    `near` are findings from `hidden_near` for `shapes`, what was drawn: each
+    counts when it is within `NEAR_HIDDEN_M` of one of them. The reader's own
+    items are shown to them as made, except in a download.
+    """
     exact = downloads_exact if download else sees_exact
-    return PositionGuard(tuple(_exact_point(finding) for finding in findings if not exact(finding, viewer)))
+    hidden = {finding.id: _exact_point(finding) for finding in findings if not exact(finding, viewer)}
+    drawn = shapely.GeometryCollection(list(shapes))
+    for finding in near:
+        if finding.id in hidden or exact(finding, viewer) or drawn.is_empty:
+            continue
+        point = _exact_point(finding)
+        if PositionGuard((point,)).near(drawn):
+            hidden[finding.id] = point
+    # A download keeps the stricter rule even for the reader's own items: a member's own view of a
+    # protected finding is still that finding's exact position (Decision 0005, rule 8).
+    active = active_viewer(viewer) if not download else None
+    return PositionGuard(tuple(hidden.values()), active.id if active is not None else None)
 
 
-def near_hidden_clause(viewer: User | None, geometry: Any, held: ColumnElement[bool]) -> ColumnElement[bool]:
-    """SQL: whether `geometry` comes near a finding matched by `held` that `viewer` sees only as a square.
+def near_hidden_clause(viewer: User | None, geometry: Any) -> ColumnElement[bool]:
+    """SQL: whether `geometry` comes near a finding that `viewer` sees only as a square.
 
-    `held` ties `Finding` to the row whose geometry this is. The distance is a
-    little longer than `PositionGuard.near`'s, whose metres are approximate, so
-    SQL never treats as far a shape that a response treats as near.
+    The distance is a little longer than `PositionGuard.near`'s, whose metres
+    are approximate, so SQL never treats as far a shape that a response
+    treats as near.
     """
     exact = sees_exact_clause(viewer)
     if exact is True:
         return false()
-    hidden = not_(as_sql(exact))
     return (
         select(Finding.id)
         .where(
-            held,
-            hidden,
+            not_(as_sql(exact)),
+            func.ST_DWithin(Finding.location, geometry, NEAR_HIDDEN_DEGREES),
             func.ST_DWithin(func.geography(geometry), func.geography(Finding.location), NEAR_HIDDEN_M * 1.05),
         )
         .exists()

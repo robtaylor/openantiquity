@@ -192,6 +192,13 @@ def test_display_names_cannot_pass_for_staff_or_a_deleted_account(name: str) -> 
         "Adrnin",
         "Former_Member",
         "Former-7K3QXM9A",
+        # Close imitations: a generic word before the staff word, and the project's name by its stem.
+        "SiteAdmin",
+        "The_Moderators",
+        "OfficialStaff",
+        "OpenAntiquities",
+        "FieldClubs",
+        "FormerMembr",
     ],
 )
 def test_handles_cannot_pass_for_the_project_its_staff_or_a_deleted_account(handle: str) -> None:
@@ -219,6 +226,12 @@ def test_handles_that_only_contain_a_staff_word_are_fine(handle: str) -> None:
         "Staff account",
         "Mod 2",
         "Fi\u0435ld Club",
+        "Former member (deleted)",
+        "Former membr",
+        "Site Moderator",
+        "The Moderators",
+        "Our Admin Team",
+        "Open Antiquities",
     ],
 )
 def test_display_names_in_look_alike_letters_cannot_pass_for_staff_either(name: str) -> None:
@@ -226,6 +239,16 @@ def test_display_names_in_look_alike_letters_cannot_pass_for_staff_either(name: 
         validate_display_name(name)
 
 
-@pytest.mark.parametrize("name", ["Badminton Club", "Staffordshire Digger", "The Moderator's Friend", "Ivan"])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Badminton Club",
+        "Staffordshire Digger",
+        "The Moderator's Friend",
+        "Ivan",
+        "Former Mayor",
+        "Site Digger",
+    ],
+)
 def test_ordinary_names_with_a_staff_word_in_them_are_fine(name: str) -> None:
     assert validate_display_name(name) == name

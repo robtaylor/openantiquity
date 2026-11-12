@@ -40,7 +40,6 @@ from fieldclub import gridref
 from fieldclub.config import get_settings
 from fieldclub.models import Investigation, User
 from fieldclub.schemas.common import GeoJSONFeature, GeoJSONGeometry, PublicUser, geojson_point
-from fieldclub.schemas.investigations import item_content, item_text
 from fieldclub.schemas.records import record_feature
 from fieldclub.services import exports, investigations, notes_markdown
 from fieldclub.services.investigations import ItemView, MemberView, Unavailable
@@ -64,7 +63,7 @@ _UNAVAILABLE_TEXT = {
 @dataclass(frozen=True)
 class Entry:
     view: ItemView
-    # The item's title and note as the download may carry them (`schemas.investigations.item_text`).
+    # The item's title and note as the download may carry them (`services.investigations.item_text`).
     title: str | None
     note: str | None
     # The download's row for a finding the viewer may see.
@@ -103,9 +102,9 @@ def gather(
     entries = [
         Entry(
             view,
-            *item_text(view, _reader(view, viewer), guard),
+            *investigations.item_text(view, _reader(view, viewer), guard),
             rows[view.finding.public_id] if view.finding is not None else None,
-            item_content(view.item, guard) if view.item.data is not None else None,
+            investigations.item_content(view.item, guard) if view.item.data is not None else None,
         )
         for view in views
     ]

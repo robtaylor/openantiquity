@@ -120,8 +120,10 @@ def test_production_serves_nothing_without_a_secret_but_a_job_may_run_without_on
     assert settings(env="dev").signing_key == DEV_SECRET_KEY.encode()
 
 
-@pytest.mark.parametrize("key", ["x", "a" * 31])
-def test_production_refuses_a_short_secret(clean_env: pytest.MonkeyPatch, key: str) -> None:
+@pytest.mark.parametrize(
+    "key", ["x", "a" * 31, " " * 32, "a" * 32, "ab" * 32, "abcdabcd" * 8, "  x" + " " * 40]
+)
+def test_production_refuses_a_short_or_plain_secret(clean_env: pytest.MonkeyPatch, key: str) -> None:
     """The key signs the sign-in flow and keys the address hashes, so it must not be guessable."""
     clean_env.setenv("FIELDCLUB_ENV", "prod")
     clean_env.setenv("FIELDCLUB_TRUSTED_PROXY_HOPS", "1")
@@ -129,8 +131,13 @@ def test_production_refuses_a_short_secret(clean_env: pytest.MonkeyPatch, key: s
     clean_env.setenv("FIELDCLUB_SECRET_KEY", key)
     with pytest.raises(ConfigError, match="at least 32"):
         settings()
-    clean_env.setenv("FIELDCLUB_SECRET_KEY", "a" * 32)
-    assert settings().env is Environment.PROD
+    # What `openssl rand -base64 48` and `openssl rand -hex 32` give.
+    for good in (
+        "q7Vt0J2mXbN8yKp4Lr6sWd1Zc9Hf3Ga5Ue/Ti+Ro0Pn2Ml4Kj6Ih8Gf0Ed2Cb4Az6Yx8Wv",
+        "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+    ):
+        clean_env.setenv("FIELDCLUB_SECRET_KEY", good)
+        assert settings().env is Environment.PROD
 
 
 def test_production_refuses_cookies_that_are_not_secure(clean_env: pytest.MonkeyPatch) -> None:

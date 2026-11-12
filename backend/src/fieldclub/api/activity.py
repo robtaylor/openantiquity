@@ -14,7 +14,7 @@ from fieldclub.api.deps import BBoxQuery, Db, OptionalUser, PageQuery, private
 from fieldclub.auth.handles import HANDLE_MAX_LENGTH
 from fieldclub.schemas.activity import ActivityOut
 from fieldclub.schemas.common import Page, parse_bbox
-from fieldclub.services import feed, findings, ids, people
+from fieldclub.services import feed, findings, ids, investigations, people
 from fieldclub.services.feed import FeedFilters
 from fieldclub.vocab import ActivityKind
 
@@ -55,9 +55,20 @@ def list_activity(
         actor_id=people.get_person(db, person).id if person is not None else None,
     )
     found = feed.list_feed(db, viewer, filters, limit=page.limit, cursor=page.cursor)
+    shown = {
+        item.investigation.id: item.investigation for item in found.items if item.investigation is not None
+    }
+    guards = investigations.position_guards(db, list(shown.values()), viewer)
     return Page[ActivityOut](
         items=[
-            ActivityOut.build(item.activity, item.actor, item.finding, item.investigation, viewer)
+            ActivityOut.build(
+                item.activity,
+                item.actor,
+                item.finding,
+                item.investigation,
+                viewer,
+                guards[item.investigation.id] if item.investigation is not None else None,
+            )
             for item in found.items
         ],
         next_cursor=found.next_cursor,

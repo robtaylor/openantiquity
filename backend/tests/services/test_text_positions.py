@@ -15,6 +15,7 @@ from fieldclub.services.text_positions import (
     find_positions,
     holds_position,
     redact,
+    restore,
 )
 from tests.helpers import AVEBURY
 
@@ -291,3 +292,129 @@ def test_reading_escaped_and_paired_values_is_quick_on_long_hostile_text() -> No
         started = time.monotonic()
         redact(text)
         assert time.monotonic() - started < 0.5, text[:20]
+
+
+# Positions written in other characters, or in other systems than the grid and degrees.
+DISGUISED = [
+    # Full-width letters and figures, as a phone keyboard in another script gives them.
+    "\uff33\uff35\uff11\uff10\uff12\uff13\uff16\uff19\uff19\uff16",
+    "\uff33\uff35 \uff11\uff10\uff12\uff13 \uff16\uff19\uff19\uff16",
+    "\uff15\uff11.\uff14\uff12\uff18\uff16, -\uff11.\uff18\uff15\uff14\uff12",
+    # Mathematical and circled forms that read as the same figures.
+    "SU \U0001d7cf\U0001d7ce\U0001d7d0\U0001d7d1 6996",
+    # Invisible format characters inside the figures.
+    "SU 10\u200d23 69\u200c96",
+    "SU 1023\u2066 6996",
+    "51.42\u00ad86, -1.8542",
+    # Open Location Codes ("plus codes"), in full and short with a place, as Google shares them.
+    "9C3WC4HW+F8",
+    "9c3wc4hw+f8",
+    "C4HW+F8 Avebury",
+    "C4HW+F8R",
+    "https://plus.codes/9C3WC4HW+F8",
+    "https://www.google.com/maps/search/9C3WC4HW%2BF8",
+    # Geohash links.
+    "https://geohash.org/gcnstf3c",
+    "geohash.org/gcnhrwf9",
+]
+
+
+@pytest.mark.parametrize("text", DISGUISED)
+def test_positions_in_other_characters_and_systems_are_found(text: str) -> None:
+    sentence = f"Look at {text} today."
+    assert holds_position(sentence), text
+    hidden = redact(sentence)
+    assert hidden.startswith("Look at "), hidden
+    assert hidden.endswith(" today."), hidden
+    assert PLACEHOLDER in hidden
+    for figures in ("6996", "\uff16\uff19\uff19\uff16", "4286", "C4HW", "c4hw", "gcn"):
+        assert figures not in hidden, hidden
+
+
+# Links to map sites say where a place is even when no figures show it.
+MAP_SITE_LINKS = [
+    "https://maps.app.goo.gl/AbCdEf123",
+    "https://goo.gl/maps/AbCdEf123",
+    "https://www.google.com/maps/place/Avebury+Henge",
+    "https://www.google.co.uk/maps/@?api=1&map_action=pano&pano=abc",
+    "https://maps.google.com/?cid=1234567890",
+    "https://osm.org/go/euu4P0Ia-",
+    "https://www.openstreetmap.org/way/4054513",
+    "https://tile.openstreetmap.org/18/129718/87091.png",
+    "https://www.bing.com/maps?osid=abc",
+    "https://maps.apple.com/?auid=123456",
+    "https://wego.here.com/p/s-abc",
+    "https://www.streetmap.co.uk/map.srf?x=410250&y=169960",
+]
+
+
+@pytest.mark.parametrize("link", MAP_SITE_LINKS)
+def test_links_to_map_sites_are_positions(link: str) -> None:
+    assert holds_position(link), link
+    assert redact(f"See {link} for it") == f"See {PLACEHOLDER} for it"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "+44 1672 539250",
+        "C++ and C# code",
+        "2+2 is 4, 22+33 is 55",
+        "Grades A+ and B+",
+        "openstreetmap.org has the paths",
+        "We used Google Maps and OpenStreetMap.",
+        "https://wiki.openstreetmap.org.example/page",
+        "\uff21\uff42\uff43 is full-width text",
+    ],
+)
+def test_text_near_those_systems_is_left_alone(text: str) -> None:
+    assert not holds_position(text), text
+    assert redact(text) == text
+
+
+def test_redaction_keeps_the_text_around_a_position_exactly_as_written() -> None:
+    text = "Ring\u00a0\u00a0ditch \uff08see\uff09 at SU\u200b 1023  6996, then\u3000\u3000north."
+    assert redact(text) == f"Ring\u00a0\u00a0ditch \uff08see\uff09 at {PLACEHOLDER}, then\u3000\u3000north."
+
+
+@pytest.mark.parametrize("separator", [" ", "\u00a0", "\t", "\u3000", "\u200b", " \u200b"])
+@pytest.mark.parametrize(
+    "before",
+    [
+        "a",
+        "SU",
+        "SU 123",
+        "51.4286",
+        "51.4286\u00b0",
+        "N",
+        "N 51",
+        "51 25",
+        "410250",
+        "E",
+        "lat",
+        "51\u00b025'",
+    ],
+)
+def test_finding_positions_takes_linear_time_however_long_the_spaces(before: str, separator: str) -> None:
+    """A run of spaces once took time growing with its square or cube, from a signed-out read."""
+    import time
+
+    text = before + separator * (50_000 // len(separator)) + "x 1"
+    started = time.monotonic()
+    find_positions(text)
+    assert time.monotonic() - started < 0.5, repr(before)
+
+
+def test_text_edited_around_its_placeholders_gets_back_what_they_hid() -> None:
+    original = f"Bank at SU 1023 6996, ditch at 51.4286, -1.8542, and a literal {PLACEHOLDER} typed."
+    shown = redact(original)
+    assert shown.count(PLACEHOLDER) == 3
+    edited = shown.replace("Bank", "Low bank").replace("typed", "kept")
+    assert restore(edited, original) == (
+        f"Low bank at SU 1023 6996, ditch at 51.4286, -1.8542, and a literal {PLACEHOLDER} kept."
+    )
+    assert restore(shown, original) == original
+    # One placeholder fewer or more, and nothing can be put back.
+    assert restore(shown.replace(PLACEHOLDER, "", 1), original) is None
+    assert restore(shown + PLACEHOLDER, original) is None
+    assert restore("No positions", "No positions") == "No positions"

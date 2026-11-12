@@ -493,7 +493,7 @@ def test_the_log_mailer_is_refused_in_production() -> None:
     with pytest.raises(ConfigError, match="MAIL_BACKEND=log"):
         settings(
             env="prod",
-            secret_key="s" * 40,
+            secret_key="a-long-random-value-of-forty-characters!",
             trusted_proxy_hops=1,
             terms_url="/terms",
             dev_login=False,
@@ -654,3 +654,40 @@ def test_the_outbox_exists_only_where_the_development_sign_in_does(
     response = mounted.get(OUTBOX, params={"to": "a@example.org"})
     assert response.status_code == 404
     assert "abc" not in response.text
+
+
+def test_a_browser_that_signed_in_by_link_keeps_its_own_budget_when_strangers_use_up_the_rest(
+    app: FastAPI, client_for: ClientFor, mail_on: None, limits_on: None
+) -> None:
+    """Strangers on enough addresses could use up the 20 an hour and leave the owner no way in."""
+    owner = caller_at(app, client_for, "10.9.9.9")
+    token = request_link(owner, "owner@example.org")
+    signed_in = owner.post(VERIFY, json={"token": token})
+    assert signed_in.status_code == 200, signed_in.text
+    known = owner.cookies.get(email_link.KNOWN_COOKIE)
+    assert known
+    owner.post("/api/v1/auth/logout")
+    for number in range(8):
+        stranger = caller_at(app, client_for, f"2001:db8:{number}::1")
+        for _ in range(3):
+            stranger.post(START, json={"email": "owner@example.org"})
+    late = caller_at(app, client_for, "10.8.8.8")
+    assert late.post(START, json={"email": "owner@example.org"}).status_code == 429
+    # A cookie made up, or one for another mailbox, buys nothing.
+    late.cookies.set(email_link.KNOWN_COOKIE, "0" * 64, path=email_link.LINK_COOKIE_PATH)
+    assert late.post(START, json={"email": "owner@example.org"}).status_code == 429
+    # The owner's browser, from another address now, still gets its link.
+    owner.headers["X-Forwarded-For"] = "10.7.7.7"
+    assert owner.post(START, json={"email": "Owner@example.org"}).status_code == 202
+
+
+def test_one_ipv6_site_counts_as_one_caller_for_an_address(
+    app: FastAPI, client_for: ClientFor, mail_on: None, limits_on: None
+) -> None:
+    answers = [
+        caller_at(app, client_for, f"2001:db8:1:{number}::1")
+        .post(START, json={"email": "ann@example.org"})
+        .status_code
+        for number in range(5)
+    ]
+    assert answers == [202, 202, 202, 429, 429]

@@ -118,9 +118,14 @@ class ActivityOut(ApiModel):
         finding: Finding | None,
         investigation: Investigation | None,
         viewer: User | None,
+        guard: sensitivity.PositionGuard | None = None,
     ) -> ActivityOut:
+        """The event as `viewer` reads it. `guard` is the investigation's for the viewer
+        (`services.investigations.position_guards`), whose title it passes through as the
+        investigation's page does."""
         assert (finding is None) == (activity.finding_id is None), "the finding passed is not the event's"
         assert (investigation is None) == (activity.investigation_id is None), "wrong investigation"
+        assert (investigation is None) == (guard is None), "an investigation comes with its guard"
         return cls(
             id=activity.id,
             kind=ActivityKind(activity.kind),
@@ -128,8 +133,11 @@ class ActivityOut(ApiModel):
             actor=PublicUser.from_user(actor) if actor is not None else None,
             finding=ActivityFinding.build(finding, viewer) if finding is not None else None,
             investigation=(
-                ActivityInvestigation(public_id=investigation.public_id, title=investigation.title)
-                if investigation is not None
+                ActivityInvestigation(
+                    public_id=investigation.public_id,
+                    title=guard.text(investigation.title) or investigation.title,
+                )
+                if investigation is not None and guard is not None
                 else None
             ),
             details=ActivityDetails.from_data(activity.kind, activity.data),

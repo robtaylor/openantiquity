@@ -182,3 +182,21 @@ def test_a_handle_given_up_is_held_back_from_everyone_else_for_a_year(
         with pytest.raises(HandleHeldBackError):
             profile.update_profile(db, stranger, handle="GoneGeorge")
     db.rollback()
+
+
+def test_one_account_holds_back_only_its_latest_given_up_handles(db: Session, make_user: MakeUser) -> None:
+    """Changing name over and over mustn't reserve a name for each change."""
+    from fieldclub.auth import profile
+    from fieldclub.auth.handles import MAX_HELD_BACK_PER_ACCOUNT, held_back
+
+    owner, stranger = make_user(handle="Cycler0"), make_user()
+    names = [f"Cycler{i}" for i in range(MAX_HELD_BACK_PER_ACCOUNT + 3)]
+    for name in names[1:]:
+        profile.update_profile(db, owner, handle=name)
+        db.commit()
+    given_up = names[:-1]
+    kept = MAX_HELD_BACK_PER_ACCOUNT
+    expected = [False] * (len(given_up) - kept) + [True] * kept
+    assert [held_back(db, name, stranger) for name in given_up] == expected
+    profile.update_profile(db, stranger, handle="Cycler0")
+    db.commit()

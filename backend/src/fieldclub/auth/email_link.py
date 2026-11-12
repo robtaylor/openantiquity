@@ -34,6 +34,14 @@ drafts would then be saved (login CSRF). A masked address alone isn't enough:
 anyone can pick an address with the victim's first letter at the same big
 domain. The victim types their own address, which isn't the attacker's.
 
+A browser that has signed in with a link for a mailbox is remembered for
+it: verify sets `openantiquity_email_known`, holding a keyed hash of the
+mailbox for each of the last `KNOWN_MAILBOXES_MAX` it signed in to. Asking
+from such a browser spends a budget of its own rather than the one all
+callers share, so strangers who use up that one from many addresses don't
+leave the owner without a way in. Nobody can make the value without the
+server's key and the mailbox.
+
 The answer says whether this browser asked for the link (`asked_here`). When
 it didn't, the app must not save drafts left in the browser without asking:
 the person may be signed in to someone else's account however careful they were.
@@ -41,6 +49,8 @@ the person may be signed in to someone else's account however careful they were.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
@@ -53,7 +63,7 @@ from fieldclub.auth.failures import EmailMismatchError, LinkConfirmationRequired
 from fieldclub.auth.mailer import Message
 from fieldclub.auth.providers import register_provider
 from fieldclub.auth.tokens import hash_presented, hash_token, new_token
-from fieldclub.config import Settings
+from fieldclub.config import Settings, get_settings
 from fieldclub.models import MagicLink, User
 from fieldclub.vocab import SignInProvider
 
@@ -66,6 +76,11 @@ LINK_COOKIE = "openantiquity_email_link"
 LINK_COOKIE_PATH = "/api/v1/auth/email"
 VERIFY_PATH = f"{LINK_COOKIE_PATH}/verify"
 START_PATH = f"{LINK_COOKIE_PATH}/start"
+# The cookie that says which mailboxes this browser has signed in to by link,
+# sent to start and verify only.
+KNOWN_COOKIE = "openantiquity_email_known"
+KNOWN_LIFETIME = timedelta(days=365)
+KNOWN_MAILBOXES_MAX = 4
 
 register_provider(SignInProvider.EMAIL, lambda settings: settings.mail_backend is not None)
 
@@ -141,11 +156,34 @@ def _same_address(link: MagicLink, typed: str) -> bool:
     return typed.strip().casefold() == link.email.casefold()
 
 
+def _known_tag(email: str) -> str:
+    """The keyed hash of `email`'s mailbox (`rate_key`) a browser that signed in to it keeps."""
+    mailbox = rate_key(email).encode("utf-8")
+    return hmac.new(get_settings().signing_key, b"email-known:" + mailbox, hashlib.sha256).hexdigest()
+
+
+def known_here(cookie: str | None, email: str) -> bool:
+    """Whether the `KNOWN_COOKIE` a browser sent says it has signed in to `email`'s mailbox by link."""
+    if not cookie:
+        return False
+    tag = _known_tag(email)
+    return any(hmac.compare_digest(tag, held) for held in cookie.split(".")[:KNOWN_MAILBOXES_MAX])
+
+
+def remember_here(cookie: str | None, email: str) -> str:
+    """The `KNOWN_COOKIE` value with `email`'s mailbox added, keeping the latest few."""
+    tag = _known_tag(email)
+    held = [value for value in (cookie or "").split(".") if len(value) == len(tag) and value != tag]
+    return ".".join([tag, *held][:KNOWN_MAILBOXES_MAX])
+
+
 @dataclass(frozen=True)
 class Redeemed:
     user: User
     # True when the browser that asked for the link redeemed it.
     asked_here: bool
+    # The address the link was sent to.
+    email: str
 
 
 def redeem(
@@ -190,4 +228,4 @@ def redeem(
     user = signin.user_for_email(db, link.email, now=now)
     link.user_id = user.id
     db.flush()
-    return Redeemed(user, asked_here)
+    return Redeemed(user, asked_here, link.email)

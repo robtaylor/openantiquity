@@ -97,9 +97,37 @@ def test_a_new_role_weighs_answers_given_from_then_on_and_not_those_given_before
     assert set_role(client_as(make_user(Role.MODERATOR)), "Arch", "expert").status_code == 200
     db.refresh(archaeologist)
     answer(db, after, archaeologist)
+    # Someone else's answer reassesses the earlier finding: the archaeologist's answer there still
+    # weighs as a member's (1), not as an expert's (3).
+    answer(db, before, make_user())
     db.expire_all()
-    assert findings.get_finding(db, before.public_id, None).assessment["seen"] == 1.0
+    assert findings.get_finding(db, before.public_id, None).assessment["seen"] == 2.0
     assert findings.get_finding(db, after.public_id, None).assessment["seen"] == 3.0
+
+
+@pytest.mark.parametrize("change", ["expert", "member", "ban"])
+def test_a_vote_keeps_the_weight_it_was_given_with_when_the_finding_is_reassessed(
+    db: Session, client_as: ClientAs, make_user: MakeUser, change: str
+) -> None:
+    """Decision 0019 for votes: a later reassessment must not weigh a vote by the voter's new standing."""
+    voter = make_user("trusted" if change == "member" else Role.MEMBER, handle="Voter")
+    finding = create(db, make_user())
+    evidence, _ = add_desk_evidence(db, finding, make_user(), EvidenceKind.HISTORIC_MAP)
+    findings.vote(db, evidence.id, voter, 1)
+    db.commit()
+    db.refresh(finding)
+    given = finding.assessment
+    moderator = client_as(make_user(Role.MODERATOR))
+    if change == "ban":
+        assert moderator.post(f"{API}/mod/users/Voter/ban", json=REASON).status_code == 200
+    else:
+        assert set_role(moderator, "Voter", change).status_code == 200
+    db.expire_all()
+    finding = findings.get_finding(db, finding.public_id, None)
+    findings.reassess(db, findings.lock(db, finding), None)
+    db.commit()
+    db.expire_all()
+    assert findings.get_finding(db, finding.public_id, None).assessment == given
 
 
 def _public_score(client, public_id: str) -> tuple[int, str, str]:

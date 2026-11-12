@@ -342,6 +342,27 @@ def test_an_outline_has_at_most_two_thousand_points(
     assert count(db, Finding) == 1
 
 
+def test_a_shape_with_an_empty_hole_is_refused_and_the_api_keeps_answering(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    """GEOS crashed the whole process testing such a shape against the British Isles."""
+    client = client_as(make_user())
+    ring = [[LON, LAT], [LON + 0.001, LAT], [LON + 0.001, LAT + 0.001], [LON, LAT]]
+    holed = {"type": "Polygon", "coordinates": [ring, []]}
+    refused = client.post(
+        f"{API}/findings", json={"location": point(), "feature_class": "enclosure", "outline": holed}
+    )
+    assert refused.status_code == 422, refused.text
+    assert error_code(refused) == "validation_error"
+    made = client.post(f"{API}/findings", json={"location": point(), "feature_class": "enclosure"}).json()
+    assert error_code(client.patch(f"{API}/findings/{made['public_id']}", json={"outline": holed})) == (
+        "validation_error"
+    )
+    area = client.post(f"{API}/investigations", json={"title": "Holes", "area": holed})
+    assert error_code(area) == "validation_error"
+    assert client.get("/healthz").status_code == 200
+
+
 def test_the_map_answer_draws_points_and_carries_no_outline(
     db: Session, client_as: ClientAs, make_user: MakeUser
 ) -> None:

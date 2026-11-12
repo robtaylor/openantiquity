@@ -239,6 +239,17 @@ def test_one_address_can_ask_for_only_so_many_tiles_a_minute(
     assert other.get("/tiles/records/0/0/0.mvt").status_code == 200
 
 
+def test_two_people_panning_hard_behind_one_address_are_not_refused_tiles(
+    app: FastAPI, client_for: ClientFor, limits_on: None
+) -> None:
+    """One browser panning and zooming for a minute asked for about 1,200 tiles in the review's
+    measurement. A household or a school shares an address, and MapLibre leaves a hole for a refused tile."""
+    caller = client_for(app)
+    caller.headers["X-Forwarded-For"] = "203.0.113.10"
+    answers = {caller.get("/tiles/records/0/0/0.mvt").status_code for _ in range(2 * 1200)}
+    assert answers == {200}
+
+
 def test_a_public_answer_never_carries_a_session_cookie(
     db: Session, make_user: MakeUser, app: FastAPI, client_for: ClientFor
 ) -> None:

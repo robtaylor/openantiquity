@@ -23,8 +23,9 @@ from fieldclub.services import record_tiles
 
 MOUNT_AT_ROOT = True
 
-# A map being panned quickly asks for a few hundred tiles a minute. Counted by address alone.
-TILES_PER_MINUTE = 600
+# One map panned hard asks for about 1,200 tiles a minute, and several people
+# can share an address. Counted by address alone.
+TILES_PER_MINUTE = 2400
 router = APIRouter(
     tags=["tiles"],
     dependencies=[Depends(rate_limit_by_address("record_tiles", TILES_PER_MINUTE, per_seconds=60))],

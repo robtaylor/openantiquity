@@ -210,6 +210,19 @@ def test_a_broken_line_is_named(tmp_path: Path) -> None:
         list(read_ndjson(path))
 
 
+def test_a_publisher_s_polygon_with_an_empty_hole_is_refused_before_geos_sees_it(tmp_path: Path) -> None:
+    ring = [[-1.8, 51.45], [-1.799, 51.45], [-1.799, 51.451], [-1.8, 51.45]]
+    feature = {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {"type": "Polygon", "coordinates": [ring, []]},
+    }
+    path = tmp_path / "holes.ndjson"
+    path.write_text(json.dumps(feature) + "\n")
+    with pytest.raises(UpstreamFormatError, match="line 1 isn't valid GeoJSON"):
+        list(read_ndjson(path))
+
+
 def test_plain_objects_are_kept_whole(tmp_path: Path) -> None:
     path = tmp_path / "plain.ndjson"
     path.write_text('{"id": 1, "name": "A"}\n')

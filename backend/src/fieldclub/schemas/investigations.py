@@ -8,11 +8,13 @@ has `unavailable` set and neither.
 
 Everything people wrote and drew in an investigation goes through its
 `PositionGuard` for the viewer (`services.investigations.position_guard`):
-when it holds a finding the viewer sees only as a square, the title,
-summary, notes and every item's text lose the positions written in them, a
-reference's link that holds one is dropped, a saved view or height profile
-near that finding is held back as `near_protected`, and an area near it is
-widened to the area grid.
+when it holds or has held a finding the viewer sees only as a square, or
+something drawn in it comes near one, the title, summary, notes and every
+item's text lose the positions written in them, a reference's link is given
+only when it is rebuilt from a DOI's or a video's identifier, a saved view
+or height profile near that finding is held back as `near_protected`, and an
+area near it is shown as the whole grid squares it covers. What the viewer
+added themselves is shown to them as they made it.
 """
 
 from __future__ import annotations
@@ -22,9 +24,8 @@ from typing import Annotated, Any, Literal
 
 from geoalchemy2.shape import to_shape
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, UrlConstraints
-from shapely.geometry import LineString, Point
 
-from fieldclub.models import Investigation, InvestigationItem, User
+from fieldclub.models import Investigation, User
 from fieldclub.schemas.common import (
     MAX_ID,
     ApiModel,
@@ -36,48 +37,15 @@ from fieldclub.schemas.common import (
 from fieldclub.schemas.findings import FindingSummary, ViewState
 from fieldclub.schemas.records import RecordSummary, record_summary
 from fieldclub.services import sensitivity
-from fieldclub.services.investigations import ItemView, Listed, MemberView, Unavailable
+from fieldclub.services.investigations import (
+    ItemView,
+    Listed,
+    MemberView,
+    Unavailable,
+    item_content,
+    item_text,
+)
 from fieldclub.vocab import InvestigationItemKind, InvestigationRole, Visibility
-
-
-def item_text(
-    view: ItemView, reader: User | None, guard: sensitivity.PositionGuard
-) -> tuple[str | None, str | None]:
-    """An item's title and note as `reader` may read them.
-
-    What a member writes on a finding item is about that finding, so a
-    position written in it is hidden as the finding's own text is
-    (`sensitivity.visible_text`), and from everyone once the finding isn't
-    shown. Every item's text goes through the investigation's `guard` too.
-    """
-    item = view.item
-    title, note = item.title, item.note
-    if InvestigationItemKind(item.kind) is InvestigationItemKind.FINDING:
-        title = sensitivity.visible_text(view.finding, reader, title)
-        note = sensitivity.visible_text(view.finding, reader, note)
-    return guard.text(title), guard.text(note)
-
-
-def item_content(item: InvestigationItem, guard: sensitivity.PositionGuard) -> dict[str, Any] | None:
-    """A view's, reference's or profile's stored content as the guard lets it be read.
-
-    None for a view or profile held back because it lies near a finding the
-    reader sees only as a square. A reference keeps its citation without the
-    positions in it, and its link only if the link holds none.
-    """
-    data = dict(item.data or {})
-    kind = InvestigationItemKind(item.kind)
-    if kind is InvestigationItemKind.VIEW and guard.near(Point(data["centre"])):
-        return None
-    if kind is InvestigationItemKind.PROFILE and guard.near(LineString(data["line"]["coordinates"])):
-        return None
-    if kind is InvestigationItemKind.REFERENCE:
-        for name, keep in (("url", guard.url), ("citation", guard.text)):
-            if data.get(name) is not None:
-                data[name] = keep(data[name])
-        return {name: value for name, value in data.items() if value is not None}
-    return data
-
 
 TITLE_MAX = 120
 SUMMARY_MAX = 1000
@@ -289,13 +257,14 @@ def _summary_fields(
 ) -> dict[str, Any]:
     assert owner.has_id(investigation.owner_id), "the owner passed doesn't own the investigation"
     area = to_shape(investigation.area) if investigation.area is not None else None
+    squares = to_shape(investigation.area_squares) if investigation.area_squares is not None else None
     return {
         "public_id": investigation.public_id,
         "title": guard.text(investigation.title) or investigation.title,
         "summary": guard.text(investigation.summary),
         "visibility": investigation.visibility,
         "owner": PublicUser.from_user(owner),
-        "area": geojson_geometry(guard.area(area)),
+        "area": geojson_geometry(guard.area(area, squares)),
         "item_count": item_count,
         "created_at": investigation.created_at,
         "updated_at": investigation.updated_at,
@@ -357,8 +326,8 @@ class InvestigationItemOut(ApiModel):
     the viewer may see them. Otherwise `unavailable` says why: `hidden` (a
     moderator hid the finding), `withdrawn` (its finder took it back) or
     `gone` (the record has left the index). A view or profile is left out as
-    `near_protected` when it lies near a finding the investigation holds that
-    the viewer sees only as a 1 km square. Show the item as a line saying so.
+    `near_protected` when it lies near a finding the viewer sees only as a
+    1 km square. Show the item as a line saying so.
     """
 
     id: int

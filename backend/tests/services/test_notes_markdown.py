@@ -257,6 +257,10 @@ SLOW_CASES = {
     "lists of openers": "- *a\n" * 10000,
     "headings of openers": "# **a\n" * 8400,
     "hashes and spaces": "# " + " #" * 25000,
+    # Runs of spaces after something a position could start with, which `text_positions` reads.
+    "a heading and a run of spaces": "# a" + " " * 49990 + "b",
+    "degrees and a run of spaces": "51.4286" + " " * 49990 + "N",
+    "a grid letter and a run of spaces": "SU" + "\u00a0" * 49990 + "1",
 }
 
 

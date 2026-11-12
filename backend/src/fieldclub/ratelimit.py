@@ -139,12 +139,16 @@ def reset_all() -> None:
 
 
 IPV6_SUBSCRIBER_PREFIX = 64
+# A whole site's IPv6 network, often one subscriber's too, which is cheap to
+# hold many /64s in.
+IPV6_SITE_PREFIX = 48
 
 
-def address_key(ip: str) -> str:
+def address_key(ip: str, *, ipv6_prefix: int = IPV6_SUBSCRIBER_PREFIX) -> str:
     """The part of an address that identifies one caller for rate limiting.
 
-    An IPv4 address is itself. An IPv6 address is its /64 network, and an
+    An IPv4 address is itself. An IPv6 address is its /64 network (or
+    `ipv6_prefix`), and an
     IPv4 address written as IPv6 (`::ffff:203.0.113.5`) is the IPv4 address.
     Anything that isn't an address is used as it stands.
     """
@@ -155,17 +159,21 @@ def address_key(ip: str) -> str:
     if isinstance(address, ipaddress.IPv6Address):
         if address.ipv4_mapped is not None:
             return str(address.ipv4_mapped)
-        network = ipaddress.ip_network((address, IPV6_SUBSCRIBER_PREFIX), strict=False)
+        network = ipaddress.ip_network((address, ipv6_prefix), strict=False)
         return str(network.network_address)
     return str(address)
 
 
-def caller_key(request: Request, user: User | None) -> str:
-    """Who to count a request against: the user if signed in, otherwise their hashed address."""
+def caller_key(request: Request, user: User | None, *, ipv6_prefix: int = IPV6_SUBSCRIBER_PREFIX) -> str:
+    """Who to count a request against: the user if signed in, otherwise their hashed address.
+
+    A budget a stranger could use up from many addresses can count IPv6
+    callers by a wider network (`IPV6_SITE_PREFIX`).
+    """
     if user is not None:
         return f"user:{user.id}"
     ip = client_ip(request)
-    return f"ip:{hash_ip(address_key(ip))}" if ip else "ip:unknown"
+    return f"ip:{hash_ip(address_key(ip, ipv6_prefix=ipv6_prefix))}" if ip else "ip:unknown"
 
 
 def enforce(limiter: RateLimiter, request: Request, user: User | None) -> None:

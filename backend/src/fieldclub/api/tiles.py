@@ -25,8 +25,10 @@ answered 503 `tiles_busy` with a `Retry-After`.
 
 Each address may ask for `TILES_PER_MINUTE` terrain tiles a minute, counted
 together, so one client can't hold every tile thread and every request slot
-by asking for tiles nobody has drawn yet. A map being panned quickly asks for
-a few hundred.
+by asking for tiles nobody has drawn yet. One map panned and zoomed hard asks
+for about 1,200, and a household, a school or a mobile network puts several
+people behind one address, so the limit is twice that. The tile threads'
+queue, not this limit, is what keeps drawing within the server's means.
 """
 
 from __future__ import annotations
@@ -46,7 +48,7 @@ MOUNT_AT_ROOT = True
 
 # Left out of the OpenAPI schema: the frontend takes tile URLs from /meta, not
 # from the generated client, and the schema documents the /api/v1 API.
-TILES_PER_MINUTE = 600
+TILES_PER_MINUTE = 2400
 router = APIRouter(
     prefix="/tiles",
     tags=["tiles"],

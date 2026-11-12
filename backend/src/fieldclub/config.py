@@ -26,10 +26,25 @@ DEV_SECRET_KEY = "dev-only-secret-change-me"
 # The shortest key production accepts. It signs the sign-in flow and keys the
 # hashes of addresses kept with sessions, so it must not be guessable.
 SECRET_KEY_MIN_LENGTH = 32
+# The fewest different characters it may have: a repeated or patterned value
+# is no key, while any random one, even in hexadecimal, has more.
+SECRET_KEY_MIN_DISTINCT = 10
 _SECRET_KEY_NEEDED = (
     f"FIELDCLUB_SECRET_KEY must be a random value of at least {SECRET_KEY_MIN_LENGTH} characters "
-    "in production."
+    "in production, such as one from `openssl rand -base64 48`."
 )
+
+
+def is_weak_key(key: str) -> bool:
+    """Whether a secret key is too short, the placeholder, or too plain to be random."""
+    plain = key.strip()
+    return (
+        key == DEV_SECRET_KEY
+        or len(plain) < SECRET_KEY_MIN_LENGTH
+        or len(set(plain)) < SECRET_KEY_MIN_DISTINCT
+    )
+
+
 # The session cookie. Its `__Host-` prefix makes the browser refuse it unless it
 # is Secure, for the whole site and for this host alone, so a page on another
 # subdomain can't plant a session of its own. Local development over plain
@@ -356,7 +371,7 @@ class Settings(BaseSettings):
     def _check_consistency(self) -> Self:
         is_prod = self.env is Environment.PROD
         key = self.secret_key.get_secret_value() if self.secret_key is not None else None
-        if is_prod and key is not None and (key == DEV_SECRET_KEY or len(key) < SECRET_KEY_MIN_LENGTH):
+        if is_prod and key is not None and is_weak_key(key):
             raise ConfigError(_SECRET_KEY_NEEDED)
         if is_prod and self.cookie_secure is False:
             raise ConfigError("FIELDCLUB_COOKIE_SECURE can't be false in production: cookies must be Secure.")

@@ -92,6 +92,11 @@ def test_a_protected_finding_refuses_a_position_in_its_title_or_description(
         "Centre 410250 169960",
         "51d25m43s N 1d51m15s W",
         "51,4286 -1,8542",
+        # Full-width figures, a plus code, and short links to map sites.
+        "Barrow \uff33\uff35\uff11\uff10\uff12\uff13\uff16\uff19\uff19\uff16",
+        "Plus code C4HW+F8 Avebury",
+        "See https://maps.app.goo.gl/AbCdEf123",
+        "See https://geohash.org/gcnstf3c",
     ],
 )
 def test_positions_written_loosely_are_refused_too(

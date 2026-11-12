@@ -239,7 +239,7 @@ def update_item(
 ) -> InvestigationItemOut:
     """Change an item's title, note or content. What it points at stays."""
     access = investigations.load(db, public_id, user, Need.EDIT, lock=True)
-    investigations.update_item(db, access, item_id, body.changes(), body.content_kinds())
+    investigations.update_item(db, access, user, item_id, body.changes(), body.content_kinds())
     db.commit()
     private(response)
     return _item_out(db, access, item_id, user)

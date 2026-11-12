@@ -20,6 +20,10 @@ from fieldclub.errors import InvalidBboxError, ValidationFailedError
 from fieldclub.errors import InvalidCursorError as InvalidCursorError
 from fieldclub.models.common import to_db_geometry as to_db_geometry
 from fieldclub.schemas import text
+from fieldclub.schemas.shapes import GEOMETRY_MAX_PARTS as GEOMETRY_MAX_PARTS
+from fieldclub.schemas.shapes import GEOMETRY_MAX_POINTS as GEOMETRY_MAX_POINTS
+from fieldclub.schemas.shapes import MALFORMED, check_shape
+from fieldclub.schemas.shapes import GeometryTooComplexError as GeometryTooComplexError
 
 if TYPE_CHECKING:
     from fieldclub.models import User
@@ -349,46 +353,6 @@ def _round_coordinates(value: Any, decimals: int) -> Any:
     return value
 
 
-# The most positions and parts a shape sent by a client may have, counting every
-# ring, line and member. A finding's outline and an investigation's area are
-# drawn by hand, and every list of findings carries the outline, so a shape
-# with hundreds of thousands of points would be paid for by every visitor.
-GEOMETRY_MAX_POINTS = 2000
-GEOMETRY_MAX_PARTS = 200
-
-
-class GeometryTooComplexError(ValidationFailedError):
-    code = "geometry_too_complex"
-    message = f"A shape can have at most {GEOMETRY_MAX_POINTS} points and {GEOMETRY_MAX_PARTS} parts."
-
-
-def _check_size(data: dict[str, Any], max_points: int) -> None:
-    """Count positions and parts without recursion, and stop as soon as either is too many.
-
-    Runs before shapely sees the geometry, so a huge one costs no more than
-    the counting up to the limit. A malformed one is left for `shape` to refuse.
-    """
-    points = parts = 0
-    stack: list[Any] = [data.get("coordinates")]
-    stack.extend(
-        member.get("coordinates") for member in data.get("geometries") or () if isinstance(member, dict)
-    )
-    while stack:
-        value = stack.pop()
-        if not isinstance(value, list | tuple) or not value:
-            continue
-        if isinstance(value[0], int | float):
-            points += 1
-            if points > max_points:
-                raise GeometryTooComplexError()
-            continue
-        if isinstance(value[0], list | tuple) and value[0] and isinstance(value[0][0], int | float):
-            parts += 1
-            if parts > GEOMETRY_MAX_PARTS:
-                raise GeometryTooComplexError()
-        stack.extend(value)
-
-
 def from_geojson(
     geometry: GeoJSONGeometry | dict[str, Any],
     *,
@@ -406,11 +370,11 @@ def from_geojson(
     if allowed is not None and data.get("type") not in allowed:
         raise ValidationFailedError(f"Expected a geometry of type {' or '.join(allowed)}.")
     assert max_points <= GEOMETRY_MAX_POINTS, "no shape from a client may be larger than the general limit"
-    _check_size(data, max_points)
+    check_shape(data, max_points=max_points)
     try:
         geom = shape(data)
     except (ShapelyError, ValueError, TypeError, KeyError, AttributeError, IndexError):
-        raise ValidationFailedError("That isn't valid GeoJSON geometry.") from None
+        raise ValidationFailedError(MALFORMED) from None
     if geom.is_empty:
         raise ValidationFailedError("The geometry is empty.")
     if not geom.is_valid:

@@ -19,6 +19,7 @@ import io
 import json
 import logging
 import math
+import sys
 import warnings
 import zipfile
 from collections.abc import Iterable, Iterator, Sequence
@@ -31,6 +32,7 @@ from shapely.errors import ShapelyError
 from shapely.geometry import Point, shape
 from shapely.geometry.base import BaseGeometry
 
+from fieldclub.errors import ValidationFailedError
 from fieldclub.ingest.adapters import ogr
 from fieldclub.ingest.adapters.common import (
     Feature,
@@ -43,6 +45,7 @@ from fieldclub.ingest.adapters.common import (
 )
 from fieldclub.ingest.adapters.ogr import DataSourceError
 from fieldclub.ingest.base import BBox
+from fieldclub.schemas.shapes import check_shape
 
 logger = logging.getLogger(__name__)
 
@@ -285,8 +288,12 @@ def geojson_geometry(value: Any, crs: str = "EPSG:4326", *, where: str = "a feat
     """A GeoJSON geometry object as shapely in WGS84, or None when it is null or empty."""
     if value is None:
         return None
+    if isinstance(value, dict) and value.get("coordinates", value.get("geometries")) == []:
+        return None
     try:
+        # GEOS can crash the process on a shape with an empty part, so the structure is checked first.
+        check_shape(value, max_points=sys.maxsize, max_parts=sys.maxsize)
         geometry = shape(value)
-    except (ValueError, TypeError, KeyError, AttributeError, IndexError, ShapelyError):
+    except (ValueError, TypeError, KeyError, AttributeError, IndexError, ShapelyError, ValidationFailedError):
         raise UpstreamFormatError(f"The geometry of {where} isn't valid GeoJSON.") from None
     return None if geometry.is_empty else to_wgs84(geometry, crs)

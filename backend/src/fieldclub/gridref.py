@@ -42,7 +42,7 @@ class GridSystem(StrEnum):
     IRISH = "irish"
 
 
-_EPSG = {GridSystem.OSGB: 27700, GridSystem.IRISH: 29903}
+EPSG = {GridSystem.OSGB: 27700, GridSystem.IRISH: 29903}
 
 # Extent of each grid in metres: (width, height).
 _EXTENT = {GridSystem.OSGB: (700_000, 1_300_000), GridSystem.IRISH: (500_000, 500_000)}
@@ -97,7 +97,7 @@ def to_grid(lon: float, lat: float) -> tuple[GridSystem, float, float]:
     if not is_lon_lat(lon, lat):
         raise GridRefError(f"Not a position on Earth: {lon}, {lat}.")
     system = grid_system(lon, lat)
-    easting, northing = transformer(4326, _EPSG[system]).transform(lon, lat)
+    easting, northing = transformer(4326, EPSG[system]).transform(lon, lat)
     width, height = _EXTENT[system]
     if not (
         math.isfinite(easting) and math.isfinite(northing) and 0 <= easting < width and 0 <= northing < height
@@ -108,7 +108,7 @@ def to_grid(lon: float, lat: float) -> tuple[GridSystem, float, float]:
 
 def to_lonlat(system: GridSystem, easting: float, northing: float) -> tuple[float, float]:
     """Longitude and latitude (WGS84) of a grid position."""
-    lon, lat = transformer(_EPSG[system], 4326).transform(easting, northing)
+    lon, lat = transformer(EPSG[system], 4326).transform(easting, northing)
     assert math.isfinite(lon), f"{system} {easting}, {northing} did not transform"
     assert math.isfinite(lat), f"{system} {easting}, {northing} did not transform"
     return lon, lat

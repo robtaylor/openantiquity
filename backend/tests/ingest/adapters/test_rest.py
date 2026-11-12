@@ -16,7 +16,8 @@ URL = "https://api.example/works"
 
 
 def make() -> RestJson:
-    return RestJson(httpx.Client(), polite=NoWait(), where="Example")
+    # The shared client follows redirects (`fieldclub.http`), so this one does too.
+    return RestJson(httpx.Client(follow_redirects=True), polite=NoWait(), where="Example")
 
 
 def linked(page: list[str], following: str | None, total: int) -> httpx.Response:
@@ -236,3 +237,34 @@ def test_a_next_page_on_another_server_is_refused_unasked(elsewhere: str) -> Non
     with pytest.raises(UpstreamFormatError, match="another server"):
         list(make().items(URL, items="data", next_url="links.next"))
     assert len(respx.calls) == 1
+
+
+@pytest.mark.parametrize(
+    "elsewhere",
+    [
+        "http://169.254.169.254/computeMetadata/v1/",
+        "https://internal.example/works?cursor=2",
+        "https://user:pw@api.example/works?cursor=2",
+        "file:///etc/passwd",
+    ],
+)
+@respx.mock
+def test_a_page_that_redirects_to_another_server_is_refused_unasked(elsewhere: str) -> None:
+    """The client would follow a same-host next page's redirect anywhere, so each hop is checked too."""
+    respx.get(URL).mock(return_value=linked(["a"], f"{URL}/2", 5))
+    respx.get(f"{URL}/2").mock(return_value=httpx.Response(302, headers={"Location": elsewhere}))
+    away = elsewhere.startswith("http") and "api.example" not in elsewhere
+    hop = respx.get(elsewhere.split("?")[0]) if away else None
+    with pytest.raises(UpstreamFormatError, match="another server"):
+        list(make().items(URL, items="data", next_url="links.next"))
+    assert len(respx.calls) == 2
+    assert hop is None or not hop.called
+
+
+@respx.mock
+def test_a_redirect_on_the_same_server_is_followed() -> None:
+    respx.get(URL).mock(return_value=httpx.Response(301, headers={"Location": "/v2/works"}))
+    respx.get("https://api.example/v2/works").mock(return_value=linked(["a"], None, 1))
+    assert [item["id"] for item in make().items(URL, items="data", next_url="links.next", id_path="id")] == [
+        "a"
+    ]

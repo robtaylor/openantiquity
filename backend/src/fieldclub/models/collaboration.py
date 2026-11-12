@@ -49,7 +49,10 @@ class Investigation(Base):
     """A shared notebook tied to the map."""
 
     __tablename__ = "investigations"
-    __table_args__ = (enum_check("visibility", Visibility),)
+    __table_args__ = (
+        enum_check("visibility", Visibility),
+        CheckConstraint("(area IS NULL) = (area_squares IS NULL)", name="area_squares_with_area"),
+    )
 
     id: Mapped[IdPk]
     created_at: Mapped[CreatedAt]
@@ -60,6 +63,11 @@ class Investigation(Base):
     # Markdown.
     notes: Mapped[str | None] = mapped_column(Text)
     area: Mapped[WKBElement | None] = mapped_column(any_geometry())
+    # The whole 1 km grid squares the area's bounding box covers, set with
+    # the area (`sensitivity.square_cover`). Shown, and matched by a box
+    # search, in place of the area for a reader it would tell where a
+    # protected finding is (Decision 0023).
+    area_squares: Mapped[WKBElement | None] = mapped_column(polygon())
     visibility: Mapped[str] = mapped_column(
         Text, default=Visibility.PRIVATE.value, server_default=Visibility.PRIVATE.value
     )
@@ -111,6 +119,25 @@ class InvestigationItem(Base):
     data: Mapped[JsonDict | None] = json_column()
     position: Mapped[int] = mapped_column(Integer)
     added_by: Mapped[int] = fk("users.id")
+
+
+class InvestigationHeldFinding(Base):
+    """A finding an investigation has held at any time, kept when its item is taken off.
+
+    What was written and drawn beside a finding still says where it is after
+    the finding leaves the page, so the guard on an investigation's text
+    counts every finding it has held (Decision 0023).
+    """
+
+    __tablename__ = "investigation_held_findings"
+
+    investigation_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("investigations.id", ondelete="CASCADE"), primary_key=True
+    )
+    finding_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("findings.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    created_at: Mapped[CreatedAt]
 
 
 class SquareSurvey(Base):

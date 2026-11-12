@@ -51,6 +51,18 @@ and an easting and northing as `x=410250&y=169960`. A word or address with
 `%` escapes in it (`51%C2%B025%2743%22N`) is read decoded as well, and when
 the decoded form holds a position the whole word is hidden.
 
+An Open Location Code ("plus code") counts too, in full (`9C3WC4HW+F8`) or
+short (`C4HW+F8 Avebury`, as Google shares it), and so does any link to a map
+site, such as a short link (`maps.app.goo.gl/...`), an OpenStreetMap object
+or tile, a geohash or a plus code, because such a link opens at a place
+whether or not figures show in it.
+
+Text is read as a person sees it: compatibility forms such as full-width
+letters and figures are read as the plain ones (NFKC), invisible format
+characters are skipped, and a run of spaces counts as one, so every pattern
+takes time in proportion to the text. Spans still point into the text as
+written, so `redact` keeps everything around a position exactly.
+
 Some text only looks like a position, and is left alone: postcodes
 (`SO17 1BJ`), dates (`2024-11-11`), telephone numbers (`01234 567890`), list
 entry numbers (`1012345`), a single number, and prices. Some ordinary text
@@ -58,16 +70,19 @@ is caught, and is accepted as the cost of not missing a position: a word of
 one or two letters that names a grid square followed by six figures (`no
 123456`, `A 123 456`, `No. 123.456`), two six-figure numbers side by side,
 two numbers with a decimal comma that could be a latitude and a longitude
-(`52,000 1,250`), and three dotted words such as `fish.and.chips`.
+(`52,000 1,250`), three dotted words such as `fish.and.chips`, a sum of
+four figures and two (`3456+78`, which is also a plus code), and any link
+into a map site, even one that doesn't open at a place.
 """
 
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
-from urllib.parse import unquote_plus
+from urllib.parse import unquote
 
 from fieldclub import gridref
 
@@ -174,6 +189,38 @@ _QUERY_PAIR = re.compile(
     rf"&(?P<l2>{_AXIS_LABEL})=(?P<v2>{_NUMBER})(?![.\d])"
 )
 
+# Open Location Codes: an even number of characters from their alphabet, a
+# `+`, and two or three more. Four or more before the `+` name a place to
+# within metres, given a nearby town for a short one.
+_OLC = "23456789CFGHJMPQRVWXcfghjmpqrvwx"
+_PLUS_CODE = re.compile(rf"(?<![0-9A-Za-z+])(?P<code>[{_OLC}]{{4,8}})\+[{_OLC}]{{2,3}}(?![0-9A-Za-z+])")
+
+# Links into map sites: each opens at a place, whatever its address shows.
+_MAP_SITES = (
+    r"maps\.app\.goo\.gl/",
+    r"goo\.gl/maps/",
+    r"g\.co/kgs/",
+    r"maps\.google\.[a-z]{2,3}(?:\.[a-z]{2})?[/?#]",
+    r"google\.[a-z]{2,3}(?:\.[a-z]{2})?/maps[/?@#]",
+    r"openstreetmap\.org[/?#]",
+    r"osm\.org/",
+    r"bing\.com/maps[/?#]",
+    r"maps\.apple\.com[/?#]",
+    r"(?:wego\.)?here\.com/[a-z]{1,2}/",
+    r"what3words\.com/",
+    r"w3w\.co/",
+    r"plus\.codes/",
+    r"geohash\.org/",
+    r"gridreferencefinder\.com[/?#]",
+    r"streetmap\.co\.uk/",
+    r"wikimapia\.org[/?#]",
+    r"waze\.com/(?:[a-z-]+/)?(?:ul|live-map)",
+)
+_MAP_LINK = re.compile(
+    rf"(?i)(?<![\w.@/-])(?:https?://)?(?:[a-z0-9-]{{1,63}}\.){{0,4}}(?:{'|'.join(_MAP_SITES)})"
+    r"[^\s<>\"'\[\]{}|\\^`]+"
+)
+
 _WORD = r"[^\W\d_]+"
 _WORDS = re.compile(
     rf"(?<![\w.@/-])(?P<prefix>///{_SEP}*|(?:https?://)?(?:www\.)?(?:what3words\.com|w3w\.co)/)?"
@@ -199,6 +246,8 @@ class PositionKind(StrEnum):
     COORDINATES = "coordinates"
     EASTING_NORTHING = "easting_northing"
     THREE_WORDS = "three_words"
+    PLUS_CODE = "plus_code"
+    MAP_LINK = "map_link"
 
 
 @dataclass(frozen=True)
@@ -316,6 +365,14 @@ def _paired_east_north(match: re.Match[str]) -> bool:
     return _east_north(match["e"], match["n"])
 
 
+def _plus_code(match: re.Match[str]) -> bool:
+    return len(match["code"]) % 2 == 0
+
+
+def _always(match: re.Match[str]) -> bool:
+    return True
+
+
 # Each pattern, what it finds, and the test a match must pass.
 _FINDERS: tuple[tuple[re.Pattern[str], PositionKind, Callable[[re.Match[str]], bool]], ...] = (
     (_GRID, PositionKind.GRID_REFERENCE, _grid),
@@ -326,6 +383,8 @@ _FINDERS: tuple[tuple[re.Pattern[str], PositionKind, Callable[[re.Match[str]], b
     (_EAST_NORTH_LABELLED, PositionKind.EASTING_NORTHING, _labelled_east_north),
     (_EAST_NORTH_PAIR, PositionKind.EASTING_NORTHING, _paired_east_north),
     (_WORDS, PositionKind.THREE_WORDS, _three_words),
+    (_PLUS_CODE, PositionKind.PLUS_CODE, _plus_code),
+    (_MAP_LINK, PositionKind.MAP_LINK, _always),
 )
 
 
@@ -338,23 +397,76 @@ _DECODE_ROUNDS = 3
 _ESCAPED_WORD_MAX = 8000
 
 
+# The separators `_SEP` names, which `_normalised` folds to one space a run.
+_SEPARATOR = re.compile(_SEP)
+# Degree, minute and second marks the patterns read as written. NFKC would
+# turn some into letters (`º` into `o`) or into two marks.
+_MARKS = frozenset("\u00b0\u00ba\u02da\u2032\u2033\u2019\u201d")
+# What needs no folding: plain ASCII text without a run of two separators.
+_FOLD_NEEDED = re.compile(r"[^\x00-\x7f]|[ \t]{2}")
+
+
+@dataclass(frozen=True)
+class _Folded:
+    """Text as the patterns read it, and where each of its characters came from in the original."""
+
+    text: str
+    # `origin[i]` is the index in the original of folded character `i`, and
+    # `origin[len(text)]` is the original's length. None when nothing was folded.
+    origin: list[int] | None
+
+    def span(self, start: int, end: int) -> tuple[int, int]:
+        if self.origin is None:
+            return start, end
+        return self.origin[start], self.origin[end - 1] + 1
+
+
+def _normalised(text: str) -> _Folded:
+    """`text` in NFKC form a character at a time, less format characters, each run of separators one space."""
+    if not _FOLD_NEEDED.search(text):
+        return _Folded(text, None)
+    folded: list[str] = []
+    origin: list[int] = []
+    after_separator = False
+    for index, character in enumerate(text):
+        if unicodedata.category(character) == "Cf":
+            continue
+        plain = character.isascii() or character in _MARKS
+        for part in character if plain else unicodedata.normalize("NFKC", character):
+            separator = _SEPARATOR.fullmatch(part) is not None
+            if separator and after_separator:
+                continue
+            after_separator = separator
+            folded.append(" " if separator else part)
+            origin.append(index)
+    origin.append(len(text))
+    return _Folded("".join(folded), origin)
+
+
 def _matches(text: str) -> list[Found]:
+    """Positions in `text` as written, found in its folded form."""
+    folded = _normalised(text)
     return [
-        Found(kind, match.start(), match.end())
+        Found(kind, *folded.span(match.start(), match.end()))
         for pattern, kind, holds in _FINDERS
-        for match in pattern.finditer(text)
+        for match in pattern.finditer(folded.text)
         if holds(match)
     ]
 
 
-def _decoded(word: str) -> str:
-    """`word` with its `%` escapes undone, and `+` read as a space, as a query string means it."""
+def _decodings(word: str) -> list[str]:
+    """`word` with its `%` escapes undone, once and up to `_DECODE_ROUNDS` times, and with `+`
+    read as a space, as a query string means it. A plus code's `+` is lost to that last reading,
+    so each round is read as it is too."""
+    readings: list[str] = []
     for _ in range(_DECODE_ROUNDS):
-        decoded = unquote_plus(word)
+        decoded = unquote(word)
         if decoded == word:
             break
+        readings.append(decoded)
         word = decoded
-    return word
+    readings.append(word.replace("+", " "))
+    return readings
 
 
 def _escaped(text: str) -> list[Found]:
@@ -364,9 +476,11 @@ def _escaped(text: str) -> list[Found]:
         word = match.group(0)
         if len(word) > _ESCAPED_WORD_MAX or not _ESCAPE.search(word):
             continue
-        inside = _matches(_decoded(word))
-        if inside:
-            found.append(Found(inside[0].kind, match.start(), match.end()))
+        for reading in _decodings(word):
+            inside = _matches(reading)
+            if inside:
+                found.append(Found(inside[0].kind, match.start(), match.end()))
+                break
     return found
 
 
@@ -397,3 +511,33 @@ def redact(text: str) -> str:
         end = item.end
     parts.append(text[end:])
     return "".join(parts)
+
+
+def _hidden_parts(text: str) -> list[str]:
+    """What each `PLACEHOLDER` in `redact(text)` stands for, in order: a position, or a placeholder typed."""
+    parts: list[str] = []
+    end = 0
+    for item in find_positions(text):
+        parts.extend([PLACEHOLDER] * text[end : item.start].count(PLACEHOLDER))
+        parts.append(text[item.start : item.end])
+        end = item.end
+    parts.extend([PLACEHOLDER] * text[end:].count(PLACEHOLDER))
+    return parts
+
+
+def restore(edited: str, original: str) -> str | None:
+    """`edited`, a change to `redact(original)`, with each placeholder put back to what it hid.
+
+    Someone shown text with positions hidden can still edit the rest of it,
+    and what they couldn't see is kept. None when `edited` doesn't hold
+    exactly as many placeholders as they were shown, so which one is which
+    can't be told.
+    """
+    parts = _hidden_parts(original)
+    pieces = edited.split(PLACEHOLDER)
+    if len(pieces) != len(parts) + 1:
+        return None
+    restored = [pieces[0]]
+    for part, piece in zip(parts, pieces[1:], strict=True):
+        restored.extend((part, piece))
+    return "".join(restored)

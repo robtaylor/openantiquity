@@ -1,5 +1,5 @@
 """The `__Host-openantiquity_session` cookie (HttpOnly, SameSite=Lax, Secure; `openantiquity_session`
-in local development over http), the sign-in flow cookie, and the emailed link's browser cookie."""
+in local development over http), the sign-in flow cookie, and the emailed link's browser cookies."""
 
 from __future__ import annotations
 
@@ -8,7 +8,13 @@ from typing import Any
 from starlette.requests import Request
 from starlette.responses import Response
 
-from fieldclub.auth.email_link import LINK_COOKIE, LINK_COOKIE_PATH, LINK_LIFETIME
+from fieldclub.auth.email_link import (
+    KNOWN_COOKIE,
+    KNOWN_LIFETIME,
+    LINK_COOKIE,
+    LINK_COOKIE_PATH,
+    LINK_LIFETIME,
+)
 from fieldclub.auth.flow import FLOW_COOKIE, FLOW_LIFETIME_S
 from fieldclub.auth.oauth import OAuthProvider, callback_path
 from fieldclub.auth.sessions import session_lifetime
@@ -83,3 +89,10 @@ def set_link_cookie(response: Response, value: str) -> None:
 
 def clear_link_cookie(response: Response) -> None:
     response.delete_cookie(LINK_COOKIE, **_link_cookie_attributes())
+
+
+def set_known_cookie(response: Response, value: str) -> None:
+    """The `openantiquity_email_known` cookie: the mailboxes this browser signed in to by link."""
+    response.set_cookie(
+        KNOWN_COOKIE, value, max_age=int(KNOWN_LIFETIME.total_seconds()), **_link_cookie_attributes()
+    )

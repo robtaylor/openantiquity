@@ -245,7 +245,7 @@ def test_an_item_from_another_investigation_is_not_found(db: Session, make_user:
     item = add(db, theirs, other)
     access = investigations.load(db, mine.public_id, owner, Need.EDIT, lock=True)
     with pytest.raises(ItemNotFoundError):
-        investigations.update_item(db, access, item.id, {"note": "mine now"})
+        investigations.update_item(db, access, owner, item.id, {"note": "mine now"})
     with pytest.raises(ItemNotFoundError):
         investigations.remove_item(db, access, item.id)
 
@@ -256,15 +256,15 @@ def test_an_edit_keeps_the_kind_and_its_needs(db: Session, make_user: MakeUser) 
     note = add(db, investigation, owner, note="first")
     view = add(db, investigation, owner, kind=KIND.VIEW, data=VIEW)
     access = investigations.load(db, investigation.public_id, owner, Need.EDIT, lock=True)
-    investigations.update_item(db, access, note.id, {"note": "second", "title": "Heading"})
+    investigations.update_item(db, access, owner, note.id, {"note": "second", "title": "Heading"})
     assert (note.note, note.title) == ("second", "Heading")
     with pytest.raises(InvalidItemError):
-        investigations.update_item(db, access, note.id, {"note": None})
+        investigations.update_item(db, access, owner, note.id, {"note": None})
     with pytest.raises(InvalidItemError):
-        investigations.update_item(db, access, view.id, {"data": None}, [KIND.VIEW])
+        investigations.update_item(db, access, owner, view.id, {"data": None}, [KIND.VIEW])
     with pytest.raises(InvalidItemError, match="its own content"):
-        investigations.update_item(db, access, view.id, {"data": REFERENCE}, [KIND.REFERENCE])
-    investigations.update_item(db, access, view.id, {"data": VIEW | {"zoom": 17}}, [KIND.VIEW])
+        investigations.update_item(db, access, owner, view.id, {"data": REFERENCE}, [KIND.REFERENCE])
+    investigations.update_item(db, access, owner, view.id, {"data": VIEW | {"zoom": 17}}, [KIND.VIEW])
     assert view.data == VIEW | {"zoom": 17}
 
 

@@ -3283,8 +3283,8 @@ export interface components {
          *     the viewer may see them. Otherwise `unavailable` says why: `hidden` (a
          *     moderator hid the finding), `withdrawn` (its finder took it back) or
          *     `gone` (the record has left the index). A view or profile is left out as
-         *     `near_protected` when it lies near a finding the investigation holds that
-         *     the viewer sees only as a 1 km square. Show the item as a line saying so.
+         *     `near_protected` when it lies near a finding the viewer sees only as a
+         *     1 km square. Show the item as a line saying so.
          */
         InvestigationItemOut: {
             added_by: components["schemas"]["PublicUser"];

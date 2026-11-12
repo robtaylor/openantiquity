@@ -3,6 +3,7 @@
 from fieldclub.models.collaboration import (
     Activity,
     Investigation,
+    InvestigationHeldFinding,
     InvestigationItem,
     InvestigationMember,
     Notification,
@@ -42,6 +43,7 @@ __all__ = [
     "Follow",
     "IngestRun",
     "Investigation",
+    "InvestigationHeldFinding",
     "InvestigationItem",
     "InvestigationMember",
     "MagicLink",

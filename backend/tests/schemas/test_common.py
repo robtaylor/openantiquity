@@ -322,6 +322,63 @@ def test_from_geojson_refuses_bad_geometry(geometry: dict, message: str) -> None
     assert caught.value.status_code == 422
 
 
+_RING = [[-1.8, 51.45], [-1.799, 51.45], [-1.799, 51.451], [-1.8, 51.45]]
+
+
+@pytest.mark.parametrize(
+    "geometry",
+    [
+        # A polygon with an empty hole made GEOS crash the whole process in `contains`.
+        {"type": "Polygon", "coordinates": [_RING, []]},
+        {"type": "Polygon", "coordinates": [[]]},
+        {"type": "Polygon", "coordinates": []},
+        {"type": "MultiPolygon", "coordinates": [[_RING], []]},
+        {"type": "MultiPolygon", "coordinates": [[_RING, []]]},
+        {"type": "MultiPolygon", "coordinates": []},
+        # Rings need four positions and must close; lines need two.
+        {"type": "Polygon", "coordinates": [_RING[:3]]},
+        {"type": "Polygon", "coordinates": [[*_RING[:3], [-1.8, 51.4505]]]},
+        {"type": "LineString", "coordinates": [[-1.8, 51.45]]},
+        {"type": "LineString", "coordinates": []},
+        {"type": "MultiLineString", "coordinates": [[[-1.8, 51.45], [-1.79, 51.45]], []]},
+        {"type": "MultiPoint", "coordinates": [[-1.8, 51.45], []]},
+        # Positions are two or three finite numbers.
+        {"type": "Point", "coordinates": [-1.8]},
+        {"type": "Point", "coordinates": [-1.8, 51.45, 0, 0]},
+        {"type": "Point", "coordinates": [-1.8, float("nan")]},
+        {"type": "Point", "coordinates": [True, 51.45]},
+        {"type": "LineString", "coordinates": [[-1.8, 51.45], [[-1.79, 51.45]]]},
+        # A collection of nothing, or holding a broken member or another collection.
+        {"type": "GeometryCollection", "geometries": []},
+        {"type": "GeometryCollection", "geometries": [{"type": "Polygon", "coordinates": [_RING, []]}]},
+        {"type": "GeometryCollection", "geometries": [{"type": "GeometryCollection", "geometries": []}]},
+    ],
+)
+def test_from_geojson_refuses_shapes_with_empty_or_short_parts(geometry: dict) -> None:
+    """Such a shape reaches GEOS, which can crash the API process on it: refuse it first."""
+    with pytest.raises(ValidationFailedError) as caught:
+        from_geojson(geometry)
+    assert caught.value.status_code == 422
+    assert caught.value.code == "validation_error"
+
+
+@pytest.mark.parametrize(
+    "geometry",
+    [
+        {"type": "Polygon", "coordinates": [_RING]},
+        {"type": "Polygon", "coordinates": [[[x, y, 120.5] for x, y in _RING]]},
+        {"type": "MultiPolygon", "coordinates": [[_RING]]},
+        {"type": "LineString", "coordinates": [[-1.8, 51.45], [-1.79, 51.45]]},
+        {"type": "MultiPoint", "coordinates": [[-1.8, 51.45]]},
+        {"type": "GeometryCollection", "geometries": [{"type": "Point", "coordinates": [-1.8, 51.45]}]},
+    ],
+)
+def test_every_shape_from_geojson_can_be_tested_against_the_british_isles(geometry: dict) -> None:
+    from fieldclub.services.findings import check_in_british_isles
+
+    check_in_british_isles(from_geojson(geometry))
+
+
 def test_to_db_geometry_carries_the_srid() -> None:
     element = to_db_geometry(Point(-1.8542, 51.4286))
     assert isinstance(element, WKBElement)

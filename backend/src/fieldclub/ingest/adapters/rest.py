@@ -36,7 +36,7 @@ from collections.abc import Generator
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 
@@ -54,6 +54,8 @@ logger = logging.getLogger(__name__)
 
 # A safety stop. No source read so far has more than a few hundred pages.
 MAX_PAGES = 5000
+# The most redirects one page may take.
+MAX_REDIRECTS = 5
 
 
 def dig(value: Any, path: str) -> Any:
@@ -83,11 +85,30 @@ class RestJson:
         self.tolerance = tolerance
 
     def get(self, url: str, params: dict[str, str] | None = None) -> Any:
-        """One request, parsed as JSON. NaN and infinities in it are turned into None."""
-        response = self.polite.request(
-            self.client, "GET", url, params=params, headers={"Accept": "application/json"}
+        """One request, parsed as JSON. NaN and infinities in it are turned into None.
+
+        A redirect is followed only to the same host (`_check_redirect`), and
+        at most `MAX_REDIRECTS` times: the shared client would go wherever a
+        publisher's answer sends it.
+        """
+        asked = url
+        for _ in range(MAX_REDIRECTS + 1):
+            response = self.polite.request(
+                self.client,
+                "GET",
+                url,
+                params=params,
+                headers={"Accept": "application/json"},
+                follow_redirects=False,
+            )
+            if not response.is_redirect:
+                return plain_tree(json_body(response, f"{self.where} ({short_url(asked)})"))
+            target = urljoin(str(response.url), response.headers.get("location", ""))
+            _check_redirect(url, target, self.where)
+            url, params = target, None
+        raise UpstreamFormatError(
+            f"{self.where} redirected {short_url(asked)} more than {MAX_REDIRECTS} times."
         )
-        return plain_tree(json_body(response, f"{self.where} ({short_url(url)})"))
 
     def document(
         self,
@@ -217,3 +238,14 @@ def _check_same_service(first: str, following: str, where: str) -> None:
     same = (a.scheme.lower(), a.hostname, a.port) == (b.scheme.lower(), b.hostname, b.port)
     if not same or b.scheme.lower() not in ("http", "https") or b.username or b.password:
         raise UpstreamFormatError(f"{where} gave a next page on another server: {following[:200]!r}.")
+
+
+def _check_redirect(current: str, target: str, where: str) -> None:
+    """Refuse a redirect to another host, to anything but http(s), or with credentials in it.
+
+    Moving from http to https, or to another path or port on the same host,
+    is what services do and is allowed.
+    """
+    a, b = urlsplit(current), urlsplit(target)
+    if b.scheme.lower() not in ("http", "https") or a.hostname != b.hostname or b.username or b.password:
+        raise UpstreamFormatError(f"{where} redirected to another server: {target[:200]!r}.")
