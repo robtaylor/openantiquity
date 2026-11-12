@@ -32,9 +32,10 @@ directly. Checking that a shape lies in the British Isles is
     python -m fieldclub.services.shapes backfill
 
 fills the simplified copies, the kind and the length of every outline saved
-before paths existed, so the map can draw it at every zoom. It is safe to
-run again, and changes nothing the second time. Run it once by hand after
-the deploy that brings paths.
+before paths existed, so the map can draw it at every zoom, and the ground
+second looks were given on for every finding answered before that was kept
+(`looked_at.backfill`). It is safe to run again, and changes nothing the
+second time. Run it once by hand after the deploy that brings paths.
 """
 
 from __future__ import annotations
@@ -651,7 +652,7 @@ def backfill(db: Session, *, batch: int = BACKFILL_BATCH) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """`python -m fieldclub.services.shapes backfill`: see `backfill`."""
+    """`python -m fieldclub.services.shapes backfill`: see `backfill` and `looked_at.backfill`."""
     parser = argparse.ArgumentParser(
         prog="python -m fieldclub.services.shapes",
         description="Fill what outlines saved before paths lack. Safe to run again.",
@@ -662,11 +663,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Imported here, so the shapes and the tests that use them need no database settings.
     from fieldclub.config import get_settings
     from fieldclub.db import SessionLocal
+    from fieldclub.services import looked_at
 
     logging.basicConfig(level=get_settings().log_level)
     with SessionLocal() as db:
         filled = backfill(db)
+        seeded = looked_at.backfill(db)
     logger.info("Backfill filled %d outlines saved before paths", filled)
+    logger.info("Backfill seeded what was looked at for %d findings answered before it was kept", seeded)
     return 0
 
 

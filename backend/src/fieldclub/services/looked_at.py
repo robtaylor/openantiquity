@@ -13,6 +13,8 @@ finding's life, not per edit.
   `LOOKED_AT_MAX_MOVE_M` from the finding's new shape, or from its new point
   when it would have no shape. `findings.change_shape` calls it, and so does
   a move of a finding with no shape.
+- `seed` fills `looked_at` for a finding answered before it existed, from
+  the shape as stored, and `backfill` does so for every such finding.
 - `new_part` is what extensions added since the newest standing second look:
   its length, which `look_at_new_part` and the page's
   `added_since_looked_m` come from, and the view that frames the newest.
@@ -115,6 +117,75 @@ def grow(db: Session, finding: Finding, observation: Observation) -> None:
     finding.looked_at = to_db_geometry(now if before is None else shapely.union(before, now))
 
 
+def has_standing_look(db: Session, finding: Finding) -> bool:
+    """Whether anyone's second look on the finding stands, not taken back."""
+    return bool(
+        db.scalar(
+            select(
+                select(Observation.id)
+                .where(Observation.finding_id == finding.id, Observation.withdrawn_at.is_(None))
+                .exists()
+            )
+        )
+    )
+
+
+def seed(db: Session, finding: Finding) -> bool:
+    """Fill `looked_at` for a finding answered before it existed, and say whether it is set. Hold the lock.
+
+    A second look given before the deploy that brought `looked_at`, or on a
+    machine still running the old version during it, left it NULL. Its
+    ground is the finding's shape as stored now, before any edit, or its
+    point when it has no shape: the best record there is of what was seen.
+    A finding whose every second look was taken back has nothing to keep.
+    """
+    if finding.looked_at is not None:
+        return True
+    if not has_standing_look(db, finding):
+        return False
+    now = ground(finding)
+    assert not now.is_empty, f"finding {finding.public_id} has an empty shape"
+    finding.looked_at = to_db_geometry(now)
+    return True
+
+
+# Findings seeded at a time, each batch in its own transaction.
+BACKFILL_BATCH = 200
+
+
+def backfill(db: Session, *, batch: int = BACKFILL_BATCH) -> int:
+    """`seed` every finding answered before `looked_at` existed. Commits each batch, and says how many.
+
+    Each finding is locked before it is seeded, so an edit or an answer
+    committed meanwhile is seen, and a second run changes nothing.
+    """
+    assert batch > 0, "a batch holds a finding at least"
+    standing = (
+        select(Observation.id)
+        .where(Observation.finding_id == Finding.id, Observation.withdrawn_at.is_(None))
+        .exists()
+    )
+    seeded, after = 0, 0
+    while ids := db.scalars(
+        select(Finding.id)
+        .where(Finding.id > after, Finding.looked_at.is_(None), standing)
+        .order_by(Finding.id)
+        .limit(batch)
+    ).all():
+        for finding_id in ids:
+            finding = db.scalars(
+                select(Finding)
+                .where(Finding.id == finding_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ).one()
+            if finding.looked_at is None and seed(db, finding):
+                seeded += 1
+        db.commit()
+        after = ids[-1]
+    return seeded
+
+
 def _on_grid(geometry: BaseGeometry, to_grid: Transformer) -> BaseGeometry:
     def project(xy: np.ndarray) -> np.ndarray:
         x, y = to_grid.transform(xy[:, 0], xy[:, 1])
@@ -123,16 +194,19 @@ def _on_grid(geometry: BaseGeometry, to_grid: Transformer) -> BaseGeometry:
     return shapely.transform(geometry, project)
 
 
-def check(finding: Finding, target: BaseGeometry) -> None:
+def check(db: Session, finding: Finding, target: BaseGeometry) -> None:
     """Refuse an edit whose shape, or point when it has none, is `target`, if too little of `looked_at` stays.
 
-    Every looked-at point, and at least `LOOKED_AT_MIN_KEPT` of the length of
-    the looked-at lines, must lie within `LOOKED_AT_MAX_MOVE_M` of `target`.
-    An area counts as all of its inside. Nothing is checked before the first
-    second look.
+    Call it before the edit is applied, under the lock. Every looked-at
+    point, and at least `LOOKED_AT_MIN_KEPT` of the length of the looked-at
+    lines, must lie within `LOOKED_AT_MAX_MOVE_M` of `target`. An area
+    counts as all of its inside. Nothing is checked while no second look
+    stands. A finding answered before `looked_at` existed is seeded first
+    (`seed`), so its answers hold it too.
     """
-    if finding.looked_at is None:
+    if not seed(db, finding):
         return
+    assert finding.looked_at is not None, "a seeded finding has looked-at ground"
     looked_at = to_shape(finding.looked_at)
     assert not looked_at.is_empty, f"finding {finding.public_id} has looked at nothing"
     assert not target.is_empty, "an edit leaves a shape or a point"

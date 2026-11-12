@@ -9,12 +9,12 @@ import pytest
 from geoalchemy2.shape import to_shape
 from shapely.geometry import LineString, Point
 from shapely.geometry.base import BaseGeometry
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from fieldclub.errors import ValidationFailedError
 from fieldclub.models import Activity, Finding, Notification, Observation, User
-from fieldclub.services import findings, looked_at, review
+from fieldclub.services import findings, looked_at, review, shapes
 from fieldclub.vocab import Visible
 from tests.findings.support import (
     API,
@@ -288,6 +288,90 @@ def test_the_check_is_made_where_a_suggestion_would_be_applied(db: Session, make
             db, findings.lock(db, finding), suggester, path=meridian(0, 0.02, lon=east(3000)), revision=0
         )
     assert caught.value.code == "looked_at_moved"
+
+
+# --------------------------------------------------------------------------
+# Second looks given before they recorded what they saw
+# --------------------------------------------------------------------------
+
+
+def answered_before_the_change(db: Session, make_user: MakeUser, finding: Finding) -> None:
+    """A second look as one given before answers recorded a revision and before `looked_at` existed."""
+    answered(db, make_user, finding)
+    db.execute(update(Observation).where(Observation.finding_id == finding.id).values(shape_revision=None))
+    db.execute(update(Finding).where(Finding.id == finding.id).values(looked_at=None))
+    db.commit()
+    db.expire_all()
+    assert finding.looked_at is None
+
+
+def test_a_line_answered_before_the_change_is_held_to_its_shape_as_stored(
+    db: Session, make_user: MakeUser
+) -> None:
+    finder = make_user()
+    finding = drawn(db, finder, meridian(0, 0.02))
+    answered_before_the_change(db, make_user, finding)
+    assert refused(db, finding, finder, path=meridian(0, 0.02, lon=east(3000)), path_revision=0) == (
+        "looked_at_moved"
+    )
+    # Seeded from the shape before the edit, and kept from then on.
+    edit(db, finding, finder, path=meridian(0, 0.02, 0.03), path_revision=0)
+    assert same_ground(seen_on(finding), LineString([(LON, LAT), (LON, LAT + 0.02)]))
+
+
+def test_a_spot_answered_before_the_change_is_held_to_its_point(db: Session, make_user: MakeUser) -> None:
+    finder = make_user()
+    finding = create(db, finder)
+    answered_before_the_change(db, make_user, finding)
+    assert refused(db, finding, finder, location=Point(east(300), LAT)) == "looked_at_moved"
+    edit(db, finding, finder, location=Point(east(200), LAT))
+    assert seen_on(finding).equals(Point(LON, LAT))
+
+
+def test_a_finding_whose_only_look_was_taken_back_isnt_held(db: Session, make_user: MakeUser) -> None:
+    finder = make_user()
+    finding = drawn(db, finder, meridian(0, 0.02))
+    answered_before_the_change(db, make_user, finding)
+    db.execute(update(Observation).values(withdrawn_at=func.now()))
+    db.commit()
+    edit(db, finding, finder, path=meridian(0, 0.02, lon=east(3000)), path_revision=0)
+    assert finding.looked_at is None
+
+
+def _looked_at_by_id(db: Session) -> dict[int, str | None]:
+    return dict(db.execute(select(Finding.id, func.ST_AsText(Finding.looked_at))).all())
+
+
+def test_the_backfill_seeds_what_was_looked_at_once(db: Session, make_user: MakeUser) -> None:
+    finder = make_user()
+    line, spot, unanswered, taken_back = (
+        drawn(db, finder, meridian(0, 0.02)),
+        create(db, finder),
+        drawn(db, finder, meridian(0, 0.01)),
+        create(db, finder),
+    )
+    for finding in (line, spot, taken_back):
+        answered_before_the_change(db, make_user, finding)
+    db.execute(
+        update(Observation).where(Observation.finding_id == taken_back.id).values(withdrawn_at=func.now())
+    )
+    seen_now = drawn(db, finder, meridian(0, 0.03))
+    answered(db, make_user, seen_now)
+    db.commit()
+    before = _looked_at_by_id(db)
+
+    assert shapes.main(["backfill"]) == 0
+    db.expire_all()
+    after = _looked_at_by_id(db)
+    assert same_ground(seen_on(line), LineString([(LON, LAT), (LON, LAT + 0.02)]))
+    assert seen_on(spot).equals(Point(LON, LAT))
+    assert after[unanswered.id] is None
+    assert after[taken_back.id] is None
+    assert after[seen_now.id] == before[seen_now.id]
+
+    assert shapes.main(["backfill"]) == 0
+    db.expire_all()
+    assert _looked_at_by_id(db) == after
 
 
 # --------------------------------------------------------------------------

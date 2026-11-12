@@ -913,7 +913,7 @@ def change_shape(
     anchor = _anchor_for(finding, new_shape, placed or current, placed=placed is not None)
     if new_shape is not None:
         check_in_british_isles(new_shape.geometry)
-    looked_at.check(finding, new_shape.geometry if new_shape is not None else anchor)
+    looked_at.check(db, finding, new_shape.geometry if new_shape is not None else anchor)
     _record_shape_change(db, finding, by, kind, old_path, new_shape)
     for name, value in _shape_columns(new_shape).items():
         setattr(finding, name, value)
@@ -987,7 +987,7 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
         if finding.outline is not None:
             shapes.check_shape(to_shape(finding.outline), location)
         else:
-            looked_at.check(finding, location)
+            looked_at.check(db, finding, location)
         _move_anchor(db, finding, location)
     if placed:
         finding.location_derived = False
