@@ -441,3 +441,35 @@ def test_a_failure_is_one_line_on_the_error_stream_without_the_token(
     assert captured.err.count("\n") == 1
     assert "Traceback" not in captured.err
     assert TOKEN not in captured.err + captured.out
+
+
+def test_the_tool_installs_nothing_unreviewed() -> None:
+    """It runs with the Gandi token in memory, so each run must install exactly what was reviewed.
+
+    Every dependency, its own included, is pinned to one version, and nothing
+    published after `exclude-newer` is taken, not even a new file for a
+    pinned version. The versions are the ones the backend's lock holds.
+    """
+    import re
+    import tomllib
+
+    text = (REPO_ROOT / "infra" / "dns.py").read_text()
+    block = re.search(r"^# /// script\n(.*?)^# ///$", text, re.MULTILINE | re.DOTALL)
+    assert block is not None
+    # PEP 723: each line is `# ` and its content, or a bare `#`.
+    lines = (line[2:] if line.startswith("# ") else line[1:] for line in block[1].splitlines())
+    metadata = tomllib.loads("\n".join(lines))
+    pins = dict(requirement.split("==") for requirement in metadata["dependencies"])
+    assert all(re.fullmatch(r"[a-z0-9-]+", name) for name in pins), metadata["dependencies"]
+    assert metadata["tool"]["uv"]["exclude-newer"]
+    lock = tomllib.loads((REPO_ROOT / "backend" / "uv.lock").read_text())
+    locked = {package["name"]: package for package in lock["package"]}
+    closure: set[str] = set()
+    todo = ["httpx", "python-dotenv"]
+    while todo:
+        name = todo.pop()
+        if name not in closure:
+            closure.add(name)
+            todo.extend(dependency["name"] for dependency in locked[name].get("dependencies", []))
+    assert set(pins) == closure
+    assert all(pins[name] == locked[name]["version"] for name in closure)

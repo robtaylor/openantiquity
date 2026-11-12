@@ -4,7 +4,10 @@
 # second line of defence. Secrets and runtime data must never reach the
 # build context at all.
 
-# Secrets and runtime data
+# Secrets and runtime data. gha-creds-*.json is the credentials file the
+# deploy workflow's Google sign-in step writes into the workspace.
+gha-creds-*.json
+**/gha-creds-*.json
 .env
 .env.*
 **/.env

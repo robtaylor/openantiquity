@@ -1,7 +1,22 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["httpx>=0.27", "python-dotenv>=1.0"]
+# dependencies = [
+#     "httpx==0.28.1",
+#     "python-dotenv==1.2.4",
+#     # What those two need, pinned too, as backend/uv.lock has them.
+#     "anyio==4.16.0",
+#     "certifi==2026.10.23",
+#     "h11==0.16.0",
+#     "httpcore==1.0.9",
+#     "idna==3.20",
+#     "typing-extensions==4.16.0",
+# ]
+#
+# [tool.uv]
+# # Nothing published after this is installed, not even a new file for a pinned
+# # version. Move it forward, and the pins with it, only after reviewing them.
+# exclude-newer = "2026-11-01T00:00:00Z"
 # ///
 # ruff: noqa: T201 - a command-line tool: what it prints is its output
 """Make the project's DNS zones at Gandi match `infra/dns.toml`.
