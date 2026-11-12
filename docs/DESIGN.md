@@ -94,17 +94,17 @@ What happens on the ground is recorded the same way. A site visit, a geophysics 
 
 ## Credit and reputation
 
-People earn points when their findings climb, when their second looks match the eventual outcome, and when others endorse evidence they added. Every point is itemised. Points do one thing: at fifty, a member can be made "trusted" by a moderator, which gives their reviews more weight and lets them see restricted locations. A moderator makes the call because a few accounts working together could otherwise earn their way to restricted locations. There are no penalties for findings that get explained away, because marking doubtful things is how the doubtful things get checked.
+People earn points when their findings climb, when their second looks match the eventual outcome, and when others endorse evidence they added. Every point is itemised. Points do one thing: at fifty, a member can be made "trusted" by a moderator, which gives their reviews more weight and lets their downloads carry protected findings' exact positions. A moderator makes the call because a few accounts working together could otherwise earn it. There are no penalties for findings that get explained away, because marking doubtful things is how the doubtful things get checked.
 
 There's no global leaderboard. Profiles show what someone has found and helped with.
 
 ## Protecting sites
 
-Most earthworks visible in public LIDAR are at little extra risk from a pin on a public map, because the data is already public. Some are not: anything suggesting burials, hoards or rich Roman occupation could attract illegal metal detecting. Every finding has one of three levels. An open finding shows its exact position to everyone. A protected finding shows its exact position to people who've signed in. A restricted finding shows it only to its finder, trusted members, archaeologists and moderators. Anyone who may not see a position exactly sees a one-kilometre square instead. Some kinds of finding, such as round barrows, start at protected. A finder, a trusted member or a moderator can raise a level, and only a moderator can lower one.
+Most earthworks visible in public LIDAR are at little extra risk from a pin on a public map, because the data is already public. Some are not: anything suggesting burials, hoards or rich Roman occupation could attract illegal metal detecting. Every finding is open or protected. An open finding shows its exact position to everyone. A protected finding shows its exact position to people who've signed in, and a one-kilometre square to everyone else. A download gives a protected finding's exact position only to its finder, trusted members, archaeologists and moderators, and its square to other members. Some kinds of finding, such as round barrows, start protected. Its finder, a trusted member or a moderator can protect a finding, and only a moderator can make it open again. A moderator can also hide a finding altogether, and then only its finder and moderators can find it.
 
 Before logging a site visit, the tool reminds people of the rules that apply where the finding is: get the landowner's permission, never dig, never use a metal detector on a scheduled monument, and report finds to the Portable Antiquities Scheme or Treasure Trove.
 
-Every finding, comment and piece of evidence has a report button. Moderators can hide content and restrict locations.
+Every finding, comment and piece of evidence has a report button. Moderators can hide content.
 
 ## Joining
 

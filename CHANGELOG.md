@@ -32,6 +32,7 @@ Nothing is live yet. When the first version opens, this is what it does for you.
 - Names that pass for staff or for a deleted account, such as "Site Moderator" or "Former member (deleted)", are refused, and changing your handle again and again can't reserve names.
 - Pages from OpenAntiquity make your browser fetch nothing from Google, Facebook or the other sign-in providers: profile pictures from them aren't shown.
 - Possible burial mounds and other sites at risk from looting are shown as a one-kilometre square to anyone who isn't signed in.
+- A finding is open or protected. The restricted level is gone, because it kept a finding's exact place from people who could still draw beside it.
 - There are no private messages. Everything people say about a finding is public and attached to it.
 - If you find an object, OpenAntiquity records nothing about it and tells you who to report it to in your part of the UK.
 - A second look counts the moment you press your answer. You can then say what you think it is, or not, before you see what the finder and everyone else said. If you leave in between, you're offered the same choice when you come back.
