@@ -1119,6 +1119,31 @@ class ModerationActionKind(StrEnum):
     REJECT_PHOTO = "reject_photo"
 
 
+class PointKind(StrEnum):
+    """A tapped point of a finding's path. A segment between two corners is straight."""
+
+    CORNER = "corner"
+    SMOOTH = "smooth"
+
+
+class ShapeKind(StrEnum):
+    """What a finding's shape is: an open line or a closed area."""
+
+    LINE = "line"
+    AREA = "area"
+
+
+class ShapeChangeKind(StrEnum):
+    """How a change to a finding's path changed it (`services.shapes.classify_change`)."""
+
+    DRAWN = "drawn"
+    EXTENDED = "extended"
+    RESHAPED = "reshaped"
+    CLOSED = "closed"
+    OPENED = "opened"
+    REMOVED = "removed"
+
+
 class ActivityKind(StrEnum):
     FINDING_CREATED = "finding_created"
     TIER_CHANGED = "tier_changed"
