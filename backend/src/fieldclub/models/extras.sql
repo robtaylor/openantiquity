@@ -10,6 +10,28 @@ CREATE OR REPLACE FUNCTION fieldclub_join_text(parts text[]) RETURNS text
     LANGUAGE sql IMMUTABLE PARALLEL SAFE
     AS $$ SELECT coalesce(array_to_string(parts, ' '), '') $$;
 
+-- A finding's line or shape (services.shapes). create_all adds these to a new
+-- database. A database made before them gets them here, with the same
+-- definitions, so the two end up alike. Nothing is backfilled: an old outline
+-- gains its path and simplifications when it is next saved, and
+-- `python -m fieldclub.services.shapes backfill` fills the simplifications.
+ALTER TABLE findings
+    ADD COLUMN IF NOT EXISTS path jsonb,
+    ADD COLUMN IF NOT EXISTS outline_mid geometry(GEOMETRY, 4326),
+    ADD COLUMN IF NOT EXISTS outline_low geometry(GEOMETRY, 4326),
+    ADD COLUMN IF NOT EXISTS shape_kind text
+        CONSTRAINT ck_findings_shape_kind_valid CHECK (shape_kind IN ('line', 'area')),
+    ADD COLUMN IF NOT EXISTS shape_length_m real,
+    ADD COLUMN IF NOT EXISTS shape_revision integer NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS location_derived boolean NOT NULL DEFAULT false;
+
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS shape_revision integer;
+
+-- Map views match a finding's shape as well as its point, for viewers who see it exactly.
+CREATE INDEX IF NOT EXISTS idx_findings_outline ON findings USING gist (outline);
+
+CREATE INDEX IF NOT EXISTS idx_findings_outline_low ON findings USING gist (outline_low);
+
 -- Full-text search over records. The name counts most, then the type terms,
 -- then the summary.
 ALTER TABLE records ADD COLUMN IF NOT EXISTS search tsvector

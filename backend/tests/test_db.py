@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import os
+import secrets
+from collections.abc import Iterator
+
 import pytest
-from sqlalchemy import inspect, select, text
+from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import NullPool
 
 from fieldclub import db as fieldclub_db
 from fieldclub.db import Base, _split_sql, create_schema, extras_statements, get_db
@@ -19,6 +24,7 @@ EXPECTED_TABLES = {
     "released_handles",
     "reputation_events",
     "findings",
+    "finding_shape_changes",
     "observations",
     "evidence",
     "evidence_votes",
@@ -107,6 +113,80 @@ def test_create_schema_keeps_existing_rows(db: Session, database: Engine) -> Non
     assert db.scalar(select(User.handle)) == "Keeper"
 
 
+# What the shapes of lines and curves added to a database built before them.
+_SHAPE_COLUMNS = (
+    "path",
+    "outline_mid",
+    "outline_low",
+    "shape_kind",
+    "shape_length_m",
+    "shape_revision",
+    "location_derived",
+)
+
+
+@pytest.fixture
+def scratch_database(database: Engine) -> Iterator[Engine]:
+    """Another empty database on the same server, named as a session's so a killed run's is reaped."""
+    name = f"fieldclub_test_{os.getpid()}_{secrets.token_hex(4)}"
+    admin = create_engine(database.url, isolation_level="AUTOCOMMIT", poolclass=NullPool)
+    with admin.connect() as conn:
+        conn.execute(text(f'CREATE DATABASE "{name}"'))
+    engine = create_engine(database.url.set(database=name), poolclass=NullPool)
+    try:
+        yield engine
+    finally:
+        engine.dispose()
+        with admin.connect() as conn:
+            conn.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+        admin.dispose()
+
+
+def _unordered(snapshot: dict[str, list[tuple]]) -> dict[str, list[tuple]]:
+    """A snapshot without column order, which a column added later can't keep."""
+    return {key: sorted(rows, key=repr) for key, rows in snapshot.items()}
+
+
+def test_create_schema_adds_the_shape_columns_to_a_database_made_before_them(
+    database: Engine, scratch_database: Engine
+) -> None:
+    create_schema(scratch_database)
+    with scratch_database.begin() as conn:
+        conn.execute(text("DROP TABLE finding_shape_changes"))
+        conn.execute(text("DROP INDEX idx_findings_outline"))
+        conn.execute(
+            text("ALTER TABLE findings " + ", ".join(f"DROP COLUMN {name}" for name in _SHAPE_COLUMNS))
+        )
+        conn.execute(text("ALTER TABLE observations DROP COLUMN shape_revision"))
+        user_id = conn.scalar(
+            text("INSERT INTO users (handle, display_name) VALUES ('Old', 'Old') RETURNING id")
+        )
+        conn.execute(
+            text(
+                "INSERT INTO findings (public_id, author_id, title, feature_class, location, "
+                "location_public, outline) VALUES ('OLD001', :user_id, 'An old outline', 'enclosure', "
+                "ST_GeomFromText('POINT(-1.85 51.43)', 4326), ST_GeomFromText('POINT(-1.85 51.43)', 4326), "
+                "ST_GeomFromText('LINESTRING(-1.85 51.43, -1.84 51.43)', 4326))"
+            ),
+            {"user_id": user_id},
+        )
+    columns = {column["name"] for column in inspect(scratch_database).get_columns("findings")}
+    assert not columns & set(_SHAPE_COLUMNS), "the old database still has the shape columns"
+
+    create_schema(scratch_database)
+    create_schema(scratch_database)
+
+    assert _unordered(_snapshot(scratch_database)) == _unordered(_snapshot(database))
+    with scratch_database.connect() as conn:
+        old = conn.execute(
+            text(
+                "SELECT path, outline_mid, shape_kind, shape_revision, location_derived, "
+                "ST_AsText(outline) FROM findings WHERE public_id = 'OLD001'"
+            )
+        ).one()
+    assert tuple(old) == (None, None, None, 0, False, "LINESTRING(-1.85 51.43,-1.84 51.43)")
+
+
 def test_records_search_is_a_generated_tsvector(database: Engine) -> None:
     with database.connect() as conn:
         row = conn.execute(
@@ -124,6 +204,8 @@ def test_records_search_is_a_generated_tsvector(database: Engine) -> None:
         ("idx_findings_location", ("USING gist", "(location)")),
         ("ix_findings_location_geography", ("USING gist", "geography")),
         ("idx_findings_location_public", ("USING gist", "(location_public)")),
+        ("idx_findings_outline", ("USING gist", "(outline)")),
+        ("idx_findings_outline_low", ("USING gist", "(outline_low)")),
         ("ix_findings_location_public_geography", ("USING gist", "location_public", "geography")),
         ("idx_records_geom", ("USING gist", "(geom)")),
         ("ix_records_centroid_geography", ("USING gist", "geography")),
@@ -178,6 +260,8 @@ def test_geometry_columns_are_wgs84(database: Engine) -> None:
         ("findings", "location"): (4326, "POINT"),
         ("findings", "location_public"): (4326, "POINT"),
         ("findings", "outline"): (4326, "GEOMETRY"),
+        ("findings", "outline_low"): (4326, "GEOMETRY"),
+        ("findings", "outline_mid"): (4326, "GEOMETRY"),
         ("investigations", "area"): (4326, "GEOMETRY"),
         ("investigations", "area_squares"): (4326, "POLYGON"),
         ("places", "geom"): (4326, "POINT"),

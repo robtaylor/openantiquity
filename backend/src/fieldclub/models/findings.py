@@ -6,6 +6,7 @@ from datetime import date, datetime
 
 from geoalchemy2 import WKBElement
 from sqlalchemy import (
+    REAL,
     BigInteger,
     Boolean,
     CheckConstraint,
@@ -52,6 +53,8 @@ from fieldclub.vocab import (
     Relation,
     Role,
     Sensitivity,
+    ShapeChangeKind,
+    ShapeKind,
     Stance,
     StateReason,
     Tier,
@@ -72,6 +75,7 @@ class Finding(Base):
         enum_check("state", FindingState),
         enum_check("state_reason", StateReason),
         enum_check("nation", Nation),
+        enum_check("shape_kind", ShapeKind),
         CheckConstraint("confidence BETWEEN 0 AND 100", name="confidence_range"),
         # The help-wanted queue looks findings up by open step.
         Index("ix_findings_open_steps", "open_steps", postgresql_using="gin"),
@@ -107,7 +111,25 @@ class Finding(Base):
     # grid square otherwise. Written on every save by the listener below.
     # Queries for signed-out visitors use this column only.
     location_public: Mapped[WKBElement] = mapped_column(point())
-    outline: Mapped[WKBElement | None] = mapped_column(any_geometry(spatial_index=False))
+    # The full shape, derived from `path` (`services.shapes`): a LineString or a
+    # one-ring Polygon. An outline saved before paths existed may be any line
+    # or polygon, and has no path until it is next saved.
+    outline: Mapped[WKBElement | None] = mapped_column(any_geometry())
+    # The points the finder tapped and whether the shape is closed, as
+    # `services.shapes.Path.to_json` writes them. The source of truth for `outline`.
+    path: Mapped[JsonDict | None] = json_column()
+    # `outline` simplified at 0.00005 degrees, for zooms 13 to 15 and the finding page.
+    outline_mid: Mapped[WKBElement | None] = mapped_column(any_geometry(spatial_index=False))
+    # `outline` simplified at 0.0005 degrees, for zooms 9 to 12.
+    outline_low: Mapped[WKBElement | None] = mapped_column(any_geometry())
+    shape_kind: Mapped[str | None] = mapped_column(Text)
+    # The geodesic length of a line, or the perimeter of an area, in metres.
+    shape_length_m: Mapped[float | None] = mapped_column(REAL)
+    # Raised by one on every change to the shape. An edit of the path names the
+    # revision it started from, so one tab can't undo another's change unseen.
+    shape_revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # True when the server chose `location` from the shape, because the finder drew it without one.
+    location_derived: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # Left unset, a new finding takes its feature class's default level
     # (`services.sensitivity.default_sensitivity`) when it is first saved.
     sensitivity: Mapped[str] = mapped_column(Text, server_default=Sensitivity.OPEN.value)
@@ -237,6 +259,37 @@ class Observation(Base):
     # good. A later change of role or a ban moves no score through an answer,
     # so neither can show how a named person answered (Decision 0019).
     role_at_answer: Mapped[str] = mapped_column(Text)
+    # The finding's `shape_revision` when the answer was given, so the page can
+    # say what has been added to its shape since anyone looked.
+    shape_revision: Mapped[int | None] = mapped_column(Integer)
+
+
+class FindingShapeChange(Base):
+    """One change to a finding's shape. Never served whole: `path_before` goes to moderators only."""
+
+    __tablename__ = "finding_shape_changes"
+    __table_args__ = (
+        UniqueConstraint("finding_id", "revision"),
+        enum_check("kind", ShapeChangeKind),
+    )
+
+    id: Mapped[IdPk]
+    created_at: Mapped[CreatedAt]
+    finding_id: Mapped[int] = fk("findings.id", ondelete="CASCADE")
+    user_id: Mapped[int] = fk("users.id", index=True)
+    # The finding's `shape_revision` after this change.
+    revision: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(Text)
+    points_before: Mapped[int] = mapped_column(Integer)
+    points_after: Mapped[int] = mapped_column(Integer)
+    length_before_m: Mapped[float | None] = mapped_column(REAL)
+    length_after_m: Mapped[float | None] = mapped_column(REAL)
+    # For an extension: the length it added, and a centre and zoom that frame
+    # the added part (`services.shapes.added_view`).
+    added_length_m: Mapped[float | None] = mapped_column(REAL)
+    added_view: Mapped[JsonDict | None] = json_column()
+    # The path as it was, for moderators and a later undo.
+    path_before: Mapped[JsonDict | None] = json_column()
 
 
 class Evidence(Base):
@@ -408,4 +461,14 @@ class Media(Base):
     hidden_at: Mapped[datetime | None] = mapped_column(TimestampTz)
 
 
-__all__ = ["Comment", "Evidence", "EvidenceVote", "Finding", "Follow", "Media", "Mention", "Observation"]
+__all__ = [
+    "Comment",
+    "Evidence",
+    "EvidenceVote",
+    "Finding",
+    "FindingShapeChange",
+    "Follow",
+    "Media",
+    "Mention",
+    "Observation",
+]

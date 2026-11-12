@@ -20,6 +20,7 @@ from fieldclub.models import (
     Evidence,
     EvidenceVote,
     Finding,
+    FindingShapeChange,
     Follow,
     IngestRun,
     Investigation,
@@ -348,6 +349,12 @@ def test_finding_defaults(make_finding: MakeFinding, db: Session) -> None:
     )
     assert finding.updated_at.tzinfo is not None
     assert finding.hidden_at is None
+    assert (finding.path, finding.shape_kind, finding.shape_revision, finding.location_derived) == (
+        None,
+        None,
+        0,
+        False,
+    )
 
 
 def test_finding_public_id_is_unique(db: Session, make_finding: MakeFinding, make_user: MakeUser) -> None:
@@ -373,6 +380,7 @@ def test_finding_public_id_is_unique(db: Session, make_finding: MakeFinding, mak
         ("state", "lost", "state_valid"),
         ("state_reason", "boredom", "state_reason_valid"),
         ("nation", "france", "nation_valid"),
+        ("shape_kind", "blob", "shape_kind_valid"),
         ("confidence", 101, "confidence_range"),
         ("confidence", -1, "confidence_range"),
     ],
@@ -582,6 +590,14 @@ def test_deleting_a_finding_removes_what_hangs_off_it(
             ),
             Notification(user_id=other.id, kind="tier_changed", finding_id=finding.id),
             Activity(kind="finding_created", finding_id=finding.id, actor_id=finding.author_id),
+            FindingShapeChange(
+                finding_id=finding.id,
+                user_id=finding.author_id,
+                revision=1,
+                kind="drawn",
+                points_before=0,
+                points_after=2,
+            ),
         ]
     )
     db.flush()
@@ -591,8 +607,39 @@ def test_deleting_a_finding_removes_what_hangs_off_it(
 
     db.delete(finding)
     db.commit()
-    for model in (Evidence, EvidenceVote, Comment, Observation, Follow, Mention, Notification, Activity):
+    for model in (
+        Evidence,
+        EvidenceVote,
+        Comment,
+        Observation,
+        Follow,
+        Mention,
+        Notification,
+        Activity,
+        FindingShapeChange,
+    ):
         assert db.scalar(select(func.count()).select_from(model)) == 0, model.__name__
+
+
+def test_a_shape_change_is_one_per_finding_and_revision_and_of_a_known_kind(
+    db: Session, make_finding: MakeFinding
+) -> None:
+    finding = make_finding()
+
+    def change(revision: int, kind: str = "drawn") -> FindingShapeChange:
+        return FindingShapeChange(
+            finding_id=finding.id,
+            user_id=finding.author_id,
+            revision=revision,
+            kind=kind,
+            points_before=0,
+            points_after=2,
+        )
+
+    db.add(change(1))
+    db.commit()
+    expect_violation(db, change(1, "extended"), match="uq_finding_shape_changes_finding_id_revision")
+    expect_violation(db, change(2, "scribbled"), match="kind_valid")
 
 
 def test_media_storage_key_is_unique(db: Session, make_user: MakeUser) -> None:
