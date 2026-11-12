@@ -34,7 +34,6 @@ if it carries a position.
 from __future__ import annotations
 
 import importlib
-import inspect
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,6 +52,7 @@ from fieldclub.auth.deps import current_contributor
 from fieldclub.main import create_app, mount_frontend
 from fieldclub.services import record_tiles
 from fieldclub.vocab import Visibility
+from tests import leak_record
 from tests.findings import test_leaks
 from tests.findings.support import create
 from tests.helpers import MakeUser, add_record, add_source
@@ -436,19 +436,26 @@ def test_each_route_that_returns_a_position_has_a_leak_test() -> None:
 def test_every_leak_test_includes_a_line_finding() -> None:
     """A protected or restricted line's shape must not reach anyone who sees only its square (Decision 0030).
 
-    So each module a row's leak test lives in builds the leak world's lines,
-    `tests.findings.test_leaks.draw_line`, or uses that world itself.
+    So each row's leak test must build one of the leak world's lines,
+    `tests.findings.test_leaks.draw_line`, and read it through the route: a
+    request's address or body, its response, or a text the test checks names
+    the line (`tests.leak_record`).
+    The leak tests run before this module, so their record is here. Run on
+    its own, there is nothing to prove, and this test is skipped.
     """
+    named = {}
     for key, expect in ROUTES.items():
         if expect.leak_test is None:
             continue
         test = leak_test(expect.leak_test)
         assert test is not None, f"{key}: there is no {expect.leak_test}"
-        module = importlib.import_module(test.__module__)
-        source = inspect.getsource(module)
-        assert module is test_leaks or "draw_line(" in source or "world = leaks.world" in source, (
-            f"{key}: {expect.leak_test} has no line finding"
-        )
+        named[key] = f"{test.__module__}:{test.__name__}"
+    ran = {key: leak_record.RESULTS[name] for key, name in named.items() if name in leak_record.RESULTS}
+    if not ran:
+        pytest.skip("run with the leak tests, which record whether they built and read a line")
+    for key, proof in ran.items():
+        assert proof.built, f"{key}: {named[key]} builds no line finding"
+        assert proof.read, f"{key}: {named[key]} never reads its line finding"
 
 
 def test_every_write_says_who_may_make_it_and_every_read_how_it_is_checked() -> None:

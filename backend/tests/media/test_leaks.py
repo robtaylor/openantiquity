@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from fieldclub.services import findings, media
 from fieldclub.services.findings import EvidenceFields
 from fieldclub.vocab import EvidenceKind, Outcome, Sensitivity
+from tests import leak_record
 from tests.findings import test_leaks as leaks
 from tests.moderation.support import API, jpeg, photo
 
@@ -52,6 +53,8 @@ def test_a_photo_goes_only_to_those_who_see_its_finding_exactly(
     )
     db.commit()
     path = f"{API}/media/{waiting.id}"
+    # The photo's address and its bytes don't name the finding, so the test says which it reads.
+    leak_record.read(finding.public_id)
     clients: dict[str, TestClient] = {viewer: world.client(viewer) for viewer in leaks.VIEWERS}
 
     for viewer, client in clients.items():

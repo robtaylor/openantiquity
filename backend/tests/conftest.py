@@ -114,6 +114,7 @@ from fieldclub.models import Finding, User  # noqa: E402
 from fieldclub.models.common import db_point  # noqa: E402
 from fieldclub.services import findings, ids  # noqa: E402
 from fieldclub.vocab import AgeBand, FeatureClass, Role, Sensitivity  # noqa: E402
+from tests import leak_record  # noqa: E402
 from tests.helpers import AVEBURY, BASE_URL  # noqa: E402
 
 TERMS_ACCEPTED_AT = datetime(2026, 1, 1, tzinfo=UTC)
@@ -183,6 +184,36 @@ def _on_sigterm(signum: int, frame: FrameType | None) -> None:
     global _terminated
     _terminated = True
     raise _Terminated("terminated by SIGTERM")
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_setup(item: pytest.Item) -> Iterator[None]:
+    leak_record.start()
+    return (yield)
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_call(item: pytest.Item) -> Iterator[None]:
+    """Record what the test's clients read, for `leak_record`, and keep it once the test passes."""
+    send = TestClient.request
+
+    def recorded(self: TestClient, *args: Any, **kwargs: Any) -> Any:
+        response = send(self, *args, **kwargs)
+        # A route reads a line when its address names it, or its reply does.
+        leak_record.read(f"{response.request.url} {response.request.content!r}")
+        if not kwargs.get("stream"):
+            leak_record.read(response.text)
+        return response
+
+    TestClient.request = recorded
+    try:
+        result = yield
+    finally:
+        TestClient.request = send
+    function = getattr(item, "function", None)
+    if function is not None:
+        leak_record.finish(f"{function.__module__}:{function.__name__}")
+    return result
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:

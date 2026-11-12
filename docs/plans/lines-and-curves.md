@@ -242,7 +242,7 @@ The rule stays Decision 0005's: a viewer who doesn't see a finding exactly gets 
 
 | Where | What it does with a path or shape |
 |-------|-----------------------------------|
-| `GET /findings/{id}` | `outline`, `path`, `extent` and sizes to exact viewers only. Square-only viewers get the change dates alone |
+| `GET /findings/{id}` | `outline`, `path`, `extent` and sizes to exact viewers only. Square-only viewers get the change dates alone, and the finder's saved view without its zoom, since a low zoom would hint that the finding is large. Every hidden finding loses its zoom alike, point or shape |
 | `GET /findings` page, `/users/{handle}/findings`, investigation items, `GET /records/{id}/findings` | No outline for anyone. `shape_kind` to exact viewers only |
 | `GET /findings?format=geojson` | `shape` to exact viewers only. `bbox` matches the shape for exact viewers only |
 | Activity feed and event stream | No outline. Activity rows keep the square. Inference: the event stream sends ids, not positions; WS-A step 7 confirms it |
@@ -257,7 +257,7 @@ The rule stays Decision 0005's: a viewer who doesn't see a finding exactly gets 
 
 **An open line passing a protected finding.** An open road drawn past somebody else's protected barrow shows the road, not the barrow. Nothing in the line says the barrow is there unless the line was drawn to point at it, and a member could already do that today with an open point finding on the barrow, which nothing refuses. Generalising every open line near a protected finding would hide most Roman roads from signed-out visitors, since barrows line them. The plan doesn't generalise them, and records this as an accepted limit with a walk-back, as the owner decided.
 
-**The leak test.** `tests/test_routes.py` names a leak test for every route. Each test in `tests/findings/test_leaks.py` gains a line finding and an area finding at every level, and checks that the path, the outline, the extent, `shape_kind`, the length and `added_view` never reach a viewer who sees the square, and that a `bbox` placed on the line's far end doesn't return a restricted line to them.
+**The leak test.** `tests/test_routes.py` names a leak test for every route. Each test in `tests/findings/test_leaks.py` gains a line finding and an area finding at every level, and checks that the path, the outline, the extent, `shape_kind`, the length and `added_view` never reach a viewer who sees the square, and that a `bbox` placed on the line's far end doesn't return a restricted line to them. `tests/test_routes.py` proves at run time that each route's leak test built one of those lines and read it through the route: `tests/leak_record.py` notes each line `draw_line` builds and every request, response and checked text that names one.
 
 ### Drawing findings on the map
 

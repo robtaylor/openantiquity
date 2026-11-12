@@ -465,3 +465,36 @@ def test_what_is_drawn_beside_a_restricted_road_far_from_its_anchor_is_held_back
     for viewer in ("finder", "trusted"):
         items = world.clients[viewer].get(url(walk, "/items")).json()["items"]
         assert [item["unavailable"] for item in items] == [None, None], viewer
+
+
+def test_a_height_profile_beside_a_protected_road_far_from_its_anchor_is_held_back_from_a_visitor(
+    db: Session, world: World, make_user: MakeUser
+) -> None:
+    """The guard measures to the whole of a protected line too, for the signed-out visitor (Decision 0030)."""
+    surveyor = make_user(handle="Surveyor")
+    road_lon = -2.6
+    road = findings.create_finding(
+        db,
+        world.finder,
+        path=shapes.read_path(
+            {"points": [{"lon": road_lon, "lat": lat, "kind": "corner"} for lat in (51.0, 51.18, 51.36)]}
+        ),
+        feature_class=FeatureClass.ROAD,
+        requested_sensitivity=Sensitivity.PROTECTED,
+    )
+    db.commit()
+    assert road.sensitivity == Sensitivity.PROTECTED.value
+    assert abs(lon_lat(road.location)[1] - 51.18) < 1e-5
+    # About 1.4 km east of the road's southern end, 20 km from its anchor.
+    beside = road_lon + 0.02
+    walk = make(db, surveyor, Visibility.PUBLIC, title="A walk by the road")
+    add(
+        db, walk, surveyor, kind=InvestigationItemKind.PROFILE,
+        data={"line": {"type": "LineString", "coordinates": [[beside, 51.0], [beside, 51.01]]}},
+    )  # fmt: skip
+    visitor = world.clients["signed_out"].get(url(walk, "/items")).json()["items"]
+    assert [(item["unavailable"], item["profile"]) for item in visitor] == [("near_protected", None)]
+    for viewer in ("member", "finder", "trusted"):
+        items = world.clients[viewer].get(url(walk, "/items")).json()["items"]
+        assert [item["unavailable"] for item in items] == [None], viewer
+        assert items[0]["profile"] is not None, viewer

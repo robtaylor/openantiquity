@@ -620,7 +620,7 @@ class FindingDetail(FindingSummary):
             **fields,
             description=sensitivity.visible_text(finding, viewer, finding.description),
             nation=view.nation,
-            view_state=ViewState.from_stored(finding.view_state),
+            view_state=ViewState.from_stored(sensitivity.visible_view_state(finding, viewer)),
             assessment=AssessmentOut(
                 tier=assessment.tier,
                 state=assessment.state,
@@ -907,7 +907,7 @@ def review_view(
     and zooms to frame it.
     """
     where = location_out(finding, viewer)
-    view = ViewState.from_stored(finding.view_state)
+    view = ViewState.from_stored(sensitivity.visible_view_state(finding, viewer))
     if new_part is None:
         return where, view
     assert not where.obscured, "the new part is shown only to exact viewers"

@@ -13,6 +13,8 @@ exact position as degrees, as grid references and as easting and northing.
 
 from __future__ import annotations
 
+import csv
+import io
 from collections.abc import Callable
 
 import pytest
@@ -126,3 +128,31 @@ def test_item_writes_answer_with_what_the_writer_may_see(
         moved = writer.post(f"{item}/move", json={"after": None})
         assert moved.status_code == 200, moved.text
         check(moved.text, allowed, allowed, where=f"move item ({level})")
+
+
+def test_a_protected_line_downloads_as_its_square_alone_for_a_signed_out_visitor(
+    world: tuple[Investigation, Callable[[str], TestClient]],
+) -> None:
+    """Neither its shape, its length nor even its kind: the CSV's `shape_kind` column is empty too."""
+    investigation, client = world
+    visitor = client("signed_out")
+    protected = HELD.index((Sensitivity.PROTECTED, "line"))
+    open_line = HELD.index((Sensitivity.OPEN, "line"))
+    table = visitor.get(url(investigation, "/export"), params={"format": "csv"})
+    assert table.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(table.text)))
+    assert len(rows) == len(HELD)
+    assert (rows[protected]["shape_kind"], rows[protected]["shape_length_m"]) == ("", "")
+    assert rows[protected]["position_precision_m"] == "1000"
+    assert rows[open_line]["shape_kind"] == "line"
+    assert rows[open_line]["shape_length_m"] != ""
+    geojson = visitor.get(url(investigation, "/export"), params={"format": "geojson"}).json()
+    properties = geojson["features"][protected]["properties"]
+    assert (properties["shape_kind"], properties["shape_length_m"], properties["outline"]) == (
+        None,
+        None,
+        None,
+    )
+    for form in ("csv", "geojson", "html"):
+        text = visitor.get(url(investigation, "/export"), params={"format": form}).text
+        check(text, {Sensitivity.OPEN}, {Sensitivity.OPEN}, where=f"a visitor's {form} download")

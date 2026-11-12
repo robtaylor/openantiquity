@@ -393,6 +393,20 @@ def visible_shape(
     )
 
 
+def visible_view_state(finding: Finding, viewer: User | None) -> dict[str, Any]:
+    """The view the finder saved, as `viewer` may have it: with its zoom only if they see it exactly.
+
+    A finder zooms out to see a long line or a large area whole, so a low
+    zoom would hint at the size of a finding the viewer sees only as a
+    square. Every hidden finding loses its zoom alike, point or shape, so
+    its absence says nothing either.
+    """
+    stored = dict(finding.view_state or {})
+    if not sees_exact(finding, viewer):
+        stored.pop("zoom", None)
+    return stored
+
+
 def visible_text(finding: Finding | None, viewer: User | None, text: str | None) -> str | None:
     """Free text about `finding` as `viewer` may read it: with every position in it hidden,
     unless they see the exact position. `finding` is None for one this viewer isn't shown

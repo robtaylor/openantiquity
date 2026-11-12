@@ -135,8 +135,14 @@ def test_a_box_round_the_exact_point_finds_only_the_square(
 @pytest.mark.parametrize("viewer", [v for v in VIEWERS if v != "signed_out"])
 def test_notifications(world: World, viewer: str) -> None:
     text = get(world, viewer, "/notifications", limit=200)
-    assert json.loads(text)["items"], "every viewer here follows every finding"
+    items = json.loads(text)["items"]
+    assert items, "every viewer here follows every finding"
     check(text, SEES[viewer], SEES[viewer], where="notifications")
+    # Every viewer here follows every line, and each line grew, but that a line grew is shape:
+    # it is told only to those who see the line exactly. The finder made the change.
+    extended = {item["finding"]["public_id"] for item in items if item["kind"] == "shape_extended"}
+    told = set() if viewer == "finder" else SEES[viewer]
+    assert extended == {world.lines[level].public_id for level in told}
 
 
 @pytest.mark.parametrize("viewer", VIEWERS)

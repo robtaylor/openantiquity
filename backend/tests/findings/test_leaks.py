@@ -31,6 +31,7 @@ from fieldclub.models.common import db_point
 from fieldclub.services import findings, sensitivity, shapes
 from fieldclub.services.findings import EvidenceFields
 from fieldclub.vocab import EvidenceKind, FeatureClass, Outcome, Relation, Sensitivity, Visible
+from tests import leak_record
 from tests.findings.support import API, answer, create, outline_of
 from tests.helpers import MakeUser, add_record, add_source, lon_lat
 
@@ -85,6 +86,7 @@ def draw_line(db: Session, finder: User, level: Sensitivity) -> Finding:
     )
     db.commit()
     assert lon_lat(finding.location) == ANCHORS[level], "the anchor is half way along"
+    leak_record.built(finding.public_id)
     return finding
 
 
@@ -159,6 +161,7 @@ def check(
     Times are taken out first: a timestamp such as `11:07:51.776491` carries no
     position, but its seconds can spell one, which made this check fail at random.
     """
+    leak_record.read(text)
     text = _TIMES.sub("", text)
     for level in LEVELS:
         leaked = [s for s in exact_strings(level) if s in text]
@@ -640,3 +643,41 @@ def test_a_records_linked_findings(world: World, db: Session, viewer: str) -> No
     check(response.text, SEES[viewer], where="GET /records/{id}/findings")
     listed = {item["public_id"] for item in response.json()["items"]}
     assert listed == {f.public_id for level, f in world.every() if level in SEES[viewer]}
+
+
+def test_a_saved_zoom_goes_only_to_those_who_see_the_finding_exactly(
+    db: Session, make_user: MakeUser, app: FastAPI, client_for: Callable[..., TestClient]
+) -> None:
+    """A low zoom would hint that a hidden finding is large, so no hidden finding has one, point or line."""
+    finder = make_user()
+    saved = {"zoom": 9.5, "layer": "slope", "bearing": 30}
+    made = {}
+    for kind, (lon, lat) in (
+        ("point", POINTS[Sensitivity.PROTECTED]),
+        ("open point", POINTS[Sensitivity.OPEN]),
+    ):
+        level = Sensitivity.PROTECTED if kind == "point" else Sensitivity.OPEN
+        made[kind] = create(db, finder, lon=lon, lat=lat, requested_sensitivity=level, view_state=saved)
+    line = findings.create_finding(
+        db,
+        finder,
+        path=line_path(Sensitivity.PROTECTED, extended=False),
+        feature_class=FeatureClass.ROAD,
+        requested_sensitivity=Sensitivity.PROTECTED,
+        view_state=saved,
+    )
+    db.commit()
+    made["line"] = line
+    visitor, member = client_for(app), client_for(app, make_user())
+    for kind, finding in made.items():
+        hidden = finding.sensitivity != Sensitivity.OPEN.value
+        page = visitor.get(f"{API}/findings/{finding.public_id}").json()
+        assert page["location"]["obscured"] is hidden
+        assert page["view_state"]["zoom"] == (None if hidden else 9.5), kind
+        assert page["view_state"]["layer"] == "slope"
+        assert member.get(f"{API}/findings/{finding.public_id}").json()["view_state"]["zoom"] == 9.5
+    # Help wanted shows a hidden finding at its square, with no zoom either.
+    groups = visitor.get(f"{API}/review/tasks").json()["groups"]
+    for item in (item for group in groups for item in group["items"]):
+        if item["place"]["obscured"]:
+            assert item["view_state"]["zoom"] is None, item["public_id"]
