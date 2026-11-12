@@ -504,8 +504,10 @@ def check_shape(geometry: BaseGeometry, placed: Point) -> None:
 def derived_anchor(shape: Shape) -> Point:
     """The point the server chooses for a finding drawn without one.
 
-    For a line, the vertex nearest half its length. For an area, its centroid
-    when that lies inside it, and a point inside it otherwise.
+    For a line, the point half way along it, its length measured on the
+    ellipsoid, so a straight line of two points is anchored at its middle and not at an end.
+    For an area, its centroid when that lies inside it, and a point inside it
+    otherwise.
     """
     geometry = shape.geometry
     if isinstance(geometry, Polygon):
@@ -513,10 +515,18 @@ def derived_anchor(shape: Shape) -> Point:
         inside = centroid if geometry.contains(centroid) else geometry.point_on_surface()
         return Point(round(inside.x, DECIMALS), round(inside.y, DECIMALS))
     lons, lats = np.asarray(geometry.coords).T
+    assert len(lons) >= 2, "a line has two vertices at least"
     _, _, pieces = GEOD.inv(lons[:-1], lats[:-1], lons[1:], lats[1:])
     along = np.concatenate([[0.0], np.cumsum(pieces)])
-    middle = int(np.argmin(np.abs(along - along[-1] / 2)))
-    return Point(float(lons[middle]), float(lats[middle]))
+    half = along[-1] / 2
+    # The segment the half-way point lies on, and how far along it.
+    i = min(int(np.searchsorted(along, half, side="right")) - 1, len(pieces) - 1)
+    assert pieces[i] > 0, "neighbouring vertices of a derived line are apart"
+    # Along the stored segment, which is straight in degrees, so the anchor lies on the line.
+    t = (half - along[i]) / pieces[i]
+    lon = lons[i] + t * (lons[i + 1] - lons[i])
+    lat = lats[i] + t * (lats[i + 1] - lats[i])
+    return Point(round(float(lon), DECIMALS), round(float(lat), DECIMALS))
 
 
 # --------------------------------------------------------------------------

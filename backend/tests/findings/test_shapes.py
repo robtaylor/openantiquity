@@ -37,15 +37,16 @@ from tests.helpers import MakeUser, lon_lat
 # --------------------------------------------------------------------------
 
 
-def test_a_line_drawn_first_takes_the_vertex_at_half_its_length_as_its_anchor(
+def test_a_line_drawn_first_takes_the_point_half_way_along_it_as_its_anchor(
     db: Session, make_user: MakeUser
 ) -> None:
     finding = drawn(db, make_user(), meridian(0, 0.004, 0.006, 0.02))
-    # Half of 0.02 is 0.01, nearest the vertex at 0.006.
-    assert lon_lat(finding.location) == pytest.approx((LON, LAT + 0.006), abs=1e-7)
+    # Half of 0.02 is 0.01, between the vertices at 0.006 and 0.02.
+    anchor = lon_lat(finding.location)
+    assert anchor == pytest.approx((LON, LAT + 0.01), abs=1e-6)
     assert finding.location_derived is True
-    assert finding.grid_ref == gridref.to_gridref(LON, LAT + 0.006)
-    assert finding.title == findings.suggested_title("linear", LON, LAT + 0.006)
+    assert finding.grid_ref == gridref.to_gridref(*anchor)
+    assert finding.title == findings.suggested_title("linear", *anchor)
     assert finding.shape_kind == "line"
     assert finding.shape_revision == 0
     assert finding.path == meridian(0, 0.004, 0.006, 0.02).to_json()

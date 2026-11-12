@@ -406,7 +406,7 @@ def test_a_wiggle_smaller_than_the_low_tolerance_goes_from_low_but_not_mid() -> 
     assert len(coords(wiggle.low)) == 2
 
 
-def test_a_lines_derived_anchor_is_the_vertex_nearest_half_its_length() -> None:
+def test_a_lines_derived_anchor_is_half_way_along_it() -> None:
     line = shapes.shape_of(
         path(
             (LON, LAT, CORNER),
@@ -415,8 +415,20 @@ def test_a_lines_derived_anchor_is_the_vertex_nearest_half_its_length() -> None:
             (LON, LAT + 0.03, CORNER),
         )
     )
-    # Half of 0.03° is 0.015°, nearest the vertex at 0.011°.
-    assert shapes.derived_anchor(line).coords[0] == (LON, round(LAT + 0.011, 7))
+    # Half of 0.03 degrees along a meridian is 0.015 degrees, between the vertices at 0.011 and 0.03.
+    anchor = shapes.derived_anchor(line)
+    assert (anchor.x, anchor.y) == pytest.approx((LON, LAT + 0.015), abs=2e-6)
+    assert (anchor.x, anchor.y) == (round(anchor.x, 7), round(anchor.y, 7))
+
+
+def test_a_straight_line_of_two_points_is_anchored_at_its_middle_not_an_end() -> None:
+    k = math.cos(math.radians(LAT))
+    line = shapes.shape_of(path((LON, LAT, CORNER), (LON + 0.02 / k, LAT + 0.02, CORNER)))
+    anchor = shapes.derived_anchor(line)
+    _, _, to_start = GEOD.inv(anchor.x, anchor.y, LON, LAT)
+    _, _, to_end = GEOD.inv(anchor.x, anchor.y, LON + 0.02 / k, LAT + 0.02)
+    assert to_start == pytest.approx(to_end, abs=0.5)
+    assert shapes.distance_m(line.geometry, anchor) < 0.05
 
 
 def test_an_areas_derived_anchor_is_its_centroid_or_a_point_inside() -> None:

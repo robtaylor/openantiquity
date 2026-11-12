@@ -44,8 +44,8 @@ POINTS = {
     Sensitivity.RESTRICTED: (-1.776491, 51.384219),
 }
 
-# Each level's line: three points drawn first, so the anchor is the middle one,
-# and a fourth added later. None is near anything else in the tests.
+# Each level's line: three points drawn first, with the anchor half way along
+# them (`ANCHORS`), and a fourth added later. None is near anything else in the tests.
 LINES = {
     Sensitivity.OPEN: (
         (-1.887412, 51.437218), (-1.871936, 51.431574), (-1.856283, 51.425961), (-1.840617, 51.420337),
@@ -64,6 +64,15 @@ def line_path(level: Sensitivity, *, extended: bool) -> shapes.Path:
     return shapes.read_path({"points": [{"lon": lon, "lat": lat, "kind": "corner"} for lon, lat in points]})
 
 
+def _anchor(level: Sensitivity) -> tuple[float, float]:
+    anchor = shapes.derived_anchor(shapes.shape_of(line_path(level, extended=False)))
+    return anchor.x, anchor.y
+
+
+# Where the server places each level's line when it is drawn, half way along its first three points.
+ANCHORS = {level: _anchor(level) for level in LINES}
+
+
 def draw_line(db: Session, finder: User, level: Sensitivity) -> Finding:
     """The level's line, drawn by `finder` with no point, so the server places its anchor. Committed."""
     finding = findings.create_finding(
@@ -75,7 +84,7 @@ def draw_line(db: Session, finder: User, level: Sensitivity) -> Finding:
         title=f"A {level} road",
     )
     db.commit()
-    assert lon_lat(finding.location) == LINES[level][1], "the anchor is the middle point"
+    assert lon_lat(finding.location) == ANCHORS[level], "the anchor is half way along"
     return finding
 
 
@@ -84,7 +93,7 @@ def extend_line(db: Session, finder: User, finding: Finding, level: Sensitivity)
         db, findings.lock(db, finding), finder, {"path": line_path(level, extended=True), "path_revision": 0}
     )
     db.commit()
-    assert lon_lat(finding.location) == LINES[level][1], "extending keeps the anchor"
+    assert lon_lat(finding.location) == ANCHORS[level], "extending keeps the anchor"
 
 
 def _line_strings(level: Sensitivity) -> list[str]:
@@ -127,7 +136,7 @@ def _point_strings(lon: float, lat: float) -> list[str]:
 
 def exact_strings(level: Sensitivity) -> list[str]:
     """The level's area finding's exact point, and its line's anchor, points, view and length."""
-    return [*_point_strings(*POINTS[level]), *_point_strings(*LINES[level][1]), *_line_strings(level)]
+    return [*_point_strings(*POINTS[level]), *_point_strings(*ANCHORS[level]), *_line_strings(level)]
 
 
 # The time of day in an ISO timestamp, down to its fraction of a second.
@@ -277,7 +286,7 @@ def test_a_box_on_a_line_s_far_end_finds_it_only_for_those_who_see_it_exactly(
     """A box matches a line by its shape only for exact viewers: for anyone else, by its square."""
     lon, lat = LINES[level][-1]
     line = world.lines[level]
-    assert gridref.gridref_at(lon, lat, 4) != gridref.gridref_at(*LINES[level][1], 4), (
+    assert gridref.gridref_at(lon, lat, 4) != gridref.gridref_at(*ANCHORS[level], 4), (
         "the end is in another square"
     )
     tight = f"{lon - 0.0005},{lat - 0.0005},{lon + 0.0005},{lat + 0.0005}"
