@@ -32,6 +32,7 @@ var
 !example.tfvars
 
 # Tools and OS
+.*.swp
 .tldr/
 .claude/
 thoughts/
