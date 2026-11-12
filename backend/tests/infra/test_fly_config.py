@@ -140,7 +140,30 @@ def test_every_other_name_has_a_redirect_and_the_site_is_not_one() -> None:
     )
 
 
-def test_the_jobs_run_the_image_the_web_app_s_deploy_pushes() -> None:
-    assert JOBS["image_repository"] == f"registry.fly.io/{WEB['app']}"
+def test_the_jobs_run_an_image_of_their_own_app_s_repository() -> None:
+    # Not the web app's, which the deploy token in GitHub can push to.
+    assert JOBS["image_repository"] == f"registry.fly.io/{JOBS['app']}"
     assert JOBS["region"] == WEB["primary_region"] == "lhr"
     assert JOBS["app"] != WEB["app"]
+
+
+def test_the_service_listens_only_where_fly_s_proxy_reaches_it() -> None:
+    """The image binds IPv4 only, and nothing on Fly overrides it.
+
+    Fly's private network (6PN) is IPv6 and bypasses the proxy, and a service
+    is reachable on it only when it binds the machine's 6PN address. Bound to
+    0.0.0.0, every request comes through the proxy, which overwrites
+    `Fly-Client-IP`, so another machine in the organisation can't choose the
+    address that rate limits and bans rest on. Binding `::` or
+    `fly-local-6pn` would undo that.
+    """
+    dockerfile = (REPO_ROOT / "infra" / "Dockerfile").read_text()
+    assert "FIELDCLUB_HOST=0.0.0.0" in dockerfile
+    for config in (WEB, JOBS):
+        assert "FIELDCLUB_HOST" not in config.get("env", {})
+
+
+def test_the_web_app_adds_nothing_to_the_mirror(machine: pytest.MonkeyPatch) -> None:
+    # It has no supply login, and its key only reads the elevation bucket.
+    assert start(machine, WEB["env"]).terrain_api_fetch is False
+    assert "FIELDCLUB_TERRAIN_API_FETCH" not in JOBS["env"]

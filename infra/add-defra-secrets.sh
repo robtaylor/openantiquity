@@ -63,7 +63,7 @@ import sys
 from dotenv import dotenv_values
 
 path, project, key, mode, *rest = sys.argv[1:]
-value = dotenv_values(path).get(key)
+value = dotenv_values(path, interpolate=False).get(key)
 if not value:
     sys.exit(f"{key} is not set in {path}")
 if mode == "--send":

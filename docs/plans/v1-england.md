@@ -178,7 +178,7 @@ Left: the owner carries out the Fly runbook, from making the apps to the deploy 
 
 **Deliverables:**
 
-- A container image, run as Fly Machines in London: the web app, and a jobs app that alone holds Defra's login.
+- A container image, run as Fly Machines in London: the web app, and a jobs app that alone holds Defra's login and runs only images its owner built.
 - Fly's configuration files and small tested scripts for the apps, the jobs, the secrets and the bucket rules, and a CI workflow that deploys by hand from main.
 - England's converted elevation in a Tigris bucket, copied from Google Cloud Storage once.
 - The runbook, with sizing, cost and the manual spend check Fly's missing billing alert needs.

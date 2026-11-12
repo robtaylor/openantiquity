@@ -5,9 +5,10 @@
 
 app = "openantiquity-jobs"
 region = "lhr"
-# The web app's deploy pushes the image here, labelled with its commit
-# (`fly deploy --image-label <commit>`). The jobs run the same image.
-image_repository = "registry.fly.io/openantiquity"
+# The jobs app's own repository, which only `uv run infra/fly_jobs.py build`
+# pushes to, labelled with its commit. It is built from the same Dockerfile as
+# the web app's image, but GitHub's deploy token can't push here.
+image_repository = "registry.fly.io/openantiquity-jobs"
 
 # The volume that keeps ingest downloads between runs of the hourly machine,
 # so a run can ask the publisher whether a file changed instead of fetching it

@@ -115,7 +115,7 @@ def fail(message: str) -> None:
 def read(path: str, names: tuple[str, ...], *, every: bool) -> dict[str, str]:
     if not Path(path).is_file():
         fail(f"No file at {path}")
-    values = dotenv_values(path)
+    values = dotenv_values(path, interpolate=False)
     found = {name: values[name] for name in names if values.get(name)}
     if every and (missing := [name for name in names if name not in found]):
         fail(f"{', '.join(missing)} not set in {path}")

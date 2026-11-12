@@ -19,7 +19,8 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / "infra" / "add-defra-secrets.sh"
 
 HOST = "sftp.supply.invalid"
-USER = "supply-user-7"
+# Unquoted in the file, where python-dotenv would expand `${...}`.
+USER = "supply-${HOME}-user-7"
 # Characters a hand-written parser gets wrong: a hash, a dollar, quotes and spaces.
 PASSWORD = "p#ss $HOME 'w' \"d\""
 KNOWN_HOSTS = (

@@ -37,15 +37,18 @@ For whoever runs the service, as it moves to Fly.io (Decision 0018):
 
 - Buckets are reached through the S3 interface, such as Tigris, and no longer through Cloud Storage. `FIELDCLUB_STORAGE_BACKEND=s3` replaces `gcs`, `FIELDCLUB_S3_BUCKET`, `FIELDCLUB_S3_PREFIX` and `FIELDCLUB_S3_NAMESPACE_BUCKETS` replace the `FIELDCLUB_GCS_*` settings, and terrain folders are written `s3://bucket/prefix`. A `gs://` folder is refused at start-up.
 - Anything kept in a bucket needs `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_ENDPOINT_URL_S3`, as Fly sets them when a Tigris bucket is attached, and the settings refuse to load without them. `AWS_REGION` is `auto` when unset.
-- `DATABASE_URL`, as Fly attaches it, is read when `FIELDCLUB_DATABASE_URL` is unset. Either may be a plain `postgres://` address, and Fly's pooled host is replaced by its direct one. The address used is logged with its password masked.
+- `DATABASE_URL`, as Fly attaches it, is read on a Fly machine when `FIELDCLUB_DATABASE_URL` is unset, and ignored anywhere else. Either may be a plain `postgres://` address, and Fly's pooled host is replaced by its direct one. The address used is logged with its password masked.
 - `FIELDCLUB_CLIENT_IP_HEADER` names a header the proxy sets to the visitor's address. On Fly it must be `Fly-Client-IP`, and production accepts it in place of `FIELDCLUB_TRUSTED_PROXY_HOPS`.
 - On a Fly machine the settings refuse to start unless `FIELDCLUB_ENV=prod` and `FIELDCLUB_CLIENT_IP_HEADER` are set, as they refuse anything but production on Cloud Run.
 - The image listens on 8080 unless the platform sends another `PORT`, and no longer sets `CPL_MACHINE_IS_GCE`.
 - The live event stream finds a database connection that went silent, as one may while Fly has a machine suspended, within about ten seconds of the next visitor, and tells browsers to refresh what they show.
 - A full ingest run whose lock went with its database connection fails with `ingest_lock_lost` instead of deleting records.
-- The deployment is now Fly.io: `fly.toml` for the web app, a second app for the jobs that alone holds Defra's login, `infra/fly_jobs.py` to start each job as a machine, `infra/fly-secrets.sh` to set secrets without showing them, and `deploy.yml` deploying with a deploy token from main. `infra/README.md` is the new runbook. The Google Cloud deployment stays in `infra/terraform` until the cut-over, and an image built from main no longer runs there.
+- The deployment is now Fly.io: `fly.toml` for the web app, a second app for the jobs that alone holds Defra's login, `infra/fly_jobs.py` to build the jobs app's own image and start each job as a machine under a time limit, `infra/fly-secrets.sh` to set secrets without showing them, and `deploy.yml` deploying with a deploy token from main. `infra/README.md` is the new runbook. The Google Cloud deployment stays in `infra/terraform` until the cut-over, and an image built from main no longer runs there.
 - `FIELDCLUB_REDIRECT_HOSTS` lists the site's other names. A request for one is answered 308 with the same path on `FIELDCLUB_PUBLIC_URL`.
 - `fieldclub-jobs due` runs whichever of the channel scan and the source refresh is due, for a scheduler that can only start it every hour.
+- `FIELDCLUB_TERRAIN_API_FETCH=false` stops the API adding tiles to the mirror, for a web app that holds no supply login: a tile it lacks is answered `elevation_unavailable` without writing anything.
+- The settings refuse a mirror and national overview folder that are the same or one inside the other, and an overview build removes only its own build files.
+- A misnamed or missing bucket is now an error at the first read or write, instead of an empty folder or an elevation lock that waits and then says "being prepared".
 - `infra/jobs/mirror_shard.py` takes the shares to run as `--shares 4 --share N`, one or more, in place of Cloud Run's task variables.
 
 ### Added

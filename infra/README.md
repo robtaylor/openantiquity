@@ -2,7 +2,7 @@
 
 This is the runbook for the deployment on Fly.io: what the owner does once, what a deploy is afterwards, how to roll back, and what to watch. It also records the sizing and cost reasoning behind the defaults. Decision 0018 chose Fly.io, and the spike `docs/architecture/decisions/spikes/hosting-on-fly-io.md` measured what it rests on.
 
-Everything lives in the Fly organisation `openantiquity`, in London (`lhr`). Every command names its app with `--app`, so the directory a command runs in never chooses the app. Commands run from the main checkout, at the repository root, because the secrets script reads the untracked `.env` and `var/` there. What has been done so far is recorded in `docs/plans/v1-england.md`, WS8.
+Everything lives in the Fly organisation `openantiquity`, in London (`lhr`). Every command that acts on an app names it with `--app`, so the directory a command runs in never chooses the app, with three exceptions: `fly deploy` reads the web app's name from `fly.toml`, `fly_jobs.py build` names the jobs app itself, and the `fly mpg` commands name the cluster. Commands run from the main checkout, at the repository root, because the secrets script reads the untracked `.env` and `var/` there. What has been done so far is recorded in `docs/plans/v1-england.md`, WS8.
 
 Nothing in this folder has been run against Fly. Each command below was written from Fly's and Tigris's documentation, cited beside it, or from the spike. Check each one with `--help` before running it, and correct this file where the platform differs.
 
@@ -13,7 +13,7 @@ Nothing in this folder has been run against Fly. Each command below was written 
 | `../fly.toml` | The web app `openantiquity`: the image, the release command, every non-secret setting, the HTTP service, its health check and machine size. At the repository root because `fly deploy` builds from the directory it runs in, and the image is built from the root |
 | `Dockerfile` | One image for the service and every job, built from the repository root |
 | `fly/jobs.toml` | The jobs app `openantiquity-jobs`: its non-secret settings and the hourly machine's volume. Read by `fly_jobs.py`. It is not a `fly.toml` and must never be given to `fly deploy` |
-| `fly_jobs.py` | Starts each job as a machine in the jobs app, and keeps the hourly machine on the current image |
+| `fly_jobs.py` | Builds the jobs app's image, starts each job as a machine in the jobs app, and keeps the hourly machine on the current image |
 | `fly-secrets.sh` | Sets an app's secrets from `.env`, `var/` and a file of other secrets, without showing them |
 | `jobs/mirror_shard.py` | Shares of the whole-country elevation copy, run inside the image |
 | `jobs/cache_lifecycle.py` | The tile cache bucket's expiry rule, set through the S3 lifecycle interface, run inside the image |
@@ -28,9 +28,9 @@ The scripts' tests are in `backend/tests/infra/`. Each runs its script against a
 ## What gets built
 
 - **The web app `openantiquity`** serves the API, the tiles and the built frontend from one image. Three machines, `shared-cpu-2x` with 2 GB, suspended when idle and resumed by Fly's proxy when a request comes. Its release command creates the schema once per deploy.
-- **The jobs app `openantiquity-jobs`** runs the same image with other commands. Each job is a machine that runs once, exits and is removed. One machine named `due` is started by Fly every hour and runs `fieldclub-jobs due`, which runs the channel scan every six hours and the source refresh at 03:00 UTC. A 10 GB volume on it keeps ingest downloads between runs. This app alone holds Defra's login: the web app must never have it (Decision 0018). Fly keeps secrets per app, so a second app is the only way to keep a secret from the service.
+- **The jobs app `openantiquity-jobs`** runs an image built from the same commit and Dockerfile, pushed to its own repository by the owner, with other commands. Each job is a machine that runs once, exits and is removed. One machine named `due` is started by Fly every hour and runs `fieldclub-jobs due`, which runs the channel scan every six hours and the source refresh at 03:00 UTC. A 10 GB volume on it keeps ingest downloads between runs. This app alone holds Defra's login: the web app must never have it (Decision 0018). Fly keeps secrets per app, so a second app is the only way to keep a secret from the service.
 - **Managed Postgres** cluster `openantiquity`, PostgreSQL 17 with PostGIS, Basic plan, in London, attached to both apps. The application connects to its direct address, never the pooled one Fly attaches (`config.database_address`).
-- **Three private Tigris buckets.** `openantiquity-elevation` holds the mirror under `england/mirror/` and the national overview under `england/national/`. `openantiquity-cache` holds rendered tiles under `tiles/`, deleted 180 days after they were written. `openantiquity-photos` holds uploads, kept.
+- **Three private Tigris buckets.** `openantiquity-elevation` holds the mirror under `england/mirror/` and the national overview under `england/national/`. On Google, permissions kept anything from deleting or replacing a mirror tile. Here the jobs key is Editor on the whole bucket, so only the code keeps the mirror safe: a tile is uploaded only if nothing has its name, the overview build prunes only its own `england-<build>.tif` files, and the settings refuse a mirror and overview folder that are the same or one inside the other. `openantiquity-cache` holds rendered tiles under `tiles/`, deleted 180 days after they were written. `openantiquity-photos` holds uploads, kept.
 - **One Tigris access key per app.** Fly gives an app one key, in `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, so each app reaches all its buckets with that one key, given a role on each bucket. The web app's key is Editor on the cache and the photos and ReadOnly on the elevation. The jobs app's key is Editor on the elevation only.
 - **Certificates** for the six names, from Let's Encrypt through Fly. The first ten are free.
 
@@ -54,7 +54,7 @@ fly mpg create --name openantiquity --org openantiquity --region lhr --plan basi
 
 `--name`, `--org`, `--region` and `--plan` are on Fly's [Managed Postgres page](https://docs.fly.io/mpg/create-and-connect/). It doesn't name a flag for the PostgreSQL version. During the spike the command offered 16 and 17: choose 17. The cluster starts with 10 GB and grows by itself.
 
-PostGIS has to be enabled through Fly, because the app's login can't create it (the spike, Q3 step 1). The spike enabled it with the command below. Fly's page says the dashboard's Extensions page does the same.
+PostGIS has to be enabled through Fly, because the app's login can't create it (the spike, Q3 step 1). Fly's page says PostGIS can be chosen when the cluster is created: choose it if `fly mpg create` offers it. Otherwise the spike enabled it with the command below, and the page says the dashboard's Extensions page does the same.
 
 ```
 fly mpg list                                   # note the cluster's id
@@ -63,19 +63,18 @@ fly mpg attach <cluster-id> --app openantiquity
 fly mpg attach <cluster-id> --app openantiquity-jobs
 ```
 
-Each attach sets the secret `DATABASE_URL` on its app, with the pooled address. The application turns it into the direct one. The schema command creates `pg_trgm` and `citext` itself.
+Each attach sets the secret `DATABASE_URL` on its app, with the pooled address, and restarts the app, which has no machines yet. The application turns it into the direct one, and reads `DATABASE_URL` only on a Fly machine. The schema command creates `pg_trgm` and `citext` itself.
 
 ### 3. The buckets and their keys
 
-`fly storage create`, run with an app, makes a bucket and sets four secrets on that app: `BUCKET_NAME`, `AWS_ENDPOINT_URL_S3`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` ([Fly's Tigris page](https://docs.fly.io/tigris)). Run it three times. The secrets never pass through the terminal.
+`fly storage create`, run with an app, makes a bucket and a key and sets four secrets on that app: `BUCKET_NAME`, `AWS_ENDPOINT_URL_S3`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` ([Fly's Tigris page](https://docs.fly.io/tigris)). It also prints the key's id and secret, which flyctl can't show again. Nothing here needs the printed secret, because the app already holds it, so clear the terminal and its scrollback after each one. Fly's page doesn't say what a second create does to an app that already has the secrets, so each app gets one:
 
 ```
-fly storage create --app openantiquity-jobs --name openantiquity-elevation
-fly storage create --app openantiquity --name openantiquity-photos
-fly storage create --app openantiquity --name openantiquity-cache
+fly storage create -a openantiquity-jobs -n openantiquity-elevation
+fly storage create -a openantiquity -n openantiquity-cache
 ```
 
-The third replaces the web app's secrets from the second, so the web app ends up with the cache bucket's key. Give that key its two other buckets. Open Tigris's dashboard with `fly storage dashboard openantiquity-cache`, find the key under Access Keys, and give it Editor on `openantiquity-cache` and `openantiquity-photos` and ReadOnly on `openantiquity-elevation`. With Tigris's own CLI the same is
+Make the third bucket, `openantiquity-photos`, private, in Tigris's dashboard (`fly storage dashboard openantiquity-cache`, then Buckets), with no key of its own. Then give the web app's key its two other buckets: find it under Access Keys and give it Editor on `openantiquity-cache` and `openantiquity-photos` and ReadOnly on `openantiquity-elevation`. With Tigris's own CLI the same is
 
 ```
 tigris access-keys assign <tid_ key id> --bucket openantiquity-cache,openantiquity-photos,openantiquity-elevation \
@@ -84,11 +83,10 @@ tigris access-keys assign <tid_ key id> --bucket openantiquity-cache,openantiqui
 
 ([`tigris access-keys assign`](https://www.tigrisdata.com/docs/cli/access-keys/assign/)). Tigris's page doesn't say whether this adds to a key's roles or replaces them, so name all three. Then, in the same dashboard:
 
-- delete the key the second command made, which nothing uses now;
 - check that the jobs app's key is Editor on `openantiquity-elevation` and has no other bucket;
 - check that neither key is Admin, which bypasses the per-bucket roles ([Tigris access control](https://www.tigrisdata.com/docs/partner-integrations/access-control/)).
 
-The application ignores `BUCKET_NAME`: the buckets are named in `fly.toml` and `fly/jobs.toml`. Making a bucket accepts Tigris's terms of service for the organisation, which the spike already did.
+The application ignores `BUCKET_NAME`: the buckets are named in `fly.toml` and `fly/jobs.toml`. Making a bucket accepts Tigris's terms of service for the organisation, which the spike already did. A key made by hand in the dashboard instead reaches an app through `bash infra/fly-secrets.sh <web|jobs> --from <file>`, which takes `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` from an untracked file.
 
 ### 4. Secrets
 
@@ -116,7 +114,7 @@ Register each sign-in provider with the redirect address `https://openantiquity.
 From the repository root:
 
 ```
-fly deploy --image-label "$(git rev-parse HEAD)"
+fly deploy --no-public-ips --flycast --image-label "$(git rev-parse HEAD)"
 fly scale count 3 --region lhr --app openantiquity
 ```
 
@@ -124,13 +122,14 @@ fly scale count 3 --region lhr --app openantiquity
 
 The first deploy makes two machines (`--ha` is on by default) and `fly scale count` makes the third. One deploy during the spike failed after the image was pushed, with an internal error from Fly's API, and worked when run again.
 
-An app with an HTTP service is given a shared IPv4 and an IPv6 address at its first deploy ([public network services](https://docs.fly.io/networking/services/)), so the site answers at `https://openantiquity.fly.dev` from then on. Nobody has that address. Sign-in won't work there, because every sign-in redirect and emailed link is built from `https://openantiquity.org`, which doesn't point at Fly until step 11. To keep the app private until then, release its public addresses (`fly ips list --app openantiquity`, then `fly ips release <address> --app openantiquity`) and give it a private Flycast address with `fly ips allocate-v6 --private --app openantiquity` ([Flycast](https://docs.fly.io/networking/flycast/)), which goes through Fly's proxy and so wakes a suspended machine. Step 11 allocates the public addresses again.
-
-Check it answers:
+The site stays private until step 11, which waits on the security review (`docs/plans/v1-england.md`, WS9). `--no-public-ips` allocates no public address, and `--flycast` gives the app a private one, `openantiquity.flycast`, which goes through Fly's proxy and so wakes a suspended machine ([Flycast](https://docs.fly.io/networking/flycast/)). The deploy workflow passes `--no-public-ips` too, so no deploy opens the site by itself. Check it answers, through a WireGuard tunnel to the Flycast address, with the `curl` in a second terminal:
 
 ```
-curl --fail https://openantiquity.fly.dev/healthz
+fly proxy 8080:80 openantiquity.flycast --app openantiquity
+curl --fail http://localhost:8080/healthz
 ```
+
+The same tunnel wakes a suspended machine before `fly ssh console`, which needs one running.
 
 ### 6. The tile cache's expiry rule
 
@@ -140,17 +139,20 @@ Tiles in `openantiquity-cache` are deleted 180 days after they were written, the
 fly ssh console --app openantiquity -C "python /app/jobs/cache_lifecycle.py"
 ```
 
-It replaces the bucket's whole lifecycle configuration, so it is safe to run again, and prints the rule read back. `--check` only reads it. A suspended machine may need waking first: load the site once.
+It replaces the bucket's whole lifecycle configuration, so it is safe to run again, and prints the rule read back. `--check` only reads it. A suspended machine needs waking first, through the tunnel in step 5.
 
-### 7. The elevation's sources rows
+### 7. The jobs app's image and the elevation's sources rows
 
 ```
+uv run infra/fly_jobs.py build
 uv run infra/fly_jobs.py sources
 ```
 
+`build` builds the commit at `HEAD` with `fly.toml`'s Dockerfile and pushes it to the jobs app's own repository as `registry.fly.io/openantiquity-jobs:<commit>` (`fly deploy --build-only --push --app openantiquity-jobs --image-label <commit>`). It refuses a checkout with uncommitted changes, or one that isn't the commit named, because the image is labelled with it. The deploy token GitHub holds belongs to the web app, so it can push the web app's images but not these, and can't choose the code that runs beside Defra's login.
+
 The LIDAR `sources` rows must exist before any elevation is stored or shown. The copy and the overview build leave them to this job (`--skip-sources`). It is safe to run again.
 
-`fly_jobs.py` runs the image of the commit at `HEAD`, `registry.fly.io/openantiquity:<commit>`, which step 5 pushed. `--commit <sha>` names another and `--image <reference>` gives a whole one. `--dry-run` prints the `fly machine run` command without running it. Each one-off job is `fly machine run` with `--rm` and `--restart no`: it runs once, exits and is removed, and is never restarted, so a failed one is seen in `fly logs --app openantiquity-jobs` and run again by hand.
+`fly_jobs.py` runs the jobs app's image of the commit at `HEAD`. `--commit <sha>` names another and `--image <reference>` gives a whole one. `--dry-run` prints the fly command without running it. Each one-off job is `fly machine run` with `--rm` and `--restart no`: it runs once, exits and is removed, and is never restarted, so a failed one is seen in `fly logs --app openantiquity-jobs` and run again by hand. Each runs under `timeout`, with the Cloud Run job's limit where there was one: 15 minutes for `sources`, 6 hours for an ingest, the overview build and the hourly machine, 5 hours a share for the copy, and an hour for anything else. A job that hangs is stopped and its machine removed.
 
 ### 8. England's elevation in the bucket
 
@@ -163,7 +165,7 @@ uv run infra/fly_jobs.py mirror 2 4
 
 The 5,877 tiles are split into four shares of about 88 GB each, by size. Each command starts one machine that runs its two shares one after the other, each with one SFTP connection, so the two machines hold two connections to Defra's server at once, as the Google job did. A share that stops, because the supply refused the login, showed another host key or failed five tiles in a row, stops its machine, and the machine's last log lines name the share. Run a failed share again by naming it, for example `uv run infra/fly_jobs.py mirror 3`. A tile already in the mirror is skipped, so a rerun fetches only what is still missing. The spike didn't try Defra's server from Fly's addresses: start with one machine and watch its log before starting the second.
 
-The web app doesn't fetch missing elevation, because it doesn't hold Defra's login. A tile that isn't mirrored answers its failure, as Decision 0016 describes, until a copy adds it.
+The web app adds nothing to the mirror, because it holds neither Defra's login nor a key that writes the elevation bucket (`FIELDCLUB_TERRAIN_API_FETCH=false` in `fly.toml`). A map tile that needs a tile not yet mirrored is answered 503 `elevation_unavailable` for a minute at a time, logged as a warning, until a copy adds it.
 
 Progress is what `fieldclub-terrain info` reports:
 
@@ -187,23 +189,26 @@ uv run infra/fly_jobs.py run fieldclub-ingest list
 uv run infra/fly_jobs.py ingest he-nhle-scheduled-monuments
 ```
 
-Then make the volume and the hourly machine:
+Then make the volume and the hourly machine. A second `fly volumes create` would make a second volume with the same name, billed as well, so look first and create it only if `jobs_var` isn't listed:
 
 ```
+fly volumes list --app openantiquity-jobs
 fly volumes create jobs_var --app openantiquity-jobs --region lhr --size 10 --yes
 uv run infra/fly_jobs.py schedule
 ```
+
+10 GB is a guess: nothing measured the bulk sources' downloads together, and nothing prunes `var/ingest/` on the volume, as Google's 90-day rule on `ingest/` did. Watch its use with `fly volumes list` and extend it with `fly volumes extend` if it fills.
 
 `schedule` makes a machine named `due` with `--schedule hourly`, the volume mounted at `/data` and `FIELDCLUB_VAR_DIR=/data/var`, running `fieldclub-jobs due`. Fly starts it once an hour at a time of its own choosing in the hour. `fieldclub-jobs due` decides from the database and the clock what is due (`backend/src/fieldclub/jobs/due.py`): the channel scan when some channel is watched and none has been checked for five hours, which keeps scans about six hours apart, and the source refresh when the hour is 03 UTC. The refresh runs every enabled bulk connector and reference loader whose last full run is older than its `max_age`, so it covers every bulk source, and a second start in the same hour finds them current. Ingest downloads stay on the volume, so the next run can ask the publisher whether a file changed. An ingest started by hand in step 10 downloads afresh, because the volume belongs to the hourly machine.
 
 Fly's schedules run hourly, daily, weekly or monthly, at no fixed time ([`fly machine run --schedule`](https://docs.fly.io/flyctl/machine-run/)). One hourly machine that asks what is due needs nothing left running between starts.
 
-### 11. Point the domain
+### 11. Opening the site: point the domain
 
-The site is `openantiquity.org`. `www.openantiquity.org`, `openantiquity.com`, `openantiquity.co.uk` and their `www` names are answered by the application with a 308 to the same path on `openantiquity.org` (`FIELDCLUB_REDIRECT_HOSTS` in `fly.toml`, `backend/src/fieldclub/redirects.py`). Fly's proxy has no redirect setting of its own, so the application does it. `force_https` sends plain HTTP to HTTPS first, so every name needs a certificate: six, inside the ten free ones.
+Only once WS9's security review has passed (`docs/plans/v1-england.md`). Until then the app has no public address. The site is `openantiquity.org`. `www.openantiquity.org`, `openantiquity.com`, `openantiquity.co.uk` and their `www` names are answered by the application with a 308 to the same path on `openantiquity.org` (`FIELDCLUB_REDIRECT_HOSTS` in `fly.toml`, `backend/src/fieldclub/redirects.py`). Fly's proxy has no redirect setting of its own, so the application does it. `force_https` sends plain HTTP to HTTPS first, so every name needs a certificate: six, inside the ten free ones.
 
 ```
-fly ips allocate-v4 --shared --app openantiquity      # if step 5 released them
+fly ips allocate-v4 --shared --app openantiquity
 fly ips allocate-v6 --app openantiquity
 fly ips list --app openantiquity
 for name in openantiquity.org www.openantiquity.org openantiquity.com www.openantiquity.com \
@@ -231,21 +236,22 @@ fly tokens create deploy --app openantiquity --name github-deploy --expiry 2160h
   gh secret set FLY_API_TOKEN --env production
 ```
 
-A deploy token is limited to one app ([access tokens](https://docs.fly.io/security/tokens/)). The token above lasts 90 days; renew it the same way. `fly tokens list` and `fly tokens revoke <id>` take one away. GitHub never holds a token for the jobs app, so Defra's login is out of its reach.
+A deploy token is limited to one app ([access tokens](https://docs.fly.io/security/tokens/)). The token above lasts 90 days; renew it the same way. `fly tokens list` and `fly tokens revoke <id>` take one away. GitHub never holds a token for the jobs app, and the jobs app runs only images the owner built (step 7), so neither Defra's login nor the code that runs beside it is in GitHub's reach.
 
 ## A deploy
 
 1. Merge to `main`. CI runs both check suites, the docs lint, the scripts' tests and shellcheck, the Terraform checks while it stays, and an image build that is started and stopped as a Fly machine would be.
-2. In GitHub, Actions, "Deploy", run the workflow on `main`. It runs `flyctl deploy --remote-only --image-label <commit>`, which builds the image, runs the schema command once and moves the three machines onto the new image one at a time (`strategy = "rolling"`).
-3. Move the hourly machine to the same image, from the main checkout, with the command the run's summary prints:
+2. In GitHub, Actions, "Deploy", run the workflow on `main`. It runs `flyctl deploy --remote-only --no-public-ips --image-label <commit>`, which builds the image, runs the schema command once and moves the three machines onto the new image one at a time (`strategy = "rolling"`).
+3. Build the jobs app's image of the same commit and move the hourly machine to it, from a clean checkout of that commit, with the commands the run's summary prints:
 
    ```
+   uv run infra/fly_jobs.py --commit <commit> build
    uv run infra/fly_jobs.py --commit <commit> schedule
    ```
 
-   It updates the machine named `due` in place (`fly machine update --image`, [flags](https://docs.fly.io/flyctl/machine-update/)) without starting it. Until it is run, the hourly jobs run the image before, which still works against the schema, because the schema command only adds what is missing.
+   `schedule` updates the machine named `due` in place (`fly machine update --image`, [flags](https://docs.fly.io/flyctl/machine-update/)) without starting it. It refuses while `due` is running, because updating a started machine stops it; run it again once `fly machine list --app openantiquity-jobs` shows it stopped. The update keeps the machine's command and time limit; to change those, destroy `due` and run `schedule` again. Until it is run, the hourly jobs run the image before, which still works against the schema, because the schema command only adds what is missing.
 
-A deploy by hand is the same command as the workflow's, from the repository root: `fly deploy --image-label "$(git rev-parse HEAD)"`.
+A deploy by hand is the same command as the workflow's, from the repository root: `fly deploy --no-public-ips --image-label "$(git rev-parse HEAD)"`.
 
 Fly sends the old machine `SIGTERM` (`kill_signal`) and kills it ten seconds later (`kill_timeout`). The server ends its event streams at once and closes whatever else it still holds after five seconds (`FIELDCLUB_SHUTDOWN_GRACE_S`), so it stops before it is killed, and the browser opens a new stream on another machine.
 
@@ -255,11 +261,11 @@ Deploy the image before, which needs no build:
 
 ```
 fly releases --app openantiquity --image
-fly deploy --image registry.fly.io/openantiquity:<previous commit>
+fly deploy --no-public-ips --image registry.fly.io/openantiquity:<previous commit>
 uv run infra/fly_jobs.py --commit <previous commit> schedule
 ```
 
-A schema change can't be rolled back this way. The schema command only adds what is missing, so an older image runs against a newer schema as long as nothing it uses was removed.
+The jobs app's image of that commit is still in its repository if `build` ran for it; otherwise check the commit out and run `build` first. A schema change can't be rolled back this way. The schema command only adds what is missing, so an older image runs against a newer schema as long as nothing it uses was removed.
 
 Managed Postgres keeps backups. `fly mpg backup list` lists them and `fly mpg restore <cluster-id> --backup-id <id>`, or `--pitr-time <RFC 3339 time>`, restores one into a new cluster ([`fly mpg restore`](https://docs.fly.io/flyctl/mpg-restore/)). The original is left alone. Attach the new cluster to both apps and deploy. How long Fly keeps them wasn't found; check before relying on them.
 
@@ -274,14 +280,15 @@ Managed Postgres keeps backups. `fly mpg backup list` lists them and `fly mpg re
 
 ## Spend
 
-Fly can't be asked what the month has cost. Its cost page says "We don't support billing alerts (yet)" and "there's no soft ceiling. If you go over, we'll bill you", and the only place it names for the month so far is the dashboard's "current month to date bill" ([cost management](https://docs.fly.io/about/cost-management/)). Its billing page describes no API or command for usage either ([billing](https://docs.fly.io/about/billing)). Prepaid credit is no cap: the billing page says usage "is subtracted from the credit balance each month" and says nothing of what happens when the credit runs out. So there is no scheduled spend check here, because there is nothing honest for one to read.
+Decision 0018, point 9, says the deployment supplies its own check of the month's spend. It doesn't yet: what is here is a weekly look and limits, which the owner has to accept in a decision that supersedes point 9, or replace with a check.
 
-The guard is a manual check and limits that bound what the configuration can spend.
+Fly can't be asked what the month has cost, as far as its documentation says. Its cost page says "We don't support billing alerts (yet)" and "there's no soft ceiling. If you go over, we'll bill you", and the only place it names for the month so far is the dashboard's "current month to date bill" ([cost management](https://docs.fly.io/about/cost-management/)). Its billing page describes no API or command for usage either ([billing](https://docs.fly.io/about/billing)). Whether Fly's GraphQL API exposes the current invoice wasn't looked into. Prepaid credit is no cap: the billing page says usage "is subtracted from the credit balance each month" and says nothing of what happens when the credit runs out.
 
-- **The check.** Once a week, read the current month to date bill in the dashboard's Billing section for the organisation. The alert on Google was £75 a month. At the prices below that is about twice the expected bill at light use, so a bill on course to pass £75 means something has changed.
+- **The check.** Once a week, read the current month to date bill in the dashboard's Billing section for the organisation. The alert on Google was £75 a month, about $95 to $100, which is 1.3 to 1.6 times the expected bill at light use below, so a bill on course to pass £75 means something has changed.
 - **Machines.** Fly's proxy starts and suspends machines but never creates one ([autostop and autostart](https://docs.fly.io/launch/autostop-autostart/)). The web app has three, so at most three run: $40.17 a month if all three ran all month, at US east prices. A fourth exists only if someone runs `fly scale count`.
-- **Machine sizes.** `fly.toml` fixes the web machines at `shared-cpu-2x`, 2 GB, and `test_fly_config.py` fails if the memory changes. `fly_jobs.py` fixes each job's size, and every job but the hourly one is started by a person and removed when it ends.
-- **What isn't bounded.** Data sent to visitors at $0.02 a GB, Tigris storage and requests, and the database's disk, which grows by itself. Those three are what the weekly check is for.
+- **Machine sizes.** `fly.toml` fixes the web machines at `shared-cpu-2x`, 2 GB, and `test_fly_config.py` fails if the memory changes. `fly_jobs.py` fixes each job's size.
+- **How long a job runs.** Every job but the hourly one is started by a person, and every job, the hourly one included, runs under `timeout` (step 7). The dearest, the overview build on `performance-8x`, at about $0.37 an hour, stops after 6 hours, about $2.20.
+- **What isn't bounded.** Data sent to visitors at $0.02 a GB, Tigris storage and requests, and the database's disk, which grows by itself. Those three are what the weekly check is for. A multipart upload of the overview that fails part way leaves its parts in the bucket, billed as storage until they are removed, and Tigris's lifecycle rules list no way to expire them.
 
 ## Sizing
 
@@ -314,7 +321,7 @@ Fly's proxy suspends a machine after the app has been idle for several minutes a
 
 ### The database: Managed Postgres Basic
 
-The Basic plan is $38 a month plus $0.28 a GB ([pricing](https://docs.fly.io/about/pricing)). The development database holds 20,006 scheduled monuments in 137 MB, 6.8 KB a record, the heaviest kind. Most of the ten million records expected are points, so the estimate is 2 to 3 KB each, 20 to 30 GB in all, and up to 70 GB if every record were like a scheduled monument. The cluster starts at 10 GB and grows by itself. The Basic plan's memory wasn't found on the pages read; searches over ten million records will read their indexes from disk, which is fast enough for a few people at once. A larger plan is the first change if search slows.
+The Basic plan is $38 a month plus $0.28 a GB ([pricing](https://docs.fly.io/about/pricing)). The development database holds 20,006 scheduled monuments in 137 MB, 6.8 KB a record, the heaviest kind. Most of the ten million records expected are points, so the estimate is 2 to 3 KB each, 20 to 30 GB in all, and up to 70 GB if every record were like a scheduled monument. The cluster starts at 10 GB and grows by itself. The Basic plan has 2 shared vCPUs and 1 GB of memory ([Managed Postgres](https://docs.fly.io/mpg/create-and-connect/)), so searches over ten million records will read most of their indexes from disk, which is fast enough for a few people at once. A larger plan is the first change if search slows.
 
 ### The jobs
 
@@ -429,15 +436,19 @@ Once the site on Fly answers on openantiquity.org, the elevation is in Tigris an
 
 Each of these was written from documentation or inferred, and none was run:
 
-- Every flyctl command and flag above, against `--help` of the flyctl in use. In particular: `fly mpg create`'s version prompt, `fly mpg databases extensions enable`, `fly storage create --app`, `fly secrets list --json` and `fly machine list --json` and the field names in their output, `fly machine run` taking the job's own flags after `--`, `fly machine update --schedule` and `--skip-start` on a scheduled machine, `fly releases --image`, and the release command's machine getting `[env]` and the secrets.
+- Every flyctl command and flag above, against `--help` of the flyctl in use. In particular: `fly mpg create`'s version and PostGIS prompts, `fly mpg databases extensions enable`, `fly storage create -a`, `fly secrets list --json` and `fly machine list --json` and the field names in their output (`fly_jobs.py schedule` reads `id`, `name` and `state`), `fly machine run` taking the job's own flags after `--` (try `uv run infra/fly_jobs.py --dry-run run fieldclub-terrain info` and run what it prints with `--help` in place of `info`), `fly machine update --schedule` and `--skip-start` on a scheduled machine, `fly releases --image`, and the release command's machine getting `[env]` and the secrets.
+- That `fly deploy --build-only --push --app openantiquity-jobs --image-label <commit>` pushes to `registry.fly.io/openantiquity-jobs:<commit>` and starts nothing, and that the web app's deploy token can't push there.
+- That `fly deploy --no-public-ips` on a later deploy leaves the addresses step 11 allocated alone, as "Do not allocate any new public IP addresses" suggests, and that the Flycast check in step 5 answers over plain HTTP despite `force_https`.
+- That `timeout` from the image's coreutils stops a job under `tini` and the machine then exits and is removed.
 - That `fly storage create` makes a key with Editor on its own bucket and nothing more, and that a key given roles on three buckets reaches all three with one secret.
-- That a machine in `openantiquity-jobs` can pull `registry.fly.io/openantiquity:<commit>`, an image pushed by another app in the same organisation. If it can't, push the image to the jobs app as well (`fly deploy --build-only --push --app openantiquity-jobs --image-label <commit>` with `--config fly.toml`) and pass `--image registry.fly.io/openantiquity-jobs:<commit>` to `fly_jobs.py`.
 - That `--file-secret` writes the host key where the SFTP client reads it, readable by the image's user.
 - That `fly ssh console -C` runs with the app's secrets in its environment, which `cache_lifecycle.py` needs, and that Tigris accepts boto3's lifecycle request with its checksum header.
 - That `fly secrets import` keeps a value with `#`, `$`, quotes or inner spaces exactly as sent.
 - That health checks don't keep a suspended machine awake, and that the database's `LISTEN` connection is found dead and replaced after a resume (the spike didn't test it).
 - That Defra's server accepts connections from Fly's addresses, two at a time.
-- Tigris multipart upload of the national COG, about 3.5 GB, which the spike didn't test.
+- Tigris multipart upload of the national COG, about 3.5 GB, which the spike didn't test, with boto3's default CRC32 checksums.
+- Whether Tigris answers 409 to overlapping conditional writes and `NoSuchBucket` for a misnamed bucket, as AWS does. The code takes any 412 or 409, and a 404 only with the code `NoSuchKey`, as a refusal.
+- The flyctl the workflow pins, 0.5.8, was published on 2026-11-11 and its `setup-flyctl` commit was read through a summariser; check both against GitHub and prefer a release at least two weeks old.
 - The certificates for six names, the shared IPv4 at the apex, and the 308 from each other name.
 - Memory during a photo upload while tiles render, and real tile latency with the mirror in Tigris.
 - London's prices, and what Fly does when prepaid credit runs out.

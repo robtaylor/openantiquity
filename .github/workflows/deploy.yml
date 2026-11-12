@@ -10,9 +10,14 @@
 #   fly tokens create deploy --app openantiquity --name github-deploy --expiry 2160h |
 #     gh secret set FLY_API_TOKEN --env production
 #
-# The jobs app, which holds Defra's login, is never reachable from here. After
-# a deploy, the owner moves its hourly machine to the new image with the
-# command the run's summary prints.
+# The jobs app, which holds Defra's login, is never reachable from here: its
+# image is built and pushed to its own repository by the owner, which this
+# token can't write to. After a deploy, the owner builds that image and moves
+# the hourly machine to it with the commands the run's summary prints.
+#
+# --no-public-ips: a deploy never gives the app a public address. The site is
+# opened by allocating its addresses by hand (infra/README.md, "Opening the
+# site"), and an app that has them keeps them.
 name: Deploy
 
 on:
@@ -53,7 +58,7 @@ jobs:
       - name: Build, push and deploy
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-        run: flyctl deploy --remote-only --image-label "$GITHUB_SHA" --wait-timeout 10m
+        run: flyctl deploy --remote-only --no-public-ips --image-label "$GITHUB_SHA" --wait-timeout 10m
 
       - name: Say what to run next
         run: |
@@ -62,9 +67,11 @@ jobs:
             echo
             echo "Image: registry.fly.io/openantiquity:${GITHUB_SHA}"
             echo
-            echo "Move the jobs app's hourly machine to it, from the main checkout:"
+            echo "Build the jobs app's image of the same commit and move its hourly machine to it,"
+            echo "from a clean checkout of that commit:"
             echo
             echo '```'
+            echo "uv run infra/fly_jobs.py --commit ${GITHUB_SHA} build"
             echo "uv run infra/fly_jobs.py --commit ${GITHUB_SHA} schedule"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

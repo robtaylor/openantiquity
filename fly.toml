@@ -58,6 +58,9 @@ kill_timeout = 10
   FIELDCLUB_S3_NAMESPACE_BUCKETS = '{"media": "openantiquity-photos"}'
   FIELDCLUB_TERRAIN_MIRROR = "s3://openantiquity-elevation/england/mirror"
   FIELDCLUB_TERRAIN_NATIONAL = "s3://openantiquity-elevation/england/national"
+  # The web app holds no supply login and only reads the elevation bucket, so
+  # it adds nothing to the mirror: the jobs app does (infra/README.md).
+  FIELDCLUB_TERRAIN_API_FETCH = "false"
   # Up to three machines of eight connections each, inside the 112 the Basic plan allows.
   FIELDCLUB_DB_POOL_SIZE = "4"
   FIELDCLUB_DB_MAX_OVERFLOW = "4"

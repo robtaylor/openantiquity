@@ -20,14 +20,16 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / "infra" / "fly-secrets.sh"
 
 HOST = "sftp.supply.invalid"
-USER = "supply-user-7"
+# Unquoted in the file, where python-dotenv would expand `${...}`.
+USER = "supply-${HOME}-user-7"
 # Characters a hand-written parser gets wrong: a hash, a dollar, quotes and spaces inside.
 PASSWORD = "p#ss $HOME 'w' \"d\""
 KNOWN_HOSTS = (
     "sftp.supply.invalid ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPinnedPinnedPinnedPinnedPinnedPinnedPinnedPin\n"
 )
-GOOGLE = "GOCSPX-not-a-real-secret-41"
-SMTP = "smtp-pass-not-real-93"
+# python-dotenv would expand `${...}` in an unquoted or double-quoted value.
+GOOGLE = "GOCSPX-${HOME}-not-real-41"
+SMTP = "smtp-${FLY_SECRETS_TEST_UNSET}-93"
 TIGRIS_SECRET = "tsec_not_a_real_secret_88"
 VALUES = (HOST, USER, PASSWORD, "PinnedPinned", GOOGLE, SMTP, TIGRIS_SECRET)
 
@@ -65,7 +67,7 @@ def stage(tmp_path: Path) -> dict[str, Path]:
     known_hosts.write_text(KNOWN_HOSTS)
     others = tmp_path / "web-secrets.env"
     others.write_text(
-        f"FIELDCLUB_GOOGLE_CLIENT_SECRET={GOOGLE}\nFIELDCLUB_SMTP_PASSWORD={SMTP}\n"
+        f'FIELDCLUB_GOOGLE_CLIENT_SECRET={GOOGLE}\nFIELDCLUB_SMTP_PASSWORD="{SMTP}"\n'
         f"AWS_SECRET_ACCESS_KEY={TIGRIS_SECRET}\nAWS_ACCESS_KEY_ID=tid_web\n"
         f"DEFRA_SFTP_PASSWORD=smuggled\nGANDI_DNS_SSL=pat-must-never-be-sent\n"
     )
