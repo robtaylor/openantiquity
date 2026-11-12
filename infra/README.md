@@ -49,16 +49,17 @@ fly apps create openantiquity-jobs --org openantiquity
 ### 2. The database
 
 ```
-fly mpg create --name openantiquity --org openantiquity --region lhr --plan basic
+fly mpg create --name openantiquity --org openantiquity --region lhr --plan basic \
+  --pg-major-version 17 --enable-postgis-support
 ```
 
-`--name`, `--org`, `--region` and `--plan` are on Fly's [Managed Postgres page](https://docs.fly.io/mpg/create-and-connect/). It doesn't name a flag for the PostgreSQL version. During the spike the command offered 16 and 17: choose 17. The cluster starts with 10 GB and grows by itself.
+Every flag is in `fly mpg create --help` of flyctl 0.5.7. The cluster starts with 10 GB and grows by itself.
 
-PostGIS has to be enabled through Fly, because the app's login can't create it (the spike, Q3 step 1). Fly's page says PostGIS can be chosen when the cluster is created: choose it if `fly mpg create` offers it. Otherwise the spike enabled it with the command below, and the page says the dashboard's Extensions page does the same.
+PostGIS has to be enabled through Fly, because the app's login can't create it (the spike, Q3 step 1). `--enable-postgis-support` asks for it when the cluster is made. If `SELECT postgis_version()` then fails in the schema command, enable it on the database the way the spike did, with the second command below.
 
 ```
-fly mpg list                                   # note the cluster's id
-fly mpg databases extensions enable postgis    # the spike's command; check --help for how it names the cluster
+fly mpg list --org openantiquity               # note the cluster's id
+fly mpg databases extensions enable postgis --cluster <cluster-id> --database fly-db    # only if it is missing
 fly mpg attach <cluster-id> --app openantiquity
 fly mpg attach <cluster-id> --app openantiquity-jobs
 ```
@@ -105,7 +106,7 @@ bash infra/fly-secrets.sh web --from var/web-secrets.env
 
 It reads only `FIELDCLUB_GOOGLE_CLIENT_SECRET`, `FIELDCLUB_MICROSOFT_CLIENT_SECRET`, `FIELDCLUB_FACEBOOK_APP_SECRET`, `FIELDCLUB_OSM_CLIENT_SECRET`, `FIELDCLUB_APPLE_PRIVATE_KEY`, `FIELDCLUB_SMTP_PASSWORD`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` from it, and ignores every other line. Add the provider's client id to `fly.toml` at the same time, then deploy. A provider is offered only when both are there.
 
-The script sends everything in one `fly secrets import --stage`, which reads `NAME=VALUE` lines from standard input ([`fly secrets import`](https://docs.fly.io/flyctl/secrets-import/)). Fly's page says nothing of quoting or values over several lines, so the script refuses a value that spans lines or starts or ends with a space rather than risk it arriving changed. Apple's private key is a PEM file over several lines, so it can't be set this way yet: find how `fly secrets import` reads such a value first. `--stage` means a secret takes effect at the next deploy of the web app, and on each jobs machine started afterwards. A secret already set is left alone; `--replace` sends it again.
+The script sends each secret alone with `fly secrets set NAME=- --stage`, which reads the value from standard input. Checked on Fly on 2026-11-12 with flyctl 0.5.7: quotes, `$`, `#`, `=` and line breaks inside a value arrive unchanged, and white space at either end is trimmed. So the script refuses a value that starts or ends with a space or a line break, and Apple's private key, a PEM file over several lines, goes in the file inside single quotes with the closing quote straight after its last line. `fly secrets import` is not used, because it strips a pair of quotes from around a value. `--stage` means a secret takes effect at the next deploy of the web app, and on each jobs machine started afterwards. A secret already set is left alone; `--replace` sends it again.
 
 Register each sign-in provider with the redirect address `https://openantiquity.org/api/v1/auth/oauth/<provider>/callback`, where `<provider>` is `google`, `microsoft`, `apple`, `facebook` or `osm`.
 
@@ -436,16 +437,15 @@ Once the site on Fly answers on openantiquity.org, the elevation is in Tigris an
 
 Each of these was written from documentation or inferred, and none was run:
 
-- Every flyctl command and flag above, against `--help` of the flyctl in use. In particular: `fly mpg create`'s version and PostGIS prompts, `fly mpg databases extensions enable`, `fly storage create -a`, `fly secrets list --json` and `fly machine list --json` and the field names in their output (`fly_jobs.py schedule` reads `id`, `name` and `state`), `fly machine run` taking the job's own flags after `--` (try `uv run infra/fly_jobs.py --dry-run run fieldclub-terrain info` and run what it prints with `--help` in place of `info`), `fly machine update --schedule` and `--skip-start` on a scheduled machine, `fly releases --image`, and the release command's machine getting `[env]` and the secrets.
+- Checked against flyctl 0.5.7 and the spike's app on 2026-11-12, so no longer open: the flags of `fly deploy`, `fly machine run`, `fly machine update`, `fly mpg create`, `fly mpg attach`, `fly mpg databases extensions enable` and `fly storage create`; the field names `name` in `fly secrets list --json` and `id`, `name` and `state` in `fly machine list --json`; how `fly secrets set NAME=-` treats a value; that `fly ssh console -C` runs with the app's secrets in its environment; and that Defra's server accepts two connections at once from a Fly machine in London, reading at 17 to 22 MiB a second each.
+- Still to run for the first time: `fly machine run` taking the job's own flags after `--` (try `uv run infra/fly_jobs.py --dry-run run fieldclub-terrain info` and run what it prints with `--help` in place of `info`), `fly machine update --schedule` and `--skip-start` on a scheduled machine, `fly releases --image`, and the release command's machine getting `[env]` and the secrets.
 - That `fly deploy --build-only --push --app openantiquity-jobs --image-label <commit>` pushes to `registry.fly.io/openantiquity-jobs:<commit>` and starts nothing, and that the web app's deploy token can't push there.
 - That `fly deploy --no-public-ips` on a later deploy leaves the addresses step 11 allocated alone, as "Do not allocate any new public IP addresses" suggests, and that the Flycast check in step 5 answers over plain HTTP despite `force_https`.
 - That `timeout` from the image's coreutils stops a job under `tini` and the machine then exits and is removed.
 - That `fly storage create` makes a key with Editor on its own bucket and nothing more, and that a key given roles on three buckets reaches all three with one secret.
 - That `--file-secret` writes the host key where the SFTP client reads it, readable by the image's user.
-- That `fly ssh console -C` runs with the app's secrets in its environment, which `cache_lifecycle.py` needs, and that Tigris accepts boto3's lifecycle request with its checksum header.
-- That `fly secrets import` keeps a value with `#`, `$`, quotes or inner spaces exactly as sent.
+- That Tigris accepts boto3's lifecycle request with its checksum header, which `cache_lifecycle.py` sends.
 - That health checks don't keep a suspended machine awake, and that the database's `LISTEN` connection is found dead and replaced after a resume (the spike didn't test it).
-- That Defra's server accepts connections from Fly's addresses, two at a time.
 - Tigris multipart upload of the national COG, about 3.5 GB, which the spike didn't test, with boto3's default CRC32 checksums.
 - Whether Tigris answers 409 to overlapping conditional writes and `NoSuchBucket` for a misnamed bucket, as AWS does. The code takes any 412 or 409, and a 404 only with the code `NoSuchKey`, as a refusal.
 - The flyctl the workflow pins, 0.5.8, was published on 2026-11-11 and its `setup-flyctl` commit was read through a summariser; check both against GitHub and prefer a release at least two weeks old.

@@ -41,7 +41,9 @@ if args[:2] == ["secrets", "list"]:
     names = os.environ.get("FAKE_FLY_FILLED", "").split()
     key = os.environ.get("FAKE_FLY_NAME_KEY", "Name")
     print(json.dumps([{key: name, "Digest": "d1"} for name in names]))
-elif args[:2] == ["secrets", "import"]:
+elif args[:2] == ["secrets", "set"]:
+    if os.environ.get("FAKE_FLY_FAIL_ON") == args[2]:
+        sys.exit("fly: the API refused")
     entry["sent"] = sys.stdin.read()
     print("Secrets have been staged")
 else:
@@ -102,14 +104,17 @@ def calls(stage: dict[str, Path]) -> list[dict[str, Any]]:
     return [json.loads(line) for line in stage["log"].read_text().splitlines()]
 
 
+def sets(stage: dict[str, Path]) -> list[dict[str, Any]]:
+    return [call for call in calls(stage) if call["args"][:2] == ["secrets", "set"]]
+
+
 def sent(stage: dict[str, Path]) -> dict[str, str]:
-    """NAME=VALUE pairs sent to `fly secrets import`, split as flyctl would: at the first '='."""
-    imports = [call for call in calls(stage) if call["args"][:2] == ["secrets", "import"]]
+    """Each secret's value as `fly secrets set NAME=-` was given it on standard input."""
     pairs: dict[str, str] = {}
-    for call in imports:
-        for line in call["sent"].splitlines():
-            name, _, value = line.partition("=")
-            pairs[name] = value
+    for call in sets(stage):
+        name, marker = call["args"][2].split("=", 1)
+        assert marker == "-", "a value must never be an argument"
+        pairs[name] = call["sent"]
     return pairs
 
 
@@ -123,8 +128,10 @@ def test_defra_s_login_and_host_key_reach_the_jobs_app_exactly(stage: dict[str, 
         "DEFRA_SFTP_PASSWORD": PASSWORD,
         "DEFRA_KNOWN_HOSTS_B64": base64.b64encode(KNOWN_HOSTS.encode()).decode(),
     }
-    imports = [call["args"] for call in calls(stage) if call["args"][:2] == ["secrets", "import"]]
-    assert imports == [["secrets", "import", "--app", "openantiquity-jobs", "--stage"]]
+    assert [call["args"] for call in sets(stage)] == [
+        ["secrets", "set", f"{name}=-", "--app", "openantiquity-jobs", "--stage"]
+        for name in ("DEFRA_SFTP_HOST", "DEFRA_SFTP_USER", "DEFRA_SFTP_PASSWORD", "DEFRA_KNOWN_HOSTS_B64")
+    ]
 
 
 def test_defra_s_login_is_refused_for_the_web_app(stage: dict[str, Path]) -> None:
@@ -239,8 +246,20 @@ def test_a_missing_host_key_file_stops_it_before_anything_is_sent(stage: dict[st
     assert sent(stage) == {}
 
 
-@pytest.mark.parametrize("value", ["'-----BEGIN KEY-----\nabc\n-----END KEY-----'", "' padded '"])
-def test_a_value_that_import_might_change_is_refused(stage: dict[str, Path], value: str) -> None:
+def test_a_key_over_several_lines_and_a_value_in_quotes_arrive_whole(stage: dict[str, Path]) -> None:
+    key = "-----BEGIN KEY-----\nabc\n-----END KEY-----"
+    stage["others"].write_text(
+        f"FIELDCLUB_APPLE_PRIVATE_KEY='{key}'\nFIELDCLUB_SMTP_PASSWORD='\"wrapped\"'\n"
+    )
+
+    result = run(stage, "web", "--from", str(stage["others"]))
+
+    assert result.returncode == 0, result.stderr
+    assert sent(stage) == {"FIELDCLUB_APPLE_PRIVATE_KEY": key, "FIELDCLUB_SMTP_PASSWORD": '"wrapped"'}
+
+
+@pytest.mark.parametrize("value", ["' padded '", "'-----BEGIN KEY-----\nabc\n'"])
+def test_a_value_fly_would_trim_is_refused(stage: dict[str, Path], value: str) -> None:
     stage["others"].write_text(
         f"FIELDCLUB_GOOGLE_CLIENT_SECRET={GOOGLE}\nFIELDCLUB_APPLE_PRIVATE_KEY={value}\n"
     )
@@ -250,6 +269,30 @@ def test_a_value_that_import_might_change_is_refused(stage: dict[str, Path], val
     assert result.returncode != 0
     assert "FIELDCLUB_APPLE_PRIVATE_KEY" in result.stderr
     assert sent(stage) == {}
+
+
+def test_a_failure_part_way_says_which_secret_and_a_second_run_sends_the_rest(
+    stage: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FAKE_FLY_FAIL_ON", "DEFRA_SFTP_PASSWORD=-")
+
+    failed = run(stage, "jobs", "--defra")
+
+    assert failed.returncode != 0
+    assert "DEFRA_SFTP_PASSWORD" in failed.stderr
+    assert set(sent(stage)) == {"DEFRA_SFTP_HOST", "DEFRA_SFTP_USER"}
+    assert PASSWORD not in failed.stdout + failed.stderr
+
+    monkeypatch.delenv("FAKE_FLY_FAIL_ON")
+    again = run(stage, "jobs", "--defra", filled="DEFRA_SFTP_HOST DEFRA_SFTP_USER")
+
+    assert again.returncode == 0, again.stderr
+    assert set(sent(stage)) == {
+        "DEFRA_SFTP_HOST",
+        "DEFRA_SFTP_USER",
+        "DEFRA_SFTP_PASSWORD",
+        "DEFRA_KNOWN_HOSTS_B64",
+    }
 
 
 def test_a_file_with_none_of_the_app_s_names_is_refused(stage: dict[str, Path]) -> None:

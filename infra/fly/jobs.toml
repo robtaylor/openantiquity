@@ -24,7 +24,7 @@ mount = "/data"
 FIELDCLUB_ENV = "prod"
 FIELDCLUB_LOG_LEVEL = "INFO"
 FIELDCLUB_PUBLIC_URL = "https://openantiquity.org"
-FIELDCLUB_CONTACT = "https://openantiquity.org/about"
+FIELDCLUB_CONTACT = "fieldclub@shape.build"
 # Required in production for every process, though the jobs show no terms.
 FIELDCLUB_TERMS_URL = "/about#terms"
 # Required on every Fly machine, though the jobs serve no requests.

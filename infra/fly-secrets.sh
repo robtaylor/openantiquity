@@ -17,16 +17,18 @@
 #                  knows for the app are read; any other line is ignored
 #
 # Run from the main checkout, where .env and var/ are. Every value goes from its
-# file, or from the generator, to `fly secrets import` on standard input. None
-# is printed, passed as an argument or held in a shell variable, so none
-# reaches the terminal, the process list or the shell history. The secrets are
-# staged (`--stage`): the web app's take effect at its next deploy, and the jobs
-# app's on each machine started afterwards.
+# file, or from the generator, to `fly secrets set NAME=-` on standard input,
+# one secret at a time. None is printed, passed as an argument or held in a
+# shell variable, so none reaches the terminal, the process list or the shell
+# history. The secrets are staged (`--stage`): the web app's take effect at its
+# next deploy, and the jobs app's on each machine started afterwards.
 #
 # Safe to run again: a secret the app already has is left alone unless
 # --replace is given. Everything is read and checked before anything is sent,
-# so a missing value stops the run with nothing changed. Defra's login is
-# refused for the web app, which must never hold it (Decision 0018).
+# so a missing value stops the run with nothing changed. If Fly fails part-way,
+# the secrets already reported stay staged and a second run sends the rest.
+# Defra's login is refused for the web app, which must never hold it
+# (Decision 0018).
 set -euo pipefail
 
 usage() {
@@ -138,14 +140,14 @@ if from_file:
         fail(f"{from_file} sets none of the secrets the {role} app takes: {', '.join(FROM_FILE[role])}")
     wanted |= found
 
-# `fly secrets import` reads one NAME=VALUE a line. Its documentation says
-# nothing of quoting, of values over several lines or of spaces at either end,
-# so a value with any of those is refused rather than risk it arriving changed.
+# Each value is sent alone to `fly secrets set NAME=-`, which reads it from
+# standard input. Checked on Fly with flyctl 0.5.7 on 2026-11-12: quotes, `$`,
+# `#`, `=` and line breaks inside a value arrive unchanged, and white space at
+# either end is trimmed, so a value Fly would trim is refused. `fly secrets
+# import` is not used: it strips a pair of quotes from around a value.
 for name, value in wanted.items():
-    if "\n" in value or "\r" in value:
-        fail(f"{name} runs over several lines, which this script can't send. See infra/README.md.")
     if value != value.strip():
-        fail(f"{name} starts or ends with a space, which this script can't send safely.")
+        fail(f"{name} starts or ends with a space or a line break, which Fly would trim. See infra/README.md.")
 
 if replace != "true":
     listed = subprocess.run(
@@ -164,15 +166,14 @@ if not wanted:
     print("Nothing to send.")
     sys.exit(0)
 
-lines = "".join(f"{name}={value}\n" for name, value in wanted.items())
-done = subprocess.run(
-    ["fly", "secrets", "import", "--app", app, "--stage"],
-    input=lines.encode(),
-    stdout=subprocess.DEVNULL,
-    check=False,
-)
-if done.returncode != 0:
-    fail(f"fly could not set the secrets of {app}")
-for name in wanted:
+for name, value in wanted.items():
+    done = subprocess.run(
+        ["fly", "secrets", "set", f"{name}=-", "--app", app, "--stage"],
+        input=value.encode(),
+        stdout=subprocess.DEVNULL,
+        check=False,
+    )
+    if done.returncode != 0:
+        fail(f"fly could not set {name} on {app}. Run this again to send it and those after it.")
     print(f"{name} set on {app}")
 PYTHON

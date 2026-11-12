@@ -47,7 +47,9 @@ kill_timeout = 10
   FIELDCLUB_PUBLIC_URL = "https://openantiquity.org"
   # Answered 308 to the same path on FIELDCLUB_PUBLIC_URL (fieldclub.redirects).
   FIELDCLUB_REDIRECT_HOSTS = '["www.openantiquity.org", "openantiquity.com", "www.openantiquity.com", "openantiquity.co.uk", "www.openantiquity.co.uk"]'
-  FIELDCLUB_CONTACT = "https://openantiquity.org/about"
+  # Shown on the about page and sent to the services the site fetches from. It
+  # stays this address until a mailbox on the site's own domain exists (Decision 0017).
+  FIELDCLUB_CONTACT = "fieldclub@shape.build"
   # The contributor terms the welcome step asks people to accept. Point it at
   # the real terms before the site is opened.
   FIELDCLUB_TERMS_URL = "/about#terms"
