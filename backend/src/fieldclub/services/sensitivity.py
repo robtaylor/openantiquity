@@ -71,8 +71,9 @@ import shapely
 from geoalchemy2.shape import to_shape
 from shapely.geometry import Point, Polygon, box
 from shapely.geometry.base import BaseGeometry
-from sqlalchemy import ColumnElement, and_, false, func, not_, or_, select, true
-from sqlalchemy.orm import Session
+from sqlalchemy import BigInteger, ColumnElement, and_, cast, false, func, not_, or_, select, true
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.orm import Session, aliased
 
 from fieldclub import gridref
 from fieldclub.errors import DataIntegrityError, ForbiddenError
@@ -212,9 +213,22 @@ def visible_match_clause(viewer: User | None, area: ColumnElement[Any]) -> Colum
     A shape counts only where the viewer sees the finding exactly. Matched by
     its shape, a protected line would tell anyone else that it passes through
     the box.
+
+    The findings whose shape crosses the box are found first, through the
+    index on `outline`, as an array the outer query looks ids up in. Written
+    as one more spatial test in the `OR`, the planner would sometimes give up
+    the spatial indexes for a scan in date order. An outline saved before
+    `shape_kind` existed matches by its point until the backfill fills it.
     """
-    exact = as_sql(sees_exact_clause(viewer))
-    by_shape = and_(exact, Finding.outline.is_not(None), func.ST_Intersects(Finding.outline, area))
+    shaped = aliased(Finding)
+    crossing = (
+        select(func.array_agg(shaped.id))
+        .where(shaped.shape_kind.is_not(None), func.ST_Intersects(shaped.outline, area))
+        .scalar_subquery()
+    )
+    # Wrapped, so `= ANY` reads it as an array, not as a subquery of arrays. Empty when none cross.
+    ids = func.coalesce(crossing, cast(postgresql.array([]), postgresql.ARRAY(BigInteger)))
+    by_shape = and_(as_sql(sees_exact_clause(viewer)), Finding.id == func.any(ids))
     return or_(visible_position_clause(viewer, area), by_shape)
 
 
