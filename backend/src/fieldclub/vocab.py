@@ -708,6 +708,9 @@ class NextStepCode(StrEnum):
     NEED_TRUSTED_REVIEW = "need_trusted_review"
     NEED_GROUND = "need_ground"
     NEED_OFFICIAL = "need_official"
+    # Not a requirement of any tier: second looks at what an extension added
+    # to a line since the last one (`confidence.NEW_PART_LOOK_M`).
+    LOOK_AT_NEW_PART = "look_at_new_part"
 
 
 @dataclass(frozen=True)
@@ -754,6 +757,11 @@ NEXT_STEPS: tuple[NextStepInfo, ...] = (
         NextStepCode.NEED_OFFICIAL,
         "Find it on record",
         "Find a heritage record, designation or publication that includes it, for an archaeologist to check.",
+    ),
+    NextStepInfo(
+        NextStepCode.LOOK_AT_NEW_PART,
+        "Look at the new part",
+        "Look at what was added to a line since the last second look and say whether you can see it.",
     ),
 )
 
@@ -1156,6 +1164,8 @@ class ActivityKind(StrEnum):
     INVESTIGATION_PUBLISHED = "investigation_published"
     # A notification only, never an `activity` row: someone was invited to an investigation.
     INVESTIGATION_INVITATION = "investigation_invitation"
+    # The finder added to an end of the finding's line. Listed only to those who see it exactly.
+    SHAPE_EXTENDED = "shape_extended"
 
 
 # --------------------------------------------------------------------------

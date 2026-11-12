@@ -69,8 +69,8 @@ from fieldclub.errors import BadRequestError, ConflictError, ForbiddenError, Not
 from fieldclub.models import Finding, Observation, User
 from fieldclub.models.common import SRID
 from fieldclub.schemas.common import int_from_cursor, offset_from_cursor, offset_page, paginate
-from fieldclub.services import activity, findings, sensitivity
-from fieldclub.services.confidence import CHECK_PHRASES, NextStep, load_next_steps
+from fieldclub.services import activity, findings, looked_at, sensitivity
+from fieldclub.services.confidence import CHECK_PHRASES, NEW_PART_PROMPT, NextStep, load_next_steps
 from fieldclub.services.findings import ANSWER_CODES, Reassessment
 from fieldclub.vocab import (
     CHECK_EXPLANATIONS,
@@ -263,10 +263,13 @@ def put_observation(db: Session, finding: Finding, user: User, answer: Answer) -
         tier_at_answer=finding.tier if answer.detail_follows else None,
         state_at_answer=finding.state if answer.detail_follows else None,
         role_at_answer=user.role,
+        # The shape the answer was given on, which the page counts what was added since from.
+        shape_revision=finding.shape_revision,
         **answer.columns(),
     )
     db.add(observation)
     db.flush()
+    looked_at.grow(db, finding, observation)
     # No actor and no data: followers learn that someone answered, not who
     # or how. The answerer is left out of the notifications instead.
     activity.record(db, ActivityKind.OBSERVATION_ADDED, None, finding, quiet_for=user)
@@ -414,6 +417,7 @@ _BLIND_PROMPTS: dict[NextStepCode, str] = {
     NextStepCode.NEED_TRUSTED_REVIEW: (
         "A trusted member or an archaeologist needs to say whether they can see it, or more people do."
     ),
+    NextStepCode.LOOK_AT_NEW_PART: NEW_PART_PROMPT,
 }
 assert set(_BLIND_PROMPTS) | {NextStepCode.NEED_CHECK} == ANSWER_CODES
 
@@ -486,6 +490,19 @@ def review_queue(
     """Findings waiting for a second look from this viewer, best first."""
     query = select(Finding).where(_answerable(viewer)).order_by(*_queue_order(viewer, near))
     return _offset_page(db, query, limit=limit, cursor=cursor)
+
+
+def new_part_view(db: Session, finding: Finding, viewer: User | None) -> dict[str, Any] | None:
+    """The view that frames what was added to a line, while the finding asks for a look at it.
+
+    It is shape, so only for a viewer who sees the finding exactly, whom the
+    queue and the second-look tasks are the only ones to offer it to.
+    """
+    if NextStepCode.LOOK_AT_NEW_PART.value not in finding.open_steps:
+        return None
+    assert sensitivity.sees_exact(finding, viewer), "the new part is shown only to exact viewers"
+    part = looked_at.new_part(db, finding)
+    return part.view if part is not None else None
 
 
 # --------------------------------------------------------------------------

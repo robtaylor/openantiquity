@@ -78,7 +78,7 @@ from fieldclub.models import (
 )
 from fieldclub.models.common import point_lon_lat, to_db_geometry
 from fieldclub.schemas.common import cursor_int, decode_cursor, int_from_cursor, is_bbox, paginate, web_url
-from fieldclub.services import activity, geo, ids, reputation, sensitivity, shapes, text_positions
+from fieldclub.services import activity, geo, ids, looked_at, reputation, sensitivity, shapes, text_positions
 from fieldclub.services.confidence import (
     SECOND_LOOK_CODES,
     VERIFIER_ROLES,
@@ -388,7 +388,8 @@ def answers_to_next(assessment: Assessment) -> int | None:
     the checks), so it is the largest number any one step needs. A trusted
     review counts as the members it would take instead.
     """
-    steps = assessment.next_steps
+    # A look at a line's new part moves nobody up.
+    steps = [step for step in assessment.next_steps if step.code is not NextStepCode.LOOK_AT_NEW_PART]
     if not steps or any(step.code not in ANSWER_CODES for step in steps):
         return None
     needed = []
@@ -432,7 +433,8 @@ def gather_inputs(db: Session, finding: Finding, state: FindingState | None = No
     current role, and a banned person's evidence and verifications stop counting.
 
     `state` is what to tell the engine, which honours only `withdrawn`. It
-    defaults to the stored state.
+    defaults to the stored state. The length added to the line since the
+    newest second look (`looked_at.new_part`) asks for a look at it.
     """
     author_role = db.scalar(select(User.role).where(User.id == finding.author_id))
     assert author_role is not None, f"finding {finding.public_id} has no author"
@@ -489,6 +491,7 @@ def gather_inputs(db: Session, finding: Finding, state: FindingState | None = No
         state=state if state is not None else FindingState(finding.state),
         observations=observations,
         evidence=evidence,
+        added_since_looked_m=new_part.length_m if (new_part := looked_at.new_part(db, finding)) else None,
     )
 
 
@@ -896,8 +899,14 @@ def change_shape(
     sent unchanged changes nothing and returns None. Otherwise it is held to
     the limits and the British Isles, the anchor follows `_anchor_for` (with
     `placed`, a point placed with the change, which the shape must come near),
-    the change row is written and the revision raised. Nothing is
-    reassessed: every answer stands, at the weight it was given with.
+    the change must keep most of what second looks were given on
+    (`looked_at.check`), the change row is written and the revision raised.
+
+    Every answer stands, at the weight it was given with. An extension is
+    reassessed only so that the finding asks for a look at the new part
+    (`look_at_new_part`): nothing the ladder weighs has changed, so an
+    assessment that is up to date keeps its tier and score. An extension
+    records `shape_extended`, which tells the followers.
     """
     _check_revision(finding, revision)
     new_shape = shape_from_request(path, outline)
@@ -909,6 +918,7 @@ def change_shape(
     anchor = _anchor_for(finding, new_shape, placed or current, placed=placed is not None)
     if new_shape is not None:
         check_in_british_isles(new_shape.geometry)
+    looked_at.check(finding, new_shape.geometry if new_shape is not None else anchor)
     _record_shape_change(db, finding, by, kind, old_path, new_shape)
     for name, value in _shape_columns(new_shape).items():
         setattr(finding, name, value)
@@ -917,6 +927,13 @@ def change_shape(
         finding.location_derived = False
     if _point_parts(anchor) != _point_parts(current):
         _move_anchor(db, finding, anchor)
+    if kind is ShapeChangeKind.EXTENDED:
+        db.flush()
+        result = reassess(db, finding, by)
+        if result.tier_after is not result.tier_before:
+            # Only an assessment stored before the engine last changed can move here.
+            logger.warning("Finding %s moved from %s on an extension", finding.public_id, result.tier_before)
+        activity.record(db, ActivityKind.SHAPE_EXTENDED, by, finding)
     return kind
 
 
@@ -974,6 +991,8 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
     if placed and not changed_shape:
         if finding.outline is not None:
             shapes.check_shape(to_shape(finding.outline), location)
+        else:
+            looked_at.check(finding, location)
         _move_anchor(db, finding, location)
     if placed:
         finding.location_derived = False
@@ -1644,6 +1663,8 @@ class FindingView:
     nation: str | None
     # Every change to the shape, oldest first, for `sensitivity.visible_shape`.
     shape_changes: list[FindingShapeChange]
+    # What extensions added since the newest second look, if any.
+    new_part: looked_at.NewPart | None
 
 
 def finding_view(db: Session, finding: Finding, viewer: User | None) -> FindingView:
@@ -1667,4 +1688,5 @@ def finding_view(db: Session, finding: Finding, viewer: User | None) -> FindingV
                 .order_by(FindingShapeChange.revision)
             )
         ),
+        new_part=looked_at.new_part(db, finding),
     )

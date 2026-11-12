@@ -13,7 +13,7 @@ from fieldclub.auth.providers import provider_statuses
 from fieldclub.config import Settings
 from fieldclub.layers import TileVersion, build_layers, default_tile_version
 from fieldclub.schemas import meta as schema
-from fieldclub.services import record_tiles, records, sensitivity, shapes
+from fieldclub.services import looked_at, record_tiles, records, sensitivity, shapes
 from fieldclub.services.confidence import STEP_RULES, THRESHOLDS
 from fieldclub.services.findings import FIELD_KINDS, OFFICIAL_KINDS
 from fieldclub.terrain.catalogue import england_catalogue
@@ -220,5 +220,7 @@ def build_meta(
             line_max_length_m=shapes.LINE_MAX_LENGTH_M,
             shape_max_gap_m=shapes.SHAPE_MAX_GAP_M,
             curve=shapes.CURVE,
+            looked_at_max_move_m=looked_at.LOOKED_AT_MAX_MOVE_M,
+            looked_at_min_kept=looked_at.LOOKED_AT_MIN_KEPT,
         ),
     )

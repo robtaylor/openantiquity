@@ -22,6 +22,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, UrlConstraints, model_validator
 from shapely.geometry.base import BaseGeometry
 
+from fieldclub import gridref
 from fieldclub.models import Comment, Finding, FindingShapeChange, Observation, User
 from fieldclub.schemas.common import (
     ApiModel,
@@ -231,6 +232,10 @@ class ShapeOut(ApiModel):
     # The length extensions added since the newest second look. Null when no
     # second look is older than an extension.
     added_since_looked_m: float | None
+    # What second looks were given on, which an edit must keep most of close
+    # (`/meta` `shapes.looked_at_max_move_m` and `looked_at_min_kept`). Only for
+    # someone who may change the finding (`actions.edit`), and null before any second look.
+    looked_at: GeoJSONGeometry | None = None
 
 
 class LocationDetail(Location):
@@ -245,10 +250,17 @@ class LocationDetail(Location):
 
 
 def location_detail(
-    finding: Finding, viewer: User | None, changes: list[FindingShapeChange]
+    finding: Finding,
+    viewer: User | None,
+    changes: list[FindingShapeChange],
+    *,
+    added_since_looked_m: float | None = None,
+    may_change: bool = False,
 ) -> LocationDetail:
     """The page's `location`, through `sensitivity.visible_location` and `visible_shape`."""
-    shape = sensitivity.visible_shape(finding, viewer, changes)
+    shape = sensitivity.visible_shape(
+        finding, viewer, changes, added_since_looked_m=added_since_looked_m, may_change=may_change
+    )
     where = location_out(finding, viewer, with_outline=False)
     return LocationDetail(
         **where.model_dump(exclude={"outline"}),
@@ -260,8 +272,8 @@ def location_detail(
             revision=shape.revision,
             extent=list(shape.extent) if shape.extent is not None else None,
             changes=[ShapeChangeOut.model_validate(change) for change in shape.changes],
-            # Worked out once second looks record the shape they were given at.
-            added_since_looked_m=None,
+            added_since_looked_m=shape.added_since_looked_m,
+            looked_at=geojson_geometry(shape.looked_at, decimals=shapes.DECIMALS),
         ),
     )
 
@@ -592,8 +604,21 @@ class FindingDetail(FindingSummary):
         tallies = (
             Tallies.from_assessment(assessment, finding.observation_count) if view.answers_visible else None
         )
+        allowed = actions.finding_actions(
+            finding, viewer, view.my_observation, [item.evidence for item in view.evidence]
+        )
         fields = _summary_fields(finding, view.author, viewer)
-        fields["location"] = location_detail(finding, viewer, view.shape_changes)
+        fields["location"] = location_detail(
+            finding,
+            viewer,
+            view.shape_changes,
+            added_since_looked_m=view.new_part.length_m if view.new_part is not None else None,
+            may_change=allowed.edit.allowed,
+        )
+        # Asking for a look at what was added to a line says it is a line.
+        steps = [
+            step for step in assessment.next_steps if exact or step.code is not NextStepCode.LOOK_AT_NEW_PART
+        ]
         return cls(
             **fields,
             description=sensitivity.visible_text(finding, viewer, finding.description),
@@ -607,7 +632,7 @@ class FindingDetail(FindingSummary):
                 next_tier=assessment.next_tier,
                 next_steps=[
                     NextStepOut.from_step(step if view.answers_visible else review.blind_step(step))
-                    for step in assessment.next_steps
+                    for step in steps
                 ],
                 tallies=tallies,
             ),
@@ -623,11 +648,7 @@ class FindingDetail(FindingSummary):
                 else None
             ),
             following=view.following,
-            actions=_finding_actions(
-                actions.finding_actions(
-                    finding, viewer, view.my_observation, [item.evidence for item in view.evidence]
-                )
-            ),
+            actions=_finding_actions(allowed),
         )
 
 
@@ -871,6 +892,25 @@ class ReviewCard(ApiModel):
     public_id: str
     place: ReviewPlace
     view_state: ViewState
+
+
+def review_view(
+    finding: Finding, viewer: User | None, new_part: dict[str, Any] | None
+) -> tuple[Location, ViewState]:
+    """Where a second look is asked for, and how: the finding as the viewer sees it, with the finder's view.
+
+    While the finding asks for a look at what was added to its line,
+    `new_part` (`review.new_part_view`) moves the place to the added part
+    and zooms to frame it.
+    """
+    where = location_out(finding, viewer, with_outline=False)
+    view = ViewState.from_stored(finding.view_state)
+    if new_part is None:
+        return where, view
+    assert not where.obscured, "the new part is shown only to exact viewers"
+    lon, lat = new_part["lon"], new_part["lat"]
+    place = where.model_copy(update={"lon": lon, "lat": lat, "grid_ref": gridref.to_gridref(lon, lat)})
+    return place, view.model_copy(update={"zoom": float(new_part["zoom"])})
 
 
 class TaskFinding(ApiModel):

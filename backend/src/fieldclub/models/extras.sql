@@ -23,9 +23,30 @@ ALTER TABLE findings
         CONSTRAINT ck_findings_shape_kind_valid CHECK (shape_kind IN ('line', 'area')),
     ADD COLUMN IF NOT EXISTS shape_length_m real,
     ADD COLUMN IF NOT EXISTS shape_revision integer NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS location_derived boolean NOT NULL DEFAULT false;
+    ADD COLUMN IF NOT EXISTS location_derived boolean NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS looked_at geometry(GEOMETRY, 4326);
 
 ALTER TABLE observations ADD COLUMN IF NOT EXISTS shape_revision integer;
+
+-- An extension records `shape_extended` activity. A database made before it
+-- keeps the check without it, so the check is made again, once, with the
+-- kinds in the order of `vocab.ActivityKind`.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+            WHERE conname = 'ck_activity_kind_valid'
+                AND position('shape_extended' in pg_get_constraintdef(oid)) > 0
+    ) THEN
+        ALTER TABLE activity DROP CONSTRAINT IF EXISTS ck_activity_kind_valid;
+        ALTER TABLE activity ADD CONSTRAINT ck_activity_kind_valid CHECK (kind IN (
+            'finding_created', 'tier_changed', 'state_changed', 'observation_added', 'evidence_added',
+            'comment_added', 'mention_added', 'followup_logged', 'investigation_published',
+            'investigation_invitation', 'shape_extended'
+        ));
+    END IF;
+END
+$$;
 
 -- Map views match a finding's shape as well as its point, for viewers who see it exactly.
 CREATE INDEX IF NOT EXISTS idx_findings_outline ON findings USING gist (outline);

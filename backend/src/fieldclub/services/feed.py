@@ -15,7 +15,9 @@ only while what it is about can still be seen:
   (`comment_id`, `evidence_id`, `mention_id`) has been deleted, or hidden from
   this viewer by the rules its own lists follow: a hidden comment or mention
   is still listed for moderators and its author, and hidden evidence for
-  nobody.
+  nobody,
+- `shape_extended` is listed only to someone who sees the finding exactly,
+  because it says the finding is a line and that it grew.
 
 A notification of an invitation to an investigation (`investigation_id`)
 is listed while the person is still invited to it or belongs to it, and
@@ -63,7 +65,7 @@ from fieldclub.models import (
     User,
 )
 from fieldclub.schemas.common import BBox, int_from_cursor, is_bbox, paginate
-from fieldclub.services import findings, geo, ids, mentions
+from fieldclub.services import findings, geo, ids, mentions, sensitivity
 from fieldclub.vocab import ActivityKind, FindingState, Visibility
 
 # The user who did something, as distinct from the viewer.
@@ -150,6 +152,11 @@ def _listed[*Row](
     conditions: list[ColumnElement[bool]] = [
         kind.in_(_KNOWN_KINDS),
         or_(finding_id.is_(None), finding_listed_clause(viewer)),
+        # That a finding's line was extended is shape, which a square says nothing of.
+        or_(
+            kind != ActivityKind.SHAPE_EXTENDED.value,
+            sensitivity.as_sql(sensitivity.sees_exact_clause(viewer)),
+        ),
         or_(actor_id.is_(None), Actor.banned_at.is_(None)),
         not_(_content_gone(kind, data, viewer)),
     ]

@@ -15,6 +15,7 @@ from sqlalchemy.pool import NullPool
 from fieldclub import db as fieldclub_db
 from fieldclub.db import Base, _split_sql, create_schema, extras_statements, get_db
 from fieldclub.models import User
+from fieldclub.vocab import ActivityKind
 
 EXPECTED_TABLES = {
     "users",
@@ -122,6 +123,7 @@ _SHAPE_COLUMNS = (
     "shape_length_m",
     "shape_revision",
     "location_derived",
+    "looked_at",
 )
 
 
@@ -158,6 +160,14 @@ def test_create_schema_adds_the_shape_columns_to_a_database_made_before_them(
             text("ALTER TABLE findings " + ", ".join(f"DROP COLUMN {name}" for name in _SHAPE_COLUMNS))
         )
         conn.execute(text("ALTER TABLE observations DROP COLUMN shape_revision"))
+        # The activity kinds as they were, before `shape_extended`.
+        kinds = ", ".join(
+            f"'{kind.value}'" for kind in ActivityKind if kind is not ActivityKind.SHAPE_EXTENDED
+        )
+        conn.execute(text("ALTER TABLE activity DROP CONSTRAINT ck_activity_kind_valid"))
+        conn.execute(
+            text(f"ALTER TABLE activity ADD CONSTRAINT ck_activity_kind_valid CHECK (kind IN ({kinds}))")
+        )
         user_id = conn.scalar(
             text("INSERT INTO users (handle, display_name) VALUES ('Old', 'Old') RETURNING id")
         )
@@ -259,6 +269,7 @@ def test_geometry_columns_are_wgs84(database: Engine) -> None:
         ("admin_areas", "geom"): (4326, "MULTIPOLYGON"),
         ("findings", "location"): (4326, "POINT"),
         ("findings", "location_public"): (4326, "POINT"),
+        ("findings", "looked_at"): (4326, "GEOMETRY"),
         ("findings", "outline"): (4326, "GEOMETRY"),
         ("findings", "outline_low"): (4326, "GEOMETRY"),
         ("findings", "outline_mid"): (4326, "GEOMETRY"),

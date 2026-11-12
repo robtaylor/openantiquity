@@ -129,6 +129,11 @@ class Finding(Base):
     # Raised by one on every change to the shape. An edit of the path names the
     # revision it started from, so one tab can't undo another's change unseen.
     shape_revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # The ground second looks were given on: the union of the finding's shape,
+    # an area as its edge, or its point when it had none, at each second look.
+    # It only grows. An edit must keep most of it close (`services.looked_at`).
+    # Shape: never served but to someone who sees the finding exactly and may change it.
+    looked_at: Mapped[WKBElement | None] = mapped_column(any_geometry(spatial_index=False), deferred=True)
     # True when the server chose `location` from the shape, because the finder drew it without one.
     location_derived: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # Left unset, a new finding takes its feature class's default level

@@ -39,7 +39,10 @@ Interface
   person needs: `people` (how many more members, each of weight 1.0),
   `check`, `strands_needed`, `missing_strands`, `weight_needed` and
   `pending_evidence` (ids of items waiting for an endorsement or a
-  verification). The same list drives the help-wanted queue.
+  verification). The same list drives the help-wanted queue. After them
+  comes `look_at_new_part` when more than `NEW_PART_LOOK_M` has been added
+  to the line since the newest second look (`added_since_looked_m`), which
+  no tier requires.
 - `assessment.credits` says who did what, one `Credit` per person and kind,
   so the finding page can name people.
 
@@ -309,12 +312,20 @@ STEP_RULES: tuple[StepRule, ...] = (
         stance=Stance.SUPPORTS,
         needs_verification=True,
     ),
+    StepRule(NextStepCode.LOOK_AT_NEW_PART, MetBy.SECOND_LOOK),
 )
 assert [rule.code for rule in STEP_RULES] == list(NextStepCode), "every next step says what meets it"
 SECOND_LOOK_CODES: frozenset[NextStepCode] = frozenset(
     rule.code for rule in STEP_RULES if rule.met_by is MetBy.SECOND_LOOK
 )
 
+
+# A finding whose line has had more than this many metres added since its
+# newest second look asks for a look at the new part (`look_at_new_part`).
+# The step is no requirement of a tier, so it moves neither tier nor score.
+NEW_PART_LOOK_M = 200.0
+# Shown to anyone who sees the finding exactly, so it says nothing of how far or where.
+NEW_PART_PROMPT = "Someone needs to look at the part added to its line since the last second look."
 
 # Closed states: they offer nobody a next step, and earn no reputation.
 CLOSED_STATES = frozenset({FindingState.RULED_OUT, FindingState.WITHDRAWN})
@@ -484,8 +495,14 @@ class FindingInputs:
     state: FindingState = FindingState.OPEN
     observations: tuple[ObservationInput, ...] = ()
     evidence: tuple[EvidenceInput, ...] = ()
+    # The length extensions added to the finding's line since the newest
+    # standing second look, in metres. None when no such answer is older than
+    # an extension. It asks for a look at the new part and moves nothing else.
+    added_since_looked_m: float | None = None
 
     def __post_init__(self) -> None:
+        if self.added_since_looked_m is not None and not self.added_since_looked_m >= 0:
+            raise InvalidInputsError("the length added since the last second look can't be negative")
         _coerce(self, "author_role", Role)
         _coerce(self, "feature_class", FeatureClass)
         _coerce(self, "state", FindingState)
@@ -815,6 +832,9 @@ def assess(inputs: FindingInputs, thresholds: Thresholds = THRESHOLDS) -> Assess
             evidence=evidence,
             t=t,
         )
+    added = inputs.added_since_looked_m
+    if state not in CLOSED_STATES and added is not None and added > NEW_PART_LOOK_M:
+        steps += (NextStep(NextStepCode.LOOK_AT_NEW_PART, NEW_PART_PROMPT, people=1),)
 
     return Assessment(
         finder_id=finder,

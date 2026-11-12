@@ -400,6 +400,7 @@ def test_enumerations_from_the_contract() -> None:
         "investigation_published",
         # A notification only: see services.activity.notify_invitation.
         "investigation_invitation",
+        "shape_extended",
     ]
     assert [item.value for item in vocab.NextStepCode] == [
         "need_observers",
@@ -409,6 +410,7 @@ def test_enumerations_from_the_contract() -> None:
         "need_trusted_review",
         "need_ground",
         "need_official",
+        "look_at_new_part",
     ]
     assert [item.value for item in vocab.Nation] == ["england", "scotland", "wales", "northern_ireland"]
 

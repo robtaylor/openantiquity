@@ -400,7 +400,13 @@ def test_each_next_step_says_what_meets_it(meta: dict) -> None:
     rules = {rule["id"]: rule for rule in meta["vocab"]["next_steps"]}
     assert list(rules) == list(vocab.NextStepCode)
     second_looks = {code for code, rule in rules.items() if rule["met_by"] == "second_look"}
-    assert second_looks == {"need_observers", "need_class_agreement", "need_check", "need_trusted_review"}
+    assert second_looks == {
+        "need_observers",
+        "need_class_agreement",
+        "need_check",
+        "need_trusted_review",
+        "look_at_new_part",
+    }
     for code in second_looks:
         assert rules[code]["evidence_kinds"] == []
     strand = rules["need_strand"]

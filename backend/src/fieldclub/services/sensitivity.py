@@ -338,15 +338,27 @@ class VisibleShape:
     outline: BaseGeometry | None = None
     # The tapped points, as `shapes.Path.to_json` writes them.
     path: dict[str, Any] | None = None
+    # The length extensions added since the newest second look.
+    added_since_looked_m: float | None = None
+    # What second looks were given on, for someone who may change the shape.
+    looked_at: BaseGeometry | None = None
 
 
 def visible_shape(
-    finding: Finding, viewer: User | None, changes: Sequence[FindingShapeChange]
+    finding: Finding,
+    viewer: User | None,
+    changes: Sequence[FindingShapeChange],
+    *,
+    added_since_looked_m: float | None = None,
+    may_change: bool = False,
 ) -> VisibleShape:
     """The shape of `finding` and its `changes`, oldest first, as `viewer` may know them.
 
     An outline saved before paths is served with the all-corner path it is
-    (`shapes.stored_path`), and the kind of its geometry.
+    (`shapes.stored_path`), and the kind of its geometry. `added_since_looked_m`
+    is `looked_at.new_part`'s length. `may_change` is whether the viewer may
+    change the finding (`actions.edit`): only then do they get `looked_at`,
+    to draw under the path while they change it.
     """
     assert all(change.finding_id == finding.id for change in changes), "a change of another finding"
     if not sees_exact(finding, viewer):
@@ -374,6 +386,8 @@ def visible_shape(
         extent=full.bounds if full is not None else None,
         outline=shown,
         path=path.to_json() if path is not None else None,
+        added_since_looked_m=added_since_looked_m,
+        looked_at=to_shape(finding.looked_at) if may_change and finding.looked_at is not None else None,
     )
 
 

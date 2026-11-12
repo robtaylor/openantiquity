@@ -5,13 +5,13 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Query, Response
+from sqlalchemy.orm import Session
 
 from fieldclub.api.deps import CursorQuery, Db, OptionalUser, PageQuery, private
 from fieldclub.errors import BadRequestError
 from fieldclub.models import Finding, User
 from fieldclub.schemas.common import Page
 from fieldclub.schemas.findings import (
-    Location,
     NextStepOut,
     ReviewCard,
     ReviewPlace,
@@ -20,8 +20,7 @@ from fieldclub.schemas.findings import (
     TaskGroupOut,
     TaskGroups,
     TaskItem,
-    ViewState,
-    location_out,
+    review_view,
 )
 from fieldclub.services import review, sensitivity
 from fieldclub.vocab import FeatureClass, FindingState, NextStepCode, Strand, Tier
@@ -58,16 +57,16 @@ def next_cards(
     """
     chosen, next_cursor = review.review_queue(db, viewer, near=_near(lon, lat), limit=limit, cursor=cursor)
     private(response)
-    return Page[ReviewCard](items=[_card(finding, viewer) for finding in chosen], next_cursor=next_cursor)
+    return Page[ReviewCard](items=[_card(db, finding, viewer) for finding in chosen], next_cursor=next_cursor)
 
 
-def _card(finding: Finding, viewer: User | None) -> ReviewCard:
-    where = location_out(finding, viewer)
+def _card(db: Session, finding: Finding, viewer: User | None) -> ReviewCard:
+    where, view = review_view(finding, viewer, review.new_part_view(db, finding, viewer))
     assert not where.obscured, "the queue offers only findings the viewer sees exactly"
     return ReviewCard(
         public_id=finding.public_id,
         place=ReviewPlace(lon=where.lon, lat=where.lat, grid_ref=where.grid_ref),
-        view_state=ViewState.from_stored(finding.view_state),
+        view_state=view,
     )
 
 
@@ -97,7 +96,7 @@ def tasks(
             TaskGroupOut(
                 code=group.code,
                 total=group.total,
-                items=[_task(task, viewer) for task in group.tasks],
+                items=[_task(db, task, viewer) for task in group.tasks],
                 next_cursor=group.next_cursor,
                 strands=[StrandCount(strand=kind, total=total) for kind, total in group.strands],
             )
@@ -106,14 +105,17 @@ def tasks(
     )
 
 
-def _task(task: review.Task, viewer: User | None) -> TaskItem:
+def _task(db: Session, task: review.Task, viewer: User | None) -> TaskItem:
     finding = task.finding
-    place: Location = location_out(finding, viewer)
+    new_part = (
+        review.new_part_view(db, finding, viewer) if task.code is NextStepCode.LOOK_AT_NEW_PART else None
+    )
+    place, view = review_view(finding, viewer, new_part)
     return TaskItem(
         public_id=finding.public_id,
         code=task.code,
         place=place,
-        view_state=ViewState.from_stored(finding.view_state),
+        view_state=view,
         step=NextStepOut.from_step(task.step) if task.step is not None else None,
         finding=(
             TaskFinding(

@@ -485,6 +485,10 @@ class Ladder(BaseModel):
 class ShapeLimits(BaseModel):
     """The limits on a finding's line or shape and the curve's name, from `services.shapes`.
 
+    The last two are how much of what second looks were given on an edit must
+    keep, from `services.looked_at`: `looked_at_min_kept` of it within
+    `looked_at_max_move_m`.
+
     The frontend reads them here rather than keeping copies, so the two can't drift.
     """
 
@@ -494,6 +498,8 @@ class ShapeLimits(BaseModel):
     line_max_length_m: int
     shape_max_gap_m: int
     curve: str
+    looked_at_max_move_m: int
+    looked_at_min_kept: float
 
 
 class Meta(BaseModel):

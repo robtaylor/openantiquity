@@ -185,6 +185,7 @@ def test_someone_who_sees_only_the_square_learns_only_that_the_shape_changed_and
             "extent": None,
             "changes": [{"kind": "changed", "on": change["on"], "added_length_m": None, "added_view": None}],
             "added_since_looked_m": None,
+            "looked_at": None,
         }
         listed = viewer.get(f"{API}/findings").json()["items"]
         assert [item["location"]["shape_kind"] for item in listed] == [None]
@@ -306,4 +307,6 @@ def test_meta_gives_the_shape_limits_and_the_curve(client) -> None:
         "line_max_length_m": 600_000,
         "shape_max_gap_m": 1_000,
         "curve": "catmull-rom-centripetal-1",
+        "looked_at_max_move_m": 250,
+        "looked_at_min_kept": 0.75,
     }
