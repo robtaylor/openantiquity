@@ -1,6 +1,7 @@
 import { type Browser, expect, type Page } from "@playwright/test";
 import { stubUpstream, tilesRoute } from "../../e2e/support/network.js";
 import { WEB_PORT } from "./env.js";
+import { watchPolicy } from "./policy.js";
 
 /**
  * The people in a full-stack test: each signed in through the development
@@ -8,8 +9,9 @@ import { WEB_PORT } from "./env.js";
  * same stubs as the test's own page.
  */
 
-/** The same stubs the fixture gives `page`, for a page in another browser context. */
+/** The same stubs and policy watch the fixture gives `page`, for a page in another browser context. */
 export async function stub(page: Page): Promise<void> {
+  await watchPolicy(page);
   await stubUpstream(page);
   await page.route(tilesRoute(), (route) => route.fulfill({ status: 204 }));
 }

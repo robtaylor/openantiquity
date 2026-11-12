@@ -45,7 +45,7 @@ test("signs in, joins, signs out, signs in again and deletes the account", async
   await panel.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Your details are saved.")).toBeVisible();
 
-  await panel.getByRole("button", { name: "Sign out" }).click();
+  await panel.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(panel.getByRole("heading", { name: "You're not signed in" })).toBeVisible();
   expect((await page.request.get("/api/v1/auth/me")).status()).toBe(401);
 

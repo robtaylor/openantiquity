@@ -13,10 +13,18 @@ const here = dirname(fileURLToPath(import.meta.url));
 export const FRONTEND_DIR = resolve(here, "../..");
 export const BACKEND_DIR = resolve(FRONTEND_DIR, "../backend");
 
-/** The Vite dev server's port. */
-export const WEB_PORT = Number(process.env.FIELDCLUB_E2E_PORT ?? 5198);
-/** The backend's port. Never 8000, which something else may have. */
+/**
+ * The backend's port. Never 8000, which something else may have. The
+ * backend serves the built interface as well as the API, as it does in
+ * production, so the page runs under the real `Content-Security-Policy`.
+ */
 export const API_PORT = Number(process.env.FIELDCLUB_E2E_API_PORT ?? 6198);
+/** Where the browser goes: the backend itself. */
+export const WEB_PORT = API_PORT;
+/** Where the interface is built for the run, outside the source tree. */
+export const E2E_DIST = join(tmpdir(), `fieldclub-e2e-dist-${API_PORT}`);
+/** The build's output, for when it fails. */
+export const BUILD_LOG = join(tmpdir(), `fieldclub-e2e-build-${API_PORT}.log`);
 
 process.env.FIELDCLUB_E2E_DATABASE ??= `fieldclub_e2e_${process.pid}`;
 export const DATABASE = process.env.FIELDCLUB_E2E_DATABASE;
@@ -51,13 +59,18 @@ export function backendEnv(): Record<string, string> {
     FIELDCLUB_AUTO_CREATE_SCHEMA: "false",
     FIELDCLUB_MAIL_BACKEND: "log",
     FIELDCLUB_VAR_DIR: join(tmpdir(), `fieldclub-e2e-var-${DATABASE}`),
-    FIELDCLUB_FRONTEND_DIST: join(tmpdir(), "fieldclub-e2e-no-frontend"),
+    FIELDCLUB_FRONTEND_DIST: E2E_DIST,
     // INFO, so the log mailer's links reach BACKEND_LOG.
     FIELDCLUB_LOG_LEVEL: "INFO",
   };
 }
 
 const DATABASE_SCRIPT = join(here, "database.py");
+
+/** The shell command that builds the interface into `E2E_DIST`, for the backend to serve. */
+export function buildFrontendCommand(): string {
+  return `(cd ${JSON.stringify(FRONTEND_DIR)} && pnpm exec vite build --outDir ${JSON.stringify(E2E_DIST)} --emptyOutDir > ${JSON.stringify(BUILD_LOG)} 2>&1)`;
+}
 
 /** The shell command that creates the database, for the backend's start command. */
 export function createDatabaseCommand(): string {

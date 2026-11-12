@@ -5,8 +5,8 @@ import { helper } from "./support/people.js";
 /**
  * Second look against the real backend: one account marks a finding, and a
  * second, starting signed out, gets it from the blind queue, answers before
- * signing in, signs in and joins through the sheets, and sees the reveal.
- * The answer is saved exactly once. Each project marks its finding at a
+ * signing in, signs in and joins through the sheets, says to send the
+ * answer, and sees the reveal. The answer is saved exactly once. Each project marks its finding at a
  * place of its own, far from every other test's, so the queue, which puts
  * nearby findings first, offers it first.
  */
@@ -59,6 +59,13 @@ test("a second account answers a finding through the queue, signing in on the wa
     await welcome.getByRole("radio", { name: "18 or over" }).click();
     await welcome.getByRole("checkbox", { name: "I accept the contributor terms" }).check();
     await welcome.getByRole("button", { name: "Join Open Antiquity" }).click();
+
+    // An answer given before signing in waits for the person to say it is theirs: it is final once sent.
+    await expect(look.getByText(/given in this browser before you signed in/)).toBeVisible();
+    await page.waitForTimeout(300);
+    const before = await finder.page.request.get(`/api/v1/findings/${publicId}/observations`);
+    expect(((await before.json()) as { items: unknown[] }).items).toEqual([]);
+    await look.getByRole("button", { name: "Send it and see how it compares" }).click();
 
     await expect(look.getByRole("heading", { name: title })).toBeVisible();
     await expect(look.getByText(/The finder marked it as: Enclosure\. So did you\./)).toBeVisible();
