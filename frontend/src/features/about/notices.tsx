@@ -177,8 +177,10 @@ function Terms({ meta }: { meta: Meta }) {
       <More title="Looking after the map">
         <p>
           Moderators can hide anything that breaks these terms, hide the exact place of a finding, and ban an account.
-          An account that is banned can't sign in, and what it added stops counting towards any finding's confidence.
-          Everything a moderator does is written in a log the moderators share.
+          An account that is banned can't sign in, and the evidence it added and the findings it verified stop counting
+          towards any finding's confidence. Its second looks and votes go on counting as they were given, because a
+          score that moved the moment someone was banned would show how they had answered. Everything a moderator does
+          is written in a log the moderators share.
         </p>
       </More>
 
@@ -187,7 +189,7 @@ function Terms({ meta }: { meta: Meta }) {
           You can delete your account from your account page at any time. Your personal details, your photos and your
           private investigations are deleted. What else you published stays, because it was published under an open
           licence and other people's work builds on it, but it is credited to “Former member” from then on. Your old
-          name on the map no longer leads to it.
+          name on the map no longer leads to it, and nobody else can take that name for a year.
         </p>
       </More>
 
@@ -206,7 +208,10 @@ function Privacy({ meta }: { meta: Meta }) {
   return (
     <>
       <InShort>
-        <li>No adverts, no tracking, and no cookies until you start to sign in.</li>
+        <li>
+          No adverts, no tracking, and no cookies until you start to sign in. Looking at a page never makes your browser
+          contact a sign-in provider.
+        </li>
         <li>
           When you sign in we keep what you need to be recognised, and your email address if we're given it. We never
           show your email to anyone.
@@ -225,8 +230,14 @@ function Privacy({ meta }: { meta: Meta }) {
       <More title="Looking without an account">
         <p>
           Open Antiquity sets no cookies until you start to sign in, and has no advertising and no tracking. Anything
-          you mark or answer before you sign in stays in your browser as a draft, and is sent only if you sign in and
-          save it. The address bar holds the map's position so links work.
+          you mark or answer before you sign in stays in your browser as a draft, in its local storage, and is sent only
+          when you sign in. Signing in from the same tab saves what you made there as yours, except a second look, which
+          waits for you to send it. Anything else left in the browser, perhaps by someone else, is saved only if you say
+          it's yours. Whoever uses the browser after you can see that a draft is there, but not what it says or where,
+          so discard your drafts on a shared computer. The tab you're using also keeps, for as long as it is open, a
+          random number that tells your drafts from anyone else's, when you began to sign in, the square you're scanning
+          and a second look you haven't finished. When you sign in or out, the browser's storage gets a random value
+          that tells your other tabs. The address bar holds the map's position so links work.
         </p>
       </More>
 
@@ -235,22 +246,27 @@ function Privacy({ meta }: { meta: Meta }) {
           {providers.length > 0 ? (
             <li>
               From the sign-in provider ({orList(providers)}): a number that identifies your account with them, your
-              name and picture, and, where they give it, your email address. Most providers tell us an email address. We
-              use it to recognise you if you sign in another way, and never show it to anyone.
+              name, and, where they give it, your email address. Most providers tell us an email address. We use it to
+              recognise you if you sign in another way, and never show it to anyone. We don't ask for, keep or show the
+              picture a provider has of you, so nobody's browser contacts a provider to show you: people are shown by
+              their name and initials.
             </li>
           ) : null}
           {email ? (
             <li>
               If you ask for an emailed link{providers.length > 0 ? " instead" : ""}: your email address, to send the
-              link to.
+              link to. The link is deleted a day after it is used or runs out, fifteen minutes after it was sent.
             </li>
           ) : null}
-          <li>Your name on the map, your display name, a short bio if you write one, and your settings.</li>
+          <li>
+            Your name on the map, your display name, a short bio if you write one, and your settings. A name on the map
+            you give up is held for a year, so nobody else can take it and be taken for you.
+          </li>
           <li>
             Your age band ({ageBandWords(meta)}) and when you accepted the contributor terms. We keep the band, never
             your date of birth.
             {takesUnder18s(meta)
-              ? " It decides whether your name and picture from the provider are shown (for 16 and 17 year olds they never are), and adds a safety line to the reminder before a site visit."
+              ? " It decides whether your name from the provider is shown (for 16 and 17 year olds it never is), and adds a safety line to the reminder before a site visit."
               : null}
           </li>
         </ul>
@@ -258,11 +274,14 @@ function Privacy({ meta }: { meta: Meta }) {
 
       <More title="While you're signed in">
         <p>
-          A cookie, <code>openantiquity_session</code>, keeps you signed in. We keep a scrambled copy of it, when it
-          expires (up to a year after you last used it), when it was last used, the name your browser gives itself, and
-          a scrambled form of your internet address, made with a secret key so it can't be read back without it. We note
-          when you were last seen. Two short-lived cookies are used only during sign-in, to check that the sign-in
-          finishes in the browser that started it.
+          A cookie, <code>__Host-openantiquity_session</code>, keeps you signed in. We keep a scrambled copy of it, when
+          it expires, when it was last used, the name your browser gives itself, and a scrambled form of your internet
+          address, made with a secret key so it can't be read back without it. A session ends after 90 days unused, and
+          a year after you signed in however much you use it, and an ended session is deleted. You can end every session
+          of yours, on every device, from your account page. We note when you were last seen. Two short-lived cookies
+          are used only during sign-in, to check that it finishes in the browser that started it:{" "}
+          <code>openantiquity_oauth</code> for ten minutes when you sign in with a provider, and{" "}
+          <code>openantiquity_email_link</code> for fifteen minutes when you ask for an emailed link.
         </p>
       </More>
 
@@ -279,9 +298,12 @@ function Privacy({ meta }: { meta: Meta }) {
         <p>
           The map's tiles and some records come straight from other organisations' services, such as OpenStreetMap,
           OpenFreeMap and the record holders listed under “Where the data comes from” on the about page. When you look
-          at an area, your browser asks them, so they see your internet address and which area you're looking at.
+          at an area, your browser asks them, so they see your internet address and which area you're looking at. A
+          video linked on a finding shows its picture from YouTube's or Vimeo's image servers, which see your internet
+          address but not which page you're on. Your browser fetches nothing else from anywhere else: the site tells it
+          not to.
           {providers.length > 0
-            ? " Signing in with a provider sends you to their site, under their own privacy terms."
+            ? " Signing in with a provider sends you to their site, under their own privacy terms. Otherwise your browser never contacts one."
             : null}
         </p>
       </More>
@@ -295,11 +317,11 @@ function Privacy({ meta }: { meta: Meta }) {
 
       <More title="Deleting your account">
         <p>
-          Deleting your account from your account page removes your email address, your sign-ins, your sessions, any
-          unused sign-in links, your name and picture, your bio, your settings, your follows, your notifications, every
+          Deleting your account from your account page removes your email address, your sign-ins, your sessions, the
+          sign-in links for your account, your name, your bio, your settings, your follows, your notifications, every
           photo you uploaded and your private investigations. You leave any investigation you were invited to, and one
           you shared passes to one of its editors. Your name on the map is replaced with one that says nothing about
-          you.
+          you, and the old one is held for a year, tied to nobody, so nobody else can take it.
         </p>
         <p>
           What you published stays under its open licence, credited to “Former member”. So do reports, the moderators'

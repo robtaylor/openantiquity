@@ -9,9 +9,10 @@ import { ANSWER_WORDS, type AnswerDraft, detailBody, hasDetail } from "./answer.
 
 /**
  * Where the answer stands while its detail is offered: on its way to the
- * server, in and counting, or kept in this browser until sign-in.
+ * server, in and counting, kept in this browser until sign-in, or given
+ * before signing in and waiting for the person to say to send it.
  */
-export type HeldStatus = "sending" | "held" | "draft";
+export type HeldStatus = "sending" | "held" | "draft" | "waiting";
 
 export interface DetailStepProps {
   meta: Meta;
@@ -44,6 +45,8 @@ function statusLine(status: HeldStatus): string {
       return "Your answer is in, and it counts.";
     case "draft":
       return "It's kept in this browser until you sign in.";
+    case "waiting":
+      return "It was given in this browser before you signed in, and hasn't been sent.";
   }
 }
 
@@ -80,16 +83,18 @@ export function DetailStep({
   const label =
     status === "draft"
       ? "Sign in to see how it compares"
-      : revealing
-        ? "Showing…"
-        : added
-          ? "Add this and see how it compares"
-          : "See how it compares";
+      : status === "waiting"
+        ? "Send it and see how it compares"
+        : revealing
+          ? "Showing…"
+          : added
+            ? "Add this and see how it compares"
+            : "See how it compares";
   return (
     <div className="fc-detail-step">
       <p className="fc-detail-step__given" role="status" tabIndex={-1} ref={givenLine}>
         <strong>{ANSWER_WORDS[visible].given}.</strong> {statusLine(status)}{" "}
-        {status === "draft" ? <DraftBadge /> : null}
+        {status === "draft" || status === "waiting" ? <DraftBadge /> : null}
       </p>
       <AnswerDetail meta={meta} answer={detail} onChange={onDetail} />
       {/* Above the button, not in the bar that stays in sight, so on a half-open sheet the bar is the button alone
@@ -97,7 +102,9 @@ export function DetailStep({
       <p className="fc-finding__hint">
         {status === "draft"
           ? "Signing in saves it all, then shows what the finder and others said."
-          : "Then you'll see what the finder and others said, and what you add is final."}
+          : status === "waiting"
+            ? "An answer is final, so send it only if you gave it. Then you'll see what the finder and others said."
+            : "Then you'll see what the finder and others said, and what you add is final."}
       </p>
       <div className="fc-second-look__send" ref={bar}>
         <Button

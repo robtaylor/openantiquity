@@ -18,17 +18,32 @@
  *     useDrafts(DRAFT_KINDS.finding)           // read, in a component
  *     discardDraft(id)
  *
- * Whose a draft is. A browser can be shared, so each draft records who made
- * it: `{account}` for someone signed in (`setDraftsViewer`), by the
- * account's id (drafts kept under the creation time it was once known by
- * are moved to the id at sign-in, `adoptFormerDrafts`), or
- * `{signedOut: epoch}` for someone who wasn't. The epoch is a random value
- * kept with the drafts. When someone signs in, the signed-out drafts of the
- * current epoch become theirs (`adoptSignedOutDrafts`) and a new epoch
- * starts, so signed-out work left from before is never taken to be the next
- * person's. Only a person's own drafts are saved without asking.
+ * Whose a draft is (Decision 0022). A browser can be shared, so each draft
+ * records who made it: `{account}` for someone signed in
+ * (`setDraftsViewer`), by the account's id (drafts kept under the creation
+ * time it was once known by are moved to the id at sign-in,
+ * `adoptFormerDrafts`), or `{signedOut: visit}` for someone who wasn't. A
+ * visit is one tab's stay: a random value in that tab's `sessionStorage`,
+ * which a reload and a provider's round trip keep and a new tab, window or
+ * browser doesn't. It starts again whenever a signed-in person leaves the
+ * tab (a sign-out, a ban, the session running out, another account).
  *
- * The store is `{version: 2, epoch, drafts: [...]}` under `fieldclub.drafts`.
+ * Only the viewer's own drafts are shown as theirs, drawn on the map and
+ * opened: the signed-in account's, or, signed out, this visit's made in the
+ * last `VISIT_DRAFT_MAX_AGE_MS` (`useDrafts`, `listDrafts`). Everything
+ * else in the browser is someone else's as far as the app can tell, and the
+ * drafts bar shows it by kind alone, to be discarded or, by a signed-in
+ * person, claimed with "Save as mine" (`useAllDrafts`, `listOthersDrafts`).
+ *
+ * Signed-out drafts become an account's only after a sign-in that started
+ * in this tab, from the sign-in sheet (`noteSignInStarted`), and finished in
+ * this tab within `SIGN_IN_MAX_MS` (`adoptDraftsAfterSignIn`). An emailed
+ * link opened in another tab, or in a browser that didn't ask for it,
+ * adopts nothing. Adopted findings and squares are saved without asking. An
+ * adopted second look is `held` until the person says to send it, because
+ * an answer is final (Decision 0008). Only a person's own drafts are saved.
+ *
+ * The store is `{version: 3, drafts: [...]}` under `fieldclub.drafts`.
  * Reading survives damage: an unreadable store is copied aside under
  * `fieldclub.drafts.unreadable.<time>` (never over an earlier copy) and
  * reading starts empty, and an entry that can't be read is dropped on its
@@ -46,7 +61,15 @@ import { isRecord, isStringArray } from "../../api/guards.js";
 export const DRAFTS_STORAGE_KEY = "fieldclub.drafts";
 /** Unreadable stores are copied aside under this prefix, one key per copy. */
 export const DRAFTS_UNREADABLE_KEY = "fieldclub.drafts.unreadable";
-export const DRAFTS_VERSION = 2;
+export const DRAFTS_VERSION = 3;
+/** This tab's visit, in `sessionStorage`. */
+export const DRAFTS_VISIT_KEY = "fieldclub.drafts.visit";
+/** A sign-in started in this tab, in `sessionStorage`: `{visit, way, at}`. */
+export const DRAFTS_SIGN_IN_KEY = "fieldclub.drafts.signin";
+/** A signed-out draft older than this is no longer taken to be this visit's. */
+export const VISIT_DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+/** A sign-in that takes longer than this to come back adopts nothing. */
+export const SIGN_IN_MAX_MS = 30 * 60 * 1000;
 /** At most this many unreadable copies are kept. A later one is dropped, never an earlier one. */
 export const MAX_UNREADABLE_COPIES = 3;
 /** The longest a draft's data may be, as JSON. A feature's draft is a few kilobytes. */
@@ -63,7 +86,7 @@ export const DRAFT_KINDS = {
 
 export type DraftState = "waiting" | "saving" | "failed";
 
-/** Who made a draft: an account, or someone signed out during `epoch`. */
+/** Who made a draft: an account, or someone signed out during a visit. */
 export type DraftOwner = { account: string } | { signedOut: string };
 
 export interface DraftFailure {
@@ -87,6 +110,8 @@ export interface Draft {
   failure?: DraftFailure;
   /** Which tab is saving it, and since when, while `state` is "saving". */
   claim?: { tab: string; at: number };
+  /** Adopted at sign-in, and waits for the person to say to send it. Only second looks are held. */
+  held?: true;
 }
 
 /** A draft's data that isn't plain JSON. */
@@ -117,7 +142,6 @@ export class DraftBusyError extends Error {
 
 interface StoredDrafts {
   version: typeof DRAFTS_VERSION;
-  epoch: string;
   drafts: Draft[];
 }
 
@@ -139,7 +163,7 @@ function readOwner(value: unknown): DraftOwner | null {
 
 function readDraft(value: unknown): Draft | null {
   if (!isRecord(value)) return null;
-  const { id, kind, data, createdAt, updatedAt, state, failure, claim, owner } = value;
+  const { id, kind, data, createdAt, updatedAt, state, failure, claim, owner, held } = value;
   if (typeof id !== "string" || id === "" || typeof kind !== "string" || kind === "") return null;
   if (typeof createdAt !== "string" || typeof updatedAt !== "string" || !("data" in value)) return null;
   const draft: Draft = {
@@ -152,6 +176,7 @@ function readDraft(value: unknown): Draft | null {
     // An unknown state from some other build is safest treated as not yet saved.
     state: STATES.includes(state as DraftState) ? (state as DraftState) : "waiting",
   };
+  if (held === true) draft.held = true;
   if (draft.state === "failed") {
     draft.failure =
       isRecord(failure) && typeof failure.code === "string" && typeof failure.message === "string"
@@ -175,19 +200,21 @@ function readDraft(value: unknown): Draft | null {
  * goes up.
  */
 const MIGRATIONS: Readonly<Record<number, (value: Record<string, unknown>) => Record<string, unknown>>> = {
-  // Version 1 had no owners and no epoch. Nobody can say whose its drafts are.
+  // Version 1 had no owners. Nobody can say whose its drafts are.
   1: (value) => ({
     ...value,
     version: 2,
-    epoch: newId(),
     drafts: Array.isArray(value.drafts)
       ? value.drafts.map((draft: unknown) => (isRecord(draft) ? { ...draft, owner: null } : draft))
       : value.drafts,
   }),
+  // Version 2 kept a signed-out epoch for the whole browser. Its signed-out drafts match no visit, so they
+  // are nobody's until someone claims them.
+  2: ({ epoch: _epoch, ...value }) => ({ ...value, version: 3 }),
 };
 
 export type ParsedDrafts =
-  | { status: "ok"; epoch: string; drafts: Draft[] }
+  | { status: "ok"; drafts: Draft[] }
   /** Written by a newer build, which this one leaves alone. */
   | { status: "newer" }
   | { status: "unreadable" };
@@ -210,13 +237,9 @@ export function parseStoredDrafts(raw: string): ParsedDrafts {
     if (!migrate) return { status: "unreadable" };
     current = migrate(current);
   }
-  const { epoch, drafts } = current;
+  const { drafts } = current;
   if (current.version !== DRAFTS_VERSION || !Array.isArray(drafts)) return { status: "unreadable" };
-  return {
-    status: "ok",
-    epoch: typeof epoch === "string" && epoch !== "" ? epoch : newId(),
-    drafts: drafts.map(readDraft).filter((draft): draft is Draft => draft !== null),
-  };
+  return { status: "ok", drafts: drafts.map(readDraft).filter((draft): draft is Draft => draft !== null) };
 }
 
 // --------------------------------------------------------------------------
@@ -225,8 +248,6 @@ export function parseStoredDrafts(raw: string): ParsedDrafts {
 
 /** The drafts as this page last knew them. */
 let memory: Draft[] = [];
-/** The signed-out epoch, as this page last knew it. */
-let epoch = newId();
 /**
  * Drafts whose latest version the browser refused to store, by id. They live
  * only in this page, and are laid over what storage holds whenever it is read.
@@ -241,6 +262,10 @@ let foreign = false;
 let loaded = false;
 /** Who is signed in, for stamping new drafts. Null when nobody is, or it isn't known yet. */
 let viewer: string | null = null;
+/** True once `setDraftsViewer` has been told who is there, so a change of person can be told from a page load. */
+let viewerKnown = false;
+/** This tab's visit when `sessionStorage` can't keep it: then it lasts as long as the page. */
+let visitInMemory: string | null = null;
 const listeners = new Set<() => void>();
 
 function storage(): Storage | null {
@@ -249,6 +274,43 @@ function storage(): Storage | null {
   } catch {
     return null;
   }
+}
+
+function tabStorage(): Storage | null {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** This tab's visit, made the first time it is asked for. */
+function currentVisit(): string {
+  const store = tabStorage();
+  try {
+    const kept = store?.getItem(DRAFTS_VISIT_KEY);
+    if (kept) return kept;
+  } catch {
+    // Falls through to memory.
+  }
+  if (visitInMemory === null) visitInMemory = newId();
+  try {
+    store?.setItem(DRAFTS_VISIT_KEY, visitInMemory);
+  } catch {
+    // Memory alone, then: the visit lasts as long as the page.
+  }
+  return visitInMemory;
+}
+
+/** Start a new visit in this tab: the person here has changed. */
+function startNewVisit(): void {
+  visitInMemory = newId();
+  try {
+    tabStorage()?.setItem(DRAFTS_VISIT_KEY, visitInMemory);
+  } catch {
+    // Memory alone.
+  }
+  forgetSignInStarted();
 }
 
 function notify(): void {
@@ -311,7 +373,6 @@ function load(): Draft[] {
     lastStored = new Map();
     return withUnstored([]);
   }
-  epoch = parsed.epoch;
   lastStored = new Map(parsed.drafts.map((draft) => [draft.id, JSON.stringify(draft)]));
   return withUnstored(parsed.drafts);
 }
@@ -327,7 +388,7 @@ function refresh(): void {
 }
 
 function tryStore(store: Storage, drafts: Draft[]): boolean {
-  const value: StoredDrafts = { version: DRAFTS_VERSION, epoch, drafts };
+  const value: StoredDrafts = { version: DRAFTS_VERSION, drafts };
   try {
     store.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(value));
     return true;
@@ -389,10 +450,44 @@ function onStorage(event: StorageEvent): void {
 // Reading and changing drafts
 // --------------------------------------------------------------------------
 
-export function listDrafts(): readonly Draft[] {
+/** Every draft in this browser, whoever made it. Only the drafts bar and the account page need these. */
+export function listAllDrafts(): readonly Draft[] {
   if (!loaded) memory = load();
   loaded = true;
   return memory;
+}
+
+/**
+ * True when `draft` is the viewer's own: the signed-in account's, or, for
+ * someone signed out or not known yet, made in this visit and not too long ago.
+ */
+export function isViewersDraft(draft: Draft, now = Date.now(), visit = currentVisit()): boolean {
+  if (draft.owner === null) return false;
+  if (viewer !== null) return "account" in draft.owner && draft.owner.account === viewer;
+  if (!("signedOut" in draft.owner) || draft.owner.signedOut !== visit) return false;
+  const made = Date.parse(draft.createdAt);
+  return Number.isFinite(made) && now - made <= VISIT_DRAFT_MAX_AGE_MS && made <= now + 60_000;
+}
+
+let mineSource: { all: readonly Draft[]; viewer: string | null; visit: string } | null = null;
+let mine: readonly Draft[] = [];
+
+/** The viewer's own drafts (`isViewersDraft`): the only ones shown as theirs, drawn or opened. */
+export function listDrafts(): readonly Draft[] {
+  const all = listAllDrafts();
+  const visit = currentVisit();
+  if (mineSource?.all !== all || mineSource.viewer !== viewer || mineSource.visit !== visit) {
+    mineSource = { all, viewer, visit };
+    const now = Date.now();
+    mine = all.filter((draft) => isViewersDraft(draft, now, visit));
+  }
+  return mine;
+}
+
+/** Drafts in this browser that aren't the viewer's own. */
+export function listOthersDrafts(): readonly Draft[] {
+  const own = new Set(listDrafts());
+  return listAllDrafts().filter((draft) => !own.has(draft));
 }
 
 /** The drafts as stored right now, read afresh rather than from memory. */
@@ -429,7 +524,7 @@ export function hasStaleStoredCopy(id: string): boolean {
  * Add a draft of `kind`, or replace the one with `id`. It waits to be saved.
  * Throws `DraftDataError` for data that isn't plain JSON, `DraftTooLargeError`
  * for data over `MAX_DRAFT_CHARS`, and `DraftBusyError` while the draft is
- * being saved. A replaced draft keeps its owner.
+ * being saved. A replaced draft keeps its owner, and stays held if it was.
  */
 export function putDraft(kind: string, data: unknown, id?: string): Draft {
   if (!kind) throw new DraftDataError("A draft needs a kind");
@@ -454,11 +549,13 @@ export function putDraft(kind: string, data: unknown, id?: string): Draft {
       id: existing?.id ?? id ?? newId(),
       kind,
       data: parsed,
-      owner: existing ? existing.owner : viewer === null ? { signedOut: epoch } : { account: viewer },
+      owner: existing ? existing.owner : viewer === null ? { signedOut: currentVisit() } : { account: viewer },
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       state: "waiting",
     };
+    // Changing a held draft doesn't send it: only the person's say-so does (`sendHeldDraft`).
+    if (existing?.held) draft.held = true;
     const made = draft;
     return existing ? drafts.map((item) => (item.id === made.id ? made : item)) : [...drafts, made];
   });
@@ -510,9 +607,21 @@ export function retryDraft(id: string): Draft | undefined {
 // Whose drafts are whose
 // --------------------------------------------------------------------------
 
-/** Tell the store who is signed in, so new drafts are stamped with them. Null for nobody, or not known. */
-export function setDraftsViewer(account: string | null): void {
+/**
+ * Tell the store who is signed in, so new drafts are stamped with them and
+ * only theirs are shown: an account, null for nobody, or undefined while it
+ * isn't known. When a signed-in person leaves, by signing out or for
+ * another account, this tab starts a new visit, so nothing made before is
+ * taken to be the next person's.
+ */
+export function setDraftsViewer(account: string | null | undefined): void {
+  if (account === undefined) return;
+  const changed = account !== viewer;
+  // Signing in keeps the visit, so the drafts it made can still be adopted; leaving an account ends it.
+  if (changed && viewerKnown && viewer !== null) startNewVisit();
   viewer = account;
+  viewerKnown = true;
+  if (changed) notify();
 }
 
 /** True when `account` made `draft`. */
@@ -521,25 +630,84 @@ export function isOwnDraft(draft: Draft, account: string): boolean {
 }
 
 /**
- * `account` has just signed in: the drafts made signed out in this epoch are
- * theirs, and a new epoch starts. Returns how many were taken over. Nothing
- * is written when there is nothing to take over, as when another tab got
- * there first.
+ * How a sign-in started from the sign-in sheet: a provider's button, which
+ * comes back as a page load; an emailed link, which finishes on the link's
+ * page; or the development sign-in, which finishes without leaving the page.
  */
-export function adoptSignedOutDrafts(account: string): number {
-  const isCurrent = (draft: Draft): boolean =>
-    draft.owner !== null && "signedOut" in draft.owner && draft.owner.signedOut === epoch;
-  if (!readFreshDrafts().some(isCurrent)) return 0;
+export type SignInWay = "provider" | "email" | "dev";
+const SIGN_IN_WAYS: readonly SignInWay[] = ["provider", "email", "dev"];
+
+/**
+ * The person has started to sign in from this tab. Only a sign-in that
+ * started here, and finishes here the way it started, can take this visit's
+ * drafts (`adoptDraftsAfterSignIn`).
+ */
+export function noteSignInStarted(way: SignInWay, now = Date.now()): void {
+  try {
+    tabStorage()?.setItem(DRAFTS_SIGN_IN_KEY, JSON.stringify({ visit: currentVisit(), way, at: now }));
+  } catch {
+    // Without it, drafts made before signing in are offered to claim, not taken.
+  }
+}
+
+/** Forget a sign-in started here: it was used, or it can't be trusted to be the person's own. */
+export function forgetSignInStarted(): void {
+  try {
+    tabStorage()?.removeItem(DRAFTS_SIGN_IN_KEY);
+  } catch {
+    // Nothing to forget.
+  }
+}
+
+/** The visit a sign-in started from in this tab, if it started recently in one of `ways`. Reading it forgets it. */
+function takeSignInStarted(ways: readonly SignInWay[], now: number): string | null {
+  let raw: string | null | undefined = null;
+  try {
+    raw = tabStorage()?.getItem(DRAFTS_SIGN_IN_KEY);
+  } catch {
+    return null;
+  }
+  forgetSignInStarted();
+  if (!raw) return null;
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (!isRecord(value) || typeof value.visit !== "string" || typeof value.at !== "number") return null;
+    const way = SIGN_IN_WAYS.find((known) => known === value.way);
+    if (way === undefined || !ways.includes(way) || now < value.at || now - value.at > SIGN_IN_MAX_MS) return null;
+    return value.visit;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `account` has just finished signing in, in this tab, in one of `ways`. If
+ * the sign-in also started in this tab that way, recently, the drafts this
+ * visit made signed out become `account`'s, and a second look among them is
+ * held until the person says to send it. Returns how many were taken over.
+ * Nothing is taken after a sign-in that started elsewhere, or none, and
+ * nothing is written when there is nothing to take over, as when another tab
+ * got there first.
+ */
+export function adoptDraftsAfterSignIn(account: string, ways: readonly SignInWay[], now = Date.now()): number {
+  const visit = takeSignInStarted(ways, now);
+  if (visit === null || visit !== currentVisit()) return 0;
+  const isVisits = (draft: Draft): boolean => {
+    if (draft.owner === null || !("signedOut" in draft.owner) || draft.owner.signedOut !== visit) return false;
+    const made = Date.parse(draft.createdAt);
+    return Number.isFinite(made) && now - made <= VISIT_DRAFT_MAX_AGE_MS;
+  };
+  if (!readFreshDrafts().some(isVisits)) return 0;
   let adopted = 0;
-  updateDrafts((drafts) => {
-    const taken = drafts.map((draft) => {
-      if (!isCurrent(draft)) return draft;
+  updateDrafts((drafts) =>
+    drafts.map((draft): Draft => {
+      if (!isVisits(draft)) return draft;
       adopted += 1;
-      return { ...draft, owner: { account } };
-    });
-    epoch = newId();
-    return taken;
-  });
+      const taken: Draft = { ...draft, owner: { account } };
+      if (draft.kind === DRAFT_KINDS.observation) taken.held = true;
+      return taken;
+    }),
+  );
   return adopted;
 }
 
@@ -563,10 +731,27 @@ export function adoptFormerDrafts(former: string, account: string): number {
   return moved;
 }
 
-/** The person says these drafts are theirs: "Save as mine". */
+/** The person says these drafts are theirs, "Save as mine", so they are sent as theirs. */
 export function claimDraftsAsOwn(ids: readonly string[], account: string): void {
   const wanted = new Set(ids);
-  updateDrafts((drafts) => drafts.map((draft) => (wanted.has(draft.id) ? { ...draft, owner: { account } } : draft)));
+  updateDrafts((drafts) =>
+    drafts.map((draft): Draft => {
+      if (!wanted.has(draft.id)) return draft;
+      const { held: _held, ...rest } = draft;
+      return { ...rest, owner: { account } };
+    }),
+  );
+}
+
+/** The person says to send a held draft of theirs: it waits to be saved like any other. */
+export function sendHeldDraft(id: string, account: string): void {
+  updateDrafts((drafts) =>
+    drafts.map((draft): Draft => {
+      if (draft.id !== id || !draft.held || !isOwnDraft(draft, account)) return draft;
+      const { held: _held, ...rest } = draft;
+      return rest;
+    }),
+  );
 }
 
 /** False when some drafts are only in memory and will be lost when the page goes. */
@@ -584,16 +769,35 @@ export function subscribeDrafts(listener: () => void): () => void {
   };
 }
 
-/** Every draft, or those of one kind, kept up to date. */
+/** The viewer's own drafts, or those of one kind, kept up to date. */
 export function useDrafts(kind?: string): readonly Draft[] {
-  const all = useSyncExternalStore(subscribeDrafts, listDrafts, listDrafts);
-  return useMemo(() => (kind === undefined ? all : all.filter((draft) => draft.kind === kind)), [all, kind]);
+  const own = useSyncExternalStore(subscribeDrafts, listDrafts, listDrafts);
+  return useMemo(() => (kind === undefined ? own : own.filter((draft) => draft.kind === kind)), [own, kind]);
 }
 
-/** For tests: forget everything held in memory, as a fresh page load would. */
-export function resetDraftsForTests(): void {
+/** Every draft in this browser, whoever made it, kept up to date. */
+export function useAllDrafts(): readonly Draft[] {
+  return useSyncExternalStore(subscribeDrafts, listAllDrafts, listAllDrafts);
+}
+
+/**
+ * For tests: forget everything held in memory, as a fresh page load in the
+ * same tab would. With `newTab`, the tab's own storage goes too, as opening
+ * the site in a new tab would.
+ */
+export function resetDraftsForTests({ newTab = false }: { newTab?: boolean } = {}): void {
   memory = [];
-  epoch = newId();
+  if (newTab) {
+    try {
+      window.sessionStorage.removeItem(DRAFTS_VISIT_KEY);
+      window.sessionStorage.removeItem(DRAFTS_SIGN_IN_KEY);
+    } catch {
+      // No tab storage to clear.
+    }
+  }
+  visitInMemory = null;
+  mineSource = null;
+  viewerKnown = false;
   unstored.clear();
   lastStored = new Map();
   blocked = false;

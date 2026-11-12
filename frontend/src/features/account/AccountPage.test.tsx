@@ -7,7 +7,7 @@ import { json, renderShell, setUpShellTests } from "../../test/shellHarness.js";
 import {
   DRAFTS_STORAGE_KEY,
   DRAFTS_UNREADABLE_KEY,
-  listDrafts,
+  listAllDrafts,
   putDraft,
   resetDraftsForTests,
 } from "../drafts/store.js";
@@ -60,7 +60,7 @@ describe("the account page", () => {
     const { p } = await openAccount(meFixture());
     expect(await p.findByText("Ada Lovelace")).toBeInTheDocument();
     expect(p.getByRole("link", { name: "See your public profile" })).toHaveAttribute("href", "/u/QuietBarrow42");
-    expect(p.getByText(/other people see your initials/)).toBeInTheDocument();
+    expect(p.getByText(/Other people see your initials/)).toBeInTheDocument();
     expect(p.getByText("Signed in as ada@example.org.")).toBeInTheDocument();
   });
 
@@ -131,11 +131,13 @@ describe("the account page", () => {
     });
     await userEvent.click(await p.findByRole("button", { name: "Sign out" }));
     const dialog = await screen.findByRole("dialog", { name: "Keep your drafts?" });
-    expect(within(dialog).getByText(/whoever uses this browser next will see it/)).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/whoever uses this browser next will see that it's here, though not what it says/),
+    ).toBeInTheDocument();
     expect(api.callsTo("POST /auth/logout")).toEqual([]);
     await userEvent.click(within(dialog).getByRole("button", { name: "Discard and sign out" }));
     expect(await p.findByRole("heading", { name: "You're not signed in" })).toBeInTheDocument();
-    expect(listDrafts()).toEqual([]);
+    expect(listAllDrafts()).toEqual([]);
     expect(window.localStorage.getItem(`${DRAFTS_UNREADABLE_KEY}.old`)).toBeNull();
   });
 
@@ -148,7 +150,7 @@ describe("the account page", () => {
     const dialog = await screen.findByRole("dialog", { name: "Keep your drafts?" });
     await userEvent.click(within(dialog).getByRole("button", { name: "Keep and sign out" }));
     expect(await p.findByRole("heading", { name: "You're not signed in" })).toBeInTheDocument();
-    expect(listDrafts()).toHaveLength(1);
+    expect(listAllDrafts()).toHaveLength(1);
   });
 
   it("discards this browser's drafts with the account, unless told to keep them", async () => {
@@ -163,8 +165,22 @@ describe("the account page", () => {
     expect(discard).toBeChecked();
     await userEvent.click(within(dialog).getByRole("button", { name: "Delete my account" }));
     expect(await p.findByRole("heading", { name: "You're not signed in" })).toBeInTheDocument();
-    expect(listDrafts()).toEqual([]);
+    expect(listAllDrafts()).toEqual([]);
     expect(JSON.parse(window.localStorage.getItem(DRAFTS_STORAGE_KEY) ?? "{}").drafts).toEqual([]);
+  });
+
+  it("signs out on every device, and says how long a session lasts", async () => {
+    const { api, p } = await openAccount(meFixture(), {
+      "POST /auth/logout-everywhere": () => new Response(null, { status: 204 }),
+    });
+    expect(
+      await p.findByText(/ends after 90 days, and every session ends a year after you signed in/),
+    ).toBeInTheDocument();
+    await userEvent.click(p.getByRole("button", { name: "Sign out everywhere" }));
+    expect(await p.findByRole("heading", { name: "You're not signed in" })).toBeInTheDocument();
+    expect(api.callsTo("POST /auth/logout-everywhere")).toHaveLength(1);
+    expect(api.callsTo("POST /auth/logout")).toEqual([]);
+    expect(await screen.findByText("You've signed out on every device.")).toBeInTheDocument();
   });
 
   it("deletes the account only after a dialog that says what happens to contributions", async () => {

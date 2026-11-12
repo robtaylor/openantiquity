@@ -6,7 +6,6 @@ export interface AvatarProps {
   name: string;
   /** Stable id for the colour. Defaults to the name. */
   handle?: string;
-  src?: string;
   size?: number;
 }
 
@@ -29,12 +28,16 @@ export function hueOf(text: string): number {
   return hash;
 }
 
-export function Avatar({ name, handle, src, size = 32 }: AvatarProps) {
+/**
+ * A person's initials on a colour of their own. No picture is drawn, from a
+ * sign-in provider or anywhere else, so showing someone never makes a
+ * reader's browser talk to another site (Decision 0020).
+ */
+export function Avatar({ name, handle, size = 32 }: AvatarProps) {
   const style = { "--avatar-size": `${size}px`, "--avatar-hue": hueOf(handle ?? name) } as CSSProperties;
   return (
     <span className="fc-avatar" style={style} role="img" aria-label={name}>
-      {/* Pictures come from sign-in providers: their hosts aren't told which page shows them. */}
-      {src ? <img src={src} alt="" referrerPolicy="no-referrer" /> : initialsOf(name)}
+      {initialsOf(name)}
     </span>
   );
 }

@@ -23,7 +23,7 @@ beforeEach(() => {
 
 const ME = meFixture();
 const RING = pageFixture();
-const MARY = { handle: "KeenLynchet7", display_name: "Mary Anning", avatar_url: null, role: "member" };
+const MARY = { handle: "KeenLynchet7", display_name: "Mary Anning", role: "member" };
 
 function notification(overrides: Partial<Notification> = {}): Notification {
   return {

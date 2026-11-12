@@ -188,9 +188,9 @@ function failureFrom(error: unknown): DraftFailure {
   return { code: "save_failed", message: "Something went wrong while saving it." };
 }
 
-/** True when `draft` is `account`'s, has a saver, and nobody is saving it. */
+/** True when `draft` is `account`'s, has a saver, isn't held for the person to send, and nobody is saving it. */
 export function isDue(draft: Draft, account: string, now = Date.now()): boolean {
-  if (!saverFor(draft.kind) || !isOwnDraft(draft, account)) return false;
+  if (!saverFor(draft.kind) || !isOwnDraft(draft, account) || draft.held) return false;
   return draft.state === "waiting" || (draft.state === "saving" && !isBeingSaved(draft, now));
 }
 

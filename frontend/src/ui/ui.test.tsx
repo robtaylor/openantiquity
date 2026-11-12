@@ -301,9 +301,9 @@ describe("Avatar", () => {
     expect(screen.getByRole("img", { name: "Mary Leakey" })).toHaveTextContent("ML");
   });
 
-  it("loads a picture from elsewhere without telling its host where it is shown", () => {
-    const { container } = render(<Avatar name="Mary Leakey" src="https://avatars.example.org/u/1" />);
-    expect(container.querySelector("img")).toHaveAttribute("referrerpolicy", "no-referrer");
+  it("never draws a picture, so no other site is asked for one", () => {
+    const { container } = render(<Avatar name="Mary Leakey" handle="MaryL" size={40} />);
+    expect(container.querySelector("img")).toBeNull();
   });
 });
 

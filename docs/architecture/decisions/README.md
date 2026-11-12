@@ -59,6 +59,7 @@ Write all three in the same present tense and a reader can't tell *why we did it
 | [0019](0019-answers-and-votes-keep-the-weight-they-were-given-with.md) | Answers and votes keep the weight they were given with | Proposed |
 | [0020](0020-sign-in-providers-pictures-are-not-shown.md) | Sign-in providers' pictures are not shown | Proposed |
 | [0021](0021-what-is-written-and-drawn-beside-a-protected-finding-is-generalised-for-each-reader.md) | What is written and drawn beside a protected finding is generalised for each reader | Proposed |
+| [0022](0022-signed-out-drafts-belong-to-the-tab-that-made-them.md) | Signed-out drafts belong to the tab that made them | Proposed |
 
 (`new decision` appends rows for you. `uv run docs/scripts/doctool.py lint` checks this table against the files.)
 

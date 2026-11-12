@@ -115,37 +115,35 @@ test.describe("the emailed link", () => {
   // The browser logs the 409 and 400 answers these tests are built on.
   test.use({ pageProblems: "page-errors" });
 
-  test("asks before signing in with a link from another browser, and keeps the token to the exchange", async ({
-    page,
-  }) => {
+  test("asks for the address of a link from another browser, and keeps the token to the exchange", async ({ page }) => {
     const session = await fakeSession(page);
-    const verifies: Array<{ token: string; confirm: boolean }> = [];
+    const verifies: Array<{ token: string; email?: string }> = [];
     await page.route(apiRoute("/auth/email/verify"), (route) => {
-      const body = route.request().postDataJSON() as { token: string; confirm: boolean };
+      const body = route.request().postDataJSON() as { token: string; email?: string };
       verifies.push(body);
-      if (!body.confirm) {
+      if (body.email === undefined) {
         const error = { code: "confirmation_required", message: "x", details: { email: "a***@example.org" } };
         return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error }) });
       }
       session.set(meWith());
-      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(meWith()) });
+      const reply = { ...meWith(), asked_here: false };
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(reply) });
     });
 
     await page.goto(`/signin/email?next=%2Ff%2Fabc#token=${TOKEN}`);
     expect(page.url()).not.toContain(TOKEN);
     const panel = page.getByRole("complementary", { name: "Signing in" });
-    await expect(panel.getByRole("heading", { name: "Sign in as a***@example.org?" })).toBeVisible();
+    await expect(panel.getByRole("heading", { name: "Which email address is this link for?" })).toBeVisible();
+    await expect(panel).not.toContainText("a***@example.org");
     await page.waitForTimeout(500);
-    expect(verifies).toEqual([{ token: TOKEN, confirm: false }]);
+    expect(verifies).toEqual([{ token: TOKEN }]);
 
-    const yes = panel.getByRole("button", { name: "Yes, sign me in" });
-    await tabTo(page, yes);
+    const field = panel.getByLabel("Your email address");
+    await tabTo(page, field);
+    await page.keyboard.type("ada@example.org");
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\/f\/abc(#|$)/);
-    expect(verifies).toEqual([
-      { token: TOKEN, confirm: false },
-      { token: TOKEN, confirm: true },
-    ]);
+    expect(verifies).toEqual([{ token: TOKEN }, { token: TOKEN, email: "ada@example.org" }]);
 
     // The token went to the exchange and nowhere else.
     for (const request of session.requests) {
@@ -226,8 +224,7 @@ test("offers to discard this browser's drafts when signing out, in a dialog that
     localStorage.setItem(
       "fieldclub.drafts",
       JSON.stringify({
-        version: 2,
-        epoch: "e",
+        version: 3,
         drafts: [
           {
             id: "left",
@@ -245,16 +242,16 @@ test("offers to discard this browser's drafts when signing out, in a dialog that
   await page.reload();
   const panel = page.getByRole("complementary", { name: "Account" });
   await expect(page.getByRole("region", { name: "Drafts" }).getByRole("status")).toHaveText("1 draft left here");
-  await panel.getByRole("button", { name: "Sign out" }).click();
+  await panel.getByRole("button", { name: "Sign out", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Keep your drafts?" });
-  await expect(dialog).toContainText("whoever uses this browser next will see it");
+  await expect(dialog).toContainText("whoever uses this browser next will see that it's here, though not what it says");
   await expectSheetFits(page, "Keep your drafts?");
   await expectFocusTrapped(page, 4);
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   expect(session.current()).not.toBeNull();
 
-  await panel.getByRole("button", { name: "Sign out" }).click();
+  await panel.getByRole("button", { name: "Sign out", exact: true }).click();
   await dialog.getByRole("button", { name: "Discard and sign out" }).click();
   await expect(panel.getByRole("heading", { name: "You're not signed in" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Drafts" })).toHaveCount(0);
@@ -342,7 +339,7 @@ test("edits details, signs out, signs in again and deletes the account behind a 
   await expect(panel.locator(".fc-account-who__name")).toHaveText("Ada L.");
   expect(patches).toEqual([{ display_name: "Ada L." }]);
 
-  await panel.getByRole("button", { name: "Sign out" }).click();
+  await panel.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(panel.getByRole("heading", { name: "You're not signed in" })).toBeVisible();
 
   // Back in, as another tab or a provider would leave things.

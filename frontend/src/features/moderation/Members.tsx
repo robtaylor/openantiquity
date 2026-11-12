@@ -72,7 +72,7 @@ function EligibleCard({ meta, member, onTrusted }: { meta: Meta; member: Eligibl
   return (
     <li className="fc-mod-card">
       <div className="fc-mod-person">
-        <Avatar name={user.display_name} handle={user.handle} src={user.avatar_url ?? undefined} size={36} />
+        <Avatar name={user.display_name} handle={user.handle} size={36} />
         <div>
           <p>
             <Link to={profilePath(user.handle)}>
@@ -306,7 +306,7 @@ function LookUp() {
       ) : person ? (
         <div className="fc-mod-card">
           <div className="fc-mod-person">
-            <Avatar name={person.display_name} handle={person.handle} src={person.avatar_url ?? undefined} size={36} />
+            <Avatar name={person.display_name} handle={person.handle} size={36} />
             <div>
               <p>
                 <Link to={profilePath(person.handle)}>

@@ -22,7 +22,7 @@ import {
   LIMITS,
 } from "./api.js";
 import { areaShape, boundsOf, useInvestigationArea } from "./area.js";
-import { dateText, itemCountText, MARKDOWN_HINT, powersOf, VISIBILITY } from "./describe.js";
+import { dateText, GENERALISED_NOTICE, itemCountText, MARKDOWN_HINT, powersOf, VISIBILITY } from "./describe.js";
 import { Items } from "./Items.js";
 import { Markdown } from "./Markdown.js";
 import { InvitationBanner, People } from "./People.js";
@@ -208,6 +208,11 @@ function NotebookBody({ meta, detail }: { meta: Meta; detail: InvestigationDetai
         ) : null}
         <InvitationBanner detail={detail} />
         {detail.summary ? <p className="fc-inv-head__summary">{detail.summary}</p> : null}
+        {items.data?.some((item) => item.finding?.location.obscured) ? (
+          <p className="fc-inv-banner" role="note">
+            <EyeOff size={15} aria-hidden /> {GENERALISED_NOTICE}
+          </p>
+        ) : null}
         {powers.edit ? (
           <Button size="sm" icon={<Pencil size={15} aria-hidden />} onClick={() => setEditing(true)}>
             Edit the title, summary and notes

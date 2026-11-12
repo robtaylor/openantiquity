@@ -3,14 +3,17 @@ import { ExternalLink } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
 import { isTransient } from "../../api/client.js";
 import type { Meta } from "../../api/meta.js";
-import { Attribution } from "../../map/attribution.js";
+import { Attribution, safeHref } from "../../map/attribution.js";
 import { Button } from "../../ui/Button.js";
 import { Field } from "../../ui/Field.js";
 import { Skeleton } from "../../ui/Skeleton.js";
 import { aboutKeys, fetchLiveSources } from "./api.js";
 import { type Credit, creditCount, creditGroups, searchCredits } from "./creditList.js";
 
-function OutLink({ href, children }: { href: string; children: string }) {
+/** A link to another site, or just its words when the address isn't a web address. */
+function OutLink({ address, children }: { address: string; children: string }) {
+  const href = safeHref(address);
+  if (!href) return <>{children}</>;
   return (
     <a href={href} target="_blank" rel="noopener noreferrer">
       {children}
@@ -20,14 +23,15 @@ function OutLink({ href, children }: { href: string; children: string }) {
   );
 }
 
-function CreditItem({ credit }: { credit: Credit }) {
+export function CreditItem({ credit }: { credit: Credit }) {
   return (
     <li className="fc-about__credit">
       <strong className="fc-about__credit-name">{credit.name}</strong>
       {credit.publisher ? <span className="fc-about__muted">{credit.publisher}</span> : null}
       {credit.licence ? (
         <span>
-          Licence: {credit.licenceUrl ? <OutLink href={credit.licenceUrl}>{credit.licence}</OutLink> : credit.licence}
+          Licence:{" "}
+          {credit.licenceUrl ? <OutLink address={credit.licenceUrl}>{credit.licence}</OutLink> : credit.licence}
         </span>
       ) : null}
       {credit.attribution ? (
@@ -35,7 +39,7 @@ function CreditItem({ credit }: { credit: Credit }) {
           <Attribution html={credit.attribution} />
         </span>
       ) : null}
-      {credit.homepage ? <OutLink href={credit.homepage}>Their website</OutLink> : null}
+      {credit.homepage && safeHref(credit.homepage) ? <OutLink address={credit.homepage}>Their website</OutLink> : null}
     </li>
   );
 }

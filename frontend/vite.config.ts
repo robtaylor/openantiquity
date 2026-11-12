@@ -15,7 +15,8 @@ export default defineConfig({
   preview: { port: 4173, strictPort: true, proxy },
   build: {
     target: "es2022",
-    sourcemap: true,
+    // No source maps in the build: the server would hand every comment in the source to anyone who asked.
+    sourcemap: false,
     // MapLibre is about a megabyte on its own and changes far less often than
     // the app, so it gets its own long-lived chunk.
     chunkSizeWarningLimit: 1100,

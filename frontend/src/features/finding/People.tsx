@@ -38,12 +38,7 @@ export function Answers({ meta, finding }: { meta: Meta; finding: FindingDetail 
               key={answer.user.handle}
               className={answer.withdrawn ? "fc-people__row fc-people__row--withdrawn" : "fc-people__row"}
             >
-              <Avatar
-                name={answer.user.display_name}
-                handle={answer.user.handle}
-                src={answer.user.avatar_url ?? undefined}
-                size={24}
-              />
+              <Avatar name={answer.user.display_name} handle={answer.user.handle} size={24} />
               <span>
                 <strong>{answer.user.display_name}</strong>{" "}
                 <span className="fc-muted">
@@ -70,12 +65,11 @@ export function Answers({ meta, finding }: { meta: Meta; finding: FindingDetail 
 export function Credits({ finding }: { finding: FindingDetail }) {
   if (finding.credits.length === 0) return null;
   // One line per person, with everything they did.
-  const byPerson = new Map<string, { name: string; handle: string; avatar: string | null; did: string[] }>();
+  const byPerson = new Map<string, { name: string; handle: string; did: string[] }>();
   for (const credit of finding.credits) {
     const entry = byPerson.get(credit.user.handle) ?? {
       name: credit.user.display_name,
       handle: credit.user.handle,
-      avatar: credit.user.avatar_url ?? null,
       did: [],
     };
     const words = creditWords(credit.kind);
@@ -88,7 +82,7 @@ export function Credits({ finding }: { finding: FindingDetail }) {
       <ul className="fc-people">
         {[...byPerson.values()].map((person) => (
           <li key={person.handle} className="fc-people__row">
-            <Avatar name={person.name} handle={person.handle} src={person.avatar ?? undefined} size={24} />
+            <Avatar name={person.name} handle={person.handle} size={24} />
             <span>
               <strong>{person.name}</strong> <span className="fc-muted">{person.did.join(", ")}</span>
             </span>

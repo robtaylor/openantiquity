@@ -5,6 +5,7 @@
 
 import { ApiError } from "../../api/client.js";
 import { reasonOf } from "../finding/feedback.js";
+import { MAP_LINK_WORDS } from "../finding/positionInText.js";
 import type { Mention, MentionPreview } from "./types.js";
 
 /** The longest start time the server takes: a start beyond twelve hours is a typo. */
@@ -44,10 +45,13 @@ export function parseStart(text: string): number | null {
 
 /**
  * The address a mention opens: its canonical address, at the start time for
- * a YouTube or Vimeo video. Null for anything that isn't a web address, which
- * the server never sends, so a link can never run script.
+ * a YouTube or Vimeo video. Null when the server withholds the address from
+ * this viewer (it could show where a protected finding is), and for anything
+ * that isn't a web address, which the server never sends, so a link can
+ * never run script.
  */
 export function mentionHref(mention: Pick<Mention, "canonical_url" | "start_seconds">): string | null {
+  if (mention.canonical_url === null) return null;
   let url: URL;
   try {
     url = new URL(mention.canonical_url);
@@ -79,9 +83,14 @@ export function shortAddress(address: string): string {
   return address.replace(/^https?:\/\//, "").replace(/\/$/, "");
 }
 
+/** Said of a mention whose address this viewer isn't sent. */
+export const ADDRESS_WITHHELD =
+  "Its address is shown only to people who see this finding's exact place, because it could show where it is.";
+
 /** What to call a mention: its title, or its address when its page gave none. */
 export function mentionTitle(mention: Pick<Mention, "title" | "canonical_url">): string {
-  return mention.title ?? shortAddress(mention.canonical_url);
+  if (mention.title !== null) return mention.title;
+  return mention.canonical_url === null ? "A link" : shortAddress(mention.canonical_url);
 }
 
 /** Why the preview found nothing, in a sentence, or null when it found the title. */
@@ -123,6 +132,8 @@ export function mentionFailure(error: unknown): MentionFailure {
         field: "url",
         message: "A moderator has hidden that address on this finding, so it can't be added again.",
       };
+    case "position_in_text":
+      return { field: "url", message: MAP_LINK_WORDS };
     case "finding_withdrawn":
       return { field: null, message: "This finding has been withdrawn, so it takes no more mentions." };
     case "finding_not_found":

@@ -2,7 +2,7 @@ import { ExternalLink, MapPin } from "lucide-react";
 import { type ReactNode, useEffect, useRef } from "react";
 import { Link } from "react-router";
 import { findOverlay, type Meta } from "../../api/meta.js";
-import { Attribution } from "../../map/attribution.js";
+import { Attribution, safeHref } from "../../map/attribution.js";
 import { Button } from "../../ui/Button.js";
 import { scrollBehaviour } from "../../ui/motion.js";
 import { TierBadge } from "../../ui/TierBadge.js";
@@ -152,10 +152,10 @@ function Records({ example }: { example: Example }) {
       {example.records.map((record, index) => (
         <span key={`${record.source}-${record.name}`}>
           {index > 0 ? "; and " : null}“{record.name}” in {record.source}
-          {record.reference && record.url ? (
+          {record.reference && safeHref(record.url) ? (
             <>
               {", "}
-              <a href={record.url} target="_blank" rel="noopener noreferrer">
+              <a href={safeHref(record.url)} target="_blank" rel="noopener noreferrer">
                 entry {record.reference}
                 <ExternalLink size={12} aria-hidden className="fc-guide__external" />
                 <span className="fc-visually-hidden"> (opens in a new tab)</span>
@@ -328,9 +328,9 @@ function Ground({ meta }: { meta: Meta }) {
                 <li key={line}>{line}</li>
               ))}
             </ul>
-            {route?.url ? (
+            {route && safeHref(route.url) ? (
               <p>
-                <a href={route.url} target="_blank" rel="noopener noreferrer">
+                <a href={safeHref(route.url)} target="_blank" rel="noopener noreferrer">
                   {route.scheme} website
                   <ExternalLink size={12} aria-hidden className="fc-guide__external" />
                   <span className="fc-visually-hidden"> (opens in a new tab)</span>

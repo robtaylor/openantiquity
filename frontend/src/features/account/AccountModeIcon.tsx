@@ -13,7 +13,7 @@ export function AccountModeIcon({ icon: Icon, size }: { icon: LucideIcon; size: 
   if (!me) return <Icon size={size} aria-hidden />;
   return (
     <span className="fc-account-rail-avatar" aria-hidden="true" data-testid="account-avatar">
-      <Avatar name={me.display_name} handle={me.handle} src={me.avatar_url ?? undefined} size={size + 4} />
+      <Avatar name={me.display_name} handle={me.handle} size={size + 4} />
     </span>
   );
 }

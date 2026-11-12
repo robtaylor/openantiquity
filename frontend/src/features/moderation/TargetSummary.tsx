@@ -1,5 +1,6 @@
 import { ExternalLink } from "lucide-react";
 import { Link } from "react-router";
+import { safeHref } from "../../map/attribution.js";
 import { formatDate } from "../finding/describe.js";
 import { profilePath } from "../people/api.js";
 import { roleWords } from "../people/roles.js";
@@ -50,10 +51,22 @@ export function TargetSummary({ target }: { target: Target }) {
       {target.title && target.kind !== "user" ? <p className="fc-mod-target__title">{target.title}</p> : null}
       {target.body ? <blockquote className="fc-mod-target__body">{target.body}</blockquote> : null}
       {target.url ? (
-        <a className="fc-mod-target__url" href={target.url} target="_blank" rel="noopener noreferrer nofollow ugc">
-          <ExternalLink size={14} aria-hidden />
-          <span>{target.url}</span>
-        </a>
+        safeHref(target.url) ? (
+          <a
+            className="fc-mod-target__url"
+            href={safeHref(target.url)}
+            target="_blank"
+            rel="noopener noreferrer nofollow ugc"
+          >
+            <ExternalLink size={14} aria-hidden />
+            <span>{target.url}</span>
+          </a>
+        ) : (
+          // Not a web address, so it is shown and never followed.
+          <p className="fc-mod-target__url">
+            <span className="fc-mono">{target.url}</span>
+          </p>
+        )
       ) : null}
       {target.photo_url ? (
         <Photo

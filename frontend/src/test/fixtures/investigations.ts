@@ -28,16 +28,16 @@ const NOW = "2026-11-10T10:00:00Z";
 export const ADA: PublicUser = {
   handle: "QuietBarrow42",
   display_name: "Ada Lovelace",
-  avatar_url: null,
+
   role: "member",
 };
 export const MARY: PublicUser = {
   handle: "KeenLynchet7",
   display_name: "Mary Anning",
-  avatar_url: null,
+
   role: "member",
 };
-export const GUS: PublicUser = { handle: "GreyCairn3", display_name: "Gus Pitt", avatar_url: null, role: "member" };
+export const GUS: PublicUser = { handle: "GreyCairn3", display_name: "Gus Pitt", role: "member" };
 
 const AREA = {
   type: "Polygon" as const,

@@ -201,7 +201,7 @@ test("signing out and deleting with drafts in the browser", async ({ page }) => 
   await seed(page, false, { account: "someone-else" });
   await page.reload();
   await page.getByText("@QuietBarrow42").waitFor();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await page.getByRole("dialog", { name: "Keep your drafts?" }).waitFor();
   await shoot(page, "signout-dialog");
   await page.keyboard.press("Escape");

@@ -112,7 +112,10 @@ export interface paths {
          * @description Spend an emailed link and sign in. Unknown, used and expired links all fail with `link_invalid`.
          *
          *     In a browser other than the one that asked for the link, this answers
-         *     `confirmation_required` with the masked address until posted with `confirm`.
+         *     `confirmation_required` with the masked address until posted with the
+         *     address the person types as `email`, and `email_mismatch` when that isn't
+         *     the address the link was sent to. `asked_here` says which kind of sign-in
+         *     this was.
          */
         post: operations["auth_email_verify"];
         delete?: never;
@@ -161,6 +164,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/logout-everywhere": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Logout Everywhere
+         * @description End every session you have, in every browser, this one included.
+         */
+        post: operations["auth_logout_everywhere"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/me": {
         parameters: {
             query?: never;
@@ -187,11 +210,10 @@ export interface paths {
         head?: never;
         /**
          * Update Me
-         * @description Change your handle, display name, bio or settings, or remove your provider's picture.
+         * @description Change your handle, display name, bio or settings.
          *
          *     A bio is free text on a public profile, so it is a contribution: writing
-         *     one needs a finished welcome step, like any other. Clearing it doesn't,
-         *     nor does removing the picture (`avatar_url: null`).
+         *     one needs a finished welcome step, like any other. Clearing it doesn't.
          */
         patch: operations["auth_update_me"];
         trace?: never;
@@ -1580,7 +1602,10 @@ export interface paths {
         put?: never;
         /**
          * Ban
-         * @description Ban someone. Their sessions end now, and their answers, evidence and votes stop counting.
+         * @description Ban someone. Their sessions end now, and their evidence and verifications stop counting.
+         *
+         *     Their second looks and votes keep counting as they were given, so that a
+         *     ban can't show how they answered (Decision 0019).
          */
         post: operations["moderation_ban"];
         delete?: never;
@@ -1622,7 +1647,7 @@ export interface paths {
         put?: never;
         /**
          * Unban
-         * @description Lift a ban. Their work counts again at once.
+         * @description Lift a ban. Their evidence and verifications count again at once.
          */
         post: operations["moderation_unban"];
         delete?: never;
@@ -2227,8 +2252,6 @@ export interface components {
         };
         /** Ban */
         Ban: {
-            /** Findings Reassessed */
-            findings_reassessed: number;
             /** Sessions Ended */
             sessions_ended: number;
             user: components["schemas"]["ModUser"];
@@ -2561,6 +2584,44 @@ export interface components {
             user: components["schemas"]["ModUser"];
         };
         /**
+         * EmailSignedIn
+         * @description The person the emailed link signed in, and whether this browser asked for the link.
+         */
+        EmailSignedIn: {
+            age_band: components["schemas"]["AgeBand"] | null;
+            /** Asked Here */
+            asked_here: boolean;
+            /** Bio */
+            bio: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string | null;
+            /** Email Verified */
+            email_verified: boolean;
+            /** Handle */
+            handle: string;
+            /** Id */
+            id: number;
+            /** Needs Welcome */
+            needs_welcome: boolean;
+            /** Reputation */
+            reputation: number;
+            /** Role */
+            role: string;
+            /** Settings */
+            settings: {
+                [key: string]: unknown;
+            };
+            /** Terms Accepted At */
+            terms_accepted_at: string | null;
+        };
+        /**
          * EmailStart
          * @description Ask for a sign-in link. The answer is the same whether or not the address has an account.
          */
@@ -2595,11 +2656,8 @@ export interface components {
          * @description The token from the emailed link's fragment.
          */
         EmailVerify: {
-            /**
-             * Confirm
-             * @default false
-             */
-            confirm: boolean;
+            /** Email */
+            email?: string | null;
             /** Token */
             token: string;
         };
@@ -3224,7 +3282,9 @@ export interface components {
          *     `finding` is set for a finding item and `record` for a record item, when
          *     the viewer may see them. Otherwise `unavailable` says why: `hidden` (a
          *     moderator hid the finding), `withdrawn` (its finder took it back) or
-         *     `gone` (the record has left the index). Show the item as a line saying so.
+         *     `gone` (the record has left the index). A view or profile is left out as
+         *     `near_protected` when it lies near a finding the investigation holds that
+         *     the viewer sees only as a 1 km square. Show the item as a line saying so.
          */
         InvestigationItemOut: {
             added_by: components["schemas"]["PublicUser"];
@@ -3543,13 +3603,11 @@ export interface components {
          * Me
          * @description The signed-in user, as they see themselves.
          *
-         *     Unlike `PublicUser`, this shows the stored name and picture, because it
-         *     only ever goes to the account's owner.
+         *     Unlike `PublicUser`, this shows the stored name, because it only ever goes
+         *     to the account's owner.
          */
         Me: {
             age_band: components["schemas"]["AgeBand"] | null;
-            /** Avatar Url */
-            avatar_url?: string | null;
             /** Bio */
             bio: string | null;
             /**
@@ -3585,8 +3643,6 @@ export interface components {
          * @description Fields to change. Leave a field out to keep it as it is.
          */
         MeUpdate: {
-            /** Avatar Url */
-            avatar_url?: null;
             /** Bio */
             bio?: string | null;
             /** Display Name */
@@ -3682,7 +3738,7 @@ export interface components {
             /** Auto Detected */
             auto_detected: boolean;
             /** Canonical Url */
-            canonical_url: string;
+            canonical_url: string | null;
             /**
              * Created At
              * Format: date-time
@@ -3709,7 +3765,7 @@ export interface components {
             /** Title */
             title: string | null;
             /** Url */
-            url: string;
+            url: string | null;
         };
         /** MentionPreview */
         MentionPreview: {
@@ -3781,8 +3837,6 @@ export interface components {
             actions: components["schemas"]["PersonActionsOut"];
             /** Age Band */
             age_band: string | null;
-            /** Avatar Url */
-            avatar_url: string | null;
             /** Banned */
             banned: boolean;
             /** Banned At */
@@ -3810,13 +3864,11 @@ export interface components {
         };
         /**
          * ModUser
-         * @description A person as moderators see them. The name and picture follow `PublicUser`'s rules.
+         * @description A person as moderators see them. The name follows `PublicUser`'s rules.
          */
         ModUser: {
             /** Age Band */
             age_band: string | null;
-            /** Avatar Url */
-            avatar_url: string | null;
             /** Banned */
             banned: boolean;
             /** Banned At */
@@ -4328,12 +4380,10 @@ export interface components {
          * @description A person's public page.
          *
          *     Someone in the 16 to 17 band, or who hasn't chosen a band, shows only
-         *     their handle: `display_name` is the handle, and there is no picture or bio
+         *     their handle: `display_name` is the handle, and there is no bio
          *     (Decision 0009).
          */
         ProfileOut: {
-            /** Avatar Url */
-            avatar_url: string | null;
             /** Bio */
             bio: string | null;
             counts: components["schemas"]["ProfileCounts"];
@@ -4389,14 +4439,13 @@ export interface components {
          * @description What anyone may see of a user, wherever a person is credited.
          *
          *     Built from a `User`, an account in the 16 to 17 band, or one that hasn't
-         *     chosen a band yet, shows its handle as its name and no picture (Decision
-         *     0009). `User.shows_handle_only` decides. The model refuses a dict, a row
+         *     chosen a band yet, shows its handle as its name (Decision 0009).
+         *     `User.shows_handle_only` decides. Nobody has a picture: a sign-in
+         *     provider's would be fetched from the provider by every visitor's browser. The model refuses a dict, a row
          *     or any other input, because those carry no age band and the rule couldn't
          *     be applied.
          */
         PublicUser: {
-            /** Avatar Url */
-            avatar_url?: string | null;
             /** Display Name */
             display_name: string;
             /** Handle */
@@ -4530,7 +4579,7 @@ export interface components {
             /** Auto Detected */
             auto_detected: boolean;
             /** Canonical Url */
-            canonical_url: string;
+            canonical_url: string | null;
             /**
              * Created At
              * Format: date-time
@@ -4558,7 +4607,7 @@ export interface components {
             /** Title */
             title: string | null;
             /** Url */
-            url: string;
+            url: string | null;
         };
         /**
          * RecordCategory
@@ -5357,7 +5406,7 @@ export interface components {
          * Unavailable
          * @enum {string}
          */
-        Unavailable: "hidden" | "withdrawn" | "gone";
+        Unavailable: "hidden" | "withdrawn" | "gone" | "near_protected";
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -5647,7 +5696,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Me"];
+                    "application/json": components["schemas"]["EmailSignedIn"];
                 };
             };
             /** @description Validation Error */
@@ -5682,6 +5731,24 @@ export interface operations {
         };
     };
     auth_logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    auth_logout_everywhere: {
         parameters: {
             query?: never;
             header?: never;

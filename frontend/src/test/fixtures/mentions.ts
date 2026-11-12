@@ -7,13 +7,16 @@ import { OTHER, pageFixture, squareFixture } from "./findingPage.js";
  * tests, the end-to-end stubs and the design screenshots.
  */
 
+const VIDEO_URL = "https://youtu.be/dQw4w9WgXcQ?t=754";
+const VIDEO_CANONICAL_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+
 /** A YouTube video that comes to the finding twelve minutes in, added by a member. */
 export function mentionFixture(overrides: Partial<Mention> = {}): Mention {
   return {
     id: 1,
     kind: "video",
-    url: "https://youtu.be/dQw4w9WgXcQ?t=754",
-    canonical_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    url: VIDEO_URL,
+    canonical_url: VIDEO_CANONICAL_URL,
     provider: "youtube",
     title: "Barrows of the Marlborough Downs",
     author_name: "Downland Walks",
@@ -51,8 +54,8 @@ export function paperMentionFixture(overrides: Partial<Mention> = {}): Mention {
 export function previewFixture(overrides: Partial<MentionPreview> = {}): MentionPreview {
   const mention = mentionFixture();
   return {
-    url: mention.url,
-    canonical_url: mention.canonical_url,
+    url: VIDEO_URL,
+    canonical_url: VIDEO_CANONICAL_URL,
     kind: mention.kind,
     provider: "youtube",
     start_seconds: mention.start_seconds,

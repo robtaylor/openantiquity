@@ -184,9 +184,38 @@ function inline(source: string, budget: Run["budget"], depth: number): Inline[] 
   return out;
 }
 
-const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
+/**
+ * The block patterns. Each is anchored and matches a fixed prefix, so it
+ * looks at a line once whatever is in it. A heading's text and closing
+ * hashes are taken with string operations: a pattern such as
+ * `\s+(.*?)\s*#*\s*$` tries every way of sharing a run of spaces between
+ * its parts, which takes cubic time on a long line.
+ */
+const HEADING_OPENER = /^(#{1,6})[ \t]+/;
 const BULLET = /^\s{0,3}[-*+]\s+(.*)$/;
 const NUMBERED = /^\s{0,3}\d{1,9}[.)]\s+(.*)$/;
+
+/** A heading's level and text, or null when `line` (already trimmed at its end) isn't a heading. */
+function heading(line: string): { level: 1 | 2 | 3 | 4 | 5 | 6; text: string } | null {
+  const opener = HEADING_OPENER.exec(line);
+  if (opener)
+    return {
+      level: (opener[1] as string).length as 1 | 2 | 3 | 4 | 5 | 6,
+      text: headingText(line.slice(opener[0].length)),
+    };
+  // "###" alone is an empty heading.
+  return /^#{1,6}$/.test(line) ? { level: line.length as 1 | 2 | 3 | 4 | 5 | 6, text: "" } : null;
+}
+
+/** A heading's words without the closing hashes, which count only after a space or as the whole of it. */
+function headingText(rest: string): string {
+  const text = rest.trimEnd();
+  let end = text.length;
+  while (end > 0 && text[end - 1] === "#") end--;
+  if (end === 0) return "";
+  if (end === text.length || !/[ \t]/.test(text[end - 1] as string)) return text;
+  return text.slice(0, end).trimEnd();
+}
 
 /** The blocks of a note, in order. */
 export function parseMarkdown(source: string): Block[] {
@@ -212,11 +241,10 @@ export function parseMarkdown(source: string): Block[] {
       flush();
       continue;
     }
-    const heading = HEADING.exec(line);
-    if (heading && paragraph.length === 0) {
+    const head = paragraph.length === 0 ? heading(line) : null;
+    if (head) {
       flush();
-      const level = (heading[1] as string).length as 1 | 2 | 3 | 4 | 5 | 6;
-      blocks.push({ type: "heading", level, children: parseInline(heading[2] as string) });
+      blocks.push({ type: "heading", level: head.level, children: parseInline(head.text) });
       continue;
     }
     const bullet = BULLET.exec(line);

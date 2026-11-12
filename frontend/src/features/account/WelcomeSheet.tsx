@@ -3,13 +3,14 @@ import { Dices } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { ApiError } from "../../api/client.js";
 import type { Meta } from "../../api/meta.js";
+import { safeLinkHref } from "../../map/attribution.js";
 import { Button } from "../../ui/Button.js";
 import { ChipGroup } from "../../ui/Chip.js";
 import { Dialog } from "../../ui/Dialog.js";
 import { Field } from "../../ui/Field.js";
 import { toast } from "../../ui/toastStore.js";
 import { type AgeBand, accountKeys, completeWelcome, deleteMe, fetchHandleSuggestion, type Me } from "./api.js";
-import { HANDLE_MAX_LENGTH, HANDLE_PATTERN, HANDLE_RULE, HANDLE_RULE_MESSAGE } from "./handles.js";
+import { HANDLE_HELD_BACK, HANDLE_MAX_LENGTH, HANDLE_PATTERN, HANDLE_RULE, HANDLE_RULE_MESSAGE } from "./handles.js";
 import { Notice } from "./Notice.js";
 import { useAccountUi } from "./requireAccount.js";
 import { signedIn, signedOut, useSession } from "./session.js";
@@ -42,6 +43,8 @@ function errorsFrom(error: unknown): Errors {
       return { handle: "Someone already has that name. Try another, or press “Suggest another”." };
     case "invalid_handle":
       return { handle: `That name can't be used. ${HANDLE_RULE_MESSAGE}` };
+    case "handle_held_back":
+      return { handle: HANDLE_HELD_BACK };
     case "below_minimum_age":
       return { band: error.message };
     case "terms_not_accepted":
@@ -210,7 +213,11 @@ function WelcomeForm({ me, meta }: { me: Me; meta: Meta }) {
             <p className="fc-field__hint" id="welcome-terms-hint">
               What you add is public and published under {meta.app.contribution_licence}, so anyone may reuse it with
               credit. If you leave, it stays on the map, credited to “Former member”.{" "}
-              <a href={meta.auth.terms?.url ?? TERMS_FALLBACK_URL} target="_blank" rel="noopener noreferrer">
+              <a
+                href={safeLinkHref(meta.auth.terms?.url) ?? TERMS_FALLBACK_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 Read the contributor terms
                 <span className="fc-visually-hidden"> (opens in a new tab)</span>
               </a>

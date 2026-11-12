@@ -51,7 +51,13 @@ export function AccountLayer({ meta }: { meta: Meta }) {
     if (needsWelcome && sheet === null && !welcomeDismissed) useAccountUi.getState().openWelcome();
   }, [needsWelcome, sheet, welcomeDismissed]);
 
-  useDraftAutoSave(me === null ? null : accountIdentity(me), ready, me === null ? null : formerAccountIdentity(me));
+  // While the session isn't known, nobody's drafts are taken over or saved.
+  const known = session.status === "signed-in" || session.status === "signed-out";
+  useDraftAutoSave(
+    me !== null ? accountIdentity(me) : known ? null : undefined,
+    ready,
+    me === null ? null : formerAccountIdentity(me),
+  );
 
   return (
     <>

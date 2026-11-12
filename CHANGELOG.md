@@ -15,7 +15,11 @@ Nothing is live yet. When the first version opens, this is what it does for you.
 - Designated sites and other heritage records sit on the same map, each with who published it and under what licence. Where a record office doesn't let us keep its records, the map asks it directly or links to its own site.
 - You can mark something you think is there. Other people then take a second look without seeing what you said, and the finding climbs from "Spotted" to "Seen by others" and on as people agree and add evidence.
 - While you take a second look, the heritage records are hidden as well as the findings, so a record at the spot can't answer the question for you. They come back once you've answered.
-- You can try marking, answering and scanning before you join. What you do is kept in your browser, and saved to your account when you sign in.
+- You can try marking, answering and scanning before you join. What you do is kept in your browser, and saved to your account when you sign in from the same tab. A second look you gave before signing in waits for you to press send, because an answer is final.
+- On a shared computer, nothing the last person drafted is saved to your account or shown as yours. You see that it's there, by kind alone, and can discard it, or save it as yours if you made it.
+- An emailed sign-in link opened on another device asks you to type your address, and signs you in only if it's the one the link was sent to.
+- You can sign out on every device at once from your account page. A session ends after 90 days unused, and a year after you signed in at most.
+- A mention whose link would show where a protected finding is shows its title alone to people who see only the square, and says why. A map view or height profile near such a finding in an investigation says it is held back.
 - Signing in is with Google, Apple, Microsoft, Facebook or OpenStreetMap, or an emailed link. You must be 16 or over to add anything.
 - Nothing anyone links, writes or draws beside a protected finding gives away more than its one-kilometre square to people who see only the square: map links, saved map views, height profiles and an investigation's notes and area included.
 - Nobody can tell how a named person answered a second look from what happens when their role changes or they are banned.

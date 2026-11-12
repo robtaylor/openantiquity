@@ -8,7 +8,13 @@ import { createdFinding } from "../../test/fixtures/findings.js";
 import { meFixture } from "../../test/fixtures/me.js";
 import { json, mapReady, renderShell, setUpShellTests, signedOutResponse } from "../../test/shellHarness.js";
 import { useAccountUi } from "../account/requireAccount.js";
-import { DRAFTS_STORAGE_KEY, listDrafts, resetDraftsForTests, updateDrafts } from "../drafts/store.js";
+import {
+  DRAFTS_STORAGE_KEY,
+  listDrafts,
+  noteSignInStarted,
+  resetDraftsForTests,
+  updateDrafts,
+} from "../drafts/store.js";
 import type { FindingCreate } from "../findings/types.js";
 import { findingDrafts } from "./findingDrafts.js";
 import { NUDGE_FAST_PX, NUDGE_PX } from "./MarkLayer.js";
@@ -299,6 +305,8 @@ describe("saving, signed in", () => {
         failure: { code: "position_in_text", message: "It says where it is.", fields: ["body.description"] },
       })),
     );
+    // Made before a provider's sign-in from this tab, which sends the person back here.
+    noteSignInStarted("provider");
     routeApi(harness.fetchMock(), { "GET /auth/me": () => json(meFixture()) });
     renderShell(`/mark/${draft.id}`);
     await mapReady();

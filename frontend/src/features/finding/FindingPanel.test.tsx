@@ -387,7 +387,7 @@ describe("a second look on the page", () => {
   });
 
   it("never shows an answer saved before the page opened, which may be someone else's, over what the server sends", async () => {
-    const theirs = observationFixture({ user: { ...MEMBER, avatar_url: null } });
+    const theirs = observationFixture({ user: { ...MEMBER } });
     act(() => useSavedAnswers.getState().record("f-ring", { kind: "revealed", reveal: revealFixture(theirs) }));
     const { panel, routes } = await open(squareFixture(), null);
     expect(panel.queryByRole("region", { name: "Your second look" })).toBeNull();
@@ -419,7 +419,7 @@ describe("a second look on the page", () => {
   it("reveals an answer saved from a draft while the page is open, and asks for the finding again", async () => {
     const finding = pageFixture();
     const { panel, routes } = await open(finding);
-    const answered = observationFixture({ user: { ...MEMBER, avatar_url: null } });
+    const answered = observationFixture({ user: { ...MEMBER } });
     const before = routes.callsTo("GET /findings/f-ring").length;
     routes.on("GET /findings/f-ring", () => json(pageFixture({ answers_visible: true, my_observation: answered })));
     act(() =>
@@ -443,7 +443,7 @@ describe("a second look on the page", () => {
 
   it("lets an answer's note change, and offers taking it back", async () => {
     const user = userEvent.setup();
-    const given = observationFixture({ user: { ...MEMBER, avatar_url: null }, note: "faint" });
+    const given = observationFixture({ user: { ...MEMBER }, note: "faint" });
     const finding = pageFixture({ answers_visible: true, my_observation: given });
     const { panel, routes } = await open(finding);
     routes.on("PUT /findings/f-ring/observation", () =>

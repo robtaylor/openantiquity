@@ -108,11 +108,11 @@ Every finding, comment and piece of evidence has a report button. Moderators can
 
 ## Joining
 
-You can explore everything without an account. You can also mark a finding, answer a second look or scan a square. That work is kept in your browser as a draft, labelled "not saved yet", and nobody else sees it.
+You can explore everything without an account. You can also mark a finding, answer a second look or scan a square. That work is kept in your browser as a draft, labelled "not saved yet". Someone who uses the browser after you sees that a draft is there, but not what it says or where, and it is never saved to their account unless they say it's theirs.
 
 Saving needs an account. Anonymous contributions would fill the map with marks nobody stands behind, and regular users would have to wade through them. An account also means your findings, your credit and your notifications follow you between devices.
 
-Joining takes one tap: Google, Apple, Microsoft or Facebook, with OpenStreetMap for people who already map there and an emailed link for anyone who uses none of them. There are no passwords. After sign-in your drafts are saved as they were, without re-entering anything. You get a generated name such as "QuietBarrow42", which you can keep or change.
+Joining takes one tap: Google, Apple, Microsoft or Facebook, with OpenStreetMap for people who already map there and an emailed link for anyone who uses none of them. There are no passwords. After you sign in from the same tab your drafts are saved as they were, without re-entering anything. A second look waits for you to press send, because an answer can't be changed. You get a generated name such as "QuietBarrow42", which you can keep or change.
 
 ## Left out of the first version
 

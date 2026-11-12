@@ -34,6 +34,12 @@ export function safeHref(value: string | null | undefined): string | undefined {
   }
 }
 
+/** A link we may follow: an http(s) address as `safeHref` allows, or a path on this site. */
+export function safeLinkHref(value: string | null | undefined): string | undefined {
+  if (value && /^\/(?![/\\])/.test(value)) return value;
+  return safeHref(value);
+}
+
 function collect(node: Node, href: string | undefined, parts: AttributionPart[]): void {
   if (node.nodeType === Node.TEXT_NODE) {
     const text = node.textContent ?? "";

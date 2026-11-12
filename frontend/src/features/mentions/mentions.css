@@ -58,6 +58,13 @@
   overflow-wrap: anywhere;
 }
 
+.fc-mention__withheld {
+  display: block;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+
 .fc-mention__title > svg {
   margin-left: 4px;
   vertical-align: -1px;

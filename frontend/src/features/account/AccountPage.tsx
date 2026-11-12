@@ -11,13 +11,13 @@ import { EmptyState } from "../../ui/EmptyState.js";
 import { Field } from "../../ui/Field.js";
 import { Skeleton } from "../../ui/Skeleton.js";
 import { toast } from "../../ui/toastStore.js";
-import { discardAllDrafts, useDrafts } from "../drafts/store.js";
+import { discardAllDrafts, useAllDrafts } from "../drafts/store.js";
 import { ModerationLink } from "../moderation/ModerationLink.js";
 import { NotificationsSection } from "../notifications/NotificationsSection.js";
 import { useDocumentTitle } from "../placeholders.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
-import { accountKeys, deleteMe, logout, type Me, type MeUpdate, updateMe } from "./api.js";
-import { HANDLE_MAX_LENGTH, HANDLE_PATTERN, HANDLE_RULE, HANDLE_RULE_MESSAGE } from "./handles.js";
+import { accountKeys, deleteMe, logout, logoutEverywhere, type Me, type MeUpdate, updateMe } from "./api.js";
+import { HANDLE_HELD_BACK, HANDLE_MAX_LENGTH, HANDLE_PATTERN, HANDLE_RULE, HANDLE_RULE_MESSAGE } from "./handles.js";
 import { Notice } from "./Notice.js";
 import { useAccountUi } from "./requireAccount.js";
 import { signedIn, signedOut, useSession } from "./session.js";
@@ -31,9 +31,7 @@ function pictureRule(me: Me): string {
     return "Other people see only your handle. No picture or name from your sign-in is shown, because you're 16 or 17.";
   }
   if (me.age_band === null) return "Until you finish joining, other people see only your handle.";
-  if (me.avatar_url)
-    return "Your picture comes from the service you signed in with. Other people see it beside what you add.";
-  return "You don't have a picture, so other people see your initials.";
+  return "Other people see your initials beside what you add. No picture from the service you signed in with is shown.";
 }
 
 interface ProfileErrors {
@@ -82,6 +80,7 @@ function ProfileForm({ me }: { me: Me }) {
       client.setQueryData(accountKeys.me, before);
       const code = error instanceof ApiError ? error.code : "";
       if (code === "handle_taken") setErrors({ handle: "Someone already has that name. Please choose another." });
+      else if (code === "handle_held_back") setErrors({ handle: HANDLE_HELD_BACK });
       else if (code === "invalid_handle") setErrors({ handle: `That name can't be used. ${HANDLE_RULE_MESSAGE}` });
       else if (code === "invalid_display_name")
         setErrors({ display_name: error instanceof ApiError ? error.message : "" });
@@ -156,7 +155,7 @@ function draftCount(n: number): string {
 function DeleteAccount() {
   const client = useQueryClient();
   const meta = useMeta();
-  const drafts = useDrafts().length;
+  const drafts = useAllDrafts().length;
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [discardDrafts, setDiscardDrafts] = useState(true);
@@ -224,23 +223,25 @@ function DeleteAccount() {
 }
 
 /**
- * Sign out. With drafts in this browser, it first asks whether to keep them,
- * because whoever uses the browser next will see them.
+ * Sign out, here or `everywhere` (every session of the account, on every
+ * device). With drafts in this browser, it first asks whether to keep them,
+ * because whoever uses the browser next will see that they're there.
  */
-function SignOut() {
+function SignOut({ everywhere = false }: { everywhere?: boolean }) {
   const client = useQueryClient();
-  const drafts = useDrafts().length;
+  const drafts = useAllDrafts().length;
   const [asking, setAsking] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
   async function signOut(discard: boolean): Promise<void> {
     setSigningOut(true);
     try {
-      await logout();
+      await (everywhere ? logoutEverywhere() : logout());
       setAsking(false);
       if (discard) discardAllDrafts();
       signedOut(client);
-      toast(discard ? "You've signed out, and your drafts are discarded." : "You've signed out.");
+      const where = everywhere ? " on every device" : "";
+      toast(discard ? `You've signed out${where}, and your drafts are discarded.` : `You've signed out${where}.`);
     } catch (error) {
       setSigningOut(false);
       toast(error instanceof ApiError ? error.message : "You weren't signed out. Please try again.", { kind: "error" });
@@ -254,7 +255,7 @@ function SignOut() {
         onClick={() => (drafts > 0 ? setAsking(true) : void signOut(false))}
         disabled={signingOut}
       >
-        Sign out
+        {everywhere ? "Sign out everywhere" : "Sign out"}
       </Button>
       <Dialog
         open={asking}
@@ -278,8 +279,10 @@ function SignOut() {
             {drafts === 1 ? "hasn't" : "haven't"} been saved.
           </p>
           <p>
-            If you keep {drafts === 1 ? "it" : "them"}, whoever uses this browser next will see{" "}
-            {drafts === 1 ? "it" : "them"}. Discard {drafts === 1 ? "it" : "them"} if this isn't your own device.
+            If you keep {drafts === 1 ? "it" : "them"}, whoever uses this browser next will see that{" "}
+            {drafts === 1 ? "it's" : "they're"} here, though not what {drafts === 1 ? "it says" : "they say"}, and could
+            discard {drafts === 1 ? "it" : "them"}. Discard {drafts === 1 ? "it" : "them"} yourself if this isn't your
+            own device.
           </p>
         </div>
       </Dialog>
@@ -291,7 +294,7 @@ function SignedIn({ me }: { me: Me }) {
   return (
     <div className="fc-account-stack">
       <div className="fc-account-who">
-        <Avatar name={me.display_name} handle={me.handle} src={me.avatar_url ?? undefined} size={52} />
+        <Avatar name={me.display_name} handle={me.handle} size={52} />
         <div className="fc-account-who__names">
           <div className="fc-account-who__name">{me.display_name}</div>
           <div className="fc-account-who__handle">@{me.handle}</div>
@@ -331,6 +334,13 @@ function SignedIn({ me }: { me: Me }) {
         <div className="fc-account-actions">
           <SignOut />
           <DeleteAccount />
+        </div>
+        <p className="fc-account-small">
+          Signing out everywhere ends every session of yours, on every device, this one too. A session you don't use
+          ends after 90 days, and every session ends a year after you signed in.
+        </p>
+        <div className="fc-account-actions">
+          <SignOut everywhere />
         </div>
       </section>
     </div>

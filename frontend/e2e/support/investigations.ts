@@ -12,7 +12,7 @@ export { ADA, GUS, MARY };
 
 /** A signed-in person as an investigation names them. */
 export function publicUser(me: Me) {
-  return { handle: me.handle, display_name: me.display_name, avatar_url: me.avatar_url, role: me.role };
+  return { handle: me.handle, display_name: me.display_name, role: me.role };
 }
 
 const ROUTE = /^https?:\/\/localhost(?::\d+)?\/api\/v1(\/investigations(?:\/[^?#]*)?)(?:\?|$)/;

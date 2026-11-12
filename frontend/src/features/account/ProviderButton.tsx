@@ -1,6 +1,7 @@
 import { LogIn } from "lucide-react";
 import type { ReactNode } from "react";
 import type { SignInProvider } from "../../api/meta.js";
+import { noteSignInStarted } from "../drafts/store.js";
 import { providerStartUrl } from "./api.js";
 
 /**
@@ -12,6 +13,8 @@ import { providerStartUrl } from "./api.js";
  *
  * The button is a link to the server's start route, so pressing it is a
  * full-page navigation, and `next` brings the person back to this view.
+ * Pressing it notes that a sign-in started in this tab, so the drafts made
+ * here before it are the person's when they come back (Decision 0022).
  */
 
 interface Brand {
@@ -91,7 +94,11 @@ export function ProviderButton({ provider, next }: { provider: SignInProvider; n
   const brand = Object.hasOwn(BRANDS, provider.id) ? BRANDS[provider.id] : undefined;
   const style = brand ? provider.id : "other";
   return (
-    <a className={`fc-provider fc-provider--${style}`} href={providerStartUrl(provider.id, next)}>
+    <a
+      className={`fc-provider fc-provider--${style}`}
+      href={providerStartUrl(provider.id, next)}
+      onClick={() => noteSignInStarted("provider")}
+    >
       <span className="fc-provider__mark">{brand ? brand.mark : <LogIn size={18} aria-hidden />}</span>
       <span className="fc-provider__text">{brand ? brand.text(provider.label) : `Sign in with ${provider.label}`}</span>
     </a>

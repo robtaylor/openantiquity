@@ -198,7 +198,7 @@ export async function stubBackend(page: Page, log: NetworkLog = newLog()): Promi
           ? {
               handle,
               display_name: handle,
-              avatar_url: null,
+
               role: "member",
               bio: null,
               joined_at: "2026-11-01T10:00:00Z",

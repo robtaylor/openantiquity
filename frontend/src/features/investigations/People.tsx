@@ -173,11 +173,7 @@ export function People({
           const isMe = member.user.handle === myHandle;
           return (
             <li key={member.user.handle} className="fc-inv-person">
-              <Avatar
-                name={member.user.display_name}
-                handle={member.user.handle}
-                src={member.user.avatar_url ?? undefined}
-              />
+              <Avatar name={member.user.display_name} handle={member.user.handle} />
               <span className="fc-inv-person__text">
                 <span className="fc-inv-person__name">
                   {member.user.display_name}

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Member } from "./api.js";
 import { cleanHandle, itemCountText, mayInvite, powersOf, visibilityChoices } from "./describe.js";
 
-const user = (handle: string) => ({ handle, display_name: handle, avatar_url: null, role: "member" });
+const user = (handle: string) => ({ handle, display_name: handle, role: "member" });
 const owner: Member = { user: user("Owner1"), role: "owner", joined_at: "2026-11-01T10:00:00Z", pending: false };
 const invited: Member = { user: user("Guest1"), role: "editor", joined_at: "2026-11-02T10:00:00Z", pending: true };
 

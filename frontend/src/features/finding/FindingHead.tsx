@@ -103,12 +103,7 @@ export function FindingHead({ meta, finding, signedIn, change }: FindingHeadProp
       ) : null}
 
       <p className="fc-finding__byline">
-        <Avatar
-          name={finding.author.display_name}
-          handle={finding.author.handle}
-          src={finding.author.avatar_url ?? undefined}
-          size={24}
-        />
+        <Avatar name={finding.author.display_name} handle={finding.author.handle} size={24} />
         <span>
           Spotted by <Link to={`/u/${encodeURIComponent(finding.author.handle)}`}>{finding.author.display_name}</Link>{" "}
           on {formatDate(finding.created_at)}

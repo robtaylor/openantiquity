@@ -28,6 +28,12 @@ export const OUTLINE_MAX_GAP_DEG = 0.01;
 /** And only this far across, in degrees: a few kilometres. */
 export const OUTLINE_MAX_SPAN_DEG = 0.05;
 
+/**
+ * The server takes an outline of at most 2000 positions (`geometry_too_complex`).
+ * A closed shape repeats its first corner, so it may have one corner fewer.
+ */
+export const OUTLINE_MAX_POINTS = 1999;
+
 export const NEW_OUTLINE: Outline = { points: [], shape: "drawing" };
 
 /** Corner `index`, which the caller knows is there. */
@@ -37,8 +43,9 @@ function corner(points: readonly LngLat[], index: number): LngLat {
   return point;
 }
 
+/** Add a corner, unless the outline is finished or has as many as the server takes. */
 export function addPoint(outline: Outline, point: LngLat): Outline {
-  if (outline.shape !== "drawing") return outline;
+  if (outline.shape !== "drawing" || outline.points.length >= OUTLINE_MAX_POINTS) return outline;
   return { points: [...outline.points, point], shape: "drawing" };
 }
 
@@ -87,6 +94,7 @@ export function outlineGeometry(outline: Outline | null): GeoJSONGeometry | null
  */
 export function outlineProblem(outline: Outline | null, point: LngLat): string | null {
   if (outline === null || outline.points.length === 0) return null;
+  if (outline.points.length > OUTLINE_MAX_POINTS) return `An outline can have at most ${OUTLINE_MAX_POINTS} corners.`;
   const lngs = outline.points.map(([lng]) => lng);
   const lats = outline.points.map(([, lat]) => lat);
   const span = Math.max(Math.max(...lngs) - Math.min(...lngs), Math.max(...lats) - Math.min(...lats));

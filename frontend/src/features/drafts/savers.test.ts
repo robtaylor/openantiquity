@@ -13,12 +13,14 @@ import {
   useKindDrafts,
 } from "./savers.js";
 import {
-  adoptSignedOutDrafts,
+  adoptDraftsAfterSignIn,
   DRAFTS_STORAGE_KEY,
   DraftBusyError,
-  listDrafts,
+  listAllDrafts,
+  noteSignInStarted,
   putDraft,
   resetDraftsForTests,
+  sendHeldDraft,
   setDraftsViewer,
   updateDrafts,
 } from "./store.js";
@@ -79,7 +81,7 @@ describe("saveWaitingDrafts", () => {
     expect(save).toHaveBeenCalledTimes(2);
     expect(save).toHaveBeenCalledWith({ note: "one" }, { draftId: first.id });
     expect(save).toHaveBeenCalledWith({ note: "two" }, { draftId: second.id });
-    expect(listDrafts()).toEqual([]);
+    expect(listAllDrafts()).toEqual([]);
 
     // Nothing is left to save.
     await saveWaitingDrafts(ME);
@@ -93,7 +95,7 @@ describe("saveWaitingDrafts", () => {
     register(probeSaver(save));
     await saveWaitingDrafts(ME);
     expect(save).toHaveBeenCalledOnce();
-    expect(listDrafts()).toEqual([]);
+    expect(listAllDrafts()).toEqual([]);
   });
 
   it("keeps a draft that fails, with the reason, and goes on to the next", async () => {
@@ -106,18 +108,18 @@ describe("saveWaitingDrafts", () => {
     putDraft(PROBE, { note: "good" });
     const report = await saveWaitingDrafts(ME);
     expect(report).toEqual({ saved: 1, failed: 1, stopped: null });
-    expect(listDrafts()).toEqual([
+    expect(listAllDrafts()).toEqual([
       expect.objectContaining({
         id: bad.id,
         state: "failed",
         failure: { code: "validation_error", message: "The note is too long." },
       }),
     ]);
-    expect(listDrafts()[0]?.claim).toBeUndefined();
+    expect(listAllDrafts()[0]?.claim).toBeUndefined();
 
     // A failed draft waits for the person to try again.
     await saveWaitingDrafts(ME);
-    expect(listDrafts()[0]?.state).toBe("failed");
+    expect(listAllDrafts()[0]?.state).toBe("failed");
   });
 
   it("gives a plain reason for a failure that isn't from the API", async () => {
@@ -128,7 +130,10 @@ describe("saveWaitingDrafts", () => {
     );
     putDraft(PROBE, { note: "a" });
     await saveWaitingDrafts(ME);
-    expect(listDrafts()[0]?.failure).toEqual({ code: "save_failed", message: "Something went wrong while saving it." });
+    expect(listAllDrafts()[0]?.failure).toEqual({
+      code: "save_failed",
+      message: "Something went wrong while saving it.",
+    });
   });
 
   it.each([
@@ -144,7 +149,7 @@ describe("saveWaitingDrafts", () => {
     const report = await saveWaitingDrafts(ME);
     expect(report).toEqual({ saved: 0, failed: 0, stopped });
     expect(save).toHaveBeenCalledOnce();
-    expect(listDrafts().map((draft) => draft.state)).toEqual(["waiting", "waiting"]);
+    expect(listAllDrafts().map((draft) => draft.state)).toEqual(["waiting", "waiting"]);
   });
 
   it("marks a draft it can't read back as failed, without sending it", async () => {
@@ -154,13 +159,13 @@ describe("saveWaitingDrafts", () => {
     const report = await saveWaitingDrafts(ME);
     expect(report.failed).toBe(1);
     expect(save).not.toHaveBeenCalled();
-    expect(listDrafts()[0]?.failure?.code).toBe("draft_unreadable");
+    expect(listAllDrafts()[0]?.failure?.code).toBe("draft_unreadable");
   });
 
   it("leaves drafts with no saver waiting, and saves them once a saver arrives", async () => {
     putDraft(PROBE, { note: "a" });
     expect(await saveWaitingDrafts(ME)).toEqual({ saved: 0, failed: 0, stopped: null });
-    expect(listDrafts()[0]?.state).toBe("waiting");
+    expect(listAllDrafts()[0]?.state).toBe("waiting");
     const save = vi.fn(async () => {});
     register(probeSaver(save));
     await saveWaitingDrafts(ME);
@@ -182,7 +187,7 @@ describe("saveWaitingDrafts", () => {
     );
     await saveWaitingDrafts(ME);
     expect(save).toHaveBeenCalledWith({ note: "a" }, { draftId: draft.id });
-    expect(listDrafts()).toEqual([]);
+    expect(listAllDrafts()).toEqual([]);
   });
 
   it("doesn't send a draft that another tab claimed between reading and claiming", async () => {
@@ -231,11 +236,11 @@ describe("an edit while a draft is being saved", () => {
     const draft = putDraft(PROBE, { note: "first" });
     const run = saveWaitingDrafts(ME);
     await vi.waitFor(() => expect(sent).toEqual(["first"]));
-    expect(listDrafts()[0]?.state).toBe("saving");
+    expect(listAllDrafts()[0]?.state).toBe("saving");
     expect(() => putDraft(PROBE, { note: "edited" }, draft.id)).toThrow(DraftBusyError);
     release();
     await run;
-    expect(listDrafts()).toEqual([]);
+    expect(listAllDrafts()).toEqual([]);
   });
 
   it("that lands anyway is kept and sent too, rather than removed with the old save", async () => {
@@ -261,7 +266,7 @@ describe("an edit while a draft is being saved", () => {
     const report = await run;
     expect(sent).toEqual(["first", "edited"]);
     expect(report.saved).toBe(2);
-    expect(listDrafts()).toEqual([]);
+    expect(listAllDrafts()).toEqual([]);
   });
 });
 
@@ -275,22 +280,36 @@ describe("whose drafts are saved", () => {
     putDraft(PROBE, { note: "mine" });
     expect(await saveWaitingDrafts(ME)).toEqual({ saved: 1, failed: 0, stopped: null });
     expect(save.mock.calls.map(([data]) => data.note)).toEqual(["mine"]);
-    expect(listDrafts().map((draft) => (draft.data as Probe).note)).toEqual(["theirs"]);
+    expect(listAllDrafts().map((draft) => (draft.data as Probe).note)).toEqual(["theirs"]);
   });
 
-  it("makes the drafts done signed out just before sign-in the person's, and no earlier ones", async () => {
+  it("makes the drafts this tab made signed out the person's after a sign-in from this tab, and no earlier ones", async () => {
     const save = vi.fn(async (_data: Probe) => {});
     register(probeSaver(save));
     setDraftsViewer(null);
     putDraft(PROBE, { note: "left by someone" });
-    // Someone signed in and out again: the signed-out drafts of that time were theirs.
-    adoptSignedOutDrafts(SOMEONE_ELSE);
-    updateDrafts((drafts) => drafts.map((draft) => ({ ...draft, owner: { signedOut: "an-old-epoch" } })));
+    // Someone left that in an earlier visit. This tab's visit is a new one.
+    updateDrafts((drafts) => drafts.map((draft) => ({ ...draft, owner: { signedOut: "an-old-visit" } })));
     putDraft(PROBE, { note: "just now" });
-    expect(adoptSignedOutDrafts(ME)).toBe(1);
+    noteSignInStarted("provider");
+    expect(adoptDraftsAfterSignIn(ME, ["provider"])).toBe(1);
     await saveWaitingDrafts(ME);
     expect(save.mock.calls.map(([data]) => data.note)).toEqual(["just now"]);
-    expect(listDrafts()).toHaveLength(1);
+    expect(listAllDrafts()).toHaveLength(1);
+  });
+
+  it("holds a second look adopted at sign-in until the person says to send it", async () => {
+    const save = vi.fn(async (_data: Probe) => {});
+    register(probeSaver(save));
+    register({ ...probeSaver(save), kind: "observation", label: "Second look" });
+    setDraftsViewer(null);
+    const answer = putDraft("observation", { note: "yes, I can see it" });
+    noteSignInStarted("provider");
+    expect(adoptDraftsAfterSignIn(ME, ["provider"])).toBe(1);
+    expect(await saveWaitingDrafts(ME)).toEqual({ saved: 0, failed: 0, stopped: null });
+    expect(save).not.toHaveBeenCalled();
+    sendHeldDraft(answer.id, ME);
+    expect(await saveWaitingDrafts(ME)).toEqual({ saved: 1, failed: 0, stopped: null });
   });
 });
 

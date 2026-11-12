@@ -30,12 +30,7 @@ function PhotoCard({ item, onApprove, onRefuse }: { item: QueuedMedia; onApprove
         unavailable="The photo couldn't be loaded. It may have been hidden, or its uploader may have left."
       />
       <p className="fc-photo-card__meta">
-        <Avatar
-          name={item.uploader.display_name}
-          handle={item.uploader.handle}
-          src={item.uploader.avatar_url ?? undefined}
-          size={20}
-        />{" "}
+        <Avatar name={item.uploader.display_name} handle={item.uploader.handle} size={20} />{" "}
         <Link to={profilePath(item.uploader.handle)}>{item.uploader.display_name}</Link> uploaded it on{" "}
         {formatDate(item.created_at)}
         {item.width && item.height ? ` · ${item.width} × ${item.height}` : ""} · {sizeWords(item.bytes)}

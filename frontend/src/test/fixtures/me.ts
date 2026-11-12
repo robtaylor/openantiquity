@@ -12,7 +12,7 @@ export function meFixture(overrides: Partial<Me> = {}): Me {
     handle: "QuietBarrow42",
     display_name: "Ada Lovelace",
     role: "member",
-    avatar_url: null,
+
     email: "ada@example.org",
     email_verified: true,
     reputation: 0,

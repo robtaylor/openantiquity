@@ -25,7 +25,7 @@ beforeEach(() => {
   useFakeEventSource();
 });
 
-const ADA = { handle: "QuietBarrow42", display_name: "Ada Lovelace", avatar_url: null, role: "member" };
+const ADA = { handle: "QuietBarrow42", display_name: "Ada Lovelace", role: "member" };
 const RING = pageFixture();
 
 function activityItem(overrides: Partial<ActivityItem> = {}): ActivityItem {

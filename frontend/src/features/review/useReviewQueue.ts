@@ -6,6 +6,7 @@ import { useMapStore } from "../../map/store.js";
 import { toast } from "../../ui/toastStore.js";
 import { accountIdentity, useSession } from "../account/session.js";
 import { useKindDrafts } from "../drafts/savers.js";
+import { sendHeldDraft } from "../drafts/store.js";
 import { giveAnswer, revealAsAsked } from "../finding/api.js";
 import { toastFailureWithRetry, useSignedInFirst } from "../finding/feedback.js";
 import {
@@ -157,6 +158,13 @@ export function useCardAnswers(meta: Meta): CardAnswers {
 
     async function showComparison(card: ReviewCard, visible: Visible, detail: AnswerDraft): Promise<void> {
       const given = { ...detail, visible };
+      const held = draftFor(card);
+      if (ready && identity !== null && held?.held) {
+        // Given here before signing in: the person now says it is theirs, with the detail as it stands.
+        const data = { public_id: card.public_id, answer: answerBody(meta, given), reveal: true };
+        if (keepAnswerDraft(data, held.id)) sendHeldDraft(held.id, identity);
+        return;
+      }
       if (!ready) {
         const data = { public_id: card.public_id, answer: answerBody(meta, given), reveal: true };
         if (keepAnswerDraft(data, draftFor(card)?.id) && !(await signedIn())) {

@@ -8,18 +8,18 @@
  * once and keeps it in memory, and nowhere else. It is never put in storage,
  * a log line or any request but `POST /auth/email/verify`.
  *
- * `exchangeEmailLink(token, confirm)` makes that request at most once for each
- * token and answer, however many times React mounts the page, because a link
- * works only once.
+ * `exchangeEmailLink(token, email)` makes that request at most once for each
+ * token and typed address, however many times React mounts the page,
+ * because a link works only once.
  */
 
-import { type Me, verifyEmailLink } from "./api.js";
+import { type EmailSignedIn, verifyEmailLink } from "./api.js";
 
 export const EMAIL_LINK_PATH = "/signin/email";
 const TOKEN_KEY = "token";
 
 let captured: string | null = null;
-const exchanges = new Map<string, Promise<Me>>();
+const exchanges = new Map<string, Promise<EmailSignedIn>>();
 
 /** True for the paths the router shows the link page at: it ignores case and a trailing slash. */
 export function isEmailLinkPath(pathname: string): boolean {
@@ -51,22 +51,21 @@ export function emailLinkToken(): string | null {
 /** Forget the token: it was spent, refused, or the person said it wasn't theirs. */
 export function forgetEmailLinkToken(): void {
   if (captured !== null) {
-    exchanges.delete(`${captured}:false`);
-    exchanges.delete(`${captured}:true`);
+    for (const key of [...exchanges.keys()]) if (key.startsWith(`${captured}\u0000`)) exchanges.delete(key);
   }
   captured = null;
 }
 
 /**
- * Exchange `token` for a session. Calls with the same token and the same
- * `confirm` share one request. A failed attempt can be made again, because
- * a refused link was not spent.
+ * Exchange `token` for a session, with the address the person typed or
+ * null. Calls with the same token and the same address share one request. A
+ * failed attempt can be made again, because a refused link was not spent.
  */
-export function exchangeEmailLink(token: string, confirm: boolean): Promise<Me> {
-  const key = `${token}:${confirm}`;
+export function exchangeEmailLink(token: string, email: string | null): Promise<EmailSignedIn> {
+  const key = `${token}\u0000${email ?? ""}`;
   const existing = exchanges.get(key);
   if (existing) return existing;
-  const attempt = verifyEmailLink(token, confirm);
+  const attempt = verifyEmailLink(token, email);
   exchanges.set(key, attempt);
   attempt.catch(() => {
     if (exchanges.get(key) === attempt) exchanges.delete(key);

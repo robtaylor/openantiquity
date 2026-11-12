@@ -1,8 +1,9 @@
 import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
 import type { Meta } from "../../../api/meta.js";
 import { toast } from "../../../ui/toastStore.js";
+import { accountIdentity, useSession } from "../../account/session.js";
 import { useKindDrafts } from "../../drafts/savers.js";
-import { discardDraft } from "../../drafts/store.js";
+import { discardDraft, sendHeldDraft } from "../../drafts/store.js";
 import { giveAnswer, revealAsAsked } from "../api.js";
 import type { ViewerPosition } from "../describe.js";
 import { toastFailureWithRetry, useSignedInFirst } from "../feedback.js";
@@ -63,6 +64,8 @@ export function SecondLook({ meta, finding, position, ready, onRevealed, onHeld,
   const drafts = useKindDrafts(answerDrafts);
   const draft = drafts.find((entry) => entry.data.public_id === publicId) ?? null;
   const signedIn = useSignedInFirst();
+  const { me } = useSession();
+  const account = me ? accountIdentity(me) : null;
   const [openedAfter] = useState(savedAnswerCount);
   const saved = useSavedAnswers((state) => state.saved[publicId]);
 
@@ -134,6 +137,12 @@ export function SecondLook({ meta, finding, position, ready, onRevealed, onHeld,
   }
 
   async function showComparison(visible: Visible, given: AnswerDraft): Promise<void> {
+    if (ready && draft?.held && account !== null) {
+      // Given here before signing in: the person now says it is theirs, with the detail as it stands.
+      const data = { public_id: publicId, answer: answerBody(meta, { ...given, visible }), reveal: true };
+      if (keepAnswerDraft(data, draft.id)) sendHeldDraft(draft.id, account);
+      return;
+    }
     if (!ready) {
       const data = { public_id: publicId, answer: answerBody(meta, { ...given, visible }), reveal: true };
       if (keepAnswerDraft(data, draft?.id) && !(await signedIn())) {
@@ -164,14 +173,24 @@ export function SecondLook({ meta, finding, position, ready, onRevealed, onHeld,
         meta={meta}
         visible={answering}
         // A draft of someone now ready is on its way through the drafts machinery.
-        status={sending !== null ? "sending" : heldVisible !== null ? "held" : ready ? "sending" : "draft"}
+        status={
+          sending !== null
+            ? "sending"
+            : heldVisible !== null
+              ? "held"
+              : !ready
+                ? "draft"
+                : draft?.held
+                  ? "waiting"
+                  : "sending"
+        }
         detail={given ?? newAnswer(answering)}
         onDetail={setDetail}
         focusOnMount={pressed.current ? "given" : null}
         revealing={revealing || draft?.state === "saving"}
         onReveal={() => void showComparison(answering, given ?? newAnswer(answering))}
         onChangeAnswer={
-          draft && heldVisible === null && !ready
+          draft && heldVisible === null && (!ready || draft.held)
             ? () => {
                 discardDraft(draft.id);
                 setDetail(null);

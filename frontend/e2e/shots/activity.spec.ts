@@ -43,7 +43,7 @@ const barrow = {
   state: "open" as const,
   location: { lon: -1.855, lat: 51.425, obscured: true, grid_ref: null, square: "SU1069", outline: null },
 };
-const MARY = { handle: "KeenLynchet7", display_name: "Mary Anning", avatar_url: null, role: "member" };
+const MARY = { handle: "KeenLynchet7", display_name: "Mary Anning", role: "member" };
 
 const FEED: ActivityItem[] = [
   { id: 9, kind: "tier_changed", details: { tier_from: "spotted", tier_to: "seen" }, actor: null, finding: ring },

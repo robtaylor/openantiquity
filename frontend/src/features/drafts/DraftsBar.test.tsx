@@ -12,7 +12,7 @@ import { useAccountUi } from "../account/requireAccount.js";
 import { Shell } from "../shell/Shell.js";
 import { DraftBadge } from "./DraftBadge.js";
 import { registerDraftSaver, resetSaversForTests } from "./savers.js";
-import { listDrafts, putDraft, resetDraftsForTests, setDraftsViewer } from "./store.js";
+import { listAllDrafts, noteSignInStarted, putDraft, resetDraftsForTests, setDraftsViewer } from "./store.js";
 import { useDraftsUi } from "./uiStore.js";
 
 vi.mock("maplibre-gl", async () => {
@@ -30,6 +30,7 @@ beforeEach(() => {
   useAccountUi.setState(useAccountUi.getInitialState(), true);
   useDraftsUi.setState({ open: false });
   window.localStorage.clear();
+  window.sessionStorage.clear();
   resetDraftsForTests();
   resetSaversForTests();
   saved.length = 0;
@@ -100,20 +101,83 @@ describe("the drafts bar", () => {
     expect(b.getByText(/A draft is kept only in this browser/)).toBeInTheDocument();
     expect(b.getByText("Saying a")).toBeInTheDocument();
     await userEvent.click(b.getByRole("button", { name: "Discard probe" }));
-    expect(listDrafts()).toEqual([]);
+    expect(listAllDrafts()).toEqual([]);
     await userEvent.click(await screen.findByRole("button", { name: "Undo" }));
-    expect(listDrafts()).toHaveLength(1);
+    expect(listAllDrafts()).toHaveLength(1);
   });
 
   it("saves every waiting draft exactly once on arrival signed in, as after a provider's round trip", async () => {
     routeApi(harness.fetchMock(), { "GET /auth/me": () => json(meFixture()) });
     putDraft(PROBE, { note: "a" });
     putDraft(PROBE, { note: "b" });
+    // The person pressed a provider's button in this tab, and the provider sends them back to it.
+    noteSignInStarted("provider");
+    resetDraftsForTests();
     renderApp();
     expect(await screen.findByText("Your 2 drafts are saved.")).toBeInTheDocument();
     expect(saved).toEqual(["a", "b"]);
-    expect(listDrafts()).toEqual([]);
+    expect(listAllDrafts()).toEqual([]);
     expect(screen.queryByRole("region", { name: "Drafts" })).toBeNull();
+  });
+
+  it("never takes drafts left in the browser for someone who arrives already signed in", async () => {
+    routeApi(harness.fetchMock(), { "GET /auth/me": () => json(meFixture()) });
+    // Someone signed out marked two things here and left without signing in.
+    putDraft(PROBE, { note: "a" });
+    putDraft(PROBE, { note: "b" });
+    // The next person opens the site in a new tab, with a session of their own.
+    resetDraftsForTests({ newTab: true });
+    renderApp();
+    const b = await bar();
+    await waitFor(() => expect(b.getByRole("status")).toHaveTextContent("2 drafts left here"));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(saved).toEqual([]);
+    expect(listAllDrafts().every((draft) => draft.owner !== null && "signedOut" in draft.owner)).toBe(true);
+  });
+
+  it("holds a second look given before signing in until the person says to send it", async () => {
+    routeApi(harness.fetchMock(), { "GET /auth/me": () => json(meFixture()) });
+    const sent: unknown[] = [];
+    const stop = registerDraftSaver<unknown>({
+      kind: "observation",
+      label: "Second look",
+      parse: (data) => data,
+      save: async (data) => {
+        sent.push(data);
+      },
+    });
+    try {
+      putDraft("observation", { public_id: "ABC123", answer: { visible: "yes" }, reveal: true });
+      noteSignInStarted("provider");
+      resetDraftsForTests();
+      renderApp();
+      const b = await bar();
+      await waitFor(() => expect(b.getByRole("status")).toHaveTextContent("1 second look to send"));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(sent).toEqual([]);
+      await userEvent.click(b.getByRole("button", { name: "Check" }));
+      expect(b.getByText(/An answer is final, so send it only if you gave it/)).toBeInTheDocument();
+      await userEvent.click(b.getByRole("button", { name: "Send" }));
+      await waitFor(() => expect(sent).toHaveLength(1));
+    } finally {
+      stop();
+    }
+  });
+
+  it("shows a signed-out visitor drafts an earlier visit left by kind alone, to discard", async () => {
+    routeApi(harness.fetchMock());
+    putDraft(PROBE, { note: "a private note" });
+    resetDraftsForTests({ newTab: true });
+    renderApp();
+    const b = await bar();
+    expect(b.getByRole("status")).toHaveTextContent("1 draft left here");
+    expect(b.queryByRole("button", { name: "Save" })).toBeNull();
+    await userEvent.click(b.getByRole("button", { name: "Check" }));
+    expect(b.getByText(/left in this browser by an earlier visit, perhaps by someone else/)).toBeInTheDocument();
+    expect(b.queryByText(/a private note/)).toBeNull();
+    expect(b.queryByRole("button", { name: "Save as mine" })).toBeNull();
+    await userEvent.click(b.getByRole("button", { name: "Discard it" }));
+    expect(listAllDrafts()).toEqual([]);
   });
 
   it("saves, without asking, the person's drafts kept from before drafts were keyed to their id", async () => {
@@ -126,7 +190,7 @@ describe("the drafts bar", () => {
     renderApp();
     expect(await screen.findByText("Your draft is saved.")).toBeInTheDocument();
     expect(saved).toEqual(["kept"]);
-    expect(listDrafts()).toEqual([]);
+    expect(listAllDrafts()).toEqual([]);
   });
 
   it("asks before saving drafts someone else left in this browser", async () => {
@@ -141,8 +205,10 @@ describe("the drafts bar", () => {
     expect(saved).toEqual([]);
 
     await userEvent.click(b.getByRole("button", { name: "Check" }));
-    expect(b.getByText(/left in this browser before you signed in, perhaps by someone else/)).toBeInTheDocument();
-    expect(b.getByText("Saying theirs")).toBeInTheDocument();
+    expect(b.getByText(/left in this browser by an earlier visit, perhaps by someone else/)).toBeInTheDocument();
+    // Someone else's draft is shown by its kind alone: what it says stays theirs.
+    expect(b.getByText("Probe")).toBeInTheDocument();
+    expect(b.queryByText("Saying theirs")).toBeNull();
     await userEvent.click(b.getByRole("button", { name: "Save as mine" }));
     expect(await screen.findByText("Your draft is saved.")).toBeInTheDocument();
     expect(saved).toEqual(["theirs"]);
@@ -157,9 +223,9 @@ describe("the drafts bar", () => {
     const b = await bar();
     await userEvent.click(await b.findByRole("button", { name: "Check" }));
     await userEvent.click(b.getByRole("button", { name: "Discard it" }));
-    expect(listDrafts()).toEqual([]);
+    expect(listAllDrafts()).toEqual([]);
     await userEvent.click(await screen.findByRole("button", { name: "Undo" }));
-    expect(listDrafts()).toHaveLength(1);
+    expect(listAllDrafts()).toHaveLength(1);
     expect(saved).toEqual([]);
   });
 
@@ -169,6 +235,7 @@ describe("the drafts bar", () => {
       "POST /auth/welcome": () => json(meFixture()),
     });
     putDraft(PROBE, { note: "a" });
+    noteSignInStarted("provider");
     renderApp();
     const welcome = within(await screen.findByRole("dialog", { name: "Welcome to Open Antiquity" }));
     expect(saved).toEqual([]);
@@ -183,6 +250,7 @@ describe("the drafts bar", () => {
     routeApi(harness.fetchMock(), { "GET /auth/me": () => json(meFixture()) });
     failWith = new ApiError(422, "validation_error", "That square isn't in Britain.");
     putDraft(PROBE, { note: "a" });
+    noteSignInStarted("provider");
     renderApp();
     expect(
       await screen.findByText("One draft couldn't be saved. It's still here, with the reason."),
@@ -194,7 +262,7 @@ describe("the drafts bar", () => {
     failWith = null;
     await userEvent.click(b.getAllByRole("button", { name: "Try again" })[0] as HTMLElement);
     await waitFor(() => expect(saved).toEqual(["a"]));
-    expect(listDrafts()).toEqual([]);
+    expect(listAllDrafts()).toEqual([]);
   });
 });
 

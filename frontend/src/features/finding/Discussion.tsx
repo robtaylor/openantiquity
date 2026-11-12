@@ -187,12 +187,7 @@ export function Discussion({ finding, viewer, displayName, mayComment }: Discuss
         ) : (
           <>
             <p className="fc-comment__by">
-              <Avatar
-                name={comment.author.display_name}
-                handle={comment.author.handle}
-                src={comment.author.avatar_url ?? undefined}
-                size={22}
-              />
+              <Avatar name={comment.author.display_name} handle={comment.author.handle} size={22} />
               <strong>{comment.author.display_name}</strong>
               <span className="fc-muted">{comment.id < 0 ? "Posting…" : formatDate(comment.created_at)}</span>
             </p>

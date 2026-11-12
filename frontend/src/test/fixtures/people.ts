@@ -25,7 +25,7 @@ export function profileFixture(overrides: Partial<Profile> = {}): Profile {
   return {
     handle: OTHER.handle,
     display_name: OTHER.display_name,
-    avatar_url: null,
+
     role: "member",
     bio: "Walks the downs most weekends.",
     joined_at: "2026-10-02T09:00:00Z",
@@ -42,7 +42,7 @@ export function youngProfileFixture(overrides: Partial<Profile> = {}): Profile {
   return profileFixture({
     handle: "BrightCairn7",
     display_name: "BrightCairn7",
-    avatar_url: null,
+
     bio: null,
     counts: { findings: 0, second_looks: null, evidence: 0, comments: 0, mentions: 0 },
     ...overrides,
@@ -130,7 +130,7 @@ export function reportFixture(overrides: Partial<Report> = {}): Report {
     reason: "privacy",
     note: "It names the farm and the farmer.",
     status: "open",
-    reporter: { handle: "SharpEyedSam", display_name: "Sam Hill", avatar_url: null, role: "member" },
+    reporter: { handle: "SharpEyedSam", display_name: "Sam Hill", role: "member" },
     target: targetFixture(),
     open_on_target: 1,
     due_at: null,
@@ -146,7 +146,7 @@ export function eligibleFixture(overrides: Partial<Eligible> = {}): Eligible {
       handle: OTHER.handle,
       display_name: OTHER.display_name,
       role: "member",
-      avatar_url: null,
+
       reputation: 54,
       age_band: "18_plus",
       created_at: "2026-09-01T10:00:00Z",
@@ -158,13 +158,13 @@ export function eligibleFixture(overrides: Partial<Eligible> = {}): Eligible {
         finding: { public_id: RING.public_id, title: RING.title, hidden: false },
         points: 27,
         reasons: ["tier_seen", "tier_ground_checked", "tier_corroborated"],
-        others: [{ handle: "SharpEyedSam", display_name: "Sam Hill", avatar_url: null, role: "member" }],
+        others: [{ handle: "SharpEyedSam", display_name: "Sam Hill", role: "member" }],
       },
       { finding: null, points: 2, reasons: ["second_looks"], others: [] },
     ],
     associates: [
       {
-        user: { handle: "SharpEyedSam", display_name: "Sam Hill", avatar_url: null, role: "member" },
+        user: { handle: "SharpEyedSam", display_name: "Sam Hill", role: "member" },
         shared_findings: 1,
       },
     ],
@@ -176,7 +176,7 @@ export function actionFixture(overrides: Partial<Action> = {}): Action {
   return {
     id: 9,
     created_at: "2026-11-10T11:00:00Z",
-    actor: { handle: "ModMorag", display_name: "Morag Kerr", avatar_url: null, role: "moderator" },
+    actor: { handle: "ModMorag", display_name: "Morag Kerr", role: "moderator" },
     action: "hide",
     target: targetFixture({ hidden: true }),
     reason: "Names a private landowner.",

@@ -142,7 +142,9 @@ function Detail({
   const { ready } = useSession();
   const { showComparison } = useCardAnswers(meta);
   const detail = answer ?? (draft ? answerFromBody(meta, draft.data.answer) : newAnswer(visible));
-  const savingDraft = draft !== null && !held && ready;
+  // Given here before signing in: it waits for the person to say to send it (Decision 0022).
+  const waiting = draft?.held === true && !held && ready;
+  const savingDraft = draft !== null && !held && ready && !waiting;
 
   return (
     <div className="fc-review__ask">
@@ -152,14 +154,14 @@ function Detail({
       <DetailStep
         meta={meta}
         visible={visible}
-        status={sending || savingDraft ? "sending" : held ? "held" : "draft"}
+        status={sending || savingDraft ? "sending" : held ? "held" : waiting ? "waiting" : "draft"}
         detail={detail}
         onDetail={useReviewStore.getState().setAnswer}
         revealing={revealing}
         onReveal={() => void showComparison(card, visible, detail)}
         focusOnMount={focus}
         onChangeAnswer={
-          draft && !held && !ready
+          draft && !held && (!ready || waiting)
             ? () => {
                 discardDraft(draft.id);
                 useReviewStore.getState().setAnswer(null);

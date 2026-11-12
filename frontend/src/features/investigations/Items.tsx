@@ -13,18 +13,26 @@ import { ItemBody, ItemNote } from "./ItemBody.js";
 import { dropIndex } from "./order.js";
 import { isPending, type Notebook } from "./useInvestigation.js";
 
+/** The most of a note's first line read for its name. A name is 60 characters, so more only costs time. */
+const NAME_SOURCE_MAX = 500;
+
 /** A note's first line without its Markdown, cut short, to name it by. */
 function plainLine(note: string): string {
-  const line = note.trim().split("\n")[0] ?? "";
+  const line = (note.trim().split("\n", 1)[0] ?? "").slice(0, NAME_SOURCE_MAX);
   return line
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\][]*)\]\([^)\s]*\)/g, "$1")
     .replace(/^#+\s*|^\s*[-*+]\s+|[*_`\\]/g, "")
     .trim()
     .slice(0, 60);
 }
 
-/** What an item is called in words: its own title, or what it holds. One that can't be shown is named by its kind alone. */
+/**
+ * What an item is called in words: its own title, or what it holds. One that
+ * can't be shown is named by its kind alone, except a view or profile held
+ * back near a protected finding, whose title the server still gives.
+ */
 export function itemName(item: Item): string {
+  if (item.unavailable === "near_protected") return item.title || KIND_LABEL[item.kind];
   if (item.unavailable) return `${KIND_LABEL[item.kind]} no longer shown`;
   if (item.title) return item.title;
   if (item.finding) return item.finding.title;
@@ -338,8 +346,14 @@ export function Items({ meta, items, editable, notebook }: ItemsProps) {
                 ) : null}
               </div>
               {item.unavailable ? (
-                // Only the line saying why: its title, note and who added it can say what it was.
-                <ItemBody meta={meta} item={item} />
+                // Only the line saying why: its title, note and who added it can say what it was. A view or profile
+                // held back near a protected finding keeps its title, which the server has cleared of positions.
+                <>
+                  {item.unavailable === "near_protected" && item.title ? (
+                    <h4 className="fc-inv-item__title">{item.title}</h4>
+                  ) : null}
+                  <ItemBody meta={meta} item={item} />
+                </>
               ) : (
                 <>
                   {item.title && item.kind !== "finding" ? <h4 className="fc-inv-item__title">{item.title}</h4> : null}

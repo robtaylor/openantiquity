@@ -276,7 +276,7 @@ function Head({ profile }: { profile: Profile }) {
   const role = roleWords(profile.role);
   return (
     <div className="fc-profile__head">
-      <Avatar name={profile.display_name} handle={profile.handle} src={profile.avatar_url ?? undefined} size={56} />
+      <Avatar name={profile.display_name} handle={profile.handle} size={56} />
       <div className="fc-profile__who">
         <p className="fc-profile__role">
           <span className="fc-profile__badge" data-role={profile.role}>

@@ -3,6 +3,7 @@ import { type FormEvent, useState } from "react";
 import { ApiError } from "../../api/client.js";
 import { Button } from "../../ui/Button.js";
 import { Field } from "../../ui/Field.js";
+import { noteSignInStarted } from "../drafts/store.js";
 import { startEmailLink } from "./api.js";
 import { Notice } from "./Notice.js";
 
@@ -37,6 +38,7 @@ export function EmailLinkForm({ next }: { next: string }) {
       return;
     }
     setStep({ name: "sending" });
+    noteSignInStarted("email");
     try {
       await startEmailLink(address, next);
       setStep({ name: "sent", email: address });
@@ -53,7 +55,10 @@ export function EmailLinkForm({ next }: { next: string }) {
             If <strong>{step.email}</strong> can receive email, a sign-in link is on its way. It works once, for fifteen
             minutes.
           </p>
-          <p>Open it in this browser and you'll be signed straight in.</p>
+          <p>
+            Open it in this browser and you'll be signed straight in. Anything you marked before is saved as yours if
+            the link opens in this tab; in another tab, you'll be asked first.
+          </p>
         </Notice>
         <div className="fc-account-actions">
           <Button variant="ghost" onClick={() => setStep({ name: "form", error: null })}>

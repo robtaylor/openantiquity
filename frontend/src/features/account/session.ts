@@ -99,10 +99,27 @@ function setSession(client: QueryClient, me: Me | null): void {
   client.setQueryData(accountKeys.me, me);
 }
 
+const signedInHereListeners = new Set<(me: Me) => void>();
+
+/**
+ * Hear whenever someone signs in from this tab, by the development sign-in
+ * or an emailed link, rather than a change arriving from another tab or a
+ * profile being saved. A provider's sign-in returns as a page load instead.
+ * Returns a function that stops listening.
+ */
+export function onSignedInHere(listener: (me: Me) => void): () => void {
+  signedInHereListeners.add(listener);
+  return () => signedInHereListeners.delete(listener);
+}
+
 /** Someone has just signed in, or their details changed: tell the whole app. */
 export function signedIn(client: QueryClient, me: Me): void {
+  const before = client.getQueryData<Me | null>(accountKeys.me);
   setSession(client, me);
   tellOtherTabs();
+  if (!before || accountIdentity(before) !== accountIdentity(me)) {
+    for (const listener of [...signedInHereListeners]) listener(me);
+  }
 }
 
 /** Nobody is signed in any more, after signing out or deleting the account. */

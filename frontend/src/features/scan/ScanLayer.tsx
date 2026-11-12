@@ -4,7 +4,7 @@ import { useLocation } from "react-router";
 import { useMapStore } from "../../map/store.js";
 import { uncoveredBounds, useMapCover, visibleCentre } from "../../map/visibleArea.js";
 import { onDraftsSaved } from "../drafts/savers.js";
-import { listDrafts, useDrafts } from "../drafts/store.js";
+import { listAllDrafts, useAllDrafts } from "../drafts/store.js";
 import { whenStageSettled } from "../finding/mapView.js";
 import { isMarkPath } from "../mark/MarkLayer.js";
 import { useMarkReturn } from "../mark/markReturn.js";
@@ -25,7 +25,7 @@ const DRAFTS_BAR_ROOM = 52;
 /** Move the map so the square fills most of the part of the map nothing covers, north up and flat. */
 export function showSquare(square: Square): void {
   const { cover } = useMapCover.getState();
-  const top = cover.top + (listDrafts().length > 0 ? DRAFTS_BAR_ROOM : 0);
+  const top = cover.top + (listAllDrafts().length > 0 ? DRAFTS_BAR_ROOM : 0);
   const room = { ...cover, top, bottom: cover.bottom + PRIMARY_ACTION_ROOM };
   const framing = frameSquare(square.bbox, window.innerWidth, window.innerHeight, room);
   useMapStore.getState().requestCamera({ ...framing, bearing: 0, pitch: 0 });
@@ -58,7 +58,7 @@ function useFrameSquare(square: Square | null, scanning: boolean, onMap: boolean
   }, [square, scanning, onMap]);
 
   // Any draft brings the bar up, as `showSquare` reckons.
-  const drafting = useDrafts().length > 0;
+  const drafting = useAllDrafts().length > 0;
   const hadDrafts = useRef(drafting);
   useEffect(() => {
     const appeared = drafting && !hadDrafts.current;

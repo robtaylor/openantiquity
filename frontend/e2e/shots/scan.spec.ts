@@ -95,7 +95,7 @@ test("scan: signed in, a finding counted, marked", async ({ page }) => {
         square: null,
         outline: null,
       },
-      author: { handle: MEMBER.handle, display_name: MEMBER.display_name, avatar_url: null, role: "member" },
+      author: { handle: MEMBER.handle, display_name: MEMBER.display_name, role: "member" },
       created_at: new Date(Date.now() + 60_000).toISOString(),
       updated_at: new Date().toISOString(),
       evidence_count: 0,

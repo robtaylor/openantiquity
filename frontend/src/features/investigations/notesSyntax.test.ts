@@ -115,8 +115,23 @@ describe("parseMarkdown on hostile text", () => {
     ["brackets", `${"[".repeat(50000)}](https://example.org)`],
     ["deep nesting", `${"**".repeat(12500)}x${"**".repeat(12500)}`],
     ["a long line of spaces", `${" ".repeat(50000)}x`],
+    ["a heading with a few thousand spaces inside", `# a${" ".repeat(3000)}b`],
+    ["a heading with a run of spaces inside", `# a${" ".repeat(49995)}b`],
+    ["many headings with spaces inside", `# a${" ".repeat(700)}b\n`.repeat(70)],
+    ["a heading of hashes and spaces", `# ${"# ".repeat(24999)}x`],
+    ["a heading that ends in a long run of hashes", `# a ${"#".repeat(49995)}`],
+    ["a bullet with spaces inside", `- a${" ".repeat(49995)}b`],
+    ["a numbered item with spaces inside", `1. a${" ".repeat(49994)}b`],
   ])("reads %s quickly", (_name, source) => {
     expect(timed(source)).toBeLessThan(50);
+  });
+
+  it("still reads a heading's closing hashes, and keeps hashes that are part of a word", () => {
+    expect(parseMarkdown("## The bank ##")).toEqual([{ type: "heading", level: 2, children: [text("The bank")] }]);
+    expect(parseMarkdown("# Ditch   #   ")).toEqual([{ type: "heading", level: 1, children: [text("Ditch")] }]);
+    expect(parseMarkdown("# Notes in C#")).toEqual([{ type: "heading", level: 1, children: [text("Notes in C#")] }]);
+    expect(parseMarkdown("### ###")).toEqual([{ type: "heading", level: 3, children: [] }]);
+    expect(parseMarkdown("#\tTabbed")).toEqual([{ type: "heading", level: 1, children: [text("Tabbed")] }]);
   });
 
   it("nests emphasis no deeper than it allows, showing deeper markers as written", () => {

@@ -16,7 +16,7 @@ import { apiRoute } from "./support/network.js";
  */
 
 const RING = pageFixture();
-const MARY = { handle: "KeenLynchet7", display_name: "Mary Anning", avatar_url: null, role: "member" };
+const MARY = { handle: "KeenLynchet7", display_name: "Mary Anning", role: "member" };
 const ME = meWith();
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 

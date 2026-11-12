@@ -14,13 +14,16 @@ import { apiRoute, stubNetwork } from "./support/network.js";
 
 const KIND = "fixture_probe";
 
-const EPOCH = "seeded-epoch";
+/** This tab's visit, as the store keeps it in `sessionStorage` (Decision 0022). */
+const VISIT = "seeded-visit";
+/** The signed-in person's own drafts, by `accountIdentity`. */
+const MINE = { account: `person:${meWith().id}` };
 
 /**
- * Put drafts in this browser's storage, as signed-out work would have, or
- * as someone else's work left behind when `owner` is given.
+ * Put drafts in this browser's storage, as signed-out work in this tab would
+ * have, or as someone else's work, or the person's own, when `owner` is given.
  */
-async function seedDrafts(page: Page, notes: string[], owner: object = { signedOut: EPOCH }): Promise<void> {
+async function seedDrafts(page: Page, notes: string[], owner: object = { signedOut: VISIT }): Promise<void> {
   const now = new Date().toISOString();
   const drafts = notes.map((note, index) => ({
     id: `seed-${index}-${note}`,
@@ -31,10 +34,13 @@ async function seedDrafts(page: Page, notes: string[], owner: object = { signedO
     updatedAt: now,
     state: "waiting",
   }));
-  await page.evaluate(([key, value]) => localStorage.setItem(key, value), [
-    DRAFTS_STORAGE_KEY,
-    JSON.stringify({ version: DRAFTS_VERSION, epoch: EPOCH, drafts }),
-  ] as const);
+  await page.evaluate(
+    ([key, value, visit]) => {
+      localStorage.setItem(key, value);
+      sessionStorage.setItem("fieldclub.drafts.visit", visit);
+    },
+    [DRAFTS_STORAGE_KEY, JSON.stringify({ version: DRAFTS_VERSION, drafts }), VISIT] as const,
+  );
 }
 
 interface SaveLog {
@@ -104,10 +110,29 @@ test("asks before saving drafts someone else left in this browser", async ({ pag
   expect(saves.notes).toEqual([]);
 
   await bar(page).getByRole("button", { name: "Check" }).click();
-  await expect(bar(page).getByText(/left in this browser before you signed in, perhaps by someone else/)).toBeVisible();
+  await expect(bar(page).getByText(/left in this browser by an earlier visit, perhaps by someone else/)).toBeVisible();
+  // Shown by kind alone: what someone else's draft says stays theirs.
+  await expect(bar(page)).not.toContainText("their barrow");
   await bar(page).getByRole("button", { name: "Save as mine" }).click();
   await expect(page.getByText("Your draft is saved.")).toBeVisible();
   expect(saves.notes).toEqual(["their barrow"]);
+});
+
+test("never takes signed-out drafts for someone who arrives already signed in", async ({ page }) => {
+  await fakeSession(page);
+  const saves = await answerSaves(page);
+  await openMap(page, "/");
+  await seedDrafts(page, ["left by a visitor"]);
+  // A new tab, already signed in: a different visit, and no sign-in started there.
+  const other = await page.context().newPage();
+  await stubNetwork(other);
+  await fakeSession(other, meWith());
+  await answerSaves(other, undefined, saves);
+  await openMap(other, "/");
+  await expect(bar(other).getByRole("status")).toHaveText("1 draft left here");
+  await other.waitForTimeout(500);
+  expect(saves.notes).toEqual([]);
+  await other.close();
 });
 
 test("saves each draft once with two tabs open", async ({ page, context }) => {
@@ -125,10 +150,11 @@ test("saves each draft once with two tabs open", async ({ page, context }) => {
   await answerSaves(other, slow, log);
 
   await openMap(page, "/");
-  await seedDrafts(page, ["first", "second"]);
+  // The person's own drafts, kept from an earlier session that ran out.
+  await seedDrafts(page, ["first", "second"], MINE);
   await page.reload();
   await openMap(other, "/");
-  for (const tab of [page, other]) await expect(bar(tab).getByRole("status")).toHaveText("2 drafts not saved yet");
+  for (const tab of [page, other]) await expect(bar(tab).getByRole("status")).toHaveText("2 drafts left here");
 
   // Both tabs learn of the sign-in at once.
   for (const session of sessions) session.set(meWith());
@@ -160,7 +186,7 @@ test.describe("a save that fails", () => {
         : route.fulfill({ status: 201, body: "{}" }),
     );
     await openMap(page, "/");
-    await seedDrafts(page, ["offshore"]);
+    await seedDrafts(page, ["offshore"], MINE);
     await page.reload();
     await expect(page.getByText("One draft couldn't be saved. It's still here, with the reason.")).toBeVisible();
     await expect(bar(page).getByRole("status")).toHaveText("1 draft couldn't be saved");

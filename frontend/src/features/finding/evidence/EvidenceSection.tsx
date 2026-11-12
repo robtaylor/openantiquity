@@ -11,6 +11,7 @@ import { groupEvidence, lowerFirst, offered, type Viewer, type ViewerPosition } 
 import { composeEvidence, type FieldId, type FormValues, isRecordKind } from "../evidenceForms.js";
 import { reasonOf, toastFailure, useSignedInFirst } from "../feedback.js";
 import { findingPageKeys } from "../keys.js";
+import { MAP_LINK_WORDS, refusesLink } from "../positionInText.js";
 import type { Evidence, EvidenceIn, FindingDetail } from "../types.js";
 import { useOptimisticFinding } from "../useFinding.js";
 import { EvidenceForm } from "./EvidenceForm.js";
@@ -131,7 +132,10 @@ export function EvidenceSection({
       const body = open.photo.status === "done" ? { ...composed.body, media_id: open.photo.media.id } : composed.body;
       onApplied(await addEvidence(finding.public_id, body));
     } catch (error) {
-      setForm({ ...open, problem: { field: null, message: reasonOf(error) } });
+      const problem = refusesLink(error)
+        ? { field: "url" as const, message: MAP_LINK_WORDS }
+        : { field: null, message: reasonOf(error) };
+      setForm({ ...open, problem });
       toastFailure("Your evidence couldn't be added.", error);
     } finally {
       setPending((items) => items.filter((item) => item !== placeholder));

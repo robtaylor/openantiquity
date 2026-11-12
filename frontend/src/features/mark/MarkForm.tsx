@@ -8,6 +8,7 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import { type ReactNode, useEffect, useId, useRef } from "react";
 import { useNavigate } from "react-router";
 import type { Meta } from "../../api/meta.js";
+import { safeHref } from "../../map/attribution.js";
 import { isMapLive } from "../../map/MapPane.js";
 import { useMainMap } from "../../map/mainMap.js";
 import { screenPoint } from "../../map/useMapFrame.js";
@@ -241,8 +242,8 @@ function FindsNotice({ meta, nation }: { meta: Meta; nation: string | null }) {
       {route ? (
         <p>
           {route.text}{" "}
-          {route.url ? (
-            <a href={route.url} target="_blank" rel="noreferrer noopener">
+          {safeHref(route.url) ? (
+            <a href={safeHref(route.url)} target="_blank" rel="noreferrer noopener">
               {route.scheme} website
             </a>
           ) : null}
@@ -280,7 +281,8 @@ function DraftStatus({ draft }: { draft: KindDraft<FindingDraft> }) {
       ) : null}
       {draft.state === "waiting" && !session.ready ? (
         <p className="fc-mark__hint">
-          Kept only in this browser, and nobody else sees it until you sign in and save it.
+          Kept only in this browser until you sign in and save it. Whoever uses this browser next can see that it's
+          there, but not what it says or where.
         </p>
       ) : null}
     </div>

@@ -196,7 +196,7 @@ test("opened from Explore, the frame is in the middle of the map left uncovered,
   }).toPass();
 });
 
-test("a signed-out answer and its detail are a draft through a provider's round trip, sent in order, then revealed", async ({
+test("a signed-out answer and its detail are a draft through a provider's round trip, sent in order when the person says, then revealed", async ({
   page,
 }) => {
   const session = await fakeSession(page);
@@ -224,6 +224,11 @@ test("a signed-out answer and its detail are a draft through a provider's round 
   });
   await look.getByRole("button", { name: "Sign in to see how it compares" }).click();
   await page.getByRole("dialog", { name: "Sign in" }).getByRole("link", { name: "Continue with Google" }).click();
+  // Back and signed in, the answer waits for the person to say it is theirs: once sent, it is final.
+  await expect(look.getByText(/given in this browser before you signed in/)).toContainText("You can see it.");
+  await page.waitForTimeout(300);
+  expect(queue.answers).toEqual({});
+  await look.getByRole("button", { name: "Send it and see how it compares" }).click();
   await expect(look.getByRole("heading", { name: CLAIMED.title })).toBeVisible();
   expect(next.startsWith("/review")).toBe(true);
   await page.waitForTimeout(500);
@@ -276,6 +281,7 @@ test.describe("failures", () => {
     });
     await look.getByRole("button", { name: "Sign in to see how it compares" }).click();
     await page.getByRole("dialog", { name: "Sign in" }).getByRole("link", { name: "Continue with Google" }).click();
+    await look.getByRole("button", { name: "Send it and see how it compares" }).click();
     // The card says the kept answer failed, and offers the answers again.
     await expect(look.getByText(/The answer kept in this browser couldn't be saved\. Broke\./)).toBeVisible();
 

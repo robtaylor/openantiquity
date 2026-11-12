@@ -7,6 +7,7 @@ import type { Meta } from "../../api/meta.js";
 import { Button } from "../../ui/Button.js";
 import { Dialog } from "../../ui/Dialog.js";
 import { Field } from "../../ui/Field.js";
+import { noteSignInStarted } from "../drafts/store.js";
 import { devLogin } from "./api.js";
 import { EmailLinkForm } from "./EmailLinkForm.js";
 import { Notice } from "./Notice.js";
@@ -30,6 +31,7 @@ function DevSignIn() {
     event.preventDefault();
     setBusy(true);
     setError(null);
+    noteSignInStarted("dev");
     try {
       signedIn(client, await devLogin(handle.trim()));
     } catch (failure) {
@@ -122,7 +124,8 @@ function SignInChoices({ meta }: { meta: Meta }) {
       {devEnabled ? <DevSignIn /> : null}
 
       <p className="fc-account-small">
-        Anything you've marked stays in this browser while you sign in, and is saved after.
+        Anything you've marked in this tab stays here while you sign in, and is saved as yours after. Work left in this
+        browser by an earlier visit is never saved without asking.
       </p>
     </div>
   );

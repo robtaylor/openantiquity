@@ -16,9 +16,9 @@ import { findingDetail, findingFeature, findingSummary, MEMBER_ACTIONS, offset }
  * end-to-end stubs and the design screenshots.
  */
 
-export const FINDER = { handle: "QuietBarrow42", display_name: "Ada Lovelace", avatar_url: null, role: "member" };
-export const OTHER = { handle: "KeenLynchet7", display_name: "Mary Anning", avatar_url: null, role: "member" };
-export const EXPERT = { handle: "DrDitch", display_name: "Dr Ditch", avatar_url: null, role: "expert" };
+export const FINDER = { handle: "QuietBarrow42", display_name: "Ada Lovelace", role: "member" };
+export const OTHER = { handle: "KeenLynchet7", display_name: "Mary Anning", role: "member" };
+export const EXPERT = { handle: "DrDitch", display_name: "Dr Ditch", role: "expert" };
 
 const AT = offset(0, 0);
 

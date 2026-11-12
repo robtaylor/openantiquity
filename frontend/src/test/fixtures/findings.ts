@@ -115,7 +115,7 @@ export function findingSummary(feature: FindingFeature, overrides: Partial<Findi
       square: properties.obscured ? (properties.square ?? null) : null,
       outline: null,
     },
-    author: { handle: "QuietBarrow42", display_name: "QuietBarrow42", avatar_url: null, role: "member" },
+    author: { handle: "QuietBarrow42", display_name: "QuietBarrow42", role: "member" },
     created_at: "2026-11-01T10:00:00Z",
     updated_at: "2026-11-01T10:00:00Z",
     evidence_count: 0,

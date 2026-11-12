@@ -61,6 +61,10 @@ describe("the address a mention opens", () => {
     expect(mentionHref({ canonical_url: "javascript:alert(1)", start_seconds: null })).toBeNull();
     expect(mentionHref({ canonical_url: "not an address", start_seconds: null })).toBeNull();
   });
+
+  it("opens nothing when the server withholds the address from this viewer", () => {
+    expect(mentionHref({ canonical_url: null, start_seconds: 30 })).toBeNull();
+  });
 });
 
 describe("what a mention shows", () => {
@@ -69,6 +73,7 @@ describe("what a mention shows", () => {
       "Barrows of the Ridgeway",
     );
     expect(mentionTitle({ title: null, canonical_url: "https://example.org/a/" })).toBe("example.org/a");
+    expect(mentionTitle({ title: null, canonical_url: null })).toBe("A link");
   });
 
   it("shows only a picture served over https", () => {
@@ -100,6 +105,14 @@ describe("a refusal, in plain words", () => {
       message: "This finding has been withdrawn, so it takes no more mentions.",
     });
     expect(mentionFailure(new ApiError(429, "rate_limited", "x")).message).toMatch(/Try again a little later/);
+  });
+
+  it("puts a map link refused on a protected finding beside the address", () => {
+    const error = new ApiError(422, "position_in_text", "x", { fields: [{ field: "body.url", message: "x" }] });
+    expect(mentionFailure(error)).toEqual({
+      field: "url",
+      message: expect.stringMatching(/shows where this finding is/),
+    });
   });
 
   it("names the field a validation error is about", () => {

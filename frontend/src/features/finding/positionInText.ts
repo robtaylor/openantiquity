@@ -36,6 +36,19 @@ export function namedFields(fields: readonly string[]): ReadonlySet<PositionFiel
   return named.size > 0 ? named : new Set<PositionField>(["title", "description"]);
 }
 
+/** Said beside a link refused because it shows the place: a map link on a finding that isn't open. */
+export const MAP_LINK_WORDS =
+  "That link shows where this finding is, and its exact place is kept back to protect the site. Link to something that doesn't.";
+
+/** True when `error` refuses a link (`body.url`) for showing the place. */
+export function refusesLink(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.code === POSITION_IN_TEXT &&
+    error.fields.some((problem) => problem.field === "body.url")
+  );
+}
+
 /** What to say beside the field, in plain words that say what to do. */
 export function positionWords(field: PositionField): string {
   // The description is called the note on every form.

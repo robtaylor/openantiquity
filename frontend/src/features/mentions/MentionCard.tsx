@@ -16,7 +16,7 @@ import type { Meta } from "../../api/meta.js";
 import { Button } from "../../ui/Button.js";
 import { formatDate, labelOf } from "../finding/describe.js";
 import { ReportButton } from "../reports/ReportButton.js";
-import { mentionHref, mentionTitle, safeThumbnail, startWords } from "./describe.js";
+import { ADDRESS_WITHHELD, mentionHref, mentionTitle, safeThumbnail, startWords } from "./describe.js";
 import type { Mention } from "./types.js";
 import "./mentions.css";
 
@@ -62,6 +62,13 @@ export function MentionThumbnail({ kind, src }: { kind: string; src: string | nu
 export function MentionLink({ mention }: { mention: Pick<Mention, "title" | "canonical_url" | "start_seconds"> }) {
   const href = mentionHref(mention);
   const title = mentionTitle(mention);
+  if (mention.canonical_url === null) {
+    return (
+      <span className="fc-mention__title">
+        {title} <span className="fc-mention__withheld">{ADDRESS_WITHHELD}</span>
+      </span>
+    );
+  }
   if (href === null) return <span className="fc-mention__title">{title}</span>;
   return (
     <a className="fc-mention__title" href={href} target="_blank" rel="noreferrer noopener" referrerPolicy="no-referrer">

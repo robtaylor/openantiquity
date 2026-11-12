@@ -20,7 +20,7 @@ export function previewOf(me: Me, body: ItemIn): Omit<Item, "id" | "position"> {
     view: "view" in body ? body.view : null,
     reference: "reference" in body ? body.reference : null,
     profile: "profile" in body ? body.profile : null,
-    added_by: { handle: me.handle, display_name: me.display_name, avatar_url: me.avatar_url, role: me.role },
+    added_by: { handle: me.handle, display_name: me.display_name, role: me.role },
     created_at: new Date().toISOString(),
   };
 }

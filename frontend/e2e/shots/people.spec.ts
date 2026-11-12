@@ -177,7 +177,7 @@ test("moderation queue", async ({ page }) => {
           ref: "CheapDetectors",
           finding: null,
           title: "CheapDetectors",
-          owner: { handle: "CheapDetectors", display_name: "CheapDetectors", avatar_url: null, role: "member" },
+          owner: { handle: "CheapDetectors", display_name: "CheapDetectors", role: "member" },
           body: "Best metal detectors, ships free. https://example.com/shop",
         }),
       }),

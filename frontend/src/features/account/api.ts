@@ -57,13 +57,21 @@ export async function startEmailLink(email: string, next: string): Promise<void>
   await apiFetch<components["schemas"]["EmailStarted"]>("/auth/email/start", { method: "POST", body });
 }
 
+export type EmailSignedIn = components["schemas"]["EmailSignedIn"];
+
 /**
- * `POST /auth/email/verify`. `confirm` is true only after the person has said
- * yes to "Sign in as …?". Nothing else may set it.
+ * `POST /auth/email/verify`. `email` is the address the person typed, sent
+ * only for a link opened in a browser that didn't ask for it; the server
+ * signs in only when it is the link's own. Nothing fills it in for them.
  */
-export function verifyEmailLink(token: string, confirm: boolean): Promise<Me> {
-  const body: components["schemas"]["EmailVerify"] = { token, confirm };
-  return apiFetch<Me>("/auth/email/verify", { method: "POST", body });
+export function verifyEmailLink(token: string, email: string | null): Promise<EmailSignedIn> {
+  const body: components["schemas"]["EmailVerify"] = email === null ? { token } : { token, email };
+  return apiFetch<EmailSignedIn>("/auth/email/verify", { method: "POST", body });
+}
+
+/** `POST /auth/logout-everywhere`: ends every session of the signed-in person, this one too. */
+export function logoutEverywhere(): Promise<void> {
+  return apiFetch<void>("/auth/logout-everywhere", { method: "POST" });
 }
 
 /** `POST /auth/dev-login`. Exists only on a development or test server. */
