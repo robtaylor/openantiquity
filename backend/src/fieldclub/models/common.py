@@ -48,12 +48,23 @@ def enum_check(column: str, enum_cls: type[StrEnum]) -> CheckConstraint:
     what stops a typo reaching the table. A `CHECK` passes when it is NULL, so
     a nullable column needs nothing more: nullability comes from the
     `Mapped[...]` annotation.
+
+    The check names its column and enumeration in `info`, so that
+    `fieldclub.db.create_schema` can make it again in a database built
+    before the enumeration last changed.
     """
+    return CheckConstraint(
+        enum_check_text(column, enum_cls), name=f"{column}_valid", info={"column": column, "enum": enum_cls}
+    )
+
+
+def enum_check_text(column: str, enum_cls: type[StrEnum]) -> str:
+    """The condition of an `enum_check`: the column is one of the enumeration's values."""
     values = [member.value for member in enum_cls]
     assert values, f"{enum_cls.__name__} has no members"
     assert all("'" not in value for value in values), f"{enum_cls.__name__} has a value with a quote in it"
     quoted = ", ".join(f"'{value}'" for value in values)
-    return CheckConstraint(f"{column} IN ({quoted})", name=f"{column}_valid")
+    return f"{column} IN ({quoted})"
 
 
 def point(*, spatial_index: bool = True) -> Geometry:

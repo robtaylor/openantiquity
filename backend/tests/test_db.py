@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import os
 import secrets
+import time
 from collections.abc import Iterator
+from contextlib import contextmanager
+from enum import StrEnum
 
 import pytest
-from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy import CheckConstraint, create_engine, inspect, select, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
@@ -149,11 +153,9 @@ def _unordered(snapshot: dict[str, list[tuple]]) -> dict[str, list[tuple]]:
     return {key: sorted(rows, key=repr) for key, rows in snapshot.items()}
 
 
-def test_create_schema_adds_the_shape_columns_to_a_database_made_before_them(
-    database: Engine, scratch_database: Engine
-) -> None:
-    create_schema(scratch_database)
-    with scratch_database.begin() as conn:
+def _as_main_made_it(engine: Engine) -> None:
+    """Take out of a freshly built schema what lines and curves added, as `main` built it, and add rows."""
+    with engine.begin() as conn:
         conn.execute(text("DROP TABLE finding_shape_changes"))
         conn.execute(text("DROP INDEX idx_findings_outline"))
         conn.execute(
@@ -168,25 +170,75 @@ def test_create_schema_adds_the_shape_columns_to_a_database_made_before_them(
         conn.execute(
             text(f"ALTER TABLE activity ADD CONSTRAINT ck_activity_kind_valid CHECK (kind IN ({kinds}))")
         )
-        user_id = conn.scalar(
-            text("INSERT INTO users (handle, display_name) VALUES ('Old', 'Old') RETURNING id")
+        finder, helper = (
+            conn.scalar(
+                text("INSERT INTO users (handle, display_name) VALUES (:name, :label) RETURNING id"),
+                {"name": name, "label": name},
+            )
+            for name in ("Old", "Helper")
         )
-        conn.execute(
+        finding_id = conn.scalar(
             text(
                 "INSERT INTO findings (public_id, author_id, title, feature_class, location, "
                 "location_public, outline) VALUES ('OLD001', :user_id, 'An old outline', 'enclosure', "
                 "ST_GeomFromText('POINT(-1.85 51.43)', 4326), ST_GeomFromText('POINT(-1.85 51.43)', 4326), "
-                "ST_GeomFromText('LINESTRING(-1.85 51.43, -1.84 51.43)', 4326))"
+                "ST_GeomFromText('LINESTRING(-1.85 51.43, -1.84 51.43)', 4326)) RETURNING id"
             ),
-            {"user_id": user_id},
+            {"user_id": finder},
         )
+        conn.execute(
+            text(
+                "INSERT INTO observations (finding_id, user_id, visible, role_at_answer) "
+                "VALUES (:finding_id, :user_id, 'yes', 'member')"
+            ),
+            {"finding_id": finding_id, "user_id": helper},
+        )
+        conn.execute(
+            text(
+                "INSERT INTO activity (kind, actor_id, finding_id) VALUES "
+                "('finding_created', :user_id, :finding_id), ('observation_added', NULL, :finding_id)"
+            ),
+            {"user_id": finder, "finding_id": finding_id},
+        )
+
+
+def _rows(engine: Engine) -> dict[str, list[tuple]]:
+    with engine.connect() as conn:
+        return {
+            "findings": [
+                tuple(row)
+                for row in conn.execute(
+                    text("SELECT id, public_id, title, ST_AsText(outline) FROM findings ORDER BY id")
+                )
+            ],
+            "observations": [
+                tuple(row)
+                for row in conn.execute(text("SELECT id, finding_id, user_id, visible FROM observations"))
+            ],
+            "activity": [
+                tuple(row)
+                for row in conn.execute(text("SELECT id, kind, finding_id FROM activity ORDER BY id"))
+            ],
+        }
+
+
+def test_create_schema_brings_a_database_made_by_main_up_to_date_and_keeps_every_row(
+    database: Engine, scratch_database: Engine
+) -> None:
+    create_schema(scratch_database)
+    _as_main_made_it(scratch_database)
     columns = {column["name"] for column in inspect(scratch_database).get_columns("findings")}
     assert not columns & set(_SHAPE_COLUMNS), "the old database still has the shape columns"
+    rows = _rows(scratch_database)
+    assert [len(found) for found in rows.values()] == [1, 1, 2]
 
     create_schema(scratch_database)
+    once = _snapshot(scratch_database)
     create_schema(scratch_database)
 
-    assert _unordered(_snapshot(scratch_database)) == _unordered(_snapshot(database))
+    assert _snapshot(scratch_database) == once, "a second run changed the schema"
+    assert _unordered(once) == _unordered(_snapshot(database))
+    assert _rows(scratch_database) == rows
     with scratch_database.connect() as conn:
         old = conn.execute(
             text(
@@ -194,7 +246,106 @@ def test_create_schema_adds_the_shape_columns_to_a_database_made_before_them(
                 "ST_AsText(outline) FROM findings WHERE public_id = 'OLD001'"
             )
         ).one()
+        answered = conn.scalar(text("SELECT shape_revision FROM observations"))
+        unchecked = conn.scalar(text("SELECT count(*) FROM pg_constraint WHERE NOT convalidated"))
     assert tuple(old) == (None, None, None, 0, False, "LINESTRING(-1.85 51.43,-1.84 51.43)")
+    assert answered is None
+    assert unchecked == 0, "a check was left NOT VALID"
+
+
+# A reader holds a table for longer than this, so a schema step that needs to
+# wait for it fails, or a test before `create_schema` set its own timeout would hang.
+_READER_WAIT = "lock_timeout=2000"
+
+
+@contextmanager
+def _reading(engine: Engine, *tables: str) -> Iterator[None]:
+    """A long query: a transaction holding ACCESS SHARE on each table until the block ends."""
+    with engine.connect() as conn, conn.begin():
+        for table in tables:
+            conn.execute(text(f"SELECT 1 FROM {table} LIMIT 1"))
+        yield
+
+
+def test_an_up_to_date_schema_waits_for_no_reader(scratch_database: Engine) -> None:
+    create_schema(scratch_database)
+    impatient = create_engine(
+        scratch_database.url, poolclass=NullPool, connect_args={"options": f"-c {_READER_WAIT}"}
+    )
+    try:
+        with _reading(scratch_database, *EXPECTED_TABLES):
+            create_schema(impatient)
+    finally:
+        impatient.dispose()
+
+
+def test_a_schema_change_that_cant_get_its_lock_fails_instead_of_queueing(
+    scratch_database: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    create_schema(scratch_database)
+    _as_main_made_it(scratch_database)
+    monkeypatch.setattr(fieldclub_db, "SCHEMA_LOCK_TIMEOUT_MS", 200)
+    # Without a timeout of its own, the schema would wait ten seconds for the reader.
+    patient = create_engine(
+        scratch_database.url, poolclass=NullPool, connect_args={"options": "-c lock_timeout=10000"}
+    )
+    try:
+        with _reading(scratch_database, "findings"):
+            started = time.monotonic()
+            with pytest.raises(OperationalError, match="lock timeout"):
+                create_schema(patient)
+            assert time.monotonic() - started < 5
+    finally:
+        patient.dispose()
+    columns = {column["name"] for column in inspect(scratch_database).get_columns("findings")}
+    assert not columns & set(_SHAPE_COLUMNS), "a failed schema run left part of its change"
+    create_schema(scratch_database)
+    columns = {column["name"] for column in inspect(scratch_database).get_columns("findings")}
+    assert set(_SHAPE_COLUMNS) <= columns
+
+
+def _kind_check(engine: Engine) -> tuple[str, bool]:
+    with engine.connect() as conn:
+        row = conn.execute(
+            text(
+                "SELECT pg_get_constraintdef(oid), convalidated FROM pg_constraint "
+                "WHERE conname = 'ck_activity_kind_valid'"
+            )
+        ).one()
+    return row[0], row[1]
+
+
+def test_the_activity_kind_check_follows_the_vocabulary(
+    scratch_database: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    create_schema(scratch_database)
+    (check,) = [
+        constraint
+        for constraint in Base.metadata.tables["activity"].constraints
+        if isinstance(constraint, CheckConstraint) and constraint.name == "ck_activity_kind_valid"
+    ]
+    assert check.info["enum"] is ActivityKind
+    grown = StrEnum(
+        "GrownActivityKind", {kind.value: kind.value for kind in [*ActivityKind]} | {"made_up": "made_up"}
+    )
+    monkeypatch.setitem(check.info, "enum", grown)
+
+    create_schema(scratch_database)
+    definition, validated = _kind_check(scratch_database)
+    assert "'made_up'" in definition
+    assert validated
+    with scratch_database.begin() as conn:
+        conn.execute(text("INSERT INTO activity (kind) VALUES ('made_up')"))
+        conn.execute(text("DELETE FROM activity WHERE kind = 'made_up'"))
+
+    monkeypatch.setitem(check.info, "enum", ActivityKind)
+    create_schema(scratch_database)
+    definition, validated = _kind_check(scratch_database)
+    assert "'made_up'" not in definition
+    assert "'shape_extended'" in definition
+    assert validated
+    with pytest.raises(IntegrityError), scratch_database.begin() as conn:
+        conn.execute(text("INSERT INTO activity (kind) VALUES ('made_up')"))
 
 
 def test_records_search_is_a_generated_tsvector(database: Engine) -> None:

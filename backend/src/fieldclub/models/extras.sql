@@ -2,6 +2,24 @@
 -- this file after the tables exist, every time, so each statement must be
 -- safe to repeat. A statement ends with a semicolon at the end of a line.
 -- Don't write a percent sign: the driver reads it as a parameter placeholder.
+--
+-- It runs on the live database at every deploy while the old version still
+-- serves. An ALTER TABLE takes the strongest lock even when it changes
+-- nothing, so each one is skipped when its columns are there already
+-- (fieldclub_has_columns). The checks that keep a column inside a vocabulary
+-- are kept in step by fieldclub.db, not here.
+
+-- Whether a table in this schema has every one of the columns named.
+CREATE OR REPLACE FUNCTION fieldclub_has_columns(table_name text, column_names text[]) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+        SELECT count(*) = cardinality(column_names)
+            FROM pg_attribute
+            WHERE attrelid = to_regclass(table_name)
+                AND attnum > 0
+                AND NOT attisdropped
+                AND attname = ANY (column_names)
+    $$;
 
 -- array_to_string() is only STABLE, and a generated column needs IMMUTABLE.
 -- For text[] the result depends on nothing but the argument, so wrapping it
@@ -15,35 +33,30 @@ CREATE OR REPLACE FUNCTION fieldclub_join_text(parts text[]) RETURNS text
 -- definitions, so the two end up alike. Nothing is backfilled: an old outline
 -- gains its path and simplifications when it is next saved, and
 -- `python -m fieldclub.services.shapes backfill` fills the simplifications.
-ALTER TABLE findings
-    ADD COLUMN IF NOT EXISTS path jsonb,
-    ADD COLUMN IF NOT EXISTS outline_mid geometry(GEOMETRY, 4326),
-    ADD COLUMN IF NOT EXISTS outline_low geometry(GEOMETRY, 4326),
-    ADD COLUMN IF NOT EXISTS shape_kind text
-        CONSTRAINT ck_findings_shape_kind_valid CHECK (shape_kind IN ('line', 'area')),
-    ADD COLUMN IF NOT EXISTS shape_length_m real,
-    ADD COLUMN IF NOT EXISTS shape_revision integer NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS location_derived boolean NOT NULL DEFAULT false,
-    ADD COLUMN IF NOT EXISTS looked_at geometry(GEOMETRY, 4326);
-
-ALTER TABLE observations ADD COLUMN IF NOT EXISTS shape_revision integer;
-
--- An extension records `shape_extended` activity. A database made before it
--- keeps the check without it, so the check is made again, once, with the
--- kinds in the order of `vocab.ActivityKind`.
 DO $$
 BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-            WHERE conname = 'ck_activity_kind_valid'
-                AND position('shape_extended' in pg_get_constraintdef(oid)) > 0
-    ) THEN
-        ALTER TABLE activity DROP CONSTRAINT IF EXISTS ck_activity_kind_valid;
-        ALTER TABLE activity ADD CONSTRAINT ck_activity_kind_valid CHECK (kind IN (
-            'finding_created', 'tier_changed', 'state_changed', 'observation_added', 'evidence_added',
-            'comment_added', 'mention_added', 'followup_logged', 'investigation_published',
-            'investigation_invitation', 'shape_extended'
-        ));
+    IF NOT fieldclub_has_columns('findings', ARRAY[
+        'path', 'outline_mid', 'outline_low', 'shape_kind', 'shape_length_m', 'shape_revision',
+        'location_derived', 'looked_at'
+    ]) THEN
+        ALTER TABLE findings
+            ADD COLUMN IF NOT EXISTS path jsonb,
+            ADD COLUMN IF NOT EXISTS outline_mid geometry(GEOMETRY, 4326),
+            ADD COLUMN IF NOT EXISTS outline_low geometry(GEOMETRY, 4326),
+            ADD COLUMN IF NOT EXISTS shape_kind text
+                CONSTRAINT ck_findings_shape_kind_valid CHECK (shape_kind IN ('line', 'area')),
+            ADD COLUMN IF NOT EXISTS shape_length_m real,
+            ADD COLUMN IF NOT EXISTS shape_revision integer NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS location_derived boolean NOT NULL DEFAULT false,
+            ADD COLUMN IF NOT EXISTS looked_at geometry(GEOMETRY, 4326);
+    END IF;
+END
+$$;
+
+DO $$
+BEGIN
+    IF NOT fieldclub_has_columns('observations', ARRAY['shape_revision']) THEN
+        ALTER TABLE observations ADD COLUMN IF NOT EXISTS shape_revision integer;
     END IF;
 END
 $$;
@@ -55,15 +68,23 @@ CREATE INDEX IF NOT EXISTS idx_findings_outline_low ON findings USING gist (outl
 
 -- Full-text search over records. The name counts most, then the type terms,
 -- then the summary.
-ALTER TABLE records ADD COLUMN IF NOT EXISTS search tsvector
-    GENERATED ALWAYS AS (
-        setweight(to_tsvector('english', coalesce(name, '')), 'A')
-        || setweight(
-            to_tsvector('english', coalesce(record_type, '') || ' ' || fieldclub_join_text(monument_types)),
-            'B'
-        )
-        || setweight(to_tsvector('english', coalesce(summary, '')), 'C')
-    ) STORED;
+DO $$
+BEGIN
+    IF NOT fieldclub_has_columns('records', ARRAY['search']) THEN
+        ALTER TABLE records ADD COLUMN IF NOT EXISTS search tsvector
+            GENERATED ALWAYS AS (
+                setweight(to_tsvector('english', coalesce(name, '')), 'A')
+                || setweight(
+                    to_tsvector(
+                        'english', coalesce(record_type, '') || ' ' || fieldclub_join_text(monument_types)
+                    ),
+                    'B'
+                )
+                || setweight(to_tsvector('english', coalesce(summary, '')), 'C')
+            ) STORED;
+    END IF;
+END
+$$;
 
 CREATE INDEX IF NOT EXISTS ix_records_search ON records USING GIN (search);
 

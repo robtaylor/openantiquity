@@ -12,10 +12,22 @@ from __future__ import annotations
 
 import argparse
 import logging
+import re
 from collections.abc import Generator, Sequence
+from dataclasses import dataclass
 from importlib import resources
 
-from sqlalchemy import URL, Engine, MetaData, create_engine, event, make_url, text
+from sqlalchemy import (
+    URL,
+    CheckConstraint,
+    Connection,
+    Engine,
+    MetaData,
+    create_engine,
+    event,
+    make_url,
+    text,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -28,6 +40,12 @@ EXTENSIONS = ("postgis", "pg_trgm", "citext")
 # Any fixed number works. It only has to be the same in every process that
 # might build the schema at the same moment.
 _SCHEMA_LOCK_ID = 5_867_001
+
+# How long a schema step waits for a lock on a table before the whole run
+# fails. A deploy builds the schema while the old version is serving, and a
+# step that waits behind a long query makes every later query on that table
+# queue behind it. Failing the deploy leaves the old version serving.
+SCHEMA_LOCK_TIMEOUT_MS = 5_000
 
 NAMING_CONVENTION = {
     "ix": "ix_%(table_name)s_%(column_0_N_name)s",
@@ -162,22 +180,106 @@ def extras_statements() -> list[str]:
     return statements
 
 
+@dataclass(frozen=True)
+class _EnumCheck:
+    table: str
+    name: str
+    condition: str
+
+
+def _enum_checks() -> list[_EnumCheck]:
+    """Every `models.common.enum_check` on the tables, with its condition as the enumeration gives it now."""
+    from fieldclub.models.common import enum_check_text
+
+    found: list[_EnumCheck] = []
+    for table in Base.metadata.tables.values():
+        for constraint in table.constraints:
+            if isinstance(constraint, CheckConstraint) and "enum" in constraint.info:
+                assert isinstance(constraint.name, str), f"an unnamed check on {table.name}"
+                condition = enum_check_text(constraint.info["column"], constraint.info["enum"])
+                found.append(_EnumCheck(table.name, constraint.name, condition))
+    return found
+
+
+_QUOTED = re.compile(r"'((?:[^']|'')*)'")
+
+
+def _sync_enum_checks(conn: Connection) -> None:
+    """Make again each vocabulary check whose stored values differ from its enumeration's now.
+
+    `create_all` makes a check only with its table, so a database built before
+    a value was added keeps the old check. The new one is added `NOT VALID`,
+    which needs no scan of the table, and `_validate_checks` checks the rows
+    after this transaction has let go of its locks.
+    """
+    stored = {
+        (table, name): definition
+        for table, name, definition in conn.execute(
+            text(
+                "SELECT conrelid::regclass::text, conname, pg_get_constraintdef(oid) FROM pg_constraint "
+                "WHERE contype = 'c' AND connamespace = current_schema()::regnamespace"
+            )
+        )
+    }
+    for check in _enum_checks():
+        definition = stored.get((check.table, check.name))
+        assert definition is not None, f"{check.table} has no check {check.name}"
+        if set(_QUOTED.findall(definition)) == set(_QUOTED.findall(check.condition)):
+            continue
+        logger.info("Making %s on %s again with the values it has now", check.name, check.table)
+        conn.exec_driver_sql(
+            f'ALTER TABLE "{check.table}" DROP CONSTRAINT "{check.name}", '
+            f'ADD CONSTRAINT "{check.name}" CHECK ({check.condition}) NOT VALID'
+        )
+
+
+def _validate_checks(conn: Connection) -> None:
+    """Check the rows against every vocabulary check added `NOT VALID`.
+
+    `VALIDATE` lets reads and writes go on while it scans the table.
+    """
+    names = {check.name for check in _enum_checks()}
+    for table, name in conn.execute(
+        text(
+            "SELECT conrelid::regclass::text, conname FROM pg_constraint "
+            "WHERE contype = 'c' AND NOT convalidated AND connamespace = current_schema()::regnamespace"
+        )
+    ):
+        if name in names:
+            conn.exec_driver_sql(f'ALTER TABLE "{table}" VALIDATE CONSTRAINT "{name}"')
+
+
+def _limit_lock_waits(conn: Connection) -> None:
+    conn.execute(
+        text("SELECT set_config('lock_timeout', :timeout, true)"), {"timeout": f"{SCHEMA_LOCK_TIMEOUT_MS}ms"}
+    )
+
+
 def create_schema(engine: Engine | None = None) -> None:
     """Create extensions, tables and the extras. Idempotent.
 
     The steps run in one transaction under an advisory lock, so two processes
-    starting at the same moment can't trip over each other.
+    starting at the same moment can't trip over each other. Each waits at
+    most `SCHEMA_LOCK_TIMEOUT_MS` for a lock on a table, and then the whole
+    run fails and changes nothing. A vocabulary check made again is
+    validated afterwards in a second transaction.
     """
     import fieldclub.models  # noqa: F401 - registers every table on Base.metadata
 
     engine = engine or get_engine()
     with engine.begin() as conn:
         conn.execute(text("SELECT pg_advisory_xact_lock(:id)"), {"id": _SCHEMA_LOCK_ID})
+        _limit_lock_waits(conn)
         for extension in EXTENSIONS:
             conn.execute(text(f'CREATE EXTENSION IF NOT EXISTS "{extension}"'))
         Base.metadata.create_all(conn)
         for statement in extras_statements():
             conn.exec_driver_sql(statement)
+        _sync_enum_checks(conn)
+    with engine.begin() as conn:
+        conn.execute(text("SELECT pg_advisory_xact_lock(:id)"), {"id": _SCHEMA_LOCK_ID})
+        _limit_lock_waits(conn)
+        _validate_checks(conn)
     logger.info("Schema is up to date (%d tables)", len(Base.metadata.tables))
 
 
