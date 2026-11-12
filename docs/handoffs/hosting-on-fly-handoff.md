@@ -16,7 +16,7 @@ See docs/handoff-discipline.md for the migration table.
 
 **Goal of this thread:** move the deployment from Google Cloud to Fly.io (Decision 0018). On 2026-11-12 steps 1 to 9 of the runbook were carried out, except one part of step 3. The web app runs on Fly on a private address, with Managed Postgres, the whole elevation mirror and the national overview. Nothing is public, no records have been ingested, and the hourly machine doesn't exist yet.
 
-**Next session should pick up:** follow-up 1, which the owner does in Tigris's dashboard, then check the web app reads the elevation. Then get the owner's word on follow-ups 2 and 3. Do every cloud step in the main session: sub-agents and workflow agents don't touch Fly, Google or Gandi and don't read `.env`.
+**Next session should pick up:** follow-ups 1 to 3 in order. Do every cloud step in the main session: sub-agents and workflow agents don't touch Fly, Google or Gandi and don't read `.env`.
 
 **Verification command:**
 
@@ -36,7 +36,7 @@ fly machine list --app openantiquity-jobs
 fly mpg list --org openantiquity
 # Expect: the cluster openantiquity, d2gznoqz2n8opkm8, ready, attached to both apps
 fly storage list --org openantiquity
-# Expect: openantiquity-elevation and openantiquity-cache, and openantiquity-photos once follow-up 1 is done
+# Expect: openantiquity-elevation, openantiquity-cache and openantiquity-photos
 uv run infra/fly_jobs.py --commit 2399cebab319ef8bc5a722996167710237ef124a run fieldclub-terrain info
 fly logs --app openantiquity-jobs --no-tail | grep -e mirrored -e overview
 # Expect: mirrored 5877 tiles (100.00%), and overview c2a8a0e49f2f, 5877 tiles
@@ -58,34 +58,27 @@ The last pair names the jobs image that exists. `fly_jobs.py` looks for the imag
 
 ## Open follow-ups (priority-ordered)
 
-### 1. Finish step 3 in Tigris's dashboard (the owner, minutes)
+### 1. Deploy the terrain fix and check tiles draw (minutes)
 
-flyctl can't make a bucket without a key or change a key's roles. Until this is done the web app can't list the elevation bucket: `/api/v1/meta` gives `mirrored_tiles` as null and no terrain is drawn. The owner was given these steps on 2026-11-12, and offered that the session drive them in Chrome instead.
+No terrain tile draws on the web app as deployed, commit `85ad12a`: GDAL had the Tigris endpoint on one thread only. The fix and the mirror check are on `main` after that commit. Deploy from the repository root, then build the jobs app's image of the same commit:
 
-`fly storage dashboard openantiquity-cache`, then:
+```
+fly deploy --no-public-ips --image-label "$(git rev-parse HEAD)"
+uv run infra/fly_jobs.py build
+```
 
-- Make a private bucket named `openantiquity-photos`, with no key.
-- Give the web app's key, the one made with `openantiquity-cache`, Editor on `openantiquity-cache` and `openantiquity-photos` and ReadOnly on `openantiquity-elevation`.
-- Check that the jobs app's key is Editor on `openantiquity-elevation` alone, and that neither key is Admin.
+The release command now checks the mirror first, so the deploy itself proves a tile can be read. Then, through the tunnel in step 5 of the runbook, fetch `/tiles/lidar/composite/15/16215/10907.png`, a tile over Avebury, and expect a PNG.
 
-Then check, through the tunnel in step 5 of the runbook, that `/api/v1/meta` gives `mirrored_tiles` as 5877 and that a terrain tile over Avebury draws. The web machines may need a minute: the mirror is listed at most once a minute.
+### 2. Take the jobs key's read access off two buckets (the owner, minutes)
 
-### 2. A choice for the owner: tiles that aren't in the mirror
+The owner made `openantiquity-photos` and set the keys' roles in Tigris's dashboard on 2026-11-12. Each key was then probed from its own app's machine, by listing, by writing and deleting one probe object, and by asking for an object that isn't there.
 
-Still open, and the record it needs is 0027 or later. On Fly the web app can't fetch a missing elevation tile, because only the jobs app holds Defra's login (`FIELDCLUB_TERRAIN_API_FETCH = "false"`). A square whose tile is missing answers `elevation_unavailable` for a minute, where Decision 0016 has it answer "being prepared" while the tile is fetched.
+- The web app's key is as intended: it lists and reads all three buckets, writes the cache and the photos, and is refused a write to the elevation bucket.
+- The jobs app's key writes the elevation bucket alone, as intended, but it can also list and read `openantiquity-cache` and `openantiquity-photos`. Step 3 of the runbook gives it no other bucket. Photos are what members upload, and the jobs app holds Defra's login and parses other publishers' files, so the owner should remove both roles in the dashboard. The owner was told on 2026-11-12.
 
-Where the owner's thinking stood on 2026-11-12: the data was to be moved once, which is done, and "maybe just a pre-flight check makes sense". The shape put to the owner, not yet agreed: a read-only check in the web app's release command that compares the catalogue with the bucket's listing and stops the deploy when a tile is missing, with a setting in `fly.toml` that lets a deploy through anyway. It needs no supply login and never fetches. Repair stays a deliberate `uv run infra/fly_jobs.py mirror 1 2 3 4`.
+### 3. Step 10: the volume and the hourly machine (the owner has said to go ahead)
 
-What was found, for the record to carry:
-
-- The fetcher knows only the 5,877 tiles of the 2022 composite, a list packaged with the code (`backend/src/fieldclub/terrain/catalogue.py`). All 5,877 are in Tigris. A fetch on demand could only replace a tile that had gone from the bucket.
-- No code of ours deletes a mirrored tile. The mirror deletes only its failure markers (`terrain/mirror.py`) and the overview build only its own build files (`terrain/national.py`). So a tile goes missing when a person or a tool deletes it, when Tigris loses it or suspends the bucket, or when a deploy changes what the code expects: a larger catalogue, another mirror folder, a new format.
-- The running app already reports `catalogue_tiles` and `mirrored_tiles` at `/api/v1/meta`.
-- No document says why the web app holds no supply login. Decision 0018, point 7, states the rule alone. The record should give the reason: the login was issued to the owner under a Defra ticket, a public service has no use for it once the mirror is whole, and the web app's key can't write the elevation bucket.
-
-### 3. Step 10: the first ingests and the hourly machine (the owner's go-ahead, then some hours)
-
-[`infra/README.md`](../../infra/README.md), step 10. It makes a 10 GB volume at $1.50 a month and the machine named `due`. The owner was asked before it is started, because the hourly machine's 03:00 run refreshes every bulk source, the first load of each publisher from Fly. Run one ingest by hand first and read its log. The privacy notice needs the hourly machine to exist before the site opens.
+[`infra/README.md`](../../infra/README.md), step 10. The first ingest ran on Fly on 2026-11-12: `he-nhle-scheduled-monuments`, 20,006 records in 19 seconds. Left: the 10 GB volume at $1.50 a month and the machine named `due`, made from the jobs image of the commit deployed. The hourly machine's 03:00 run refreshes every bulk source, the first load of each publisher from Fly, so read its log the morning after. The privacy notice needs the hourly machine to exist before the site opens.
 
 ### 4. Step 12: the deploy workflow (minutes)
 
@@ -103,7 +96,6 @@ Step 11. The DNS records are commented in `infra/dns.toml` and applied with `inf
 
 - Done: the jobs app has no session key, and its jobs start without one. The tile render queue on Fly is 16, inside the soft limit.
 - Open: one database login, `fly-user` with the role `schema_admin`, serves both apps. Managed Postgres offers the roles `schema_admin`, `writer` and `reader` (`fly mpg users create`). The web app's release command creates the schema, so the web app's login needs `schema_admin` as things are. Giving the web app `writer` means moving the schema command to the jobs app, a change to how a deploy runs. It can be done later without making the cluster again. The owner was told on 2026-11-12.
-- Open: look at what each Tigris key may do across the three buckets, with follow-up 1.
 - Open: `timeout` stopping a job that runs past its limit hasn't been seen on Fly.
 
 ### 8. Check Managed Postgres's backups before relying on them (an hour)
@@ -127,12 +119,11 @@ How long Fly keeps backups wasn't found, and no restore has been tried. `fly mpg
 - [`0018`](../architecture/decisions/0018-hosting-moves-to-fly-io-with-managed-postgres-and-tigris.md): the decision to move
 - [`0025`](../architecture/decisions/0025-spend-on-fly-is-watched-by-hand-each-week-and-bounded-by-limits.md): the spend check, in place of point 9 of 0018
 - [`hosting-on-fly-io`](../architecture/decisions/spikes/hosting-on-fly-io.md): what the spike checked on the platform
-- [`0016`](../architecture/decisions/0016-terrain-requests-never-wait-for-elevation-and-tiles-draw-on-threads-of-their-own.md): the "being prepared" answer follow-up 2 touches
+- [`0027`](../architecture/decisions/0027-the-web-app-never-fetches-elevation-and-a-deploy-checks-the-mirror-first.md): the web app never fetches, and a deploy checks the mirror first
 
 ## Migration note
 
-- Follow-up 2 → one decision record, and the area doc for hosting when WS9 writes it
-- Follow-ups 1 and 3 to 6 → `docs/plans/v1-england.md`, WS8, as each is done; corrections to commands → `infra/README.md`
+- Follow-ups 1 to 6 → `docs/plans/v1-england.md`, WS8, as each is done; corrections to commands → `infra/README.md`
 - Follow-up 7 → `infra/README.md` where a step changes, or a decision record for the database roles
 - Follow-up 8 → `infra/README.md`, "Rolling back"
 - Critical context → `infra/README.md` and the hosting area doc

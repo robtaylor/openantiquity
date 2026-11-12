@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -345,3 +346,43 @@ def test_meta_still_answers_when_the_overview_cannot_be_read(
     }
     # The mirror could still be listed.
     assert response.json()["terrain"]["mirrored_tiles"] == len(TILES) - 1
+
+
+def test_a_mirror_that_adds_no_tiles_says_when_what_it_lacks_changes(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """On Fly the web app can't fetch, so a tile gone from the bucket is gone until a job adds it."""
+    for name in ("SU16nw", "SU16ne"):
+        write_source_tile(tmp_path / "src", name)
+    filler = local_mirror(tmp_path)
+    filler.ensure("SU16nw")
+    now = [0.0]
+    overview = Overview(
+        local_mirror(tmp_path, fetchers=[]),
+        NationalStore(LocalFolder(tmp_path / "national")),
+        refresh_s=60,
+        clock=lambda: now[0],
+    )
+
+    with caplog.at_level(logging.INFO, logger="fieldclub.terrain.overview"):
+        assert overview.mirrored() == frozenset({"SU16nw"})
+        now[0] = 61.0
+        overview.mirrored()
+        assert caplog.text.count("The mirror lacks 1 of 2 tiles") == 1, "said again though nothing changed"
+        assert "SU16ne" in caplog.text
+        filler.ensure("SU16ne")
+        now[0] = 122.0
+        overview.mirrored()
+
+    assert "The mirror holds every tile again" in caplog.text
+
+
+def test_a_mirror_that_fetches_what_it_lacks_says_nothing(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    for name in ("SU16nw", "SU16ne"):
+        write_source_tile(tmp_path / "src", name)
+    overview = Overview(local_mirror(tmp_path), NationalStore(LocalFolder(tmp_path / "national")))
+
+    assert overview.mirrored() == frozenset()
+    assert "lacks" not in caplog.text

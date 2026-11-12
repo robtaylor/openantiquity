@@ -61,6 +61,8 @@ For whoever runs the service, as it moves to Fly.io (Decision 0018):
 - `FIELDCLUB_REDIRECT_HOSTS` lists the site's other names. A request for one is answered 308 with the same path on `FIELDCLUB_PUBLIC_URL`.
 - `fieldclub-jobs due` deletes old sign-ins, then runs whichever of the channel scan and the source refresh is due, for a scheduler that can only start it every hour.
 - `FIELDCLUB_TERRAIN_API_FETCH=false` stops the API adding tiles to the mirror, for a web app that holds no supply login: a tile it lacks is answered `elevation_unavailable` without writing anything.
+- Terrain tiles draw on Fly. GDAL was told where the bucket is on one thread only, and tiles are drawn on others, so every tile failed there. The setting now reaches every thread.
+- A deploy checks the elevation mirror before it replaces anything (`fieldclub-release`, Decision 0027): every tile of the catalogue is there and one can be read as a map tile reads it. `FIELDCLUB_TERRAIN_CHECK_ALLOW_MISSING` lets a deploy through with tiles missing. A server that can't add tiles says in its log which ones the mirror lacks.
 - On Fly a machine draws four tiles at once and keeps 16 waiting, inside its soft limit of 20 requests, so a burst of uncached tiles is answered `tiles_busy` before it can hold every request slot. The jobs app is no longer given a session key.
 - The settings refuse a mirror and national overview folder that are the same or one inside the other, and an overview build removes only its own build files.
 - A misnamed or missing bucket is now an error at the first read or write, instead of an empty folder or an elevation lock that waits and then says "being prepared".

@@ -122,7 +122,9 @@ fly deploy --no-public-ips --flycast --image-label "$(git rev-parse HEAD)"
 fly scale count 3 --region lhr --app openantiquity
 ```
 
-`fly deploy` reads `fly.toml`, builds the image on Fly's builder (`--remote-only` is the default), pushes it as `registry.fly.io/openantiquity:<commit>`, runs the release command `python -m fieldclub.db` on a machine of its own and then starts the service ([`fly deploy`](https://docs.fly.io/flyctl/deploy/), [`[deploy]`](https://docs.fly.io/reference/configuration)). The schema command creates the extensions, the tables and the extras, and is safe to run again. Until the first release there is no migration history (`docs/ARCHITECTURE.md`, Conventions), so a change to an existing table needs the database rebuilt or Alembic, which starts at the first public release.
+`fly deploy` reads `fly.toml`, builds the image on Fly's builder (`--remote-only` is the default), pushes it as `registry.fly.io/openantiquity:<commit>`, runs the release command `fieldclub-release` on a machine of its own and then starts the service ([`fly deploy`](https://docs.fly.io/flyctl/deploy/), [`[deploy]`](https://docs.fly.io/reference/configuration)). The schema command creates the extensions, the tables and the extras, and is safe to run again. Until the first release there is no migration history (`docs/ARCHITECTURE.md`, Conventions), so a change to an existing table needs the database rebuilt or Alembic, which starts at the first public release.
+
+The release command checks the elevation mirror before it creates the schema (`fieldclub-terrain check`, Decision 0027): every tile of the catalogue is in the bucket, and GDAL reads one on a thread of its own, as a map tile is drawn. It needs the web app's key to read the elevation bucket, so finish step 3 first. A fresh setup has no mirror at this step: for its first deploy add `FIELDCLUB_TERRAIN_CHECK_ALLOW_MISSING = "5877"` to `[env]` in `fly.toml`, and take it out once step 8 has filled the mirror.
 
 The first deploy makes two machines (`--ha` is on by default) and `fly scale count` makes the third. One deploy during the spike failed after the image was pushed, with an internal error from Fly's API, and worked when run again. On 2026-11-12 one `fly machine run` was refused with a 408 from the same API, left nothing behind and worked when run again.
 
@@ -249,7 +251,7 @@ A deploy token is limited to one app ([access tokens](https://docs.fly.io/securi
 ## A deploy
 
 1. Merge to `main`. CI runs both check suites, the docs lint, the scripts' tests and shellcheck, the Terraform checks while it stays, and an image build that is started and stopped as a Fly machine would be.
-2. In GitHub, Actions, "Deploy", run the workflow on `main`. It runs `flyctl deploy --remote-only --no-public-ips --image-label <commit>`, which builds the image, runs the schema command once and moves the three machines onto the new image one at a time (`strategy = "rolling"`).
+2. In GitHub, Actions, "Deploy", run the workflow on `main`. It runs `flyctl deploy --remote-only --no-public-ips --image-label <commit>`, which builds the image, runs the release command once and moves the three machines onto the new image one at a time (`strategy = "rolling"`). The release command checks the elevation mirror, then creates what the schema lacks.
 3. Build the jobs app's image of the same commit and move the hourly machine to it, from a clean checkout of that commit, with the commands the run's summary prints:
 
    ```
@@ -258,6 +260,8 @@ A deploy token is limited to one app ([access tokens](https://docs.fly.io/securi
    ```
 
    `schedule` updates the machine named `due` in place (`fly machine update --image`, [flags](https://docs.fly.io/flyctl/machine-update/)) without starting it. It refuses while `due` is running, because updating a started machine stops it; run it again once `fly machine list --app openantiquity-jobs` shows it stopped. The update keeps the machine's command and time limit; to change those, destroy `due` and run `schedule` again. Until it is run, the hourly jobs run the image before, which still works against the schema, because the schema command only adds what is missing.
+
+If the mirror check fails, the deploy stops before anything is replaced, and the release machine's log says which tiles are missing or why one couldn't be read (`fly logs --app openantiquity`). Add missing tiles with `uv run infra/fly_jobs.py mirror 1 2 3 4`, which fetches only what the bucket lacks, and deploy again. To deploy knowing tiles are missing, set `FIELDCLUB_TERRAIN_CHECK_ALLOW_MISSING` in `fly.toml` to their number. To deploy with no check at all, as when Tigris can't be listed, set `release_command` back to `python -m fieldclub.db` for that deploy.
 
 A deploy by hand is the same command as the workflow's, from the repository root: `fly deploy --no-public-ips --image-label "$(git rev-parse HEAD)"`.
 
@@ -273,7 +277,7 @@ fly deploy --no-public-ips --image registry.fly.io/openantiquity:<previous commi
 uv run infra/fly_jobs.py --commit <previous commit> schedule
 ```
 
-The jobs app's image of that commit is still in its repository if `build` ran for it; otherwise check the commit out and run `build` first. A schema change can't be rolled back this way. The schema command only adds what is missing, so an older image runs against a newer schema as long as nothing it uses was removed.
+The jobs app's image of that commit is still in its repository if `build` ran for it; otherwise check the commit out and run `build` first. The image has to hold the release command that `fly.toml` names. Images built before `fieldclub-release` was added on 2026-11-12, `85ad12a` among them, don't: deploy one of those from a checkout of its own commit. A schema change can't be rolled back this way. The schema command only adds what is missing, so an older image runs against a newer schema as long as nothing it uses was removed.
 
 Managed Postgres keeps backups. `fly mpg backup list` lists them and `fly mpg restore <cluster-id> --backup-id <id>`, or `--pitr-time <RFC 3339 time>`, restores one into a new cluster ([`fly mpg restore`](https://docs.fly.io/flyctl/mpg-restore/)). The original is left alone. Attach the new cluster to both apps and deploy. The spike's cluster took one every hour without being asked: a full backup a day, a differential every six hours and incrementals between. How long Fly keeps them wasn't found, and no restore has been tried; check both before relying on them.
 
@@ -283,6 +287,7 @@ Managed Postgres keeps backups. `fly mpg backup list` lists them and `fly mpg re
 - **The web app's machines.** `fly status --app openantiquity` and the dashboard's metrics: memory, CPU and how often machines are running. A machine that stays running with few requests is held by open event streams. Steady CPU at the shared baseline means Fly is throttling it (see [Sizing](#sizing)).
 - **The database.** The cluster's page in the dashboard: CPU, memory, disk and connections. The Basic plan allows 112 connections.
 - **The jobs.** `fly logs --app openantiquity-jobs`. Every job logs a one-line summary and exits non-zero when anything failed. Check the hourly machine's last runs after each deploy.
+- **The mirror.** `/api/v1/meta` gives `catalogue_tiles` and `mirrored_tiles`, which should be equal. A web machine logs `The mirror lacks` at `ERROR`, with the number and the names, when they aren't.
 - **The tile cache's rule.** `fly ssh console --app openantiquity -C "python /app/jobs/cache_lifecycle.py --check"` exits 1 if the rule has gone.
 - **Errors.** `fly logs --app openantiquity`, for lines at `ERROR`.
 
@@ -440,6 +445,7 @@ Each of these was written from documentation or inferred, and none was run:
 - Checked against flyctl 0.5.7 and the spike's app on 2026-11-12, so no longer open: the flags of `fly deploy`, `fly machine run`, `fly machine update`, `fly mpg create`, `fly mpg attach`, `fly mpg databases extensions enable` and `fly storage create`; the field names `name` in `fly secrets list --json` and `id`, `name` and `state` in `fly machine list --json`; how `fly secrets set NAME=-` treats a value; that `fly ssh console -C` runs with the app's secrets in its environment; and that Defra's server accepts two connections at once from a Fly machine in London, reading at 17 to 22 MiB a second each.
 - Checked on the jobs app on 2026-11-12, during the copy from Google, so no longer open: `fly machine run` passes the flags after `--` to the command; a machine started with `--rm` and `--restart no` is removed when its command exits; a secret set with `--stage` is in the environment of the next machine started; and the key `fly storage create` made for the jobs app lists, writes and reads `openantiquity-elevation`.
 - Checked on 2026-11-12 while steps 2 to 7 were carried out, so no longer open: the release command's machine gets `[env]` and the secrets, and connects to the database's direct address; `fly deploy --build-only --push --app openantiquity-jobs --image-label <commit>` pushes to `registry.fly.io/openantiquity-jobs:<commit>` and starts nothing; a job under `timeout` and `tini` exits and its machine is removed when the job ends by itself; the jobs start without a session key; Tigris accepts boto3's lifecycle request and gives the rule back; and Tigris takes the national overview, 3.08 GB, as a multipart upload.
+- Found on the web app on 2026-11-12 and fixed: no terrain tile drew, though the mirror's listing was whole. GDAL had the Tigris endpoint only on the thread that set it, and tiles are drawn on others. The release command now reads a tile that way before every deploy.
 - Still to run for the first time: `fly machine update --schedule` and `--skip-start` on a scheduled machine, and `fly releases --image`.
 - That the web app's deploy token can't push to the jobs app's repository.
 - That `fly deploy --no-public-ips` on a later deploy leaves the addresses step 11 allocated alone, as "Do not allocate any new public IP addresses" suggests.

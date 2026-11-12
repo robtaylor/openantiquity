@@ -24,6 +24,7 @@ import contextlib
 import hashlib
 import http.server
 import io
+import os
 import threading
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
@@ -34,6 +35,8 @@ from typing import Any, BinaryIO
 
 import pytest
 from botocore.exceptions import ClientError
+
+from fieldclub.terrain.blobs import gdal_s3_options
 
 
 @dataclass
@@ -288,3 +291,6 @@ def serve_for_gdal(s3: FakeS3, monkeypatch: pytest.MonkeyPatch) -> Iterator[str]
     finally:
         server.shutdown()
         server.server_close()
+        # What the folders put in the process's environment for GDAL goes with the endpoint.
+        for name in gdal_s3_options({"AWS_ENDPOINT_URL_S3": endpoint}):
+            os.environ.pop(name, None)

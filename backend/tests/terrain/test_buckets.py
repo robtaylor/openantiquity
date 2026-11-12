@@ -8,9 +8,12 @@ does in production.
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 import uuid
+from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -21,7 +24,14 @@ import rasterio
 
 from fieldclub.errors import DataIntegrityError
 from fieldclub.storage import S3Storage, StorageNotFoundError
-from fieldclub.terrain.blobs import LocalFolder, LockTimeoutError, ObjectLock, S3Folder, gdal_s3_options
+from fieldclub.terrain.blobs import (
+    LocalFolder,
+    LockTimeoutError,
+    ObjectLock,
+    S3Folder,
+    configure_gdal_for_s3,
+    gdal_s3_options,
+)
 from fieldclub.terrain.catalogue import SourceTile
 from fieldclub.terrain.grid import tile_at
 from fieldclub.terrain.mirror import Fetched, LocalSourceFetcher, Mirror, S3MirrorStore
@@ -445,6 +455,60 @@ def test_gdal_is_given_the_endpoint_and_no_secret(endpoint: str, options: dict[s
     given = gdal_s3_options(environ)
     assert given == options
     assert "tsec_test" not in "".join(given.values())
+
+
+GDAL_S3_OPTIONS = ("AWS_S3_ENDPOINT", "AWS_HTTPS", "AWS_VIRTUAL_HOSTING")
+
+
+@pytest.fixture
+def gdal_environment() -> Iterator[None]:
+    """Take back what `configure_gdal_for_s3` writes to the process's environment in a test."""
+    before = {name: os.environ.get(name) for name in GDAL_S3_OPTIONS}
+    yield
+    for name, value in before.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+
+
+def gdal_sees_on_another_thread() -> dict[str, str | None]:
+    """What GDAL reads for its S3 options on a thread that configured nothing itself."""
+    from rasterio.env import get_gdal_config
+
+    with ThreadPoolExecutor(max_workers=1) as other:
+        return other.submit(
+            lambda: {name: get_gdal_config(name, normalize=False) for name in GDAL_S3_OPTIONS}
+        ).result()
+
+
+@pytest.mark.usefixtures("gdal_environment")
+def test_gdal_is_given_the_endpoint_on_every_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tiles are drawn on threads other than the one that made the folder.
+
+    rasterio's `set_gdal_config` reaches only the thread that calls it. On Fly
+    the folder was made on one thread, and a tile drawn on another asked
+    amazonaws.com for a Tigris bucket.
+    """
+    monkeypatch.setenv("AWS_ENDPOINT_URL_S3", "https://fly.storage.tigris.dev")
+    with ThreadPoolExecutor(max_workers=1) as maker:
+        maker.submit(configure_gdal_for_s3).result()
+
+    assert gdal_sees_on_another_thread() == {
+        "AWS_S3_ENDPOINT": "fly.storage.tigris.dev",
+        "AWS_HTTPS": "YES",
+        "AWS_VIRTUAL_HOSTING": "FALSE",
+    }
+
+
+@pytest.mark.usefixtures("gdal_environment")
+def test_gdal_keeps_its_own_settings_when_there_is_no_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("AWS_ENDPOINT_URL_S3", raising=False)
+    monkeypatch.setenv("AWS_S3_ENDPOINT", "minio.example:9000")
+
+    configure_gdal_for_s3()
+
+    assert gdal_sees_on_another_thread()["AWS_S3_ENDPOINT"] == "minio.example:9000"
 
 
 def test_gdal_can_t_be_given_an_endpoint_with_a_path() -> None:

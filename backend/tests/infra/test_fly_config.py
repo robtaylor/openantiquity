@@ -139,8 +139,11 @@ def test_health_checks_ask_the_route_the_application_has() -> None:
     assert check["path"] == "/healthz"
 
 
-def test_the_schema_is_made_once_per_release() -> None:
-    assert WEB["deploy"]["release_command"] == "python -m fieldclub.db"
+def test_a_release_checks_the_mirror_and_makes_the_schema_once() -> None:
+    scripts = tomllib.loads((REPO_ROOT / "backend" / "pyproject.toml").read_text())["project"]["scripts"]
+
+    assert WEB["deploy"]["release_command"] == "fieldclub-release"
+    assert scripts["fieldclub-release"] == "fieldclub.release:main"
 
 
 def test_the_shutdown_fits_inside_fly_s_wait() -> None:

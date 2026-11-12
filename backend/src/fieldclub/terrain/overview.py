@@ -28,7 +28,7 @@ from collections.abc import Callable
 
 import numpy as np
 
-from fieldclub.terrain.catalogue import TILE_METRES, Catalogue, tile_origin
+from fieldclub.terrain.catalogue import TILE_METRES, Catalogue, shorten, tile_origin
 from fieldclub.terrain.grid import nominal_ground_resolution, window_for
 from fieldclub.terrain.mirror import Mirror
 from fieldclub.terrain.national import NATIONAL_FORMAT, RESOLUTION_M, RESOLUTIONS, Manifest, NationalStore
@@ -164,6 +164,8 @@ class Overview:
         # The mirror's last good listing, or None before one has succeeded.
         self._mirrored: frozenset[str] | None = None
         self._listed = -float("inf")
+        # The catalogue tiles the last listing lacked, for a mirror that adds none itself.
+        self._lacking: frozenset[str] = frozenset()
 
     def snapshot(self) -> OverviewSnapshot:
         with self._guard:
@@ -208,7 +210,32 @@ class Overview:
                     self._mirrored = frozenset(self.mirror.store.names())
                 except Exception:
                     logger.exception("Couldn't list the mirror; trying again in %.0f s", self.refresh_s)
+                else:
+                    self._say_what_is_lacking(self._mirrored)
             return self._mirrored
+
+    def _say_what_is_lacking(self, held: frozenset[str]) -> None:
+        """Log, when it changes, which catalogue tiles a mirror that adds none doesn't hold.
+
+        A mirror with a fetcher adds a missing tile on first use, so a gap
+        there is ordinary. One with none, as the web app on Fly has, draws
+        nothing over a missing tile until a job adds it.
+        """
+        if self.mirror.adds_tiles:
+            return
+        lacking = frozenset(self.mirror.catalogue.missing_from(held))
+        if lacking == self._lacking:
+            return
+        self._lacking = lacking
+        if lacking:
+            logger.error(
+                "The mirror lacks %d of %d tiles, and this process adds none: %s",
+                len(lacking),
+                len(self.mirror.catalogue),
+                shorten(sorted(lacking)),
+            )
+        else:
+            logger.info("The mirror holds every tile again")
 
     def _mirror_names(self) -> frozenset[str]:
         """What a snapshot draws from the mirror: none of it until a listing has succeeded."""

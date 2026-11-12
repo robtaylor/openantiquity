@@ -49,6 +49,7 @@ from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import TextIO
 
+import rasterio
 from sqlalchemy.exc import OperationalError
 
 from fieldclub.config import get_settings
@@ -58,7 +59,8 @@ from fieldclub.schemas import common as schemas_common
 from fieldclub.schemas.common import BBox
 from fieldclub.terrain import years
 from fieldclub.terrain.attribution import register_sources
-from fieldclub.terrain.catalogue import SourceTile
+from fieldclub.terrain.blobs import configure_gdal_for_s3
+from fieldclub.terrain.catalogue import SourceTile, shorten
 from fieldclub.terrain.errors import CredentialsMissingError, SupplyRefusedError
 from fieldclub.terrain.grid import tiles_in
 from fieldclub.terrain.national import Builder
@@ -306,8 +308,10 @@ def cmd_mirror(terrain: Terrain, args: argparse.Namespace) -> int:
         max_failures_in_a_row=MIRROR_FAILURES_IN_A_ROW,
     )
     if failed:
-        shown = ", ".join(failed[:20]) + (" ..." if len(failed) > 20 else "")
-        print(f"{len(failed)} tiles failed or weren't tried: {shown}. Run the same command again to retry.")
+        print(
+            f"{len(failed)} tiles failed or weren't tried: {shorten(failed)}. "
+            "Run the same command again to retry."
+        )
         return 1
     print(f"added {len(missing)} tiles, each read back and checked before it was published")
     return 0
@@ -405,6 +409,52 @@ def cmd_info(terrain: Terrain, args: argparse.Namespace) -> int:
     return 0
 
 
+def read_a_pixel(path: str) -> None:
+    with rasterio.open(path) as dataset:
+        dataset.read(1, window=((0, 1), (0, 1)))
+
+
+def cmd_check(terrain: Terrain, args: argparse.Namespace) -> int:
+    """Whether the mirror holds the tiles this code expects and one can be read. It only looks.
+
+    For a deploy to ask before it replaces anything (`fieldclub.release`). A
+    tile is added with `mirror`, never here.
+    """
+    allowed = get_settings().terrain_check_allow_missing
+    catalogue = terrain.catalogue
+    held = set(terrain.mirror.store.names())
+    missing = catalogue.missing_from(held)
+    print(f"mirror       {terrain.mirror.store!r}")
+    print(f"mirrored     {len(catalogue) - len(missing)} of {len(catalogue)} tiles")
+    passed = True
+    if missing:
+        print(f"missing      {len(missing)}: {shorten(missing)}")
+    if len(missing) > allowed:
+        print(
+            f"error: {len(missing)} tiles are missing from the mirror and "
+            f"FIELDCLUB_TERRAIN_CHECK_ALLOW_MISSING allows {allowed}. "
+            "Add them with `fieldclub-terrain mirror`, or raise the setting to go ahead without them.",
+            file=sys.stderr,
+        )
+        passed = False
+    sample = next((tile.name for tile in catalogue if tile.name in held), None)
+    if sample is not None:
+        try:
+            # On a thread that set nothing up itself, as a map tile is drawn.
+            with ThreadPoolExecutor(max_workers=1) as other:
+                other.submit(read_a_pixel, terrain.mirror.store.gdal_path(sample)).result()
+        except Exception as exc:  # the check reports whatever stops a tile being read
+            print(
+                f"error: {sample} is in the mirror but GDAL can't read it on a tile's thread: "
+                f"{type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
+            passed = False
+        else:
+            print(f"read         {sample}, on a thread of its own as a map tile is drawn")
+    return 0 if passed else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="fieldclub-terrain",
@@ -429,6 +479,7 @@ def build_parser() -> argparse.ArgumentParser:
     year.add_argument("--out", help="where to write them; the packaged file by default")
     sub.add_parser("sources", help="write the LIDAR rows of the sources table")
     sub.add_parser("info", help="what the mirror and the overview hold")
+    sub.add_parser("check", help="whether the mirror is whole and readable; a deploy asks first")
     for command in (mirror, national, year):
         command.add_argument(
             "--skip-sources", action="store_true", help="don't write the sources rows (no database here)"
@@ -443,6 +494,7 @@ COMMANDS = {
     "years": cmd_years,
     "sources": cmd_sources,
     "info": cmd_info,
+    "check": cmd_check,
 }
 # The commands that store or show elevation, so need its `sources` rows first.
 STORING = frozenset({"mirror", "national", "years", "sources"})
@@ -463,6 +515,8 @@ def main(argv: list[str] | None = None, *, terrain: Terrain | None = None) -> in
         level=get_settings().log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
     logging.getLogger("paramiko").setLevel(logging.WARNING)
+    # Before any thread is started: GDAL reads these from the process's environment.
+    configure_gdal_for_s3()
     if args.command == "mirror" and sum(map(bool, (args.tiles, args.bbox, args.all))) != 1:
         build_parser().error("mirror takes tile names, or --bbox, or --all")
     if args.command in STORING and not getattr(args, "skip_sources", False):

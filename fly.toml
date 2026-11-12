@@ -24,7 +24,7 @@ kill_timeout = 10
 [deploy]
   # Once per release, before any machine runs the new image. It only adds what
   # is missing, so it is safe to run again (docs/ARCHITECTURE.md, Conventions).
-  release_command = "python -m fieldclub.db"
+  release_command = "fieldclub-release"
   release_command_timeout = "15m"
   strategy = "rolling"
 

@@ -6,6 +6,7 @@ import asyncio
 import json
 import subprocess
 import sys
+import threading
 import types
 from collections.abc import Iterator
 from pathlib import Path
@@ -491,6 +492,52 @@ def test_startup_builds_the_schema_only_when_asked(db: Session, monkeypatch: pyt
     with TestClient(create_app(), base_url=BASE_URL) as client:
         assert client.get("/healthz").status_code == 200
     assert calls == [1]
+
+
+def test_startup_looks_at_a_mirror_it_can_t_add_to(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+    looked = threading.Event()
+    monkeypatch.setattr(main, "_look_at_the_mirror", looked.set)
+
+    with TestClient(create_app(), base_url=BASE_URL) as client:
+        assert client.get("/healthz").status_code == 200
+    assert not looked.is_set(), "a server that fetches missing tiles has nothing to report at start-up"
+
+    monkeypatch.setattr(
+        main, "get_settings", lambda: get_settings().model_copy(update={"terrain_api_fetch": False})
+    )
+    with TestClient(create_app(), base_url=BASE_URL) as client:
+        assert client.get("/healthz").status_code == 200
+    # On a thread of its own, so a slow bucket can't keep the server from answering.
+    assert looked.wait(timeout=5)
+
+
+def test_startup_gives_gdal_its_settings_before_anything_else(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fieldclub.terrain import blobs
+
+    calls: list[int] = []
+    monkeypatch.setattr(blobs, "configure_gdal_for_s3", lambda: calls.append(1))
+
+    with TestClient(create_app(), base_url=BASE_URL) as client:
+        assert client.get("/healthz").status_code == 200
+
+    assert calls == [1]
+
+
+def test_a_mirror_that_can_t_be_looked_at_doesn_t_stop_the_server(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from fieldclub.terrain import service
+
+    def broken() -> object:
+        raise OSError("the bucket is down")
+
+    monkeypatch.setattr(service, "get_terrain", broken)
+
+    main._look_at_the_mirror()
+
+    assert "Couldn't look at the mirror" in caplog.text
 
 
 def test_print_openapi_writes_the_schema_as_json(db: Session, capsys: pytest.CaptureFixture[str]) -> None:

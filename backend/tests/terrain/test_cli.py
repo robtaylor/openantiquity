@@ -8,14 +8,16 @@ import signal
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 import pytest
+import rasterio
 from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from fieldclub.config import DefraSftpSettings
+from fieldclub.config import DefraSftpSettings, get_settings
 from fieldclub.models import Source
 from fieldclub.terrain import cli, sftp
 from fieldclub.terrain.catalogue import SourceTile
@@ -315,3 +317,75 @@ def test_a_command_closes_the_supply_sessions_of_the_terrain_it_built(
     assert cli.main(["mirror", "SU16ne", "--skip-sources"]) == 0
     assert len(opened) == 1
     assert not opened[0].alive, "the session should be closed when the command ends"
+
+
+# --------------------------------------------------------------------------
+# check: what a deploy asks before it goes ahead
+# --------------------------------------------------------------------------
+
+
+def test_check_passes_a_whole_mirror_and_reads_a_tile_off_the_calling_thread(
+    terrain: Terrain, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A map tile is drawn on a thread of its own, and GDAL's settings must reach it there."""
+    for name in NAMES:
+        terrain.mirror.ensure(name)
+    opened_on: list[int] = []
+    real_open = rasterio.open
+
+    def recording_open(*args: Any, **kwargs: Any) -> Any:
+        opened_on.append(threading.get_ident())
+        return real_open(*args, **kwargs)
+
+    monkeypatch.setattr(rasterio, "open", recording_open)
+
+    assert cli.main(["check"], terrain=terrain) == 0
+
+    assert "mirrored     4 of 4 tiles" in capsys.readouterr().out
+    assert opened_on, "no tile was read"
+    assert threading.get_ident() not in opened_on
+
+
+def test_check_fails_a_mirror_that_lacks_a_tile_unless_the_settings_allow_it(
+    terrain: Terrain, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name in NAMES[:3]:
+        terrain.mirror.ensure(name)
+
+    assert cli.main(["check"], terrain=terrain) == 1
+
+    out = capsys.readouterr()
+    assert "mirrored     3 of 4 tiles" in out.out
+    assert "missing      1: SU17se" in out.out
+    assert "FIELDCLUB_TERRAIN_CHECK_ALLOW_MISSING" in out.err
+    # It only looks: nothing was fetched, though this mirror could have.
+    assert terrain.mirror.store.names() == sorted(NAMES[:3])
+
+    allowing = get_settings().model_copy(update={"terrain_check_allow_missing": 1})
+    monkeypatch.setattr(cli, "get_settings", lambda: allowing)
+
+    assert cli.main(["check"], terrain=terrain) == 0
+
+
+def test_check_fails_when_a_mirrored_tile_can_t_be_read(
+    terrain: Terrain, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name in NAMES:
+        terrain.mirror.ensure(name)
+    monkeypatch.setattr(terrain.mirror.store, "gdal_path", lambda name: f"/nowhere/{name}.tif")
+
+    assert cli.main(["check"], terrain=terrain) == 1
+
+    assert "GDAL can't read it" in capsys.readouterr().err
+
+
+def test_every_command_gives_gdal_its_settings_before_it_starts_a_thread(
+    terrain: Terrain, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    order: list[str] = []
+    monkeypatch.setattr(cli, "configure_gdal_for_s3", lambda: order.append("gdal"))
+    monkeypatch.setitem(cli.COMMANDS, "info", lambda terrain, args: order.append("command") or 0)
+
+    assert cli.main(["info"], terrain=terrain) == 0
+
+    assert order == ["gdal", "command"]

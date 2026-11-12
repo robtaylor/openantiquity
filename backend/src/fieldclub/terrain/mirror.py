@@ -307,6 +307,11 @@ class Mirror:
         """The tile's GDAL path if the mirror holds it, without adding it."""
         return self.store.gdal_path(name) if self.has(name) else None
 
+    @property
+    def adds_tiles(self) -> bool:
+        """Whether a missing tile can be fetched here. A mirror with no fetcher only reads its folder."""
+        return bool(self.fetchers)
+
     def ensure(self, name: str, *, retry_failed: bool = False) -> str | None:
         """The tile's GDAL path, adding it to the mirror first if needed. None when no such tile exists.
 
@@ -319,7 +324,7 @@ class Mirror:
             return self.store.gdal_path(tile.name)
         if not retry_failed:
             self._refuse_if_failed(tile.name)
-        if not self.fetchers:
+        if not self.adds_tiles:
             # Before the shared lock, which a process that only reads the folder can't write.
             raise ElevationUnavailableError(f"{tile.name} isn't in the mirror, and this process adds none.")
         with self._tile_lock(tile.name):

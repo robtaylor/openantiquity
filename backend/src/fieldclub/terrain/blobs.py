@@ -356,11 +356,17 @@ def gdal_s3_options(environ: Mapping[str, str]) -> dict[str, str]:
 
 
 def configure_gdal_for_s3() -> None:
-    """Set `gdal_s3_options` for every thread in the process. Safe to call again."""
-    from rasterio.env import set_gdal_config
+    """Put `gdal_s3_options` in the process's environment, where GDAL finds them on every thread.
 
-    for key, value in gdal_s3_options(os.environ).items():
-        set_gdal_config(key, value)
+    rasterio's `set_gdal_config` reaches only the thread that calls it, and
+    tiles are drawn on threads other than the one that made the folder. Each
+    program calls this as it starts, before it has other threads
+    (`main._lifespan`, `terrain.cli.main`). A folder calls it too, which by
+    then changes nothing. Safe to call again.
+    """
+    for name, value in gdal_s3_options(os.environ).items():
+        if os.environ.get(name) != value:
+            os.environ[name] = value
 
 
 def folder(location: str) -> Folder:

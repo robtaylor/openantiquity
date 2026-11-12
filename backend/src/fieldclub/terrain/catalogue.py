@@ -11,7 +11,7 @@ isn't listed has no data, so nothing is fetched for it.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from importlib import resources
@@ -87,6 +87,11 @@ def tile_name_at(easting: float, northing: float) -> str:
     return square.format(compact=True) + quadrant
 
 
+def shorten(names: Sequence[str], *, most: int = 20) -> str:
+    """The first `most` names for a log line or a message, with a mark that there are more."""
+    return ", ".join(names[:most]) + (" ..." if len(names) > most else "")
+
+
 class Catalogue:
     """The tiles of one edition, by name."""
 
@@ -106,6 +111,10 @@ class Catalogue:
 
     def __len__(self) -> int:
         return len(self._tiles)
+
+    def missing_from(self, held: Collection[str]) -> list[str]:
+        """The names of the listed tiles that `held` lacks, sorted."""
+        return sorted(name for name in self._tiles if name not in held)
 
     @property
     def total_bytes(self) -> int:

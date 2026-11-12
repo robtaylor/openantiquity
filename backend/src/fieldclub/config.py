@@ -313,6 +313,9 @@ class Settings(BaseSettings):
     # minute at a time, with a warning and no writes to the mirror's folder.
     # The commands always fetch.
     terrain_api_fetch: bool = True
+    # How many of the catalogue's tiles may be missing from the mirror before
+    # `fieldclub-terrain check`, which a deploy runs first, stops the deploy.
+    terrain_check_allow_missing: int = Field(default=0, ge=0)
     # Terrain map tiles drawn at once in one process, on threads of their own,
     # and how many more may wait for a turn before a tile is answered 503
     # `tiles_busy` (`terrain/workers.py`). Tiles never use the thread pool the

@@ -84,6 +84,9 @@ for _name in (
     "DATABASE_URL",
     # Would point every S3 client and GDAL at a real store.
     "AWS_ENDPOINT_URL_S3",
+    "AWS_S3_ENDPOINT",
+    "AWS_HTTPS",
+    "AWS_VIRTUAL_HOSTING",
     # Set by Cloud Run and by Fly. Settings refuse a test environment there.
     "K_SERVICE",
     "CLOUD_RUN_JOB",

@@ -9,6 +9,7 @@ import os
 import pkgutil
 import socket
 import sys
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -130,11 +131,34 @@ def _operation_id(route: APIRoute) -> str:
     return f"{tag}_{route.name}"
 
 
+def _look_at_the_mirror() -> None:
+    """List the elevation mirror once at start-up. It never stops the server.
+
+    A server that can't add tiles then says in the log from the start which
+    tiles the mirror lacks (`terrain/overview.py`). It runs on a thread of its
+    own, so a slow bucket can't keep the server from answering.
+    """
+    # Imported here, so that importing this module alone loads no GDAL.
+    from fieldclub.terrain import service
+
+    try:
+        service.get_terrain().overview.mirrored()
+    except Exception:
+        logger.exception("Couldn't look at the mirror at start-up")
+
+
 @asynccontextmanager
 async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
+    # Imported here, so that importing this module alone loads no GDAL.
+    from fieldclub.terrain.blobs import configure_gdal_for_s3
+
     settings = get_settings()
+    # Before any other thread is started: GDAL reads these from the process's environment.
+    configure_gdal_for_s3()
     if settings.should_create_schema:
         await run_in_threadpool(create_schema)
+    if not settings.terrain_api_fetch:
+        threading.Thread(target=_look_at_the_mirror, name="mirror-look", daemon=True).start()
     try:
         yield
     finally:
