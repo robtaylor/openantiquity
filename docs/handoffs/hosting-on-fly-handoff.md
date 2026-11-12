@@ -1,4 +1,4 @@
-# Handoff — Hosting on Fly.io (answering on openantiquity.org, with OpenStreetMap sign-in)
+# Handoff — Hosting on Fly.io (answering on openantiquity.org, with OpenStreetMap and Google sign-in)
 
 **Created:** 2026-11-12
 **Working tree:** clean
@@ -28,7 +28,7 @@ cd backend && uv run pytest -q tests/infra tests/test_config.py tests/test_stora
 fly apps list --org openantiquity
 # Expect: openantiquity and openantiquity-jobs alone
 fly machine list --app openantiquity
-# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit e7c0794 or later
+# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit d746298 or later
 fly ips list --app openantiquity
 # Expect: the private address, the shared IPv4 address 66.241.124.216 and the IPv6 address 2a09:8280:1::1fe:8e38:0
 fly machine list --app openantiquity-jobs
@@ -37,7 +37,7 @@ fly mpg list --org openantiquity
 # Expect: the cluster openantiquity, d2gznoqz2n8opkm8, ready, attached to both apps
 fly storage list --org openantiquity
 # Expect: openantiquity-elevation, openantiquity-cache and openantiquity-photos
-uv run infra/fly_jobs.py --commit e7c0794710157b5672fdf1b80c1424c0ec89adc4 run fieldclub-terrain info
+uv run infra/fly_jobs.py --commit d74629802b114cc251891a22cdb91619cfde8b7c run fieldclub-terrain info
 fly logs --app openantiquity-jobs --no-tail | grep -e mirrored -e overview
 # Expect: mirrored 5877 tiles (100.00%), and overview c2a8a0e49f2f, 5877 tiles
 ```
@@ -61,11 +61,15 @@ The last pair names the jobs image that exists. `fly_jobs.py` looks for the imag
 
 ### 1. Read the first nightly refresh (minutes, on 2026-11-13)
 
-The hourly machine `due` was made on 2026-11-12 with its 10 GB volume, from the jobs image of commit `e7c0794`, and its first run found nothing due. Its 03:00 UTC run on 2026-11-13 is the first refresh of every bulk source from Fly, 34 connectors, under a six-hour limit. Read it with `fly logs --app openantiquity-jobs`, or ask the database for the runs, and run by hand any source that failed: `uv run infra/fly_jobs.py --commit e7c0794710157b5672fdf1b80c1424c0ec89adc4 ingest <key>`. Then look at `fly volumes list --app openantiquity-jobs` for how much of the volume the downloads took.
+The hourly machine `due` was made on 2026-11-12 with its 10 GB volume, and was moved in place to the jobs image of commit `d746298` later that day. Its first run found nothing due. Its 03:00 UTC run on 2026-11-13 is the first refresh of every bulk source from Fly, 34 connectors, under a six-hour limit. Read it with `fly logs --app openantiquity-jobs`, or ask the database for the runs, and run by hand any source that failed: `uv run infra/fly_jobs.py --commit d74629802b114cc251891a22cdb91619cfde8b7c ingest <key>`. Then look at `fly volumes list --app openantiquity-jobs` for how much of the volume the downloads took.
 
-### 2. Try a real sign-in with OpenStreetMap (the owner, minutes)
+### 2. Sign-in: OpenStreetMap works, Google is on and untried the whole way (the owner, minutes)
 
-The owner registered the OpenStreetMap application on 2026-11-12 and kept its id and secret in `.env` as `OSM_AUTH2_ID` and `OSM_AUTH2_SECRET`. Both were piped to the web app's secrets as `FIELDCLUB_OSM_CLIENT_ID` and `FIELDCLUB_OSM_CLIENT_SECRET` by `var/handoff/tools/osm_to_fly.py`, which shows neither, and the web app was deployed. `/api/v1/meta` now gives OpenStreetMap as enabled, `/api/v1/auth/oauth/osm/start` sends the browser to OpenStreetMap with the registered redirect address and the `openid` scope, and OpenStreetMap answers that with its login page. Nobody has yet signed in the whole way: the code exchange, the new account and the welcome step are untried on Fly. If it fails, `fly logs --app openantiquity` has the reason.
+Both providers' ids and secrets are in `.env`, as `OSM_AUTH2_ID`, `OSM_AUTH2_SECRET`, `GOOGLE_OAUTH2_ID` and `GOOGLE_OAUTH2_SECRET`, and were piped to the web app's secrets by `var/handoff/tools/env_to_fly_secrets.py`, which shows none of them.
+
+- **OpenStreetMap.** The owner signed in the whole way on 2026-11-12, and saved a finding.
+- **Google.** The application is in production in a Google project of its own, not `fieldclub-uk`, which is to be deleted. `/api/v1/meta` gives Google as enabled, the start of the sign-in sends the registered redirect address and `openid email profile`, and Google answers with its sign-in page. Nobody has yet signed in with Google the whole way. If it fails, `fly logs --app openantiquity` has the reason, though it keeps only the last minute or two.
+- That first real sign-in found a fault, fixed the same day in `a527988`: "Save finding" on the form of a draft made before signing in did nothing, because the draft was held and only the drafts bar lifted the hold.
 
 The jobs app's Tigris key was put right by the owner the same day: tried from a jobs machine, it lists, reads and writes the elevation bucket and is refused all three on the cache and the photos.
 
@@ -81,7 +85,7 @@ The GitHub environment `production` and a deploy token for the web app alone. Th
 
 The domains were pointed at Fly on 2026-11-12 at the owner's word ("noone will be looking yet"). The site answers on `openantiquity.org` and anyone can look at the map.
 
-- OpenStreetMap sign-in is on since 2026-11-12 (follow-up 2). So anyone with an OpenStreetMap account can now join and post.
+- OpenStreetMap and Google sign-in are on since 2026-11-12 (follow-up 2). So anyone with an account at either can now join and post.
 - The app has no gate. The owner was told on 2026-11-12, and that [`owner-actions.md`](../plans/owner-actions.md) holds a public launch until an operator is named and the terms, the privacy notice and the Online Safety Act assessment exist (WS14 to WS17). A setting that limits sign-up to named accounts was offered and not yet asked for.
 - The other providers and the mail relay are in `owner-actions.md`, WS3.
 
