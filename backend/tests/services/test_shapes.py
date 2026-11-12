@@ -372,15 +372,15 @@ def test_a_closed_shape_that_crosses_itself_is_refused() -> None:
 
 def test_a_placed_point_must_be_within_a_kilometre_of_the_shape() -> None:
     line = shapes.shape_of(path((LON, LAT, CORNER), (LON, LAT + 0.01, CORNER)))
-    shapes.check_gap(line, Point(east_by(shapes.SHAPE_MAX_GAP_M - 5), LAT + 0.005))
+    shapes.check_shape(line.geometry, Point(east_by(shapes.SHAPE_MAX_GAP_M - 5), LAT + 0.005))
     with pytest.raises(ValidationFailedError) as refused:
-        shapes.check_gap(line, Point(east_by(shapes.SHAPE_MAX_GAP_M + 5), LAT + 0.005))
+        shapes.check_shape(line.geometry, Point(east_by(shapes.SHAPE_MAX_GAP_M + 5), LAT + 0.005))
     assert _code(refused) == "outline_too_far"
     # Inside an area is no distance at all.
     k = math.cos(math.radians(LAT))
     ring = [(LON - 0.02 / k, LAT - 0.02), (LON + 0.02 / k, LAT - 0.02), (LON, LAT + 0.02)]
     area = shapes.shape_of(path(*((x, y, CORNER) for x, y in ring), closed=True))
-    shapes.check_gap(area, Point(LON, LAT))
+    shapes.check_shape(area.geometry, Point(LON, LAT))
 
 
 # --------------------------------------------------------------------------
@@ -444,9 +444,9 @@ def test_an_areas_derived_anchor_is_its_centroid_or_a_point_inside() -> None:
 def test_the_nearest_point_on_a_shape_and_the_distance_to_it_are_in_metres() -> None:
     line = shapes.shape_of(path((LON, LAT, CORNER), (LON, LAT + 0.01, CORNER)))
     off = Point(east_by(300), LAT + 0.004)
-    nearest = shapes.nearest_point(line, off)
+    nearest = shapes.nearest_point(line.geometry, off)
     assert (nearest.x, nearest.y) == pytest.approx((LON, LAT + 0.004), abs=1e-7)
-    assert shapes.distance_m(line, off) == pytest.approx(300, abs=0.5)
+    assert shapes.distance_m(line.geometry, off) == pytest.approx(300, abs=0.5)
 
 
 # --------------------------------------------------------------------------

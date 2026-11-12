@@ -57,6 +57,8 @@ SHAPE_MAX_VERTICES = 50_000
 SHAPE_MAX_ACROSS_M = 25_000
 LINE_MAX_LENGTH_M = 600_000
 SHAPE_MAX_GAP_M = 1_000
+# A derived anchor stays where it is while the shape still passes this close.
+ANCHOR_KEEP_M = 25
 
 # Two neighbouring points closer than this in the projected plane would make
 # the curve divide by almost nothing.
@@ -421,7 +423,7 @@ def simplified(geometry: BaseGeometry, tolerance: float) -> BaseGeometry:
 
 
 def shape_of(path: Path) -> Shape:
-    """Draw a path and hold it to the limits, all but the gap to a placed point (`check_gap`).
+    """Draw a path and hold it to the limits, all but the gap to a placed point (`check_shape`).
 
     The vertices are counted before the curve is drawn.
     """
@@ -438,31 +440,30 @@ def shape_of(path: Path) -> Shape:
     return shape
 
 
-def _local_scale(point: Point) -> float:
-    return math.cos(math.radians(point.y))
-
-
-def nearest_point(shape: Shape, point: Point) -> Point:
-    """The point of the shape nearest `point`, measured in a plane scaled for its latitude.
+def nearest_point(geometry: BaseGeometry, point: Point) -> Point:
+    """The point of `geometry` nearest `point`, measured in a plane scaled for its latitude.
 
     Inside an area, that is `point` itself.
     """
-    k = _local_scale(point)
-    scaled = shapely.transform(shape.geometry, lambda xy: xy * np.array([k, 1.0]))
+    k = math.cos(math.radians(point.y))
+    scaled = shapely.transform(geometry, lambda xy: xy * np.array([k, 1.0]))
     _, nearest = nearest_points(Point(point.x * k, point.y), scaled)
     return Point(round(nearest.x / k, DECIMALS), round(nearest.y, DECIMALS))
 
 
-def distance_m(shape: Shape, point: Point) -> float:
-    """How far `point` is from the shape, in metres. Nothing when it is inside an area."""
-    nearest = nearest_point(shape, point)
+def distance_m(geometry: BaseGeometry, point: Point) -> float:
+    """How far `point` is from `geometry`, in metres. Nothing when it is inside an area."""
+    nearest = nearest_point(geometry, point)
     _, _, metres = GEOD.inv(point.x, point.y, nearest.x, nearest.y)
     return float(metres)
 
 
-def check_gap(shape: Shape, placed: Point) -> None:
-    """Refuse a shape that doesn't come within `SHAPE_MAX_GAP_M` of the point the finder placed."""
-    if distance_m(shape, placed) > SHAPE_MAX_GAP_M:
+def check_shape(geometry: BaseGeometry, placed: Point) -> None:
+    """Refuse a shape that doesn't come within `SHAPE_MAX_GAP_M` of the point the finder placed.
+
+    `geometry` is a shape that `shape_of` passed, or an outline saved before paths existed.
+    """
+    if distance_m(geometry, placed) > SHAPE_MAX_GAP_M:
         raise OutlineTooFarError()
 
 

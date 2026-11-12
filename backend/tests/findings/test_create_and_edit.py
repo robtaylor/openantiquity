@@ -136,6 +136,7 @@ def test_the_edges_of_the_british_isles_are_accepted(
 
 
 def test_an_outline_must_be_near_its_point_and_not_too_big(db: Session, make_user: MakeUser) -> None:
+    """An outline is read as an all-corner path, held to the limits in `services.shapes`."""
     author = make_user()
     assert (
         create(db, author, outline=box(LON - 0.001, LAT - 0.001, LON + 0.001, LAT + 0.001)).outline
@@ -145,8 +146,8 @@ def test_an_outline_must_be_near_its_point_and_not_too_big(db: Session, make_use
         create(db, author, outline=box(LON + 0.1, LAT, LON + 0.11, LAT + 0.01))
     assert far.value.code == "outline_too_far"
     with pytest.raises(findings.ValidationFailedError) as big:
-        create(db, author, outline=box(LON - 0.1, LAT - 0.1, LON + 0.1, LAT + 0.1))
-    assert big.value.code == "outline_too_big"
+        create(db, author, outline=box(LON - 0.2, LAT - 0.2, LON + 0.2, LAT + 0.2))
+    assert big.value.code == "shape_too_big"
 
 
 def test_a_public_id_clash_is_retried_by_inserting_again(
@@ -292,7 +293,8 @@ def test_level_changes_follow_decision_0005(db: Session, client_as: ClientAs, ma
     assert lon_lat(finding.location_public) == pytest.approx((LON, LAT))
 
 
-def _ring(points: int, lon: float = LON, lat: float = LAT, radius: float = 0.0005) -> list[list[float]]:
+def _ring(points: int, lon: float = LON, lat: float = LAT, radius: float = 0.001) -> list[list[float]]:
+    # Wide enough that 2,000 corners stay the 1e-6 degrees apart a path needs (`shapes.read_path`).
     import math
 
     ring = [

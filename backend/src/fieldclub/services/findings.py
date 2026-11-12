@@ -65,6 +65,7 @@ from fieldclub.models import (
     Evidence,
     EvidenceVote,
     Finding,
+    FindingShapeChange,
     Follow,
     Media,
     Observation,
@@ -74,7 +75,7 @@ from fieldclub.models import (
 )
 from fieldclub.models.common import point_lon_lat, to_db_geometry
 from fieldclub.schemas.common import cursor_int, decode_cursor, int_from_cursor, is_bbox, paginate, web_url
-from fieldclub.services import activity, geo, ids, reputation, sensitivity, text_positions
+from fieldclub.services import activity, geo, ids, reputation, sensitivity, shapes, text_positions
 from fieldclub.services.confidence import (
     SECOND_LOOK_CODES,
     VERIFIER_ROLES,
@@ -102,6 +103,7 @@ from fieldclub.vocab import (
     Relation,
     Role,
     Sensitivity,
+    ShapeChangeKind,
     Stance,
     Tier,
     tier_rank,
@@ -214,9 +216,9 @@ BRITISH_ISLES = Polygon(
 )
 assert BRITISH_ISLES.is_valid, "the British Isles outline crosses itself"
 
-# An outline must be near its point and no bigger than a large hillfort's field system.
-OUTLINE_MAX_SPAN_DEG = 0.05
-OUTLINE_MAX_GAP_DEG = 0.01
+# The types an outline saved before paths existed may have. A request's
+# `outline` must now be a LineString or a one-ring Polygon
+# (`shapes.path_from_outline`), and the limits are in `services.shapes`.
 OUTLINE_TYPES = ("Polygon", "MultiPolygon", "LineString", "MultiLineString")
 
 
@@ -236,18 +238,19 @@ def _corners(geometry: BaseGeometry) -> list[tuple[float, float]]:
     return [(min_lon, min_lat), (min_lon, max_lat), (max_lon, min_lat), (max_lon, max_lat)]
 
 
-def check_outline(outline: BaseGeometry, point: Point) -> None:
-    """An outline must be inside the British Isles, near its point, and of a sensible size."""
-    check_in_british_isles(outline)
-    min_lon, min_lat, max_lon, max_lat = outline.bounds
-    if max(max_lon - min_lon, max_lat - min_lat) > OUTLINE_MAX_SPAN_DEG:
-        raise ValidationFailedError(
-            "An outline can be at most a few kilometres across.", code="outline_too_big"
-        )
-    if outline.distance(point) > OUTLINE_MAX_GAP_DEG:
-        raise ValidationFailedError(
-            "The outline must be drawn round the marked point.", code="outline_too_far"
-        )
+class LocationRequiredError(ValidationFailedError):
+    code = "location_required"
+    message = "Mark the point, or draw a line or shape for the server to place it on."
+
+
+class PathRevisionRequiredError(ValidationFailedError):
+    code = "path_revision_required"
+    message = "A change to the shape says which `path_revision` it started from."
+
+
+class ShapeChangedError(ConflictError):
+    code = "shape_changed"
+    message = "The shape was changed somewhere else. Reload the finding and make your change again."
 
 
 # --------------------------------------------------------------------------
@@ -580,6 +583,130 @@ def current_assessment(finding: Finding) -> Assessment:
 
 
 # --------------------------------------------------------------------------
+# Shapes
+# --------------------------------------------------------------------------
+
+
+def shape_from_request(path: shapes.Path | None, outline: BaseGeometry | None) -> shapes.Shape | None:
+    """The shape a request asks for, held to the limits.
+
+    That is its `path`, or its `outline` read as an all-corner path.
+    """
+    if path is not None and outline is not None:
+        raise shapes.OutlineAndPathError()
+    if outline is not None:
+        as_path = shapes.path_from_outline(outline)
+        if as_path is None:
+            raise shapes.OutlineNotAPathError()
+        # Checked as a path from a request is, for points on top of each other.
+        path = shapes.read_path(as_path.to_json())
+    return shapes.shape_of(path) if path is not None else None
+
+
+def stored_path(finding: Finding) -> shapes.Path | None:
+    """The finding's path. For an outline saved before paths, the all-corner path it is, if it is one.
+
+    None for a finding without a shape, and for an old outline that is
+    several parts or has holes, which can be replaced but not changed.
+    """
+    if finding.path is not None:
+        return shapes.read_path(finding.path)
+    if finding.outline is not None:
+        return shapes.path_from_outline(to_shape(finding.outline))
+    return None
+
+
+def _shape_columns(shape: shapes.Shape | None) -> dict[str, Any]:
+    """The columns that hold a shape, for a new finding or an edit. All None without one."""
+    if shape is None:
+        return dict.fromkeys(
+            ("path", "outline", "outline_mid", "outline_low", "shape_kind", "shape_length_m")
+        )
+    return {
+        "path": shape.path.to_json(),
+        "outline": to_db_geometry(shape.geometry),
+        "outline_mid": to_db_geometry(shape.mid),
+        "outline_low": to_db_geometry(shape.low),
+        "shape_kind": shape.kind.value,
+        "shape_length_m": shape.length_m,
+    }
+
+
+def _check_revision(finding: Finding, revision: int | None) -> None:
+    """Refuse a change to the shape that didn't start from the shape as it is now. Hold the lock."""
+    if revision is None:
+        raise PathRevisionRequiredError()
+    if revision != finding.shape_revision:
+        raise ShapeChangedError()
+
+
+def _classify(finding: Finding, old: shapes.Path | None, new: shapes.Shape | None) -> ShapeChangeKind | None:
+    """`shapes.classify_change`, knowing that an old outline with no path is still a shape."""
+    if old is None and finding.outline is not None:
+        return ShapeChangeKind.RESHAPED if new is not None else ShapeChangeKind.REMOVED
+    return shapes.classify_change(old, new.path if new is not None else None)
+
+
+def _anchor_for(finding: Finding, shape: shapes.Shape | None, location: Point, *, placed: bool) -> Point:
+    """Where the anchor goes when the shape changes.
+
+    A point the finder places now, or placed before, never moves by itself:
+    the shape must come within `shapes.SHAPE_MAX_GAP_M` of it. A point the
+    server chose stays while the shape passes within `shapes.ANCHOR_KEEP_M`,
+    so extending a line never moves it, and otherwise moves to the point of
+    the new shape nearest where it was, never to the new middle, which would
+    leave a trail of squares along a restricted line. Removing the shape
+    leaves the point where it is.
+    """
+    if shape is None:
+        return location
+    if placed or not finding.location_derived:
+        shapes.check_shape(shape.geometry, location)
+        return location
+    if shapes.distance_m(shape.geometry, location) <= shapes.ANCHOR_KEEP_M:
+        return location
+    return shapes.nearest_point(shape.geometry, location)
+
+
+def _record_shape_change(
+    db: Session,
+    finding: Finding,
+    actor: User,
+    kind: ShapeChangeKind,
+    old: shapes.Path | None,
+    new: shapes.Shape | None,
+) -> FindingShapeChange:
+    """Write the change row for the revision this change makes. Call it before storing the new shape."""
+    length_before = finding.shape_length_m
+    if length_before is None and finding.outline is not None:
+        # An outline saved before paths was never measured.
+        length_before = shapes.length_m(to_shape(finding.outline))
+    added_length: float | None = None
+    added_view: dict[str, float] | None = None
+    if kind is ShapeChangeKind.EXTENDED:
+        assert old is not None, "an extension extends a path"
+        assert new is not None, "an extension leaves a shape"
+        assert length_before is not None, "a path that was extended was measured"
+        added_length = max(0.0, new.length_m - length_before)
+        added_view = shapes.added_view(old, new.path)
+    row = FindingShapeChange(
+        finding_id=finding.id,
+        user_id=actor.id,
+        revision=finding.shape_revision + 1,
+        kind=kind.value,
+        points_before=len(old.points) if old is not None else 0,
+        points_after=len(new.path.points) if new is not None else 0,
+        length_before_m=length_before,
+        length_after_m=new.length_m if new is not None else None,
+        added_length_m=added_length,
+        added_view=added_view,
+        path_before=old.to_json() if old is not None else None,
+    )
+    db.add(row)
+    return row
+
+
+# --------------------------------------------------------------------------
 # Creating and editing
 # --------------------------------------------------------------------------
 
@@ -646,11 +773,12 @@ def create_finding(
     db: Session,
     author: User,
     *,
-    location: Point,
     feature_class: FeatureClass | str,
+    location: Point | None = None,
     title: str | None = None,
     description: str | None = None,
     period: Period | str = Period.UNKNOWN,
+    path: shapes.Path | None = None,
     outline: BaseGeometry | None = None,
     view_state: dict[str, Any] | None = None,
     requested_sensitivity: Sensitivity | str | None = None,
@@ -658,14 +786,29 @@ def create_finding(
 ) -> Finding:
     """Save a new finding, follow it for its finder, assess it, and record `finding_created`.
 
+    It needs a point, a `path`, or both. Without a point the server chooses
+    one on the shape (`shapes.derived_anchor`). An `outline`, still accepted
+    for a release, is read as an all-corner path. The shape is held to the
+    limits in `services.shapes` before anything is checked against the
+    British Isles. Drawing it at the start is no change to it: the shape
+    starts at revision 0.
+
     The public id is safe under concurrency (`ids.insert_with_public_id`). The
     starting level is `sensitivity.starting_sensitivity`. A `client_ref` is
     stored for `create_finding_once`, which is the way to pass one.
     """
     feature_class = FeatureClass(feature_class)
+    shape = shape_from_request(path, outline)
+    derived = location is None
+    if location is None:
+        if shape is None:
+            raise LocationRequiredError()
+        location = shapes.derived_anchor(shape)
+    elif shape is not None:
+        shapes.check_shape(shape.geometry, location)
     check_in_british_isles(location)
-    if outline is not None:
-        check_outline(outline, location)
+    if shape is not None:
+        check_in_british_isles(shape.geometry)
     lon, lat = _point_parts(location)
     level = sensitivity.starting_sensitivity(feature_class, requested_sensitivity, author)
     check_text_for_level(level, {"title": title, "description": description})
@@ -681,7 +824,8 @@ def create_finding(
             feature_class=feature_class.value,
             period=Period(period).value,
             location=to_db_geometry(location),
-            outline=to_db_geometry(outline) if outline is not None else None,
+            location_derived=derived,
+            **_shape_columns(shape),
             sensitivity=level.value,
             view_state=view_state or {},
             nation=nation,
@@ -726,7 +870,17 @@ def create_finding_once(db: Session, author: User, client_ref: str, **fields: An
 
 
 _EDITABLE = frozenset(
-    {"location", "feature_class", "title", "description", "period", "outline", "view_state"}
+    {
+        "location",
+        "feature_class",
+        "title",
+        "description",
+        "period",
+        "path",
+        "path_revision",
+        "outline",
+        "view_state",
+    }
 )
 
 
@@ -738,26 +892,52 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
     applied on save) and is reassessed, because the finder's class counts.
     A title that is still the `suggested_title` follows a move or a new class
     when no title is sent, so it never names a square the finding has left.
+
+    A `path` (or an `outline`, read as one) replaces the whole shape, and
+    `path: None` removes it. It must name the `path_revision` it started from.
+    A change raises `shape_revision` and is recorded (`_record_shape_change`),
+    and a shape sent unchanged changes nothing. The anchor follows the rules
+    of `_anchor_for`. No shape change reassesses the finding: every answer
+    stands, at the weight it was given with.
     """
     check_finder(finding, actor)
     unknown = set(changes) - _EDITABLE
     assert not unknown, f"not editable: {sorted(unknown)}"
     before = point_lon_lat(finding.location)
     suggested = finding.title == suggested_title(finding.feature_class, *before)
+    placed = "location" in changes
     location: Point = changes.get("location") or Point(before)
-    if "location" in changes:
+    if placed:
         check_in_british_isles(location)
-    outline = changes.get("outline")
-    if outline is not None:
-        check_outline(outline, location)
-    elif "location" in changes and finding.outline is not None:
-        check_outline(to_shape(finding.outline), location)
 
-    if "location" in changes:
+    kind: ShapeChangeKind | None = None
+    new_shape: shapes.Shape | None = None
+    old_path: shapes.Path | None = None
+    if "path" in changes or "outline" in changes:
+        _check_revision(finding, changes.get("path_revision"))
+        new_shape = shape_from_request(changes.get("path"), changes.get("outline"))
+        old_path = stored_path(finding)
+        kind = _classify(finding, old_path, new_shape)
+    if kind is not None:
+        location = _anchor_for(finding, new_shape, location, placed=placed)
+        if new_shape is not None:
+            check_in_british_isles(new_shape.geometry)
+    elif placed and finding.outline is not None:
+        shapes.check_shape(to_shape(finding.outline), location)
+    moved = _point_parts(location) != before
+
+    if placed or moved:
         finding.location = to_db_geometry(location)
         finding.nation = geo.nation_of(db, Point(*_point_parts(location)))
-    if "outline" in changes:
-        finding.outline = to_db_geometry(outline) if outline is not None else None
+    if placed:
+        finding.location_derived = False
+    if kind is not None:
+        _record_shape_change(db, finding, actor, kind, old_path, new_shape)
+        for name, value in _shape_columns(new_shape).items():
+            setattr(finding, name, value)
+        finding.shape_revision += 1
+        if new_shape is None:
+            finding.location_derived = False
     for name in ("title", "view_state"):
         if changes.get(name) is not None:
             setattr(finding, name, changes[name])
@@ -769,7 +949,7 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
     if changes.get("feature_class") is not None and changes["feature_class"] != finding.feature_class:
         finding.feature_class = FeatureClass(changes["feature_class"]).value
         class_changed = True
-    if suggested and changes.get("title") is None and ("location" in changes or class_changed):
+    if suggested and changes.get("title") is None and (moved or class_changed):
         finding.title = suggested_title(finding.feature_class, *_point_parts(location))
     level_before = finding.sensitivity
     db.flush()
@@ -778,7 +958,7 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
     raised = finding.sensitivity != level_before
     checked = [name for name in _CHECKED_TEXT if raised or name in changes]
     check_text_for_level(finding.sensitivity, {name: getattr(finding, name) for name in checked})
-    if "location" in changes:
+    if moved:
         activity.relocate(db, finding)
     if class_changed:
         reassess(db, finding, actor)
