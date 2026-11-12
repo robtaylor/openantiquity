@@ -29,7 +29,7 @@ cd backend && uv run pytest -q
 cd ../frontend && pnpm test && pnpm typecheck && pnpm lint && pnpm build
 # Expect: 1277 unit tests pass
 FIELDCLUB_E2E_PORT=8465 pnpm e2e
-# Expect: 268 passed, 48 skipped. markers.spec's 3D test can time out when the machine is busy; run it alone before believing a failure
+# Expect: 268 passed, 48 skipped. markers.spec's 3D test is the slowest: it draws two panes of terrain in software, took over three minutes on a slow CI runner, and has had eight since 2026-11-12
 FIELDCLUB_E2E_API_PORT=8471 FIELDCLUB_CONTACT=fieldclub@shape.build pnpm e2e:full
 # Expect: 34 passed, with no Content-Security-Policy violation
 uv run docs/scripts/doctool.py lint

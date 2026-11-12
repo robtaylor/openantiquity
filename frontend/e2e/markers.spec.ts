@@ -313,9 +313,12 @@ for (const terrain of ["flat", "3D"] as const) {
       { ...right, properties: { id: 2, category: "designation" } },
     ]);
     const camera = terrain === "3D" ? "0/50" : "0/0";
-    // Two panes of terrain in 3D are the slowest thing the suite draws.
+    // Two panes of terrain in 3D are the slowest thing the suite draws. In software a frame takes
+    // 3 to 5 seconds on a CI runner, and the drag alone is a dozen moves of two frames each. The
+    // test took 2.1 minutes on a quick runner and ran out of three on a slow one, still drawing,
+    // so it gets eight: about twice what that slow run would have needed.
     const wait = terrain === "3D" ? SLOW_MAP : undefined;
-    if (terrain === "3D") test.slow();
+    if (terrain === "3D") test.setTimeout(480_000);
     await openMap(
       page,
       `/?panel=none#m=${ZOOM}/${CENTRE.lat}/${CENTRE.lon}/${camera}&v=composite&c=osm_standard&s=315/25&x=2&t=${terrain === "3D" ? 1 : 0}/1.5&o=osm:80:h,records:100`,

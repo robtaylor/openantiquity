@@ -5,9 +5,10 @@ export const BARE_MAP = "/?panel=none";
 
 /**
  * How long a map tilted into 3D may take to settle. The test browser draws terrain in software,
- * which takes most of a minute alone and longer while other suites are running.
+ * which takes most of a minute alone and longer while other suites are running. On a slow CI
+ * runner one of two panes took 56 seconds, so the limit is twice that.
  */
-export const SLOW_MAP = { timeout: 60_000 } as const;
+export const SLOW_MAP = { timeout: 120_000 } as const;
 
 /**
  * Open the app, at the bare map unless told otherwise, and wait for the map to be on screen.

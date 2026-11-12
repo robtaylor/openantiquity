@@ -57,7 +57,9 @@ jobs:
   frontend:
     name: Frontend
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # A slow runner takes about 20 minutes. The cap leaves room for the slowest end-to-end
+    # test to run out its eight minutes twice, so its trace is still uploaded when it hangs.
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: frontend
