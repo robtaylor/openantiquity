@@ -4,7 +4,7 @@ This is the runbook for the deployment on Fly.io: what the owner does once, what
 
 Everything lives in the Fly organisation `openantiquity`, in London (`lhr`). Every command that acts on an app names it with `--app`, so the directory a command runs in never chooses the app, with three exceptions: `fly deploy` reads the web app's name from `fly.toml`, `fly_jobs.py build` names the jobs app itself, and the `fly mpg` commands name the cluster. Commands run from the main checkout, at the repository root, because the secrets script reads the untracked `.env` and `var/` there. What has been done so far is recorded in `docs/plans/v1-england.md`, WS8.
 
-Steps 1 to 9 were carried out on 2026-11-12, except the third bucket and the keys' roles in step 3, which need Tigris's dashboard. Steps 10 to 12 haven't been run against Fly. Each of their commands was written from Fly's and Tigris's documentation, cited beside it, or from the spike. Check each one with `--help` before running it, and correct this file where the platform differs.
+Steps 1 to 10 were carried out on 2026-11-12. Steps 11 and 12 haven't been run against Fly. Each of their commands was written from Fly's and Tigris's documentation, cited beside it, or from the spike. Check each one with `--help` before running it, and correct this file where the platform differs.
 
 ## What is in this folder
 
@@ -205,7 +205,7 @@ fly volumes create jobs_var --app openantiquity-jobs --region lhr --size 10 --ye
 uv run infra/fly_jobs.py schedule
 ```
 
-10 GB is a guess: nothing measured the bulk sources' downloads together, and nothing prunes `var/ingest/` on the volume, as Google's 90-day rule on `ingest/` did. Watch its use with `fly volumes list` and extend it with `fly volumes extend` if it fills.
+Fly gives a new volume's mount point to the image's user, so the jobs can write `/data` without being root. 10 GB is a guess: nothing measured the bulk sources' downloads together, and nothing prunes `var/ingest/` on the volume, as Google's 90-day rule on `ingest/` did. Watch its use with `fly volumes list` and extend it with `fly volumes extend` if it fills.
 
 `schedule` makes a machine named `due` with `--schedule hourly`, the volume mounted at `/data` and `FIELDCLUB_VAR_DIR=/data/var`, running `fieldclub-jobs due`. Fly starts it once an hour at a time of its own choosing in the hour. `fieldclub-jobs due` first deletes expired sessions, and sign-in links spent or expired over a day ago, as the privacy notice says happens. It then decides from the database and the clock what is due (`backend/src/fieldclub/jobs/due.py`): the channel scan when some channel is watched and none has been checked for five hours, which keeps scans about six hours apart, and the source refresh when the hour is 03 UTC. The refresh runs every enabled bulk connector and reference loader whose last full run is older than its `max_age`, so it covers every bulk source, and a second start in the same hour finds them current. Ingest downloads stay on the volume, so the next run can ask the publisher whether a file changed. An ingest started by hand in step 10 downloads afresh, because the volume belongs to the hourly machine.
 
@@ -262,6 +262,8 @@ A deploy token is limited to one app ([access tokens](https://docs.fly.io/securi
    `schedule` updates the machine named `due` in place (`fly machine update --image`, [flags](https://docs.fly.io/flyctl/machine-update/)) without starting it. It refuses while `due` is running, because updating a started machine stops it; run it again once `fly machine list --app openantiquity-jobs` shows it stopped. The update keeps the machine's command and time limit; to change those, destroy `due` and run `schedule` again. Until it is run, the hourly jobs run the image before, which still works against the schema, because the schema command only adds what is missing.
 
 If the mirror check fails, the deploy stops before anything is replaced, and the release machine's log says which tiles are missing or why one couldn't be read (`fly logs --app openantiquity`). Add missing tiles with `uv run infra/fly_jobs.py mirror 1 2 3 4`, which fetches only what the bucket lacks, and deploy again. To deploy knowing tiles are missing, set `FIELDCLUB_TERRAIN_CHECK_ALLOW_MISSING` in `fly.toml` to their number. To deploy with no check at all, as when Tigris can't be listed, set `release_command` back to `python -m fieldclub.db` for that deploy.
+
+A deploy leaves the three machines stopped, not suspended, and the first request afterwards waits for one to start from cold: 32 seconds on 2026-11-12, of which Fly's start is about 20. Ask for `/healthz` once after a deploy. A machine started that way is suspended when it next idles, and then answers in under a second.
 
 A deploy by hand is the same command as the workflow's, from the repository root: `fly deploy --no-public-ips --image-label "$(git rev-parse HEAD)"`.
 
@@ -446,15 +448,16 @@ Each of these was written from documentation or inferred, and none was run:
 - Checked on the jobs app on 2026-11-12, during the copy from Google, so no longer open: `fly machine run` passes the flags after `--` to the command; a machine started with `--rm` and `--restart no` is removed when its command exits; a secret set with `--stage` is in the environment of the next machine started; and the key `fly storage create` made for the jobs app lists, writes and reads `openantiquity-elevation`.
 - Checked on 2026-11-12 while steps 2 to 7 were carried out, so no longer open: the release command's machine gets `[env]` and the secrets, and connects to the database's direct address; `fly deploy --build-only --push --app openantiquity-jobs --image-label <commit>` pushes to `registry.fly.io/openantiquity-jobs:<commit>` and starts nothing; a job under `timeout` and `tini` exits and its machine is removed when the job ends by itself; the jobs start without a session key; Tigris accepts boto3's lifecycle request and gives the rule back; and Tigris takes the national overview, 3.08 GB, as a multipart upload.
 - Found on the web app on 2026-11-12 and fixed: no terrain tile drew, though the mirror's listing was whole. GDAL had the Tigris endpoint only on the thread that set it, and tiles are drawn on others. The release command now reads a tile that way before every deploy.
+- Checked on 2026-11-12 with the fix deployed: the release command's mirror check passes and stops nothing when the mirror is whole; terrain tiles draw from the mirror in Tigris, a tile over a fresh area in about 4 seconds, a cached one in 0.4, and an overview tile in about 4; health checks don't keep idle machines awake; the hourly machine is made with its volume, runs `fieldclub-jobs due` and stops; and `fly deploy` without `--flycast` keeps the private address, though it prints that the app has none.
 - Still to run for the first time: `fly machine update --schedule` and `--skip-start` on a scheduled machine, and `fly releases --image`.
 - That the web app's deploy token can't push to the jobs app's repository.
 - That `fly deploy --no-public-ips` on a later deploy leaves the addresses step 11 allocated alone, as "Do not allocate any new public IP addresses" suggests.
 - That `timeout` from the image's coreutils stops a job that runs past its limit, and the machine then exits and is removed. `tini` warns on every start that it isn't process 1, because Fly's own init is.
 - That the key `fly storage create` makes reaches no bucket but its own, and that a key given roles on three buckets reaches all three with one secret.
 - That `--file-secret` writes the host key where the SFTP client reads it, readable by the image's user.
-- That health checks don't keep a suspended machine awake, and that the database's `LISTEN` connection is found dead and replaced after a resume (the spike didn't test it).
+- That the database's `LISTEN` connection is found dead and replaced after a resume (the spike didn't test it).
 - Whether Tigris answers 409 to overlapping conditional writes and `NoSuchBucket` for a misnamed bucket, as AWS does. The code takes any 412 or 409, and a 404 only with the code `NoSuchKey`, as a refusal.
 - The flyctl the workflow pins, 0.5.8, was published on 2026-11-11 and its `setup-flyctl` commit was read through a summariser; check both against GitHub and prefer a release at least two weeks old.
 - The certificates for six names, the shared IPv4 at the apex, and the 308 from each other name.
-- Memory during a photo upload while tiles render, and real tile latency with the mirror in Tigris.
+- Memory during a photo upload while tiles render, and tile latency under a real screen of tiles at once.
 - London's prices, and what Fly does when prepaid credit runs out.

@@ -1,4 +1,4 @@
-# Handoff — Hosting on Fly.io (running on a private address, not yet open)
+# Handoff — Hosting on Fly.io (running on a private address with terrain and the hourly jobs, not yet open)
 
 **Created:** 2026-11-12
 **Working tree:** clean
@@ -14,7 +14,7 @@ See docs/handoff-discipline.md for the migration table.
 
 ## Goal & next-up
 
-**Goal of this thread:** move the deployment from Google Cloud to Fly.io (Decision 0018). On 2026-11-12 steps 1 to 9 of the runbook were carried out, except one part of step 3. The web app runs on Fly on a private address, with Managed Postgres, the whole elevation mirror and the national overview. Nothing is public, no records have been ingested, and the hourly machine doesn't exist yet.
+**Goal of this thread:** move the deployment from Google Cloud to Fly.io (Decision 0018). On 2026-11-12 steps 1 to 10 of the runbook were carried out. The web app runs on Fly on a private address, with Managed Postgres, the whole elevation mirror and the national overview, and it draws terrain. The hourly machine exists. Nothing is public, and only the scheduled monuments have been ingested.
 
 **Next session should pick up:** follow-ups 1 to 3 in order. Do every cloud step in the main session: sub-agents and workflow agents don't touch Fly, Google or Gandi and don't read `.env`.
 
@@ -28,16 +28,16 @@ cd backend && uv run pytest -q tests/infra tests/test_config.py tests/test_stora
 fly apps list --org openantiquity
 # Expect: openantiquity and openantiquity-jobs alone
 fly machine list --app openantiquity
-# Expect: three machines in lhr, shared-cpu-2x with 2 GB, suspended or started, on the image of commit 85ad12a or later
+# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit e7c0794 or later
 fly ips list --app openantiquity
 # Expect: one private address and no public one, until step 11
 fly machine list --app openantiquity-jobs
-# Expect: none, until step 10 makes the machine named `due`
+# Expect: one machine, `due`, stopped, with the schedule hourly and the volume jobs_var at /data
 fly mpg list --org openantiquity
 # Expect: the cluster openantiquity, d2gznoqz2n8opkm8, ready, attached to both apps
 fly storage list --org openantiquity
 # Expect: openantiquity-elevation, openantiquity-cache and openantiquity-photos
-uv run infra/fly_jobs.py --commit 2399cebab319ef8bc5a722996167710237ef124a run fieldclub-terrain info
+uv run infra/fly_jobs.py --commit e7c0794710157b5672fdf1b80c1424c0ec89adc4 run fieldclub-terrain info
 fly logs --app openantiquity-jobs --no-tail | grep -e mirrored -e overview
 # Expect: mirrored 5877 tiles (100.00%), and overview c2a8a0e49f2f, 5877 tiles
 ```
@@ -52,22 +52,16 @@ The last pair names the jobs image that exists. `fly_jobs.py` looks for the imag
 | `b7682bc` | Send each Fly secret on standard input, and name the database flags | `fly secrets import` strips a pair of quotes from around a value, so each secret goes through `fly secrets set NAME=-` |
 | `2a6f347` | Join the security fixes to the Fly move, and widen the crash guard | The per-address stream limit Fly needs to start, and the hourly machine deleting old sign-ins |
 | `c730199`, `b0f754a` | Copy the elevation into Tigris, and record the spend check | Step 1, the elevation bucket and the copy of step 8. Decision 0025. The spike's cluster, apps and bucket deleted |
-| `85ad12a` | Keep tiles inside a Fly machine's soft limit, and give the jobs no session key | The commit the web app runs. Two of the security review's hosting items closed |
-| `2399ceb` | Ignore editor swap files | The commit the jobs app's image is of |
-| The commit that last changed this file | Record steps 2 to 9 | The runbook says what the platform did at each step |
+| `85ad12a` | Keep tiles inside a Fly machine's soft limit, and give the jobs no session key | Two of the security review's hosting items closed |
+| `9041d2c` | Publish the code under the AGPL version 3, with a README | The repository is public at `github.com/robtaylor/openantiquity`. Decision 0026 |
+| `e7c0794` | Draw terrain on Fly, and check the mirror before each deploy | The commit the web app and the jobs image are of. Decision 0027 |
+| The commit that last changed this file | Record step 10 | The hourly machine, and what the deploy of `e7c0794` showed |
 
 ## Open follow-ups (priority-ordered)
 
-### 1. Deploy the terrain fix and check tiles draw (minutes)
+### 1. Read the first nightly refresh (minutes, on 2026-11-13)
 
-No terrain tile draws on the web app as deployed, commit `85ad12a`: GDAL had the Tigris endpoint on one thread only. The fix and the mirror check are on `main` after that commit. Deploy from the repository root, then build the jobs app's image of the same commit:
-
-```
-fly deploy --no-public-ips --image-label "$(git rev-parse HEAD)"
-uv run infra/fly_jobs.py build
-```
-
-The release command now checks the mirror first, so the deploy itself proves a tile can be read. Then, through the tunnel in step 5 of the runbook, fetch `/tiles/lidar/composite/15/16215/10907.png`, a tile over Avebury, and expect a PNG.
+The hourly machine `due` was made on 2026-11-12 with its 10 GB volume, from the jobs image of commit `e7c0794`, and its first run found nothing due. Its 03:00 UTC run on 2026-11-13 is the first refresh of every bulk source from Fly, 34 connectors, under a six-hour limit. Read it with `fly logs --app openantiquity-jobs`, or ask the database for the runs, and run by hand any source that failed: `uv run infra/fly_jobs.py --commit e7c0794710157b5672fdf1b80c1424c0ec89adc4 ingest <key>`. Then look at `fly volumes list --app openantiquity-jobs` for how much of the volume the downloads took.
 
 ### 2. Take the jobs key's read access off two buckets (the owner, minutes)
 
@@ -76,9 +70,9 @@ The owner made `openantiquity-photos` and set the keys' roles in Tigris's dashbo
 - The web app's key is as intended: it lists and reads all three buckets, writes the cache and the photos, and is refused a write to the elevation bucket.
 - The jobs app's key writes the elevation bucket alone, as intended, but it can also list and read `openantiquity-cache` and `openantiquity-photos`. Step 3 of the runbook gives it no other bucket. Photos are what members upload, and the jobs app holds Defra's login and parses other publishers' files, so the owner should remove both roles in the dashboard. The owner was told on 2026-11-12.
 
-### 3. Step 10: the volume and the hourly machine (the owner has said to go ahead)
+### 3. Wake the machines after a deploy, or accept the first slow request (a choice, minutes)
 
-[`infra/README.md`](../../infra/README.md), step 10. The first ingest ran on Fly on 2026-11-12: `he-nhle-scheduled-monuments`, 20,006 records in 19 seconds. Left: the 10 GB volume at $1.50 a month and the machine named `due`, made from the jobs image of the commit deployed. The hourly machine's 03:00 run refreshes every bulk source, the first load of each publisher from Fly, so read its log the morning after. The privacy notice needs the hourly machine to exist before the site opens.
+A deploy leaves the three web machines stopped, and the first request afterwards took 32 seconds on 2026-11-12. The runbook says to ask for `/healthz` once after a deploy. The deploy workflow doesn't do it yet, and can't reach the private address until step 11 gives the app a public one.
 
 ### 4. Step 12: the deploy workflow (minutes)
 
