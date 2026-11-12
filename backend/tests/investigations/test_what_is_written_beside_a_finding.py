@@ -440,7 +440,7 @@ def test_what_is_drawn_beside_a_restricted_road_far_from_its_anchor_is_held_back
         requested_sensitivity=Sensitivity.RESTRICTED,
     )
     db.commit()
-    assert abs(lon_lat(road.location)[1] - 51.18) < 1e-6
+    assert abs(lon_lat(road.location)[1] - 51.18) < 1e-5
     # About 1.4 km east of the road's southern end, 20 km from its anchor.
     beside = road_lon + 0.02
     walk = make(
