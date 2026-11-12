@@ -4,7 +4,7 @@ This is the runbook for the deployment on Fly.io: what the owner does once, what
 
 Everything lives in the Fly organisation `openantiquity`, in London (`lhr`). Every command that acts on an app names it with `--app`, so the directory a command runs in never chooses the app, with three exceptions: `fly deploy` reads the web app's name from `fly.toml`, `fly_jobs.py build` names the jobs app itself, and the `fly mpg` commands name the cluster. Commands run from the main checkout, at the repository root, because the secrets script reads the untracked `.env` and `var/` there. What has been done so far is recorded in `docs/plans/v1-england.md`, WS8.
 
-Steps 1, 2 and 4, the two `fly storage create` commands of step 3 and the copy in step 8 were carried out on 2026-11-12. Nothing else in this folder has been run against Fly. Each remaining command was written from Fly's and Tigris's documentation, cited beside it, or from the spike. Check each one with `--help` before running it, and correct this file where the platform differs.
+Steps 1 to 9 were carried out on 2026-11-12, except the third bucket and the keys' roles in step 3, which need Tigris's dashboard. Steps 10 to 12 haven't been run against Fly. Each of their commands was written from Fly's and Tigris's documentation, cited beside it, or from the spike. Check each one with `--help` before running it, and correct this file where the platform differs.
 
 ## What is in this folder
 
@@ -124,14 +124,16 @@ fly scale count 3 --region lhr --app openantiquity
 
 `fly deploy` reads `fly.toml`, builds the image on Fly's builder (`--remote-only` is the default), pushes it as `registry.fly.io/openantiquity:<commit>`, runs the release command `python -m fieldclub.db` on a machine of its own and then starts the service ([`fly deploy`](https://docs.fly.io/flyctl/deploy/), [`[deploy]`](https://docs.fly.io/reference/configuration)). The schema command creates the extensions, the tables and the extras, and is safe to run again. Until the first release there is no migration history (`docs/ARCHITECTURE.md`, Conventions), so a change to an existing table needs the database rebuilt or Alembic, which starts at the first public release.
 
-The first deploy makes two machines (`--ha` is on by default) and `fly scale count` makes the third. One deploy during the spike failed after the image was pushed, with an internal error from Fly's API, and worked when run again.
+The first deploy makes two machines (`--ha` is on by default) and `fly scale count` makes the third. One deploy during the spike failed after the image was pushed, with an internal error from Fly's API, and worked when run again. On 2026-11-12 one `fly machine run` was refused with a 408 from the same API, left nothing behind and worked when run again.
 
 The site stays private until step 11, which waits on the security review (`docs/plans/v1-england.md`, WS9). `--no-public-ips` allocates no public address, and `--flycast` gives the app a private one, `openantiquity.flycast`, which goes through Fly's proxy and so wakes a suspended machine ([Flycast](https://docs.fly.io/networking/flycast/)). The deploy workflow passes `--no-public-ips` too, so no deploy opens the site by itself. Check it answers, through a WireGuard tunnel to the Flycast address, with the `curl` in a second terminal:
 
 ```
-fly proxy 8080:80 openantiquity.flycast --app openantiquity
-curl --fail http://localhost:8080/healthz
+fly proxy 8443:443 openantiquity.flycast --app openantiquity
+curl --fail --resolve openantiquity.fly.dev:8443:127.0.0.1 https://openantiquity.fly.dev:8443/healthz
 ```
+
+Plain HTTP on port 80 is answered 301 to https, because of `force_https`, so the check goes to port 443 under the app's `fly.dev` name, whose certificate Fly's proxy already holds. `fly checks list --app openantiquity` shows what each machine's own health check last answered.
 
 The same tunnel wakes a suspended machine before `fly ssh console`, which needs one running.
 
@@ -184,7 +186,7 @@ fly logs --app openantiquity-jobs
 uv run infra/fly_jobs.py national
 ```
 
-It runs `fieldclub-terrain national build --skip-sources` on a `performance-8x` machine, the size Fly lists with 16 GB, with a 20 GB root file system (`--rootfs-size`). The build mosaics the 8 m copies inside the mirrored tiles into one cloud-optimised file under `england/national/`, uploads it and points `england/national/national.json` at it (Decision 0012). The service reads `national.json`, so nothing needs deploying afterwards. Its work folder, about 8 GB for all of England, is on the machine's disk here, where on Cloud Run it was in memory. Run it again whenever tiles have been added. It exits 0 when the overview is current and 1 on an error.
+It runs `fieldclub-terrain national build --skip-sources` on a `performance-8x` machine, the size Fly lists with 16 GB, with a 20 GB root file system (`--rootfs-size`). The build mosaics the 8 m copies inside the mirrored tiles into one cloud-optimised file under `england/national/`, uploads it and points `england/national/national.json` at it (Decision 0012). The service reads `national.json`, so nothing needs deploying afterwards. Its work folder, about 8 GB for all of England, is on the machine's disk here, where on Cloud Run it was in memory. Run it again whenever tiles have been added. It exits 0 when the overview is current and 1 on an error. On 2026-11-12 it built all of England from the 5,877 tiles in 13 minutes, a file of 3.08 GB.
 
 ### 10. The first ingests and the hourly machine
 
@@ -402,7 +404,7 @@ Assumptions for light use, as on Google: 50 visits a day of ten minutes each, 30
 
 At rest this is more than Google's estimate of $36 to $46, because Managed Postgres costs more than `db-g1-small`; Decision 0018 expected the two to cost about the same at rest. The saving is in traffic: at a thousand visits a day, the 675 GB a month the Google runbook assumed costs $13.50 here against $81 there, and there is no load balancer for the domain.
 
-One-off costs: the national overview build on `performance-8x`, which the pricing page didn't list; at the listed $66 a month for `performance-2x`, four times that is about $0.37 an hour, so a build of a few hours costs a dollar or two. Copying the elevation from Google cost about $15 in Google's transfer fee.
+One-off costs: the national overview build on `performance-8x`, which the pricing page didn't list; at the listed $66 a month for `performance-2x`, four times that is about $0.37 an hour, so the 13 minutes the build took cost about $0.08. Copying the elevation from Google cost about $15 in Google's transfer fee.
 
 What these figures leave out:
 
@@ -437,15 +439,14 @@ Each of these was written from documentation or inferred, and none was run:
 
 - Checked against flyctl 0.5.7 and the spike's app on 2026-11-12, so no longer open: the flags of `fly deploy`, `fly machine run`, `fly machine update`, `fly mpg create`, `fly mpg attach`, `fly mpg databases extensions enable` and `fly storage create`; the field names `name` in `fly secrets list --json` and `id`, `name` and `state` in `fly machine list --json`; how `fly secrets set NAME=-` treats a value; that `fly ssh console -C` runs with the app's secrets in its environment; and that Defra's server accepts two connections at once from a Fly machine in London, reading at 17 to 22 MiB a second each.
 - Checked on the jobs app on 2026-11-12, during the copy from Google, so no longer open: `fly machine run` passes the flags after `--` to the command; a machine started with `--rm` and `--restart no` is removed when its command exits; a secret set with `--stage` is in the environment of the next machine started; and the key `fly storage create` made for the jobs app lists, writes and reads `openantiquity-elevation`.
-- Still to run for the first time: `fly machine update --schedule` and `--skip-start` on a scheduled machine, `fly releases --image`, and the release command's machine getting `[env]` and the secrets.
-- That `fly deploy --build-only --push --app openantiquity-jobs --image-label <commit>` pushes to `registry.fly.io/openantiquity-jobs:<commit>` and starts nothing, and that the web app's deploy token can't push there.
-- That `fly deploy --no-public-ips` on a later deploy leaves the addresses step 11 allocated alone, as "Do not allocate any new public IP addresses" suggests, and that the Flycast check in step 5 answers over plain HTTP despite `force_https`.
-- That `timeout` from the image's coreutils stops a job under `tini` and the machine then exits and is removed.
+- Checked on 2026-11-12 while steps 2 to 7 were carried out, so no longer open: the release command's machine gets `[env]` and the secrets, and connects to the database's direct address; `fly deploy --build-only --push --app openantiquity-jobs --image-label <commit>` pushes to `registry.fly.io/openantiquity-jobs:<commit>` and starts nothing; a job under `timeout` and `tini` exits and its machine is removed when the job ends by itself; the jobs start without a session key; Tigris accepts boto3's lifecycle request and gives the rule back; and Tigris takes the national overview, 3.08 GB, as a multipart upload.
+- Still to run for the first time: `fly machine update --schedule` and `--skip-start` on a scheduled machine, and `fly releases --image`.
+- That the web app's deploy token can't push to the jobs app's repository.
+- That `fly deploy --no-public-ips` on a later deploy leaves the addresses step 11 allocated alone, as "Do not allocate any new public IP addresses" suggests.
+- That `timeout` from the image's coreutils stops a job that runs past its limit, and the machine then exits and is removed. `tini` warns on every start that it isn't process 1, because Fly's own init is.
 - That the key `fly storage create` makes reaches no bucket but its own, and that a key given roles on three buckets reaches all three with one secret.
 - That `--file-secret` writes the host key where the SFTP client reads it, readable by the image's user.
-- That Tigris accepts boto3's lifecycle request with its checksum header, which `cache_lifecycle.py` sends.
 - That health checks don't keep a suspended machine awake, and that the database's `LISTEN` connection is found dead and replaced after a resume (the spike didn't test it).
-- Tigris multipart upload of the national COG, about 3.5 GB, which the spike didn't test, with boto3's default CRC32 checksums.
 - Whether Tigris answers 409 to overlapping conditional writes and `NoSuchBucket` for a misnamed bucket, as AWS does. The code takes any 412 or 409, and a 404 only with the code `NoSuchKey`, as a refusal.
 - The flyctl the workflow pins, 0.5.8, was published on 2026-11-11 and its `setup-flyctl` commit was read through a summariser; check both against GitHub and prefer a release at least two weeks old.
 - The certificates for six names, the shared IPv4 at the apex, and the 308 from each other name.
