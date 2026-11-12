@@ -4,7 +4,7 @@ This is the runbook for the deployment on Fly.io: what the owner does once, what
 
 Everything lives in the Fly organisation `openantiquity`, in London (`lhr`). Every command that acts on an app names it with `--app`, so the directory a command runs in never chooses the app, with three exceptions: `fly deploy` reads the web app's name from `fly.toml`, `fly_jobs.py build` names the jobs app itself, and the `fly mpg` commands name the cluster. Commands run from the main checkout, at the repository root, because the secrets script reads the untracked `.env` and `var/` there. What has been done so far is recorded in `docs/plans/v1-england.md`, WS8.
 
-Nothing in this folder has been run against Fly. Each command below was written from Fly's and Tigris's documentation, cited beside it, or from the spike. Check each one with `--help` before running it, and correct this file where the platform differs.
+Step 1, the elevation bucket of step 3 and the copy in step 8 were carried out on 2026-11-12. Nothing else in this folder has been run against Fly. Each remaining command was written from Fly's and Tigris's documentation, cited beside it, or from the spike. Check each one with `--help` before running it, and correct this file where the platform differs.
 
 ## What is in this folder
 
@@ -68,12 +68,14 @@ Each attach sets the secret `DATABASE_URL` on its app, with the pooled address, 
 
 ### 3. The buckets and their keys
 
-`fly storage create`, run with an app, makes a bucket and a key and sets four secrets on that app: `BUCKET_NAME`, `AWS_ENDPOINT_URL_S3`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` ([Fly's Tigris page](https://docs.fly.io/tigris)). It also prints the key's id and secret, which flyctl can't show again. Nothing here needs the printed secret, because the app already holds it, so clear the terminal and its scrollback after each one. Fly's page doesn't say what a second create does to an app that already has the secrets, so each app gets one:
+`fly storage create`, run with an app, makes a bucket and a key and sets five secrets on that app: `BUCKET_NAME`, `AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` ([Fly's Tigris page](https://docs.fly.io/tigris)). It also prints the key's id and secret, which flyctl can't show again. Nothing here needs the printed secret, because the app already holds it, so clear the terminal and its scrollback after each one. Fly's page doesn't say what a second create does to an app that already has the secrets, so each app gets one:
 
 ```
 fly storage create -a openantiquity-jobs -n openantiquity-elevation
 fly storage create -a openantiquity -n openantiquity-cache
 ```
+
+The first of the two was run on 2026-11-12, so `openantiquity-elevation` exists and the jobs app holds its key: don't run it again. The command asks whether Tigris's terms are accepted, and `--yes` answers it.
 
 Make the third bucket, `openantiquity-photos`, private, in Tigris's dashboard (`fly storage dashboard openantiquity-cache`, then Buckets), with no key of its own. Then give the web app's key its two other buckets: find it under Access Keys and give it Editor on `openantiquity-cache` and `openantiquity-photos` and ReadOnly on `openantiquity-elevation`. With Tigris's own CLI the same is
 
@@ -157,14 +159,14 @@ The LIDAR `sources` rows must exist before any elevation is stored or shown. The
 
 ### 8. England's elevation in the bucket
 
-The converted elevation already in Google's bucket is copied across once, after Google's copy has finished (Decision 0018, point 8). Defra's server isn't asked for the country a second time. See [Copying the elevation from Google](#copying-the-elevation-from-google). The Fly copy below is for anything Google's copy lacks, or for a fresh start if the Google bucket is gone.
+The converted elevation in Google's bucket was copied across on 2026-11-12 (Decision 0018, point 8): 5,877 tiles, 126.4 GB, each checked against Google's by size and MD5. Defra's server wasn't asked for the country a second time. How it was done is in [Copying the elevation from Google](#copying-the-elevation-from-google). The Fly copy below is for a tile that goes missing, or for a fresh start if the bucket is lost.
 
 ```
 uv run infra/fly_jobs.py mirror 1 3
 uv run infra/fly_jobs.py mirror 2 4
 ```
 
-The 5,877 tiles are split into four shares of about 88 GB each, by size. Each command starts one machine that runs its two shares one after the other, each with one SFTP connection, so the two machines hold two connections to Defra's server at once, as the Google job did. A share that stops, because the supply refused the login, showed another host key or failed five tiles in a row, stops its machine, and the machine's last log lines name the share. Run a failed share again by naming it, for example `uv run infra/fly_jobs.py mirror 3`. A tile already in the mirror is skipped, so a rerun fetches only what is still missing. The spike didn't try Defra's server from Fly's addresses: start with one machine and watch its log before starting the second.
+The 5,877 tiles are split into four shares of about 88 GB each, by size. Each command starts one machine that runs its two shares one after the other, each with one SFTP connection, so the two machines hold two connections to Defra's server at once, as the Google job did. A share that stops, because the supply refused the login, showed another host key or failed five tiles in a row, stops its machine, and the machine's last log lines name the share. Run a failed share again by naming it, for example `uv run infra/fly_jobs.py mirror 3`. A tile already in the mirror is skipped, so a rerun fetches only what is still missing. The spike held two connections to Defra's server at once from a Fly machine in London, but no share of the copy has run there: start with one machine and watch its log before starting the second.
 
 The web app adds nothing to the mirror, because it holds neither Defra's login nor a key that writes the elevation bucket (`FIELDCLUB_TERRAIN_API_FETCH=false` in `fly.toml`). A map tile that needs a tile not yet mirrored is answered 503 `elevation_unavailable` for a minute at a time, logged as a warning, until a copy adds it.
 
@@ -343,45 +345,37 @@ The copy has 5,877 files, 353.6 GB, from one SFTP server that Defra offered free
 - **It resumes.** A tile already in the mirror is skipped, so a failed share, or the whole copy run again, fetches only what is missing.
 - **Nothing to forget.** Each machine is removed when it exits.
 
-The converted mirror is about half the source: SU16nw went from 48 MB to 24 MB. The bucket ends at about 177 GB.
+The converted mirror is a little over a third of the source: 126.4 GB for 353.6 GB of source files. SU16nw went from 48 MB to 24 MB.
 
 ## Copying the elevation from Google
 
-Google's copy is finishing in `gs://$P-elevation/england/`, where `P` is the Google project id (`fieldclub-uk`). Copy it once to `openantiquity-elevation/england/` with [rclone](https://rclone.org/), from any machine with a good connection, after Google's copy has finished:
+Done on 2026-11-12. Google's copy, `gs://fieldclub-uk-elevation/england/mirror/`, held 5,877 `.tif` files and nothing else: no locks and no national overview. [rclone](https://rclone.org/) copied them to `openantiquity-elevation/england/mirror/` from a machine in the jobs app, so the bytes went from Google to Fly's London region to Tigris and never through a laptop. The copy took 12.5 minutes at about 160 MiB a second on a `performance-2x` machine. `rclone check` then found 5,877 matching files and no differences, by size and MD5, and each bucket holds 126,358,266,985 bytes.
 
-1. Make a temporary Tigris key in the dashboard (`fly storage dashboard openantiquity-elevation`) with Editor on `openantiquity-elevation` alone.
-2. Write it into an untracked rclone configuration, `var/rclone.conf`, with an editor, so neither secret is typed on a command line:
+To repeat it while the Google project exists:
 
-   ```
-   [google]
-   type = google cloud storage
-   env_auth = true
-   bucket_policy_only = true
-
-   [tigris]
-   type = s3
-   provider = Other
-   endpoint = https://fly.storage.tigris.dev
-   region = auto
-   access_key_id = <the temporary key's id>
-   secret_access_key = <its secret>
-   ```
-
-   `env_auth = true` uses the Google application default credentials the owner already has from `gcloud auth application-default login`.
-
-3. Copy, leaving out the per-tile locks, then check:
+1. Do it before step 4 gives the jobs app Defra's login, or in an app of its own. The machine runs rclone's published image, not ours, and a machine sees every secret of the app it runs in.
+2. Make a Google service account that can only read the bucket, with `roles/storage.objectViewer` on it, and an HMAC key for that account. Google's bucket answers the S3 interface to an HMAC key, so rclone needs no Google login. Hand the key's two halves to the jobs app as the secrets `RCLONE_CONFIG_GOOGLE_ACCESS_KEY_ID` and `RCLONE_CONFIG_GOOGLE_SECRET_ACCESS_KEY`, each on standard input with `fly secrets set NAME=- --stage`, so neither is typed or shown.
+3. Copy, as a machine that exits and is removed. rclone takes its settings from the environment, and its Tigris key is the one the app already holds:
 
    ```
-   export P=fieldclub-uk
-   RCLONE_CONFIG=var/rclone.conf rclone copy "google:$P-elevation/england" tigris:openantiquity-elevation/england \
-     --exclude "mirror/locks/**" --checksum --transfers 8 --progress
-   RCLONE_CONFIG=var/rclone.conf rclone check "google:$P-elevation/england" tigris:openantiquity-elevation/england \
-     --exclude "mirror/locks/**" --one-way
+   fly machine run rclone/rclone@sha256:5a25abdcf2f2f093a03e1e6a13caddeb5fae3cd07ae6c699768e6f1917a5d3ce \
+     --app openantiquity-jobs --region lhr --rm --restart no --vm-size performance-2x \
+     -e RCLONE_CONFIG_GOOGLE_TYPE=s3 -e RCLONE_CONFIG_GOOGLE_PROVIDER=GCS \
+     -e RCLONE_CONFIG_GOOGLE_ENDPOINT=https://storage.googleapis.com \
+     -e RCLONE_CONFIG_TIGRIS_TYPE=s3 -e RCLONE_CONFIG_TIGRIS_PROVIDER=Other -e RCLONE_CONFIG_TIGRIS_ENV_AUTH=true \
+     -e RCLONE_CONFIG_TIGRIS_ENDPOINT=https://fly.storage.tigris.dev -e RCLONE_CONFIG_TIGRIS_REGION=auto \
+     -- copy google:fieldclub-uk-elevation/england tigris:openantiquity-elevation/england \
+     --exclude "mirror/locks/**" --checksum --transfers 16 --checkers 16 --s3-no-check-bucket \
+     --stats 60s --stats-one-line --stats-log-level NOTICE
    ```
 
-4. Delete the temporary key in the dashboard, and `var/rclone.conf`.
+   The image is rclone 1.75.2, published on 2026-10-09 and named by its digest. `fly logs --app openantiquity-jobs` shows a line of progress a minute.
+4. Check, with the same command but `check` in place of `copy`, and after the two folders only `--exclude "mirror/locks/**" --checkers 16`. Its last log lines give the number of matching files and of differences.
+5. Unset the two secrets, delete the HMAC key and the service account, and take the account off the bucket's permissions.
 
-The copy is about 177 GB, plus the national overview's 3.5 GB if Google built it. Google charges $0.12 a GB for data leaving its network, so about $21 to $22. Writing to Tigris is about 6,000 Class A requests, $0.03. The bytes pass through the machine running rclone. If Google's national overview was built, `national.json` and its COG come across with it and the service uses them; otherwise run step 9.
+All five were done on 2026-11-12, and nothing of the temporary key is left on either side.
+
+Google charges $0.12 a GB for data leaving its network, so the 126.4 GB cost about $15. Writing to Tigris was about 6,000 Class A requests, $0.03. Google's bucket holds no national overview, so step 9 builds it on Fly.
 
 ## Estimated monthly cost
 
@@ -397,22 +391,23 @@ Assumptions for light use, as on Google: 50 visits a day of ten minutes each, 30
 | Web machines suspended, three root file systems of about 1 GB, an estimate from the image's size | $0.15 a GB-month | $0.45 | $0.45 |
 | The hourly job machine, about 20 s an hour, and its stopped root file system | $12.70 a month at 2 GB; $0.15 a GB-month | $0.22 | $0.22 |
 | Its volume, 10 GB | $0.15 a GB-month | $1.50 | $1.50 |
-| Tigris storage, 177 GB of elevation and 6 GB of tiles and photos, 5 GB free | $0.02 a GB-month | $3.56 | $3.56 |
+| Tigris storage, 126 GB of elevation and 6 GB of tiles and photos, 5 GB free | $0.02 a GB-month | $2.54 | $2.54 |
 | Tigris writes, 225,000, 10,000 free | $0.005 a thousand | $0 | $1.08 |
 | Tigris reads, about 2.5 million, 100,000 free | $0.0005 a thousand | $0 | $1.20 |
 | Data out to visitors, 68 GB | $0.02 a GB | $0 | $1.36 |
 | Shared IPv4, IPv6, six certificates | Free, the first ten certificates | $0 | $0 |
 | Image builder and registry | Free today, which the page says may change | $0 | $0 |
-| **Total** | | **about $52 to $63** | **about $63 to $74** |
+| **Total** | | **about $51 to $62** | **about $62 to $73** |
 
 At rest this is more than Google's estimate of $36 to $46, because Managed Postgres costs more than `db-g1-small`; Decision 0018 expected the two to cost about the same at rest. The saving is in traffic: at a thousand visits a day, the 675 GB a month the Google runbook assumed costs $13.50 here against $81 there, and there is no load balancer for the domain.
 
-One-off costs: the national overview build on `performance-8x`, which the pricing page didn't list; at the listed $66 a month for `performance-2x`, four times that is about $0.37 an hour, so a build of a few hours costs a dollar or two. Copying the elevation from Google costs about $21 in Google's transfer fee.
+One-off costs: the national overview build on `performance-8x`, which the pricing page didn't list; at the listed $66 a month for `performance-2x`, four times that is about $0.37 an hour, so a build of a few hours costs a dollar or two. Copying the elevation from Google cost about $15 in Google's transfer fee.
 
 What these figures leave out:
 
 - London's machine prices.
-- Data from the machines to Tigris, which Fly's pricing page says is billed separately, at a rate it didn't give.
+- Data from the machines to Tigris, which Fly's pricing page says is billed separately, at a rate it didn't give. The copy on 2026-11-12 sent 126 GB that way, so November's invoice will show the rate.
+- Whether the database's storage is billed on the 10 GB asked for or on what the cluster reports as allocated. The spike's cluster, made with the default 10 GB, reports 20 GB allocated and one replica.
 - Managed Postgres backups, if they are charged.
 - A real traffic pattern. The light-use row is a guess with its working shown.
 
@@ -426,7 +421,7 @@ An image built from main can't run there any more: the application now speaks on
 
 Once the site on Fly answers on openantiquity.org, the elevation is in Tigris and checked, and the first ingests have run:
 
-- [ ] `rclone check` (above) reports no missing files.
+- [x] `rclone check` reports no missing files. Done on 2026-11-12: 5,877 matching files and no differences.
 - [ ] Copy out anything else wanted. The Google database holds what ingests make again, and whatever the owner did while trying the held-back site.
 - [ ] In `terraform/storage.tf`, remove the `prevent_destroy` line from the elevation bucket.
 - [ ] From `infra/terraform`, with `terraform.tfvars` as it was applied: `terraform destroy`. It removes the service, the jobs, the schedules, the database, the buckets, the secrets, the service accounts, the federation and the budget.
@@ -440,11 +435,12 @@ Once the site on Fly answers on openantiquity.org, the elevation is in Tigris an
 Each of these was written from documentation or inferred, and none was run:
 
 - Checked against flyctl 0.5.7 and the spike's app on 2026-11-12, so no longer open: the flags of `fly deploy`, `fly machine run`, `fly machine update`, `fly mpg create`, `fly mpg attach`, `fly mpg databases extensions enable` and `fly storage create`; the field names `name` in `fly secrets list --json` and `id`, `name` and `state` in `fly machine list --json`; how `fly secrets set NAME=-` treats a value; that `fly ssh console -C` runs with the app's secrets in its environment; and that Defra's server accepts two connections at once from a Fly machine in London, reading at 17 to 22 MiB a second each.
-- Still to run for the first time: `fly machine run` taking the job's own flags after `--` (try `uv run infra/fly_jobs.py --dry-run run fieldclub-terrain info` and run what it prints with `--help` in place of `info`), `fly machine update --schedule` and `--skip-start` on a scheduled machine, `fly releases --image`, and the release command's machine getting `[env]` and the secrets.
+- Checked on the jobs app on 2026-11-12, during the copy from Google, so no longer open: `fly machine run` passes the flags after `--` to the command; a machine started with `--rm` and `--restart no` is removed when its command exits; a secret set with `--stage` is in the environment of the next machine started; and the key `fly storage create` made for the jobs app lists, writes and reads `openantiquity-elevation`.
+- Still to run for the first time: `fly machine update --schedule` and `--skip-start` on a scheduled machine, `fly releases --image`, and the release command's machine getting `[env]` and the secrets.
 - That `fly deploy --build-only --push --app openantiquity-jobs --image-label <commit>` pushes to `registry.fly.io/openantiquity-jobs:<commit>` and starts nothing, and that the web app's deploy token can't push there.
 - That `fly deploy --no-public-ips` on a later deploy leaves the addresses step 11 allocated alone, as "Do not allocate any new public IP addresses" suggests, and that the Flycast check in step 5 answers over plain HTTP despite `force_https`.
 - That `timeout` from the image's coreutils stops a job under `tini` and the machine then exits and is removed.
-- That `fly storage create` makes a key with Editor on its own bucket and nothing more, and that a key given roles on three buckets reaches all three with one secret.
+- That the key `fly storage create` makes reaches no bucket but its own, and that a key given roles on three buckets reaches all three with one secret.
 - That `--file-secret` writes the host key where the SFTP client reads it, readable by the image's user.
 - That Tigris accepts boto3's lifecycle request with its checksum header, which `cache_lifecycle.py` sends.
 - That health checks don't keep a suspended machine awake, and that the database's `LISTEN` connection is found dead and replaced after a resume (the spike didn't test it).

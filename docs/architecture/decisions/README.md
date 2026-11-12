@@ -62,6 +62,7 @@ Write all three in the same present tense and a reader can't tell *why we did it
 | [0022](0022-signed-out-drafts-belong-to-the-tab-that-made-them.md) | Signed-out drafts belong to the tab that made them | Proposed |
 | [0023](0023-what-is-drawn-near-a-protected-finding-is-judged-by-distance-and-shown-as-whole-squares.md) | What is drawn near a protected finding is judged by distance and shown as whole squares | Proposed |
 | [0024](0024-drafts-taken-over-at-sign-in-wait-to-be-sent.md) | Drafts taken over at sign-in wait to be sent | Proposed |
+| [0025](0025-spend-on-fly-is-watched-by-hand-each-week-and-bounded-by-limits.md) | Spend on Fly is watched by hand each week and bounded by limits | Proposed |
 
 (`new decision` appends rows for you. `uv run docs/scripts/doctool.py lint` checks this table against the files.)
 
