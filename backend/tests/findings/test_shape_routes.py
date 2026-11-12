@@ -185,6 +185,7 @@ def test_someone_who_sees_only_the_square_learns_only_that_the_shape_changed_and
             "extent": None,
             "changes": [{"kind": "changed", "on": change["on"], "added_length_m": None, "added_view": None}],
             "added_since_looked_m": None,
+            "added_view": None,
             "looked_at": None,
         }
         listed = viewer.get(f"{API}/findings").json()["items"]

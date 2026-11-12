@@ -212,47 +212,137 @@ def test_an_extension_leaves_the_tier_the_score_and_every_answer_as_they_were(
     assert NEW_PART in finding.open_steps
 
 
-def test_the_new_part_is_asked_about_above_200_m_and_no_more_once_someone_looks(
+def added(finding: Finding) -> float | None:
+    """The page's `added_since_looked_m`, as stored."""
+    return finding.added_since_looked_m
+
+
+def frames(view: dict[str, Any] | None, lon: float, lat_from: float, lat_to: float) -> bool:
+    """Whether `view` is centred on the stretch of meridian `lon` from `lat_from` to `lat_to`."""
+    assert view is not None, "a view frames what lies beyond"
+    return view["lon"] == pytest.approx(lon, abs=1e-5) and view["lat"] == pytest.approx(
+        (lat_from + lat_to) / 2, abs=1e-4
+    )
+
+
+def test_the_new_part_is_what_lies_beyond_250_m_and_is_asked_about_above_200_m(
     db: Session, make_user: MakeUser
 ) -> None:
     finder = make_user()
     finding = drawn(db, finder, meridian(0, 0.01))
     answered(db, make_user, finding)
 
-    edit(db, finding, finder, path=meridian(0, 0.01, 0.01 + STEP), path_revision=0)
+    # About 444 m added, of which about 194 m lies beyond 250 m of what was looked at.
+    edit(db, finding, finder, path=meridian(0, 0.01, 0.014), path_revision=0)
+    assert added(finding) == pytest.approx(444.8 - 250, abs=6)
     assert NEW_PART not in finding.open_steps
-    edit(db, finding, finder, path=meridian(0, 0.01, 0.01 + STEP, 0.01 + 2 * STEP), path_revision=1)
-    # Both extensions count: about 222 m since the answer.
+    edit(db, finding, finder, path=meridian(0, 0.01, 0.014, 0.016), path_revision=1)
+    assert added(finding) == pytest.approx(667.2 - 250, abs=6)
     assert NEW_PART in finding.open_steps
     (step,) = [s for s in findings.current_assessment(finding).next_steps if s.code == NEW_PART]
     assert step.people == 1
-    part = looked_at.new_part(db, finding)
-    assert part is not None
-    assert part.length_m == pytest.approx(2 * 111.2, abs=1)
-    assert part.view == changes_of(db, finding)[-1].added_view
+    beyond = 0.01 + 250 / 111_250
+    assert frames(finding.added_view, LON, LAT + beyond, LAT + 0.016)
 
     answered(db, make_user, finding)
     assert NEW_PART not in finding.open_steps
-    assert looked_at.new_part(db, finding) is None
+    assert (added(finding), finding.added_view) == (None, None)
 
 
-def test_a_reshape_asks_nobody_to_look_and_a_finding_nobody_answered_has_no_new_part(
-    db: Session, make_user: MakeUser
-) -> None:
+def test_a_nudged_end_and_20_km_more_asks_for_a_look(db: Session, make_user: MakeUser) -> None:
+    """The one-flow tool moves a point and carries on: that is a reshape, and still adds ground."""
+    finder = make_user()
+    finding = drawn(db, finder, meridian(0, 0.01))
+    answered(db, make_user, finding)
+    nudged = path((east(1), LAT), (LON, LAT + 0.01), (LON, LAT + 0.19))
+    edit(db, finding, finder, path=nudged, path_revision=0)
+    assert [change.kind for change in changes_of(db, finding)] == ["reshaped"]
+    assert added(finding) == pytest.approx(0.18 * 111_250 - 250, rel=0.01)
+    assert NEW_PART in finding.open_steps
+    assert frames(finding.added_view, LON, LAT + 0.01 + 250 / 111_250, LAT + 0.19)
+
+    answered(db, make_user, finding)
+    assert NEW_PART not in finding.open_steps
+    assert added(finding) is None
+
+
+def test_a_reshape_inside_what_was_looked_at_asks_nobody(db: Session, make_user: MakeUser) -> None:
+    finder = make_user()
+    finding = drawn(db, finder, meridian(0, 0.01, 0.02))
+    answered(db, make_user, finding)
+    bent = path((LON, LAT), (east(150), LAT + 0.01), (LON, LAT + 0.02))
+    edit(db, finding, finder, path=bent, path_revision=0)
+    assert [change.kind for change in changes_of(db, finding)] == ["reshaped"]
+    assert (added(finding), finding.added_view) == (None, None)
+    assert NEW_PART not in finding.open_steps
+
+
+def test_an_area_grown_round_what_was_looked_at_asks_for_a_look(db: Session, make_user: MakeUser) -> None:
+    finder = make_user()
+    small = [(LON, LAT), (east(400), LAT), (east(400), LAT + 0.0036), (LON, LAT + 0.0036)]
+    finding = drawn(db, finder, path(*small, closed=True))
+    answered(db, make_user, finding)
+    big = [
+        (east(-1000), LAT - 0.009),
+        (east(1400), LAT - 0.009),
+        (east(1400), LAT + 0.0126),
+        (east(-1000), LAT + 0.0126),
+    ]
+    edit(db, finding, finder, path=path(*big, closed=True), path_revision=0)
+    # Nearly the whole new edge, about 9.2 km, lies far from the small square that was looked at.
+    assert added(finding) == pytest.approx(9200, rel=0.05)
+    assert NEW_PART in finding.open_steps
+    view = finding.added_view
+    assert view is not None
+    assert east(-1000) < view["lon"] < east(1400)
+
+    answered(db, make_user, finding)
+    assert NEW_PART not in finding.open_steps
+
+
+def test_an_extension_cut_away_again_asks_nobody_and_frames_nothing(db: Session, make_user: MakeUser) -> None:
+    finder = make_user()
+    finding = drawn(db, finder, meridian(0, 0.01))
+    answered(db, make_user, finding)
+    edit(db, finding, finder, path=meridian(0, 0.01, 0.05), path_revision=0)
+    assert NEW_PART in finding.open_steps
+    edit(db, finding, finder, path=meridian(0, 0.01), path_revision=1)
+    assert [change.kind for change in changes_of(db, finding)] == ["extended", "reshaped"]
+    assert (added(finding), finding.added_view) == (None, None)
+    assert NEW_PART not in finding.open_steps
+    # The timeline still records what the extension added.
+    assert changes_of(db, finding)[0].added_length_m == pytest.approx(0.04 * 111_250, rel=0.01)
+
+
+def test_no_change_of_shape_moves_the_tier_the_score_or_any_answer(db: Session, make_user: MakeUser) -> None:
+    finder = make_user()
+    finding = drawn(db, finder, meridian(0, 0.01))
+    answered(db, make_user, finding, people=3)
+    before = (finding.tier, finding.confidence, finding.observation_count)
+    weights = sorted(
+        db.execute(select(Observation.id, Observation.role_at_answer, Observation.visible)).all()
+    )
+    edit(
+        db, finding, finder, path=path((east(1), LAT), (LON, LAT + 0.01), (LON, LAT + 0.19)), path_revision=0
+    )
+    edit(db, finding, finder, path=meridian(0, 0.01), path_revision=1)
+    assert (finding.tier, finding.confidence, finding.observation_count) == before
+    assert (
+        sorted(db.execute(select(Observation.id, Observation.role_at_answer, Observation.visible)).all())
+        == weights
+    )
+
+
+def test_a_finding_nobody_answered_has_no_new_part(db: Session, make_user: MakeUser) -> None:
     finder = make_user()
     unanswered = drawn(db, finder, meridian(0, 0.01))
     edit(db, unanswered, finder, path=meridian(0, 0.01, 0.05), path_revision=0)
     assert NEW_PART not in unanswered.open_steps
-    assert looked_at.new_part(db, unanswered) is None
-
-    reshaped = drawn(db, finder, meridian(0, 0.02))
-    answered(db, make_user, reshaped)
-    edit(db, reshaped, finder, path=meridian(0, 0.005, 0.02, lon=east(100)), path_revision=0)
-    assert [change.kind for change in changes_of(db, reshaped)] == ["reshaped"]
-    assert NEW_PART not in reshaped.open_steps
+    assert (added(unanswered), unanswered.added_view) == (None, None)
 
 
-def test_an_answer_taken_back_leaves_the_older_one_to_count_from(db: Session, make_user: MakeUser) -> None:
+def test_an_answer_taken_back_leaves_the_ground_it_was_given_on(db: Session, make_user: MakeUser) -> None:
+    """`looked_at` doesn't shrink (Decision 0029), so what lies beyond it doesn't grow back."""
     finder = make_user()
     finding = drawn(db, finder, meridian(0, 0.01))
     answered(db, make_user, finding)
@@ -261,7 +351,8 @@ def test_an_answer_taken_back_leaves_the_older_one_to_count_from(db: Session, ma
     assert NEW_PART not in finding.open_steps
     review.delete_observation(db, finding, later)
     db.commit()
-    assert NEW_PART in finding.open_steps
+    assert NEW_PART not in finding.open_steps
+    assert added(finding) is None
 
 
 def test_an_extension_tells_the_followers_and_nothing_else_does(db: Session, make_user: MakeUser) -> None:
@@ -489,12 +580,14 @@ def test_the_page_says_what_was_added_since_the_last_look_to_exact_viewers_only(
     assert _extend(client_as, finder, public_id, 0, 0, 0.01, 0.03).status_code == 200
 
     own = client_as(finder).get(f"{API}/findings/{public_id}").json()
-    assert own["location"]["shape"]["added_since_looked_m"] == pytest.approx(2224, abs=5)
+    assert own["location"]["shape"]["added_since_looked_m"] == pytest.approx(2224 - 250, abs=8)
+    assert own["location"]["shape"]["added_view"] is not None
     assert NEW_PART in [step["code"] for step in own["assessment"]["next_steps"]]
 
     # A member sees a restricted finding only as its square.
     square = client_as(make_user()).get(f"{API}/findings/{public_id}").json()
     assert square["location"]["shape"]["added_since_looked_m"] is None
+    assert square["location"]["shape"]["added_view"] is None
     assert square["location"]["shape"]["looked_at"] is None
     assert NEW_PART not in [step["code"] for step in square["assessment"]["next_steps"]]
 
@@ -510,7 +603,7 @@ def test_a_viewer_who_hasnt_answered_learns_no_count_of_answers(
     page = client_as(make_user()).get(f"{API}/findings/{public_id}").json()
     assert page["answers_visible"] is False
     assert page["assessment"]["tallies"] is None
-    assert page["location"]["shape"]["added_since_looked_m"] == pytest.approx(2224, abs=5)
+    assert page["location"]["shape"]["added_since_looked_m"] == pytest.approx(2224 - 250, abs=8)
     for step in page["assessment"]["next_steps"]:
         assert (step["people"], step["weight_needed"]) == (None, None), step
 
@@ -554,8 +647,9 @@ def test_help_wanted_and_the_queue_frame_the_new_part(
     answered(db, make_user, findings.get_finding(db, public_id, finder))
     assert _extend(client_as, finder, public_id, 0, 0, 0.01, 0.03).status_code == 200
     finding = findings.get_finding(db, public_id, finder)
-    view = changes_of(db, finding)[-1].added_view
+    view = finding.added_view
     assert view is not None
+    assert frames(view, LON, LAT + 0.01 + 250 / 111_250, LAT + 0.03)
 
     reviewer = client_as(make_user())
     groups = reviewer.get(f"{API}/review/tasks", params={"code": NEW_PART}).json()["groups"]

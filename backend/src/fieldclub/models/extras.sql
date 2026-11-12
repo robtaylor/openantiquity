@@ -37,7 +37,7 @@ DO $$
 BEGIN
     IF NOT fieldclub_has_columns('findings', ARRAY[
         'path', 'outline_mid', 'outline_low', 'shape_kind', 'shape_length_m', 'shape_revision',
-        'location_derived', 'looked_at'
+        'location_derived', 'looked_at', 'added_since_looked_m', 'added_view'
     ]) THEN
         ALTER TABLE findings
             ADD COLUMN IF NOT EXISTS path jsonb,
@@ -48,7 +48,9 @@ BEGIN
             ADD COLUMN IF NOT EXISTS shape_length_m real,
             ADD COLUMN IF NOT EXISTS shape_revision integer NOT NULL DEFAULT 0,
             ADD COLUMN IF NOT EXISTS location_derived boolean NOT NULL DEFAULT false,
-            ADD COLUMN IF NOT EXISTS looked_at geometry(GEOMETRY, 4326);
+            ADD COLUMN IF NOT EXISTS looked_at geometry(GEOMETRY, 4326),
+            ADD COLUMN IF NOT EXISTS added_since_looked_m real,
+            ADD COLUMN IF NOT EXISTS added_view jsonb;
     END IF;
 END
 $$;

@@ -15,9 +15,12 @@ finding's life, not per edit.
   a move of a finding with no shape.
 - `seed` fills `looked_at` for a finding answered before it existed, from
   the shape as stored, and `backfill` does so for every such finding.
-- `new_part` is what extensions added since the newest standing second look:
-  its length, which `look_at_new_part` and the page's
-  `added_since_looked_m` come from, and the view that frames the newest.
+- `refresh_added` stores how much of the shape lies further than
+  `LOOKED_AT_MAX_MOVE_M` from `looked_at`, as `added_since_looked_m`, and
+  the view that frames it, as `added_view`. `look_at_new_part` and the
+  page come from them. It is measured from the ground, not from the kind of
+  each change, so a nudged end with 20 km more counts, and an extension
+  later cut away doesn't.
 
 Distances are measured on the grid under what was looked at, where a metre
 is a metre to well under one part in a thousand across the British Isles.
@@ -31,8 +34,6 @@ from __future__ import annotations
 import logging
 import math
 from collections.abc import Iterator
-from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 import shapely
@@ -45,9 +46,9 @@ from sqlalchemy.orm import Session
 
 from fieldclub import gridref
 from fieldclub.errors import ValidationFailedError
-from fieldclub.models import Finding, FindingShapeChange, Observation
+from fieldclub.models import Finding, Observation
 from fieldclub.models.common import to_db_geometry
-from fieldclub.vocab import ShapeChangeKind
+from fieldclub.services import shapes
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +173,7 @@ def grow(db: Session, finding: Finding, observation: Observation) -> None:
     assert not now.is_empty, f"finding {finding.public_id} has an empty shape"
     before = to_shape(finding.looked_at) if finding.looked_at is not None else None
     finding.looked_at = to_db_geometry(grown(before, now))
+    refresh_added(finding)
 
 
 def has_standing_look(db: Session, finding: Finding) -> bool:
@@ -237,6 +239,7 @@ def backfill(db: Session, *, batch: int = BACKFILL_BATCH) -> int:
                 .execution_options(populate_existing=True)
             ).one()
             if finding.looked_at is None and seed(db, finding):
+                refresh_added(finding)
                 seeded += 1
         db.commit()
         after = ids[-1]
@@ -284,45 +287,41 @@ def check(db: Session, finding: Finding, target: BaseGeometry) -> None:
         raise _moved(kept)
 
 
-@dataclass(frozen=True)
-class NewPart:
-    """What extensions added to a line since the newest standing second look."""
-
-    length_m: float
-    # The centre and zoom that frame what the newest of them added (`shapes.added_view`).
-    view: dict[str, Any] | None
+# Less than this beyond the looked-at ground is the buffer's polygon edge, not ground anyone added.
+_ADDED_MIN_M = 2 * _COMPARE_TOLERANCE_M
 
 
-def newest_look(db: Session, finding: Finding) -> int | None:
-    """The `shape_revision` of the newest standing second look, or None when there is none.
+def _beyond(finding: Finding) -> tuple[float, tuple[float, float, float, float]] | None:
+    """The length and bounds of the shape lying further than `LOOKED_AT_MAX_MOVE_M` from `looked_at`.
 
-    An answer given before answers recorded a revision was given before any
-    change to a shape, so it counts as revision 0.
+    The shape is a line, or an area's edge. None when nothing lies beyond.
     """
-    return db.scalar(
-        select(func.max(func.coalesce(Observation.shape_revision, 0))).where(
-            Observation.finding_id == finding.id, Observation.withdrawn_at.is_(None)
-        )
-    )
+    if finding.looked_at is None or finding.outline is None:
+        return None
+    looked_at = to_shape(finding.looked_at)
+    shape = to_shape(finding.outline)
+    assert not looked_at.is_empty, f"finding {finding.public_id} has looked at nothing"
+    assert not shape.is_empty, f"finding {finding.public_id} has an empty shape"
+    edge = shape.boundary if shape.geom_type in ("Polygon", "MultiPolygon") else shape
+    system = gridref.grid_system(*looked_at.representative_point().coords[0])
+    to_grid = gridref.transformer(4326, gridref.EPSG[system])
+    reach = _on_grid(looked_at, to_grid).buffer(LOOKED_AT_MAX_MOVE_M, quad_segs=_BUFFER_QUAD_SEGS)
+    beyond = _on_grid(edge, to_grid).simplify(_COMPARE_TOLERANCE_M).difference(reach)
+    if beyond.is_empty or beyond.length < _ADDED_MIN_M:
+        return None
+    back = _on_grid(beyond, gridref.transformer(gridref.EPSG[system], 4326))
+    return float(beyond.length), back.bounds
 
 
-def new_part(db: Session, finding: Finding) -> NewPart | None:
-    """What extensions added since the newest standing second look, or None when no such look is older."""
-    since = newest_look(db, finding)
-    if since is None or since >= finding.shape_revision:
-        return None
-    extensions = db.execute(
-        select(FindingShapeChange.added_length_m, FindingShapeChange.added_view)
-        .where(
-            FindingShapeChange.finding_id == finding.id,
-            FindingShapeChange.revision > since,
-            FindingShapeChange.kind == ShapeChangeKind.EXTENDED.value,
-        )
-        .order_by(FindingShapeChange.revision)
-    ).all()
-    if not extensions:
-        return None
-    return NewPart(
-        length_m=sum(length or 0.0 for length, _ in extensions),
-        view=extensions[-1].added_view,
-    )
+def refresh_added(finding: Finding) -> bool:
+    """Store `added_since_looked_m` and `added_view` from the shape and `looked_at`, and say if they changed.
+
+    Call it whenever either changes: after a change of shape and after a
+    second look grows `looked_at`.
+    """
+    found = _beyond(finding)
+    length, view = (None, None) if found is None else (round(found[0], 1), shapes.view_of(found[1]))
+    changed = (length, view) != (finding.added_since_looked_m, finding.added_view)
+    finding.added_since_looked_m = length
+    finding.added_view = view
+    return changed

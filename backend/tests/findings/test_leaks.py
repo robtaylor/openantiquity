@@ -94,6 +94,12 @@ def extend_line(db: Session, finder: User, finding: Finding, level: Sensitivity)
     )
     db.commit()
     assert lon_lat(finding.location) == ANCHORS[level], "extending keeps the anchor"
+    if finding.added_view is not None:
+        ADDED_VIEWS[level] = finding.added_view
+
+
+# The view that frames what each level's line added beyond its second looks, once it is extended.
+ADDED_VIEWS: dict[Sensitivity, dict] = {}
 
 
 def _line_strings(level: Sensitivity) -> list[str]:
@@ -103,6 +109,8 @@ def _line_strings(level: Sensitivity) -> list[str]:
     assert view is not None, "the fourth point extends the line"
     found = [f"{abs(lon):.6f}" for lon, _ in LINES[level]] + [f"{lat:.6f}" for _, lat in LINES[level]]
     found += [f"{abs(view['lon'])}", f"{view['lat']}"]
+    if (beyond := ADDED_VIEWS.get(level)) is not None:
+        found += [f"{abs(beyond['lon'])}", f"{beyond['lat']}"]
     # Its length, and what the extension added, as whole metres and the point after them.
     found += [f"{int(extended.length_m)}.", f"{int(extended.length_m - drawn.length_m)}."]
     return found
@@ -241,6 +249,8 @@ def world(db: Session, make_user: MakeUser, app: FastAPI, client_for: Callable[.
         extend_line(db, finder, line, level)
         assert line.tier == "seen"
         assert "look_at_new_part" in line.open_steps
+        assert line.added_view is not None
+        assert ADDED_VIEWS[level] == line.added_view
 
     def client(viewer: str) -> TestClient:
         return client_for(app, None if viewer == "signed_out" else people[viewer])
@@ -355,6 +365,7 @@ def test_a_finding_page(world: World, viewer: str, level: Sensitivity, kind: str
                 for c in shape["changes"]
             ],
             "added_since_looked_m": None,
+            "added_view": None,
             "looked_at": None,
         }
         assert "look_at_new_part" not in [step["code"] for step in body["assessment"]["next_steps"]]

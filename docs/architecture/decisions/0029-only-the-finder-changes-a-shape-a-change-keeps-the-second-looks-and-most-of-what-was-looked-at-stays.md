@@ -24,7 +24,7 @@ The owner later raised other people's changes as suggestions the owner accepts o
 1. Only the finder changes, extends or removes a finding's shape. Joining different people's lines waits until there is a need. An edit names the revision it started from, so one tab can't silently undo another.
 2. Every change is recorded with the path before it, and is classed as an extension when the old points stay unchanged and in order with new points only at the ends.
 3. A change of shape never reassesses. The tier, every answer and its weight stand under Decision 0019, and each answer records the shape revision it saw.
-4. The finding page tells exact viewers how much was added since the newest second look and lists every change. An extension of more than 200 m invites fresh looks at the added part without moving the tier. A reshape is shown with its date and no invitation. A square-only viewer learns only that the shape changed and when.
+4. The finding page tells exact viewers how much was added since the second looks and lists every change. What was added is the part of the shape more than 250 m from what was looked at, measured from the ground and not from the kind of each change, so a nudged end with more line beyond counts and an extension later cut away doesn't. More than 200 m of it invites fresh looks without moving the tier. A change that stays within what was looked at is shown with its date and no invitation. A square-only viewer learns only that the shape changed and when.
 5. Nobody but those who may see answers under Decision 0010 learns how many there were. "Added since the last second look" does tell other viewers that some answer came before a date. This was weighed and accepted, since the score already moves when answers come in.
 6. Nothing moves a whole shape. The tool moves, adds and deletes single points.
 7. The finding keeps the ground its second looks were given on, which only grows. An edit must keep every looked-at point, and at least three-quarters of the looked-at length, within 250 m of the new shape. The mechanics are in the plan's section "Once looked at, most of it stays".
@@ -35,6 +35,7 @@ The owner later raised other people's changes as suggestions the owner accepts o
 - **Letting anyone extend a finding, or joining lines** — not taken. The owner kept each person's markings separate.
 - **Answers before a change stop counting** — rejected because a finder could wipe unwelcome answers by adding a metre to a line.
 - **A 1 km cap on moving the anchor** — rejected because a line can be extended elsewhere and its looked-at part deleted.
+- **Counting only the changes classed as extensions** — rejected because a strict classifier calls a nudged end with 20 km more a reshape, which the one-flow drawing tool makes the usual case, and kept counting an extension after it was cut away.
 - **A cap per edit, or comparing each edit with the last** — rejected because edits can be chained. The looked-at ground only grows, so a chain is held as one edit is.
 - **Holding all of what was looked at within 250 m** — rejected after the owner asked that shortening a line stay possible.
 - **Leaving moves alone** — rejected because a step on the ladder says others saw a feature at this place.

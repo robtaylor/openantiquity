@@ -428,8 +428,9 @@ def gather_inputs(db: Session, finding: Finding, state: FindingState | None = No
     current role, and a banned person's evidence and verifications stop counting.
 
     `state` is what to tell the engine, which honours only `withdrawn`. It
-    defaults to the stored state. The length added to the line since the
-    newest second look (`looked_at.new_part`) asks for a look at it.
+    defaults to the stored state. The length of the shape that lies beyond
+    what second looks were given on (`looked_at.refresh_added`) asks for a
+    look at it.
     """
     author_role = db.scalar(select(User.role).where(User.id == finding.author_id))
     assert author_role is not None, f"finding {finding.public_id} has no author"
@@ -486,7 +487,7 @@ def gather_inputs(db: Session, finding: Finding, state: FindingState | None = No
         state=state if state is not None else FindingState(finding.state),
         observations=observations,
         evidence=evidence,
-        added_since_looked_m=new_part.length_m if (new_part := looked_at.new_part(db, finding)) else None,
+        added_since_looked_m=finding.added_since_looked_m,
     )
 
 
@@ -897,11 +898,12 @@ def change_shape(
     the change must keep most of what second looks were given on
     (`looked_at.check`), the change row is written and the revision raised.
 
-    Every answer stands, at the weight it was given with. An extension is
-    reassessed only so that the finding asks for a look at the new part
-    (`look_at_new_part`): nothing the ladder weighs has changed, so an
-    assessment that is up to date keeps its tier and score. An extension
-    records `shape_extended`, which tells the followers.
+    Every answer stands, at the weight it was given with. When the length
+    lying beyond what was looked at changes (`looked_at.refresh_added`), the
+    finding is reassessed only so that it asks, or stops asking, for a look
+    at the new part (`look_at_new_part`): nothing the ladder weighs has
+    changed, so an assessment that is up to date keeps its tier and score.
+    An extension records `shape_extended`, which tells the followers.
     """
     _check_revision(finding, revision)
     new_shape = shape_from_request(path, outline)
@@ -922,12 +924,15 @@ def change_shape(
         finding.location_derived = False
     if _point_parts(anchor) != _point_parts(current):
         _move_anchor(db, finding, anchor)
-    if kind is ShapeChangeKind.EXTENDED:
+    if looked_at.refresh_added(finding):
         db.flush()
         result = reassess(db, finding, by)
         if result.tier_after is not result.tier_before:
             # Only an assessment stored before the engine last changed can move here.
-            logger.warning("Finding %s moved from %s on an extension", finding.public_id, result.tier_before)
+            logger.warning(
+                "Finding %s moved from %s on a change of shape", finding.public_id, result.tier_before
+            )
+    if kind is ShapeChangeKind.EXTENDED:
         activity.record(db, ActivityKind.SHAPE_EXTENDED, by, finding)
     return kind
 
@@ -1662,8 +1667,6 @@ class FindingView:
     nation: str | None
     # Every change to the shape, oldest first, for `sensitivity.visible_shape`.
     shape_changes: list[FindingShapeChange]
-    # What extensions added since the newest second look, if any.
-    new_part: looked_at.NewPart | None
 
 
 def finding_view(db: Session, finding: Finding, viewer: User | None) -> FindingView:
@@ -1687,5 +1690,4 @@ def finding_view(db: Session, finding: Finding, viewer: User | None) -> FindingV
                 .order_by(FindingShapeChange.revision)
             )
         ),
-        new_part=looked_at.new_part(db, finding),
     )

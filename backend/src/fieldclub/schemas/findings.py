@@ -226,9 +226,12 @@ class ShapeOut(ApiModel):
     # West, south, east, north.
     extent: list[float] | None
     changes: list[ShapeChangeOut]
-    # The length extensions added since the newest second look. Null when no
-    # second look is older than an extension.
+    # How much of the shape, a line's length or an area's edge, lies further
+    # than `/meta` `shapes.looked_at_max_move_m` from what second looks were
+    # given on, and a centre and zoom that frame it. Null before any second
+    # look and when nothing lies beyond.
     added_since_looked_m: float | None
+    added_view: AddedView | None = None
     # What second looks were given on, which an edit must keep most of close
     # (`/meta` `shapes.looked_at_max_move_m` and `looked_at_min_kept`). Only for
     # someone who may change the finding (`actions.edit`), and null before any second look.
@@ -251,13 +254,10 @@ def location_detail(
     viewer: User | None,
     changes: list[FindingShapeChange],
     *,
-    added_since_looked_m: float | None = None,
     may_change: bool = False,
 ) -> LocationDetail:
     """The page's `location`, through `sensitivity.visible_location` and `visible_shape`."""
-    shape = sensitivity.visible_shape(
-        finding, viewer, changes, added_since_looked_m=added_since_looked_m, may_change=may_change
-    )
+    shape = sensitivity.visible_shape(finding, viewer, changes, may_change=may_change)
     where = location_out(finding, viewer)
     return LocationDetail(
         **where.model_dump(exclude={"outline"}),
@@ -270,6 +270,7 @@ def location_detail(
             extent=list(shape.extent) if shape.extent is not None else None,
             changes=[ShapeChangeOut.model_validate(change) for change in shape.changes],
             added_since_looked_m=shape.added_since_looked_m,
+            added_view=AddedView.model_validate(shape.added_view) if shape.added_view is not None else None,
             looked_at=geojson_geometry(shape.looked_at, decimals=shapes.DECIMALS),
         ),
     )
@@ -609,7 +610,6 @@ class FindingDetail(FindingSummary):
             finding,
             viewer,
             view.shape_changes,
-            added_since_looked_m=view.new_part.length_m if view.new_part is not None else None,
             may_change=allowed.edit.allowed,
         )
         # Asking for a look at what was added to a line says it is a line.

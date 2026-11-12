@@ -135,6 +135,14 @@ class Finding(Base):
     # It only grows. An edit must keep most of it close (`services.looked_at`).
     # Shape: never served but to someone who sees the finding exactly and may change it.
     looked_at: Mapped[WKBElement | None] = mapped_column(any_geometry(spatial_index=False), deferred=True)
+    # How much of the shape lies further than `looked_at.LOOKED_AT_MAX_MOVE_M`
+    # from `looked_at`: a line's length there, an area's edge there. Null
+    # before any second look and when nothing lies beyond. With `added_view`,
+    # a centre and zoom that frame that part, it is worked out when the shape
+    # changes and when a second look is given (`looked_at.refresh_added`), so
+    # no read buffers a long line. `added_view` is shape.
+    added_since_looked_m: Mapped[float | None] = mapped_column(REAL)
+    added_view: Mapped[JsonDict | None] = json_column()
     # True when the server chose `location` from the shape, because the finder drew it without one.
     location_derived: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # Left unset, a new finding takes its feature class's default level

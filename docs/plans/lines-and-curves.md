@@ -62,7 +62,9 @@ New and changed columns on `findings`:
 | `shape_kind` | text, null | `line` or `area`, or null without a shape |
 | `shape_length_m` | real, null | Geodesic length of a line, or perimeter of an area |
 | `shape_revision` | int, default 0 | Raised by one on every change to the shape |
-| `looked_at` | Geometry, null | The ground second looks were given on: the union of the finding's shape, or point, at each second look. See "Once looked at, it stays" |
+| `looked_at` | Geometry, null | The ground second looks were given on: the union of the finding's shape, or point, at each second look. See "Once looked at, most of it stays" |
+| `added_since_looked_m` | real, null | How much of the shape lies further than 250 m from `looked_at`. See "Extending, and what it does to second looks" |
+| `added_view` | jsonb, null | A centre and zoom that frame that part |
 | `location_derived` | bool, default false | True when the server chose `location` from the shape |
 
 `observations.shape_revision` (int, null) records the finding's `shape_revision` when the answer was given, as `tier_at_answer` does for the tier.
@@ -184,13 +186,16 @@ All under `/api/v1`. Mutating requests carry `X-OpenAntiquity-Client: web` as ev
     "changes": [
       {"kind": "extended", "on": "2026-11-20", "added_length_m": 4200.0, "added_view": {"lon": -1.12, "lat": 51.28, "zoom": 15}}
     ],
-    "added_since_looked_m": 4200.0
+    "added_since_looked_m": 4200.0,
+    "added_view": {"lon": -1.12, "lat": 51.28, "zoom": 13},
+    "looked_at": {"type": "LineString", "coordinates": [[-1.2345678, 51.2345678]]}
   }
 }
 ```
 
 - `outline` in the detail is `outline_mid`, so a 600 km road doesn't cost a phone a megabyte. The full shape is in downloads and is re-derived from `path` by the editor.
-- `added_since_looked_m` is the length added by extensions after the newest live second look's `shape_revision`, and is null when no live answer is older than an extension.
+- `added_since_looked_m` is the length of the shape lying further than `LOOKED_AT_MAX_MOVE_M` from `looked_at`: for a line its length there, for an area the length of its edge there. It is null when `looked_at` is null or nothing lies beyond. `added_view` is a centre and zoom that frame that part. Both are worked out when the shape changes and when a second look is given, and stored on the finding.
+- `looked_at` is the ground second looks were given on, as GeoJSON, which the editor draws under the path. It goes only to someone who may change the finding (`actions.edit`), and is null before any second look.
 - For a viewer who sees only the square, `outline`, `path` and `extent` are null, and `shape` is `{"kind": null, "changes": [{"kind": "changed", "on": "2026-11-20"}]}`: they learn that the shape changed and when, and nothing of its size, kind or place.
 
 **Summaries** (`FindingSummary`, `ActivityFinding`, `MentionedFinding`, help-wanted tasks) no longer carry an outline: `location.outline` is always null there, and `location.shape_kind` says `line` or `area` to a viewer who sees the finding exactly and null otherwise. No frontend code reads a summary's outline today, so nothing breaks, and a 200-finding page of long lines would otherwise be tens of megabytes.
@@ -207,10 +212,12 @@ The owner decided this. In the code:
 
 - An answer stores `shape_revision` when it is given, and is refused when it names an older one (see "The API contract"). The ladder, its weights and Decision 0019's rule are untouched, because nothing reassesses on a shape change.
 - Every change writes a `finding_shape_changes` row, with `path_before` kept for moderators and for a later undo.
-- An extension records `added_view`: the centre of the added part and a zoom that frames it, worked out on the server from the added vertices.
-- The finding page says, to everyone who sees it exactly, "4.2 km added since the last second look" with a button that opens the map at `added_view`, and lists each change on the timeline.
-- An extension that leaves `added_since_looked_m` above 200 m adds a next step, `look_at_new_part`, to the finding's `open_steps`. It appears in help wanted and in the review queue with `added_view` as its view, and it never moves the tier. It clears when a second look is given after the extension.
-- A reshape that moves points the reviewers looked at is recorded the same way, with "The shape was changed on 20 November" and no invitation, as the owner decided.
+- An extension's change row records `added_length_m` and `added_view`, the centre and zoom of the vertices it added, for the timeline.
+- What has been added since the last second look is measured from the ground, not from the kind of each change. It is the part of the shape further than 250 m from `looked_at` (`added_since_looked_m`, framed by the finding's `added_view`). So a change that nudges an end point and adds 20 km is a reshape on the timeline and still counts, an area grown round what was looked at counts, and an extension later cut away no longer does. The classifier and each change's `kind` only label the timeline.
+- The finding page says, to everyone who sees it exactly, "4.2 km added since the last second look" with a button that opens the map at the finding's `added_view`, and lists each change on the timeline.
+- A change that leaves `added_since_looked_m` above 200 m adds a next step, `look_at_new_part`, to the finding's `open_steps`. It appears in help wanted and in the review queue with the finding's `added_view` as its view, and it never moves the tier. It clears when a second look is given, because that look's shape joins `looked_at`, or when the part beyond is cut away. An answer taken back leaves `looked_at` as it was, so it brings back no invitation.
+- An edit that stays within what was looked at invites nobody, and no change of shape moves the tier, the score or any answer's weight.
+- A reshape that moves points the reviewers looked at, while staying within 250 m of them, is recorded the same way, with "The shape was changed on 20 November" and no invitation, as the owner decided.
 - An extension records the activity kind `shape_extended`, placed at the finding's square like every other activity row, and notifies the finding's followers. Answerers aren't notified separately: the finder follows their own finding by default, and anyone who answered can follow it.
 
 People who can see answers (Decision 0010) also see which answers came before each change. Nobody else is told how many answers there were. "Added since the last second look" tells a viewer who hasn't answered that some answer came before that date. The score already moves when answers come in, so the existence of an answer isn't new to them, but the date is a little more. This is recorded in the decision so a later reader knows it was weighed.

@@ -128,6 +128,8 @@ _SHAPE_COLUMNS = (
     "shape_revision",
     "location_derived",
     "looked_at",
+    "added_since_looked_m",
+    "added_view",
 )
 
 

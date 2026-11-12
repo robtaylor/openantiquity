@@ -520,8 +520,7 @@ def new_part_view(db: Session, finding: Finding, viewer: User | None) -> dict[st
     if NextStepCode.LOOK_AT_NEW_PART.value not in finding.open_steps:
         return None
     assert sensitivity.sees_exact(finding, viewer), "the new part is shown only to exact viewers"
-    part = looked_at.new_part(db, finding)
-    return part.view if part is not None else None
+    return finding.added_view
 
 
 # --------------------------------------------------------------------------

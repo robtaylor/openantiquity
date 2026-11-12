@@ -586,7 +586,17 @@ def added_view(old: Path, new: Path) -> dict[str, float] | None:
             vertices.extend(_segment_vertices(segment))
     assert vertices, "an extension adds a segment at least"
     lons, lats = zip(*vertices, strict=True)
-    west, east, south, north = min(lons), max(lons), min(lats), max(lats)
+    return view_of((min(lons), min(lats), max(lons), max(lats)))
+
+
+def view_of(bounds: tuple[float, float, float, float]) -> dict[str, float]:
+    """A centre and a zoom that frame west, south, east and north.
+
+    The zoom is between `VIEW_MIN_ZOOM` and `VIEW_MAX_ZOOM`.
+    """
+    west, south, east, north = bounds
+    assert west <= east, "bounds run west to east"
+    assert south <= north, "bounds run south to north"
     lat = (south + north) / 2
     zooms = [float(VIEW_MAX_ZOOM)]
     # A map tile spans 360 / 2^z degrees of longitude, and 1 / cos(lat) times less of latitude.
