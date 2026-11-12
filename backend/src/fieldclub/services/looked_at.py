@@ -28,6 +28,8 @@ and may change it (`sensitivity.visible_shape`).
 
 from __future__ import annotations
 
+import logging
+import math
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
@@ -47,6 +49,8 @@ from fieldclub.models import Finding, FindingShapeChange, Observation
 from fieldclub.models.common import to_db_geometry
 from fieldclub.vocab import ShapeChangeKind
 
+logger = logging.getLogger(__name__)
+
 # How close what was looked at must stay to the new shape, and how much of
 # the length of its lines must stay that close. The owner agreed these figures.
 LOOKED_AT_MAX_MOVE_M = 250
@@ -57,6 +61,18 @@ LOOKED_AT_MIN_KEPT = 0.75
 _COMPARE_TOLERANCE_M = 5.0
 # Segments in a quarter circle of the buffer: about 5 m from a true circle at 250 m.
 _BUFFER_QUAD_SEGS = 4
+# What a second look adds is simplified this much, in metres, which is far
+# inside `LOOKED_AT_MAX_MOVE_M`. A 50,000-vertex line would otherwise be
+# stored, sent to the finder and buffered on each edit, once for each
+# revision someone looked at.
+LOOKED_AT_SIMPLIFY_M = 5.0
+# The most vertices `looked_at` keeps. Past it, the whole is simplified at
+# twice the tolerance, and again, until it fits. About 80 KB of geometry.
+LOOKED_AT_MAX_VERTICES = 5_000
+# Past this tolerance the simplification would blur the 250 m rule itself.
+_SIMPLIFY_MAX_M = LOOKED_AT_MAX_MOVE_M / 4
+_METRES_PER_DEGREE = 111_320
+_DECIMALS = 7
 
 
 class LookedAtMovedError(ValidationFailedError):
@@ -92,6 +108,47 @@ def ground(finding: Finding) -> BaseGeometry:
     return shape.boundary if shape.geom_type in ("Polygon", "MultiPolygon") else shape
 
 
+def _simplified(geometry: BaseGeometry, metres: float) -> BaseGeometry:
+    """`geometry` simplified to within `metres`, in a plane scaled for its latitude, never emptied."""
+    assert not geometry.is_empty, "an empty geometry is never simplified"
+    k = math.cos(math.radians(geometry.representative_point().y))
+    scale = np.array([k, 1.0])
+    flat = shapely.transform(geometry, lambda xy: xy * scale)
+    simple = flat.simplify(metres / _METRES_PER_DEGREE, preserve_topology=True)
+    result = shapely.transform(simple, lambda xy: np.round(xy / scale, _DECIMALS))
+    assert not result.is_empty, "simplifying never empties what was looked at"
+    return result
+
+
+def grown(before: BaseGeometry | None, now: BaseGeometry) -> BaseGeometry:
+    """`before` with `now` added: `now` simplified to `LOOKED_AT_SIMPLIFY_M`, and the whole kept small.
+
+    When the union passes `LOOKED_AT_MAX_VERTICES`, it is simplified at
+    twice the tolerance, and again, until it fits. Empty geometries are
+    refused before any other test: an empty ring crashes GEOS
+    (libgeos/geos#1604).
+    """
+    assert not now.is_empty, "a second look is given on something, never on an empty shape"
+    assert before is None or not before.is_empty, "what was looked at is never empty"
+    added = _simplified(now, LOOKED_AT_SIMPLIFY_M)
+    whole = added if before is None else shapely.union(before, added)
+    if whole.geom_type == "MultiLineString":
+        # The union cuts lines where they meet. Join the pieces again, so fewer stay separate.
+        # Only lines: merging anything with a point in it drops the point.
+        whole = shapely.line_merge(whole)
+    assert not whole.is_empty, "what was looked at only grows"
+    tolerance = LOOKED_AT_SIMPLIFY_M
+    while shapely.get_num_coordinates(whole) > LOOKED_AT_MAX_VERTICES and tolerance < _SIMPLIFY_MAX_M:
+        tolerance = min(2 * tolerance, _SIMPLIFY_MAX_M)
+        whole = _simplified(whole, tolerance)
+    if shapely.get_num_coordinates(whole) > LOOKED_AT_MAX_VERTICES:
+        # Only thousands of separate pieces, each answered, could leave it this big.
+        logger.error(
+            "What was looked at keeps %d vertices at %.0f m", shapely.get_num_coordinates(whole), tolerance
+        )
+    return whole
+
+
 def grow(db: Session, finding: Finding, observation: Observation) -> None:
     """Add what `observation`, just given, was given on to the finding's `looked_at`. Hold the lock.
 
@@ -114,7 +171,7 @@ def grow(db: Session, finding: Finding, observation: Observation) -> None:
     now = ground(finding)
     assert not now.is_empty, f"finding {finding.public_id} has an empty shape"
     before = to_shape(finding.looked_at) if finding.looked_at is not None else None
-    finding.looked_at = to_db_geometry(now if before is None else shapely.union(before, now))
+    finding.looked_at = to_db_geometry(grown(before, now))
 
 
 def has_standing_look(db: Session, finding: Finding) -> bool:
@@ -145,7 +202,7 @@ def seed(db: Session, finding: Finding) -> bool:
         return False
     now = ground(finding)
     assert not now.is_empty, f"finding {finding.public_id} has an empty shape"
-    finding.looked_at = to_db_geometry(now)
+    finding.looked_at = to_db_geometry(grown(None, now))
     return True
 
 

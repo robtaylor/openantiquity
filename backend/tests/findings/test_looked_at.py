@@ -3,11 +3,14 @@ and how much of what they saw an edit must keep (Decision 0029)."""
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import pytest
+import shapely
+import shapely.affinity
 from geoalchemy2.shape import to_shape
-from shapely.geometry import LineString, Point
+from shapely.geometry import LineString, MultiPoint, Point
 from shapely.geometry.base import BaseGeometry
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
@@ -112,6 +115,80 @@ def test_an_answer_naming_a_shape_that_has_since_changed_is_refused_and_stores_n
     answer(db, finding, helper, Visible.YES, shape_revision=1)
     answer(db, finding, make_user(), Visible.YES)
     assert db.scalars(select(Observation.shape_revision)).all() == [1, 1]
+
+
+def _zigzag(vertices: int, amplitude_m: float, spacing_m: float = 15.0) -> LineString:
+    """A line north from LAT that swings `amplitude_m` east and back at every vertex."""
+    k = math.cos(math.radians(LAT))
+    return LineString(
+        [
+            (LON + (i % 2) * amplitude_m / (111_320 * k), LAT + i * spacing_m / 111_320)
+            for i in range(vertices)
+        ]
+    )
+
+
+def _apart_m(a: BaseGeometry, b: BaseGeometry) -> float:
+    """The Hausdorff distance between two geometries near LAT, in metres north and east."""
+    scale = [math.cos(math.radians(LAT)) * 111_320, 111_320]
+    return shapely.transform(a, lambda xy: xy * scale).hausdorff_distance(
+        shapely.transform(b, lambda xy: xy * scale)
+    )
+
+
+def test_what_is_added_is_simplified_to_5_m() -> None:
+    wiggle = _zigzag(50_000, amplitude_m=2)
+    kept = looked_at.grown(None, wiggle)
+    assert shapely.get_num_coordinates(kept) < 100
+    # Never more than 5 m from the line, measured in metres north and east.
+    assert _apart_m(kept, wiggle) < 5.01
+
+
+def test_looked_at_is_simplified_harder_once_it_passes_the_cap() -> None:
+    saw_tooth = _zigzag(12_000, amplitude_m=30)
+    assert shapely.get_num_coordinates(saw_tooth.simplify(5 / 111_320)) > looked_at.LOOKED_AT_MAX_VERTICES
+    kept = looked_at.grown(None, saw_tooth)
+    assert 2 <= shapely.get_num_coordinates(kept) <= looked_at.LOOKED_AT_MAX_VERTICES
+    assert _apart_m(kept, saw_tooth) <= looked_at.LOOKED_AT_MAX_MOVE_M / 4
+    # The cap holds as more is added beside it.
+    beside = shapely.affinity.translate(saw_tooth, xoff=0.0005)
+    both = looked_at.grown(kept, beside)
+    assert shapely.get_num_coordinates(both) <= looked_at.LOOKED_AT_MAX_VERTICES
+
+
+def test_points_and_lines_looked_at_are_all_kept() -> None:
+    spot = looked_at.grown(None, Point(LON, LAT))
+    moved = looked_at.grown(spot, Point(LON + 0.001, LAT))
+    assert moved.equals_exact(MultiPoint([(LON, LAT), (LON + 0.001, LAT)]), 1e-9)
+    drawn_later = looked_at.grown(moved, LineString([(LON, LAT + 0.01), (LON, LAT + 0.02)]))
+    assert {part.geom_type for part in shapely.get_parts(drawn_later)} == {"Point", "LineString"}
+    assert shapely.get_num_geometries(drawn_later) == 3
+
+
+def test_nothing_empty_is_added_to_what_was_looked_at() -> None:
+    with pytest.raises(AssertionError, match="empty"):
+        looked_at.grown(None, LineString())
+    with pytest.raises(AssertionError, match="empty"):
+        looked_at.grown(Point(LON, LAT), LineString())
+
+
+def test_every_revision_looked_at_stays_under_the_cap(db: Session, make_user: MakeUser) -> None:
+    finder = make_user()
+    smooth = [(LON + 0.002 * (i % 2), LAT + 0.004 * i) for i in range(40)]
+    finding = drawn(db, finder, path(*smooth, kind="smooth"))
+    shown = []
+    for revision in range(4):
+        answered(db, make_user, finding)
+        shown.append(outline_of(finding))
+        nudged = [(lon + (revision + 1) * 0.0001, lat) for lon, lat in smooth]
+        edit(db, finding, finder, path=path(*nudged, kind="smooth"), path_revision=revision)
+    answered(db, make_user, finding)
+    shown.append(outline_of(finding))
+    vertices = shapely.get_num_coordinates(seen_on(finding))
+    assert 0 < vertices <= looked_at.LOOKED_AT_MAX_VERTICES
+    # Each revision is simplified as it is added.
+    assert vertices < shapely.get_num_coordinates(shapely.union_all(shown)) / 2
+    assert _apart_m(seen_on(finding), shapely.union_all(shown)) < 5.01
 
 
 # --------------------------------------------------------------------------
