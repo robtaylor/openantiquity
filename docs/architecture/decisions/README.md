@@ -65,15 +65,10 @@ Write all three in the same present tense and a reader can't tell *why we did it
 | [0025](0025-spend-on-fly-is-watched-by-hand-each-week-and-bounded-by-limits.md) | Spend on Fly is watched by hand each week and bounded by limits | Proposed |
 | [0026](0026-the-code-is-published-under-the-agpl-version-3.md) | The code is published under the AGPL version 3 | Proposed |
 | [0027](0027-the-web-app-never-fetches-elevation-and-a-deploy-checks-the-mirror-first.md) | The web app never fetches elevation, and a deploy checks the mirror first | Proposed |
-| [0028](0028-a-finding-s-shape-is-stored-as-the-points-its-finder-tapped-and-the-server-derives-it-with-one-fixed-curve.md) | A finding's shape is stored as the points its finder tapped, and the server derives it with one fixed curve | Proposed |
-| [0029](0029-lines-may-run-600-km-and-closed-shapes-stop-at-25-km-across.md) | Lines may run 600 km and closed shapes stop at 25 km across | Proposed |
-| [0030](0030-a-finding-drawn-as-a-shape-keeps-an-anchor-point-that-stays-put-while-the-shape-grows.md) | A finding drawn as a shape keeps an anchor point that stays put while the shape grows | Proposed |
-| [0031](0031-only-the-finder-changes-a-finding-s-shape-and-extending-it-keeps-its-step-and-its-second-looks.md) | Only the finder changes a finding's shape, and extending it keeps its step and its second looks | Proposed |
-| [0032](0032-what-is-drawn-near-a-protected-finding-is-judged-against-its-whole-shape.md) | What is drawn near a protected finding is judged against its whole shape | Proposed |
-| [0033](0033-an-open-finding-s-shape-isn-t-generalised-when-it-passes-near-someone-else-s-protected-finding.md) | An open finding's shape isn't generalised when it passes near someone else's protected finding | Proposed |
-| [0034](0034-on-a-phone-a-point-s-kind-is-switched-by-a-control-or-a-long-press-on-the-point-not-by-pressure.md) | On a phone a point's kind is switched by a control or a long press on the point, not by pressure | Proposed |
-| [0035](0035-overlapping-findings-are-picked-by-their-edges-the-more-specific-wins-and-a-chooser-settles-the-rest.md) | Overlapping findings are picked by their edges, the more specific wins, and a chooser settles the rest | Proposed |
-| [0036](0036-once-a-finding-has-second-looks-what-was-looked-at-stays-where-it-was.md) | Once a finding has second looks, what was looked at stays where it was | Proposed |
+| [0028](0028-a-finding-s-shape-is-its-tapped-points-under-one-fixed-curve-within-size-caps-around-an-anchor-that-stays-put.md) | A finding's shape is its tapped points under one fixed curve, within size caps, around an anchor that stays put | Proposed |
+| [0029](0029-only-the-finder-changes-a-shape-a-change-keeps-the-second-looks-and-most-of-what-was-looked-at-stays.md) | Only the finder changes a shape, a change keeps the second looks, and most of what was looked at stays | Proposed |
+| [0030](0030-the-privacy-guard-measures-to-a-protected-finding-s-whole-shape-and-open-shapes-near-one-aren-t-generalised.md) | The privacy guard measures to a protected finding's whole shape, and open shapes near one aren't generalised | Proposed |
+| [0031](0031-a-point-s-kind-is-switched-by-a-control-or-a-long-press-on-its-handle-and-overlapping-findings-are-picked-by-their-edges.md) | A point's kind is switched by a control or a long press on its handle, and overlapping findings are picked by their edges | Proposed |
 | [0032](0032-findings-are-open-or-protected-and-the-restricted-level-is-dropped.md) | Findings are open or protected, and the restricted level is dropped | Proposed |
 | [0033](0033-a-version-passes-over-stored-values-a-later-one-added.md) | A version passes over stored values a later one added | Proposed |
 
