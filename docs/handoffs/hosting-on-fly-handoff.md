@@ -1,4 +1,4 @@
-# Handoff — Hosting on Fly.io (answering on openantiquity.org, with no sign-in yet)
+# Handoff — Hosting on Fly.io (answering on openantiquity.org, with OpenStreetMap sign-in)
 
 **Created:** 2026-11-12
 **Working tree:** clean
@@ -14,7 +14,7 @@ See docs/handoff-discipline.md for the migration table.
 
 ## Goal & next-up
 
-**Goal of this thread:** move the deployment from Google Cloud to Fly.io (Decision 0018). On 2026-11-12 steps 1 to 11 of the runbook were carried out. The web app runs on Fly and answers on `openantiquity.org`, with Managed Postgres, the whole elevation mirror and the national overview, and it draws terrain. The hourly machine exists. Nobody can sign in, and only the scheduled monuments have been ingested.
+**Goal of this thread:** move the deployment from Google Cloud to Fly.io (Decision 0018). On 2026-11-12 steps 1 to 11 of the runbook were carried out. The web app runs on Fly and answers on `openantiquity.org`, with Managed Postgres, the whole elevation mirror and the national overview, and it draws terrain. The hourly machine exists. OpenStreetMap sign-in is on, and only the scheduled monuments have been ingested.
 
 **Next session should pick up:** follow-ups 1 to 3 in order. Do every cloud step in the main session: sub-agents and workflow agents don't touch Fly, Google or Gandi and don't read `.env`.
 
@@ -63,12 +63,11 @@ The last pair names the jobs image that exists. `fly_jobs.py` looks for the imag
 
 The hourly machine `due` was made on 2026-11-12 with its 10 GB volume, from the jobs image of commit `e7c0794`, and its first run found nothing due. Its 03:00 UTC run on 2026-11-13 is the first refresh of every bulk source from Fly, 34 connectors, under a six-hour limit. Read it with `fly logs --app openantiquity-jobs`, or ask the database for the runs, and run by hand any source that failed: `uv run infra/fly_jobs.py --commit e7c0794710157b5672fdf1b80c1424c0ec89adc4 ingest <key>`. Then look at `fly volumes list --app openantiquity-jobs` for how much of the volume the downloads took.
 
-### 2. Take the jobs key's read access off two buckets (the owner, minutes)
+### 2. Try a real sign-in with OpenStreetMap (the owner, minutes)
 
-The owner made `openantiquity-photos` and set the keys' roles in Tigris's dashboard on 2026-11-12. Each key was then probed from its own app's machine, by listing, by writing and deleting one probe object, and by asking for an object that isn't there.
+The owner registered the OpenStreetMap application on 2026-11-12 and kept its id and secret in `.env` as `OSM_AUTH2_ID` and `OSM_AUTH2_SECRET`. Both were piped to the web app's secrets as `FIELDCLUB_OSM_CLIENT_ID` and `FIELDCLUB_OSM_CLIENT_SECRET` by `var/handoff/tools/osm_to_fly.py`, which shows neither, and the web app was deployed. `/api/v1/meta` now gives OpenStreetMap as enabled, `/api/v1/auth/oauth/osm/start` sends the browser to OpenStreetMap with the registered redirect address and the `openid` scope, and OpenStreetMap answers that with its login page. Nobody has yet signed in the whole way: the code exchange, the new account and the welcome step are untried on Fly. If it fails, `fly logs --app openantiquity` has the reason.
 
-- The web app's key is as intended: it lists and reads all three buckets, writes the cache and the photos, and is refused a write to the elevation bucket.
-- The jobs app's key writes the elevation bucket alone, as intended, but it can also list and read `openantiquity-cache` and `openantiquity-photos`. Step 3 of the runbook gives it no other bucket. Photos are what members upload, and the jobs app holds Defra's login and parses other publishers' files, so the owner should remove both roles in the dashboard. The owner was told on 2026-11-12.
+The jobs app's Tigris key was put right by the owner the same day: tried from a jobs machine, it lists, reads and writes the elevation bucket and is refused all three on the cache and the photos.
 
 ### 3. Wake the machines after a deploy, or accept the first slow request (a choice, minutes)
 
@@ -80,10 +79,10 @@ The GitHub environment `production` and a deploy token for the web app alone. Th
 
 ### 5. Sign-in, and what opening to the public still needs (the owner)
 
-The domains were pointed at Fly on 2026-11-12 at the owner's word ("noone will be looking yet"). The site answers on `openantiquity.org` and anyone can look at the map. Every sign-in method is off, so nobody can join or save.
+The domains were pointed at Fly on 2026-11-12 at the owner's word ("noone will be looking yet"). The site answers on `openantiquity.org` and anyone can look at the map.
 
-- The owner is registering the OpenStreetMap application. Its redirect address is `https://openantiquity.org/api/v1/auth/oauth/osm/callback`, it is confidential, and its only permission is `openid`. The client id goes in `fly.toml` as `FIELDCLUB_OSM_CLIENT_ID`. The secret goes in `var/web-secrets.env` and then `bash infra/fly-secrets.sh web --from var/web-secrets.env`, never in chat. Then deploy.
-- The app has no gate. Once a provider is configured, anyone with an account there can join and post. The owner was told on 2026-11-12, and that [`owner-actions.md`](../plans/owner-actions.md) holds a public launch until an operator is named and the terms, the privacy notice and the Online Safety Act assessment exist (WS14 to WS17). A setting that limits sign-up to named accounts was offered and not yet asked for.
+- OpenStreetMap sign-in is on since 2026-11-12 (follow-up 2). So anyone with an OpenStreetMap account can now join and post.
+- The app has no gate. The owner was told on 2026-11-12, and that [`owner-actions.md`](../plans/owner-actions.md) holds a public launch until an operator is named and the terms, the privacy notice and the Online Safety Act assessment exist (WS14 to WS17). A setting that limits sign-up to named accounts was offered and not yet asked for.
 - The other providers and the mail relay are in `owner-actions.md`, WS3.
 
 ### 6. Take the Google project down (an hour)
