@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { Link } from "react-router";
 import { describe, expect, it, vi } from "vitest";
@@ -281,6 +281,21 @@ describe("Shell", () => {
     // While the mark is being placed, the primary action places it.
     expect(screen.getByRole("button", { name: "Place it here" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mark a finding" })).toBeNull();
+  });
+
+  it("closes the layer panel when Layers is pressed twice before the first press has drawn", async () => {
+    // The router draws a change of address as a transition, so a second press can arrive while
+    // the screen still shows the panel shut. It has to undo the first press, not repeat it.
+    renderShell("/scan");
+    await mapReady();
+    const layers = screen.getByRole("button", { name: "Layers" });
+    act(() => {
+      fireEvent.click(layers);
+      fireEvent.click(layers);
+    });
+    await waitFor(() => expect(screen.getByRole("complementary", { name: "Scan a square" })).toBeInTheDocument());
+    expect(screen.queryByRole("complementary", { name: "Layers" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Layers" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("closes the layer panel back to the mode it was opened over", async () => {

@@ -78,8 +78,9 @@ test("frames a square near the map, and ends it with one press and goes on with 
   await expect.poll(() => squares.results[SECOND.square]?.[0]?.result).toBe("skipped");
   await expect(panel(page).getByText(/1 square\s*looked over this visit/)).toBeVisible();
 
-  // The square stays through the layer panel.
+  // The square stays through the layer panel, which opens in its place and closes back to it.
   await page.getByRole("button", { name: "Layers" }).click();
+  await expect(page.getByRole("complementary", { name: "Layers" })).toBeVisible();
   await page.getByRole("button", { name: "Layers" }).click();
   await expect(place(page, THIRD)).toBeVisible();
 });

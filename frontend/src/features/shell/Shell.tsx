@@ -245,14 +245,26 @@ function ReadyShell({ meta }: { meta: Meta }) {
   // The rest of the query is kept, so a panel that keeps its state there, such
   // as a height profile's line, is as it was when the layer panel closes.
   const layersOverBareMap = useRef(false);
+  // What the last press asked for. The router draws a change of address as a
+  // transition, so a second press can arrive while this render still says the
+  // panel is shut. It has to undo the first press, not repeat it.
+  const layersWanted = useRef(layersOpen);
+  // Brought back in step whenever the address changes, so a press that another
+  // navigation overtook doesn't leave it saying the panel is open.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: location.key is the signal, not a value read
+  useEffect(() => {
+    layersWanted.current = layersOpen;
+  }, [layersOpen, location.key]);
   const toggleLayers = useCallback(() => {
-    if (!layersOpen) layersOverBareMap.current = bareMap;
+    const open = layersWanted.current;
+    layersWanted.current = !open;
+    if (!open) layersOverBareMap.current = bareMap;
     const back = layersOverBareMap.current && location.pathname === "/" ? BARE_MAP_PARAM : null;
     navigate({
       pathname: location.pathname,
-      search: searchWithPanel(location.search, layersOpen ? back : LAYERS_PARAM),
+      search: searchWithPanel(location.search, open ? back : LAYERS_PARAM),
     });
-  }, [layersOpen, bareMap, location.pathname, location.search, navigate]);
+  }, [bareMap, location.pathname, location.search, navigate]);
 
   return (
     <div
