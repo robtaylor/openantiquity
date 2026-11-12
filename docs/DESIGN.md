@@ -112,7 +112,7 @@ You can explore everything without an account. You can also mark a finding, answ
 
 Saving needs an account. Anonymous contributions would fill the map with marks nobody stands behind, and regular users would have to wade through them. An account also means your findings, your credit and your notifications follow you between devices.
 
-Joining takes one tap: Google, Apple, Microsoft or Facebook, with OpenStreetMap for people who already map there and an emailed link for anyone who uses none of them. There are no passwords. After you sign in from the same tab your drafts are saved as they were, without re-entering anything. A second look waits for you to press send, because an answer can't be changed. You get a generated name such as "QuietBarrow42", which you can keep or change.
+Joining takes one tap: Google, Apple, Microsoft or Facebook, with OpenStreetMap for people who already map there and an emailed link for anyone who uses none of them. There are no passwords. After you sign in from the same tab your drafts wait for you to press send, without re-entering anything, so nothing someone else left in an open tab is saved as yours. You get a generated name such as "QuietBarrow42", which you can keep or change.
 
 ## Left out of the first version
 

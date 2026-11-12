@@ -1,6 +1,6 @@
 # Decision 0021 — What is written and drawn beside a protected finding is generalised for each reader
 
-**Status:** Proposed.
+**Status:** Proposed. Its first point is replaced by Decision 0023.
 
 **Current architecture:** [Location sensitivity in the build contract](../../ARCHITECTURE.md#location-sensitivity).
 

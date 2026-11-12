@@ -1,6 +1,6 @@
 # Decision 0022 — Signed-out drafts belong to the tab that made them
 
-**Status:** Proposed.
+**Status:** Proposed. Its fourth point is replaced by Decision 0024.
 
 **Current architecture:** [Frontend in the build contract](../../ARCHITECTURE.md#frontend).
 

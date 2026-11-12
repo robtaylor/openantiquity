@@ -15,7 +15,7 @@ Nothing is live yet. When the first version opens, this is what it does for you.
 - Designated sites and other heritage records sit on the same map, each with who published it and under what licence. Where a record office doesn't let us keep its records, the map asks it directly or links to its own site.
 - You can mark something you think is there. Other people then take a second look without seeing what you said, and the finding climbs from "Spotted" to "Seen by others" and on as people agree and add evidence.
 - While you take a second look, the heritage records are hidden as well as the findings, so a record at the spot can't answer the question for you. They come back once you've answered.
-- You can try marking, answering and scanning before you join. What you do is kept in your browser, and saved to your account when you sign in from the same tab. A second look you gave before signing in waits for you to press send, because an answer is final.
+- You can try marking, answering and scanning before you join. What you do is kept in your browser, and when you sign in from the same tab it waits for you to press send, so nothing someone else left in an open tab is saved as yours.
 - On a shared computer, nothing the last person drafted is saved to your account or shown as yours. You see that it's there, by kind alone, and can discard it, or save it as yours if you made it.
 - An emailed sign-in link opened on another device asks you to type your address, and signs you in only if it's the one the link was sent to.
 - You can sign out on every device at once from your account page. A session ends after 90 days unused, and a year after you signed in at most.
@@ -23,6 +23,12 @@ Nothing is live yet. When the first version opens, this is what it does for you.
 - Signing in is with Google, Apple, Microsoft, Facebook or OpenStreetMap, or an emailed link. You must be 16 or over to add anything.
 - Nothing anyone links, writes or draws beside a protected finding gives away more than its one-kilometre square to people who see only the square: map links, saved map views, height profiles and an investigation's notes and area included.
 - Nobody can tell how a named person answered a second look from what happens when their role changes or they are banned.
+- A map view drawn near a protected finding is held back in every investigation, not only one that holds the finding, and still after the finding is taken off. An investigation's area near one is shown as whole one-kilometre squares, and its title is hidden the same way in the activity feed.
+- If you edit an investigation that hides a place from you, what you can't see is kept as it was: edit around each "[position hidden]" and leave it in place.
+- Your own map views and notes in an investigation are always shown to you as you made them.
+- Positions written in full-width figures, plus codes and short links to map sites are hidden or refused like grid references.
+- Once you have signed in with an emailed link, that browser can still ask for a link when strangers have asked for too many for your address.
+- Names that pass for staff or for a deleted account, such as "Site Moderator" or "Former member (deleted)", are refused, and changing your handle again and again can't reserve names.
 - Pages from Open Antiquity make your browser fetch nothing from Google, Facebook or the other sign-in providers: profile pictures from them aren't shown.
 - Possible burial mounds and other sites at risk from looting are shown as a one-kilometre square to anyone who isn't signed in.
 - There are no private messages. Everything people say about a finding is public and attached to it.
