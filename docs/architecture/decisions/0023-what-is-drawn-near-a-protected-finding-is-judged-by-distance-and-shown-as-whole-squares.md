@@ -1,6 +1,6 @@
 # Decision 0023 — What is drawn near a protected finding is judged by distance and shown as whole squares
 
-**Status:** Proposed.
+**Status:** Proposed. Its first point is replaced by Decision 0032.
 
 **Current architecture:** [Location sensitivity in the build contract](../../ARCHITECTURE.md#location-sensitivity).
 

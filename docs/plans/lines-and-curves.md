@@ -8,7 +8,7 @@ A finder can mark a finding as a line or a closed shape made of straight and smo
 
 ## Prerequisites
 
-- The owner's answers in "Decided by the owner" below. The build goes ahead on the recommended answers to the open questions.
+- The owner's answers in "Decided by the owner" below.
 - A local PostGIS from `infra/docker-compose.yml` for the backend suite.
 - Nothing deployed holds an outline that this plan can't read. Every outline the interface has ever sent is a `LineString` or a single-ring `Polygon` (`frontend/src/features/mark/outline.ts`, `outlineGeometry`).
 
@@ -36,6 +36,9 @@ Each claim here was checked by reading the code on `feat/lines-and-curves`.
 - Closed shapes are refused above 25 km across. Lines may run long, with a cap above the longest real feature.
 - On a phone the interaction is designed for touch first. Shift-click is fine on a computer, and every gesture has a visible control that does the same.
 - Overlapping findings are picked by their edges, and the more specific wins: markers, then lines, then area edges, then the smaller of two alike. A chooser settles what remains: a popover on a computer, a sheet on a phone, highlighting each shape as its entry is hovered or focused. A computer's pointer shows what a click would select, a finger gets a wider reach, and the Explore list is the keyboard route.
+- A reshape that moves earlier points is treated as an extension is: second looks stand and the change is recorded and shown, without the invitation to look at a new part.
+- An open line that passes near somebody else's protected finding is not generalised.
+- Points can be moved, never a whole shape. Once a finding has second looks, what was looked at stays where it was (Decision 0036).
 - The build goes ahead once the coordinator has checked this plan.
 
 ## Design
@@ -57,6 +60,7 @@ New and changed columns on `findings`:
 | `shape_kind` | text, null | `line` or `area`, or null without a shape |
 | `shape_length_m` | real, null | Geodesic length of a line, or perimeter of an area |
 | `shape_revision` | int, default 0 | Raised by one on every change to the shape |
+| `looked_at` | Geometry, null | The ground second looks were given on: the union of the finding's shape, or point, at each second look. See "Once looked at, it stays" |
 | `location_derived` | bool, default false | True when the server chose `location` from the shape |
 
 `observations.shape_revision` (int, null) records the finding's `shape_revision` when the answer was given, as `tier_at_answer` does for the tier.
@@ -195,12 +199,23 @@ The owner decided this. In the code:
 - An extension records `added_view`: the centre of the added part and a zoom that frames it, worked out on the server from the added vertices.
 - The finding page says, to everyone who sees it exactly, "4.2 km added since the last second look" with a button that opens the map at `added_view`, and lists each change on the timeline.
 - An extension that leaves `added_since_looked_m` above 200 m adds a next step, `look_at_new_part`, to the finding's `open_steps`. It appears in help wanted and in the review queue with `added_view` as its view, and it never moves the tier. It clears when a second look is given after the extension.
-- A reshape that moves points the reviewers looked at is recorded the same way, with "The shape was changed on 20 November" and no invitation. See open question 1.
+- A reshape that moves points the reviewers looked at is recorded the same way, with "The shape was changed on 20 November" and no invitation, as the owner decided.
 - An extension records the activity kind `shape_extended`, placed at the finding's square like every other activity row, and notifies the finding's followers. Answerers aren't notified separately: the finder follows their own finding by default, and anyone who answered can follow it.
 
 People who can see answers (Decision 0010) also see which answers came before each change. Nobody else is told how many answers there were. "Added since the last second look" tells a viewer who hasn't answered that some answer came before that date. The score already moves when answers come in, so the existence of an answer isn't new to them, but the date is a little more. This is recorded in the decision so a later reader knows it was weighed.
 
 What would change if the owner later chose otherwise: if answers given before an extension stopped counting, the stored `shape_revision` lets a reassessment drop them, with no new data needed. That choice would let a finder wipe unwelcome "can't see it" answers by adding a metre to a line, which is why it isn't recommended.
+
+### Once looked at, it stays
+
+The owner's answer to how far a finding with second looks may move: "you can only move points, not the whole shape". Moving every point in turn is a move of the whole shape by another route, and a line can be extended to somewhere new and its first part then deleted, so the server holds a finding to the ground its second looks were given on (Decision 0036).
+
+- **No whole-shape move.** The tool moves, adds and deletes single points. The API takes a path, and a change of `location` alone never carries a shape with it.
+- **`findings.looked_at`**, a geometry, null until the first second look. When a second look is given, the finding's shape then, or its point when it has no shape, is added to it with a union. It only grows.
+- **The check.** While `looked_at` is set, an edit is refused with 422 `looked_at_moved` when any part of `looked_at` would lie more than `LOOKED_AT_MAX_MOVE_M = 250` from the finding's new shape, or from its new point when it would have no shape. The message says that what others looked at has to stay, and that withdrawing the finding and marking it again starts afresh.
+- **What it allows.** Extending anywhere, since what was looked at stays. Moving a point, while the shape still passes within 250 m of everything looked at. Moving a point-only finding up to 250 m.
+- **What it refuses.** Deleting or dragging away the part others looked at, removing the shape, and moving a point-only finding further than 250 m.
+- `/meta`'s `shapes` gains `looked_at_max_move_m`, and the tool shows the refusal beside the path, with the looked-at part drawn as a faint under-line while a finding with second looks is being changed. That under-line is shape, so it goes only to the finder, who sees the finding exactly.
 
 ### Sensitivity: every place a shape leaves
 
@@ -221,7 +236,7 @@ The rule stays Decision 0005's: a viewer who doesn't see a finding exactly gets 
 
 **Near a protected finding.** Decision 0023 judges a drawing by its distance from the finding. For a line that must mean its whole shape: a height profile 1.4 km from a restricted road's middle is beside the road even when the anchor is 30 km away. `hidden_near` tests `ST_DWithin` against `location` or `outline`, using the new index, and `PositionGuard.near` measures to the exact shape. More views along protected lines are held back as a result. The default level for `road`, `trackway` and `linear` is open, so this touches few findings.
 
-**An open line passing a protected finding.** An open road drawn past somebody else's protected barrow shows the road, not the barrow. Nothing in the line says the barrow is there unless the line was drawn to point at it, and a member could already do that today with an open point finding on the barrow, which nothing refuses. Generalising every open line near a protected finding would hide most Roman roads from signed-out visitors, since barrows line them. The plan doesn't generalise them, and records this as an accepted limit with a walk-back. See open question 2.
+**An open line passing a protected finding.** An open road drawn past somebody else's protected barrow shows the road, not the barrow. Nothing in the line says the barrow is there unless the line was drawn to point at it, and a member could already do that today with an open point finding on the barrow, which nothing refuses. Generalising every open line near a protected finding would hide most Roman roads from signed-out visitors, since barrows line them. The plan doesn't generalise them, and records this as an accepted limit with a walk-back, as the owner decided.
 
 **The leak test.** `tests/test_routes.py` names a leak test for every route. Each test in `tests/findings/test_leaks.py` gains a line finding and an area finding at every level, and checks that the path, the outline, the extent, `shape_kind`, the length and `added_view` never reach a viewer who sees the square, and that a `bbox` placed on the line's far end doesn't return a restricted line to them.
 
@@ -315,6 +330,7 @@ The contract above is what the workstreams build against. WS-A comes first, beca
 3. **Create and edit.** `services/findings.create_finding` and `update_finding` take a `path`, derive and simplify, choose or keep the anchor, check the gap, raise `shape_revision` and write the change row. `check_outline` becomes `shapes.check_shape`. Tests on real PostGIS: line-first creation sets a derived anchor at half the length; an extension keeps the anchor, the square and `grid_ref`; a reshape that moves the line moves the anchor to the nearest point; a placed anchor refuses with `outline_too_far`; a stale `path_revision` is 409; only the finder may edit.
 4. **Schemas and routes.** `schemas/findings.py` (`Path`, the new `Location` fields, `ShapeOut`), the routers kept thin. `GET /findings?format=geojson&zoom=` with clipped shapes and the bbox rule per viewer. `/meta` shapes. Tests through `TestClient` for every error code in the contract.
 5. **Second looks and the ladder.** `observations.shape_revision` on answer, `added_since_looked_m`, the `look_at_new_part` next step, `shape_extended` activity and the follower notification. Tests: an extension leaves tier, score and every answer's weight as they were; the step appears above 200 m and clears with a later answer; a viewer who hasn't answered gets no count of answers.
+   Then **once looked at, it stays**: `findings.looked_at` grows on each second look, and `update_finding` refuses `looked_at_moved`. Tests: an extension far beyond the looked-at part is allowed; deleting the looked-at part after extending is refused; a chain of small moves can't carry a line more than 250 m from what was looked at; a point-only finding moves 200 m and is refused at 300 m; a finding with no second looks moves freely; `looked_at` never reaches a viewer who sees only the square.
 6. **Sensitivity.** `visible_location` and `location_out` carry the new fields; summaries drop outlines; `hidden_near` and `PositionGuard.near` measure to the shape. Extend `tests/findings/test_leaks.py` and the investigation guard tests with line and area findings at every level, including a profile beside a restricted road far from its anchor.
 7. **Everything else that carries a finding.** Activity, mentions, tasks, review cards, search, exports, the event stream. One test per route in `tests/test_routes.py`'s table.
 8. **Backfill.** `python -m fieldclub.services.shapes backfill`, idempotent, filling `outline_mid`, `outline_low`, `shape_kind` and `shape_length_m` for old outlines. Test that it runs twice and changes nothing the second time.
@@ -364,7 +380,7 @@ The contract above is what the workstreams build against. WS-A comes first, beca
 
 ## Decisions to write
 
-Each is written when its code lands, in past tense, and starts Proposed.
+They were written on 2026-11-12 as Decisions 0028 to 0036, Proposed, and are checked against the code when it lands.
 
 - **Decision — A finding's line or shape is stored as the points its finder tapped, and the server derives the shape with one fixed curve.** Records the path model, the `catmull-rom-centripetal-1` definition and its shared vectors, the server as the authority, and why the browser-flattens alternative was rejected.
 - **Decision — Lines may run 600 km and closed shapes stop at 25 km across.** Records the owner's 25 km for closed shapes, the 600 km, 5,000-point and 50,000-vertex caps, the features they were sized against, and what each cap guards: map views, "what's here" queries, the privacy guard, cost and the meaning of a second look.
@@ -372,6 +388,7 @@ Each is written when its code lands, in past tense, and starts Proposed.
 - **Decision — Only the person who marked a finding changes its shape, and extending it keeps its step and its second looks.** Records the owner's choices: lines stay with their finder and joining people's lines waits for a need; an extension keeps the tier, every answer stands with its weight, the change is recorded, and the page says how much was added since the last look and invites fresh looks. Records the small leak accepted: a viewer who hasn't answered learns that some answer came before a date.
 - **Decision — What is drawn near a protected finding is judged against its whole shape.** Replaces the first point of Decision 0023: distance is measured to the line or area, not the anchor.
 - **Decision — An open finding's shape isn't generalised when it passes near someone else's protected finding.** Records the accepted limit, that a point finding already allows the same, and the walk-back of letting moderators raise such a finding.
+- **Decision — Once a finding has second looks, what was looked at stays where it was.** Records the owner's answer that points move and whole shapes don't, the `looked_at` geometry and the 250 m rule that makes it hold on the server, and what a finder then can't do without starting again.
 - **Decision — On a phone a point's kind is switched by a control or a long press on the point, never by pressure or a long press on the map.** Records why: the map's long press already opens "open elsewhere", a wait on every tap breaks the 100 ms rule, and pressure can't be told apart from no pressure.
 - **Decision — Overlapping findings are picked by their edges, the more specific wins, and a chooser settles the rest.** Records the owner's selection rules, the reach for mouse and finger, the "clearly smaller" test that decides when the chooser opens, and the Explore list as the keyboard route.
 
@@ -384,7 +401,7 @@ Each is written when its code lands, in past tense, and starts Proposed.
 | A long line holds back many investigation views near it when protected | Medium | Linear classes default to open. Moderators can hide a scribble. The walk-back is to judge views against `outline_low` only |
 | A dense scribble inside the length cap | Medium | Rate limits, the report button and moderators' hide. Watch for it and add a density rule if it happens |
 | Thousands of handles slow a phone | Medium | Handles only in view and at most 150, preview line in MapLibre, not SVG |
-| A finder already can move a finding with answers anywhere in the British Isles, and a reshape is the same kind of change | Medium | Out of this plan's scope. Raised as open question 3 |
+| A finder moves a finding with answers to ground nobody looked at | Medium | `looked_at` and the 250 m rule (Decision 0036) |
 | An answer about a road's first stretch counts for the whole road | Low | The owner accepted this. `look_at_new_part` asks for looks at what was added |
 | A double tap adds two points before zooming | Low | Double-tap zoom is off while drawing, and a test checks it |
 
@@ -401,11 +418,7 @@ Each is written when its code lands, in past tense, and starts Proposed.
 
 ## Open questions for the owner
 
-The build goes ahead on the recommended answer to each. None blocks a workstream.
-
-1. **Does a reshape that moves earlier points get the same treatment as an extension?** Planned: yes. Answers stand and the change is recorded and shown, without the "look at the new part" step, since nothing new was added. Cost to change later: low. The change rows and each answer's `shape_revision` are stored, so a stricter rule can be applied to past changes too.
-2. **Should an open line near somebody else's protected finding be generalised?** Planned: no, as for points today. Cost to change later: high. It would put a spatial guard on every finding read, list and map page, and hide most Roman roads from signed-out visitors, since barrows line them.
-3. **Should a finding with second looks be limited in how far its point or shape can move?** Today nothing limits it, and this plan doesn't change that. Planned: nothing in this plan. The recommendation is a separate small change refusing a move of more than 1 km once a finding has answers, while still allowing extensions. Cost to change later: low in code, but every week without it is a week a finder could move a corroborated finding elsewhere and keep its step.
+None. The three that were open were answered on 2026-11-12 and are under "Decided by the owner": a reshape is treated as an extension is, an open line near somebody else's protected finding isn't generalised, and what was looked at stays where it was.
 
 ## References
 
