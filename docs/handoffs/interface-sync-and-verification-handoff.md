@@ -68,6 +68,7 @@ When it finishes: read each agent's report from the run's journal, rebase `f3/sy
 - A status for each of Decisions 0001 to 0024 set from what the code does, and a forward-link on each. The docs lint's D005 warnings list the ones without.
 - An end-to-end run of the whole loop on a clean database.
 - `CHANGELOG.md` and the plan brought up to date.
+- A link to the source on the about page. The code is under the AGPL version 3 (Decision 0026), which asks whoever hosts a changed copy to offer its source to the people using it. The repository is `github.com/robtaylor/openantiquity`.
 
 ### 3. Upstream reports (minutes each, when there is a reply)
 

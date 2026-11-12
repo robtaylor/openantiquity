@@ -10,6 +10,7 @@ service, so entries are dated, not versioned.
 
 Nothing is live yet. When the first version opens, this is what it does for you.
 
+- The code is open. It is published at github.com/robtaylor/openantiquity under the GNU Affero General Public License, version 3, so anyone may read it, change it and run their own copy, and whoever runs a changed copy has to share its source.
 - It is called Open Antiquity, at openantiquity.org. While it was being built it was called Field Club, and two early letters to record holders carry that name.
 - You can look at England's LIDAR as slope, sky-view, relief and other views made for spotting earthworks, and light it from any direction you like. You don't need an account to look at anything.
 - Designated sites and other heritage records sit on the same map, each with who published it and under what licence. Where a record office doesn't let us keep its records, the map asks it directly or links to its own site.

@@ -54,6 +54,8 @@ frontend/
     features/               explore, mark, findings, finding, mentions, review, help, squares, records, layers (terrain tools), investigations, account, activity, notifications, people, reports, moderation, photos, guide, about
     ui/                     shared components and design tokens
 fly.toml                    the web app on Fly.io; at the root because `fly deploy` builds from where it runs
+LICENSE                     the AGPL version 3, which the project's own code is under (Decision 0026)
+README.md                   what the project is, how to run it, and which licence covers what
 infra/
   README.md                 the deployment runbook, with sizing and cost
   docker-compose.yml        local PostGIS on port 54329

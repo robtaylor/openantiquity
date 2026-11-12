@@ -72,7 +72,7 @@ Then check, through the tunnel in step 5 of the runbook, that `/api/v1/meta` giv
 
 ### 2. A choice for the owner: tiles that aren't in the mirror
 
-Still open, and the record it needs is 0026 or later. On Fly the web app can't fetch a missing elevation tile, because only the jobs app holds Defra's login (`FIELDCLUB_TERRAIN_API_FETCH = "false"`). A square whose tile is missing answers `elevation_unavailable` for a minute, where Decision 0016 has it answer "being prepared" while the tile is fetched.
+Still open, and the record it needs is 0027 or later. On Fly the web app can't fetch a missing elevation tile, because only the jobs app holds Defra's login (`FIELDCLUB_TERRAIN_API_FETCH = "false"`). A square whose tile is missing answers `elevation_unavailable` for a minute, where Decision 0016 has it answer "being prepared" while the tile is fetched.
 
 Where the owner's thinking stood on 2026-11-12: the data was to be moved once, which is done, and "maybe just a pre-flight check makes sense". The shape put to the owner, not yet agreed: a read-only check in the web app's release command that compares the catalogue with the bucket's listing and stops the deploy when a tile is missing, with a setting in `fly.toml` that lets a deploy through anyway. It needs no supply login and never fetches. Repair stays a deliberate `uv run infra/fly_jobs.py mirror 1 2 3 4`.
 
@@ -89,7 +89,7 @@ What was found, for the record to carry:
 
 ### 4. Step 12: the deploy workflow (minutes)
 
-The GitHub environment `production` and a deploy token for the web app alone. The repository has no remote on this machine, so check where it is pushed from first.
+The GitHub environment `production` and a deploy token for the web app alone. The repository is `robtaylor/openantiquity` on GitHub, public since 2026-11-12, and this checkout's `origin`.
 
 ### 5. Point the domains and open the site (an hour, after the owner says so)
 
