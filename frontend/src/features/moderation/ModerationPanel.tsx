@@ -103,7 +103,7 @@ export function ModerationPanel({ meta }: { meta: Meta }) {
             </Button>
           }
         >
-          <p>This part of Open Antiquity is for moderators and trusted members.</p>
+          <p>This part of OpenAntiquity is for moderators and trusted members.</p>
         </EmptyState>
       </Frame>
     );

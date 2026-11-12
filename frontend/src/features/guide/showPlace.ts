@@ -2,7 +2,7 @@
  * Opening a place from a reference page on the map, in the view the page
  * talks about. On a phone the sheet drops to its peek stop first, so the
  * place isn't hidden behind the page that sent someone there. The marks
- * Open Antiquity draws over the ground (heritage records, findings, scan
+ * OpenAntiquity draws over the ground (heritage records, findings, scan
  * coverage) are turned off, because they would sit on the very feature the
  * page asks someone to look at, and a toast says how to turn them back on.
  */

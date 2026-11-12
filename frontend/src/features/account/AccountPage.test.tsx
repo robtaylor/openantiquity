@@ -106,11 +106,11 @@ describe("the account page", () => {
   it("keeps the bio closed until the welcome step is done", async () => {
     const { p } = await openAccount(newcomerFixture());
     // The welcome sheet offers itself; close it to look at the page.
-    const welcome = await screen.findByRole("dialog", { name: "Welcome to Open Antiquity" });
+    const welcome = await screen.findByRole("dialog", { name: "Welcome to OpenAntiquity" });
     await userEvent.click(within(welcome).getByRole("button", { name: "Close" }));
     expect(p.getByLabelText("About you")).toBeDisabled();
     await userEvent.click(p.getByRole("button", { name: "Finish joining" }));
-    expect(await screen.findByRole("dialog", { name: "Welcome to Open Antiquity" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Welcome to OpenAntiquity" })).toBeInTheDocument();
   });
 
   it("signs out everywhere at once", async () => {

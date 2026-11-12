@@ -1,8 +1,8 @@
 # Scotland, Wales and Northern Ireland record sources
 
-This page covers the national site indexes, statutory designations and local records for Scotland, Wales and Northern Ireland, plus the Isle of Man and the Channel Islands. All of it is an observation of other people's services on 2026-11-10. Nothing here describes what Open Antiquity's code does, because none of it is built. Each nation's publisher released its national site index and its designations under the Open Government Licence v3.0, and all of those are open. Two files on trove.scot cannot be fetched by script. Local Historic Environment Records are not open in any of the three nations. trove.scot, the new home of Canmore record pages, blocks every scripted request, so its record pages are links and nothing else.
+This page covers the national site indexes, statutory designations and local records for Scotland, Wales and Northern Ireland, plus the Isle of Man and the Channel Islands. All of it is an observation of other people's services on 2026-11-10. Nothing here describes what OpenAntiquity's code does, because none of it is built. Each nation's publisher released its national site index and its designations under the Open Government Licence v3.0, and all of those are open. Two files on trove.scot cannot be fetched by script. Local Historic Environment Records are not open in any of the three nations. trove.scot, the new home of Canmore record pages, blocks every scripted request, so its record pages are links and nothing else.
 
-Reuse classes and access modes follow [Decision 0004](../architecture/decisions/0004-field-club-is-non-commercial.md) and [Decision 0007](../architecture/decisions/0007-the-record-index-stores-only-what-licences-allow.md). Open Antiquity is non-commercial, so a source under a non-commercial licence is usable. A publisher that blocks scripts or forbids harvesting is `deeplink` whatever its licence.
+Reuse classes and access modes follow [Decision 0004](../architecture/decisions/0004-field-club-is-non-commercial.md) and [Decision 0007](../architecture/decisions/0007-the-record-index-stores-only-what-licences-allow.md). OpenAntiquity is non-commercial, so a source under a non-commercial licence is usable. A publisher that blocks scripts or forbids harvesting is `deeplink` whatever its licence.
 
 Where the first research report and a later follow-up disagreed, the follow-up is given and the disagreement is stated. The Scottish parts of the follow-up on bot-blocked publishers were written later than the main report and win.
 
@@ -363,7 +363,7 @@ Notes:
 
 - Fields: `RecordNumber`, `SAMNumber` (for example GM396), `Name`, `Name_cy`, `DesignationDate`, `BroadClass` and `BroadClass_cy`, `Period` and `Period_cy`, `SiteType` and `SiteType_cy`, `UnitaryAuthority` and `UnitaryAuthority_cy`, `Community`, `Report`, `easting`, `northing`.
 - The layer was last updated 2026-07-18.
-- The attribution wording requires the date Open Antiquity received the data from Cadw, so the research suggested storing a retrieval date per ingest.
+- The attribution wording requires the date OpenAntiquity received the data from Cadw, so the research suggested storing a retrieval date per ingest.
 - `srsName=EPSG:4326` returned lon/lat GeoJSON. One endpoint served 1,502 feature types. Layer metadata, including licence text, was at `https://datamap.gov.wales/api/v2/layers?filter{alternate}={typename}`. The response starts with a UTF-8 BOM.
 - Cadw and HED boundaries are indicative. The legal record is the designation document.
 
@@ -733,7 +733,7 @@ Notes:
 
 ## Deep link only
 
-These sources cannot be read by script, or their terms forbid it, or they carry no reuse licence. Decision 0007 has Open Antiquity store the identifier and the address and nothing else. The tests of 2026-11-10 are in the notes below: all patterns returned 200 except where stated.
+These sources cannot be read by script, or their terms forbid it, or they carry no reuse licence. Decision 0007 has OpenAntiquity store the identifier and the address and nothing else. The tests of 2026-11-10 are in the notes below: all patterns returned 200 except where stated.
 
 | Source | Link pattern |
 |---|---|
@@ -801,7 +801,7 @@ These are suggestions from the research, not descriptions of built behaviour.
 - Keep native coordinates beside the 4326 geometry and carry each positional accuracy field. About 13% of NRHE points are located to 100 m or worse and 1,709 NI SMR records are "Unlocated", so snapping to a LIDAR feature without it would mislead.
 - Hold per-dataset attribution with licence, exact string and retrieval date. Cadw's wording needs the date received and HES wording needs the year.
 - Do not crawl record pages or frame trove.scot. Google Cloud cannot reach trove.scot, so the follow-up suggested checking links only against unchallenged redirect hosts such as `canmore.org.uk`.
-- No service published a rate limit, except the 99% availability aim on DataMapWales, and HES runs one ArcGIS Server host. The research suggested serving Open Antiquity's own tiles.
+- No service published a rate limit, except the 99% availability aim on DataMapWales, and HES runs one ArcGIS Server host. The research suggested serving OpenAntiquity's own tiles.
 - The follow-up drafted, and did not send, requests to HES (`trove@hes.scot`) for NRHE Areas and the radiocarbon files on `inspire.hes.scot`, and to the Treasure Trove Unit (`treasuretrove@nms.ac.uk`) about a licence and an export.
 
 ## Open questions

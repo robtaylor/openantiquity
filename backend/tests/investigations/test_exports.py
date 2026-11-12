@@ -152,7 +152,7 @@ def test_the_report_is_one_page_with_every_item(
     assert "sandbox" in response.headers["content-security-policy"]
     assert "default-src 'none'" in response.headers["content-security-policy"]
     assert response.headers["x-content-type-options"] == "nosniff"
-    assert "Open Antiquity" in response.text
+    assert "OpenAntiquity" in response.text
     assert "Field Club" not in response.text
     page = response.text
     for text in (

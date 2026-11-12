@@ -30,7 +30,7 @@ def test_top_level_keys(meta: dict) -> None:
 
 def test_app(meta: dict) -> None:
     assert meta["app"] == {
-        "name": "Open Antiquity",
+        "name": "OpenAntiquity",
         "version": "0.1.0",
         "contribution_licence": "CC BY 4.0",
         "contribution_licence_url": "https://creativecommons.org/licenses/by/4.0/",

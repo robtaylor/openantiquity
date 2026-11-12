@@ -306,7 +306,7 @@ Thematic 1:633,600 national maps. The research judged them low value at site sca
 
 ## NLS RVT multi-direction hillshade
 
-Three-band RGB hillshades made with the Relief Visualization Toolbox from public sector LIDAR, lit from 315, 15 and 75 degrees at 35 degrees elevation for England. NLS listed the England and Wales URLs as offered for reuse. Decision 0006 renders Open Antiquity's own visualisations, so these serve as comparison layers.
+Three-band RGB hillshades made with the Relief Visualization Toolbox from public sector LIDAR, lit from 315, 15 and 75 degrees at 35 degrees elevation for England. NLS listed the England and Wales URLs as offered for reuse. Decision 0006 renders OpenAntiquity's own visualisations, so these serve as comparison layers.
 
 | | England | Wales | Scotland |
 |---|---|---|---|
@@ -743,7 +743,7 @@ https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/14/5453/8107.jpg
 
 EOX also served a transparent OSM overlay, https://tiles.maps.eox.at/wmts/1.0.0/overlay_3857/default/g/{z}/{y}/{x}.png and `overlay_bright_3857`, which returned 200 image/png RGBA at 256 px. Its capabilities said "Proper attribution is required for any usage." The attribution is "Overlay { Data © OpenStreetMap contributors, Rendering © EOX and MapServer }", the reuse class is share_alike, the mode is live as a fallback only, and CORS was Origin reflected. The tile was sparse at z14 with no footpaths, so the research judged the vector overlay far better. The tested request was https://tiles.maps.eox.at/wmts/1.0.0/overlay_3857/default/g/14/5453/8107.png.
 
-The research advised using only the 2016 and 2017 layers if the app might be commercial. Decision 0004 proposes that Open Antiquity is non-commercial, which would admit the later layers, though they also carry share-alike terms.
+The research advised using only the 2016 and 2017 layers if the app might be commercial. Decision 0004 proposes that OpenAntiquity is non-commercial, which would admit the later layers, though they also carry share-alike terms.
 
 ## OS Maps API OpenData styles
 
@@ -880,7 +880,7 @@ These sources were not read by script, or must not be fetched or copied. The dee
 | Vision of Britain through Time | University of Portsmouth | Not confirmed | link_only | https://www.visionofbritain.org.uk/ |
 | Places of Wales | National Library of Wales | Not checked | link_only | https://places.library.wales/ |
 
-None of these patterns was run in a browser, so each is "not tested" in the sense of the deep links page. Roy tiles at .../roy/highlands/{z}/{x}/{y}.png and .../roy/lowlands/{z}/{x}/{y}.png on the NLS host returned 200 image/png at z13 near Stirling, but need British Library permission before a public app embeds them. Sherwood Forest tiles at .../lidar/sherwood/dtm/{z}/{x}/{y}.png also returned 200 and are not to be embedded. The NLS viewer carries LIDAR SLRM and RVT layers, so it overlaps Open Antiquity's purpose. Britain from Above had a JSON spatial service that returned 18 records in a 2.5 by 2 km box at Avebury, but it is same-origin for its own site. The research advised linking out and not copying images. Old Maps Online returned 403 to scripts, and its pattern was from memory.
+None of these patterns was run in a browser, so each is "not tested" in the sense of the deep links page. Roy tiles at .../roy/highlands/{z}/{x}/{y}.png and .../roy/lowlands/{z}/{x}/{y}.png on the NLS host returned 200 image/png at z13 near Stirling, but need British Library permission before a public app embeds them. Sherwood Forest tiles at .../lidar/sherwood/dtm/{z}/{x}/{y}.png also returned 200 and are not to be embedded. The NLS viewer carries LIDAR SLRM and RVT layers, so it overlaps OpenAntiquity's purpose. Britain from Above had a JSON spatial service that returned 18 records in a 2.5 by 2 km box at Avebury, but it is same-origin for its own site. The research advised linking out and not copying images. Old Maps Online returned 403 to scripts, and its pattern was from memory.
 
 ## Layers to avoid
 
@@ -907,4 +907,4 @@ None of these patterns was run in a browser, so each is "not tested" in the sens
 - Does the OS Open Zoomstack MBTiles use a Web Mercator grid? It was believed so and not read from the file's metadata table.
 - Which licence applies to each Scottish LIDAR phase tileset? How much of the likely user area has EA vertical photography?
 - Which Welsh and Scottish equivalents are needed for access land, rights of way and imagery? The completeness review found no historic map layer for Northern Ireland, and noted that OpenDataNI listed 12 OGL datasets of the Historical Six Inch to One Mile County Series, unassessed. The Historic England National Mapping Programme raster tiles are in the England heritage report, not here.
-- Is the OpenFreeMap or the Protomaps schema the better long-term base for the overlay style, given that Open Antiquity may switch between hosted and self-hosted sources?
+- Is the OpenFreeMap or the Protomaps schema the better long-term base for the overlay style, given that OpenAntiquity may switch between hosted and self-hosted sources?

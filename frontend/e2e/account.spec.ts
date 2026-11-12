@@ -267,9 +267,9 @@ test("completes the welcome sheet by keyboard alone", async ({ page }) => {
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(meWith()) });
   });
   await openMap(page, "/");
-  const sheet = page.getByRole("dialog", { name: "Welcome to Open Antiquity" });
+  const sheet = page.getByRole("dialog", { name: "Welcome to OpenAntiquity" });
   await expect(sheet).toBeVisible();
-  await expectSheetFits(page, "Welcome to Open Antiquity");
+  await expectSheetFits(page, "Welcome to OpenAntiquity");
   expect(await focusIsInside(page, "dialog[open]")).toBe(true);
 
   await tabTo(page, sheet.getByRole("radio", { name: "Under 16" }));
@@ -278,7 +278,7 @@ test("completes the welcome sheet by keyboard alone", async ({ page }) => {
   await expect(sheet.getByRole("radio", { name: "18 or over" })).toHaveAttribute("aria-checked", "true");
   await tabTo(page, sheet.getByRole("checkbox", { name: "I accept the contributor terms" }));
   await page.keyboard.press("Space");
-  await tabTo(page, sheet.getByRole("button", { name: "Join Open Antiquity" }));
+  await tabTo(page, sheet.getByRole("button", { name: "Join OpenAntiquity" }));
   await page.keyboard.press("Enter");
   await expect(sheet).toBeHidden();
   expect(welcomes).toEqual([{ age_band: "18_plus", accept_terms: true }]);
@@ -298,11 +298,11 @@ test("turns away someone under 16 without storing anything", async ({ page }) =>
     return route.fulfill({ status: 204 });
   });
   await openMap(page, "/");
-  const sheet = page.getByRole("dialog", { name: "Welcome to Open Antiquity" });
+  const sheet = page.getByRole("dialog", { name: "Welcome to OpenAntiquity" });
   await sheet.getByRole("radio", { name: "Under 16" }).click();
-  await expect(sheet.getByText("Open Antiquity is for people aged 16 and over")).toBeVisible();
-  await expect(sheet.getByRole("button", { name: "Join Open Antiquity" })).toHaveCount(0);
-  await expectSheetFits(page, "Welcome to Open Antiquity");
+  await expect(sheet.getByText("OpenAntiquity is for people aged 16 and over")).toBeVisible();
+  await expect(sheet.getByRole("button", { name: "Join OpenAntiquity" })).toHaveCount(0);
+  await expectSheetFits(page, "Welcome to OpenAntiquity");
   await sheet.getByRole("button", { name: "Remove my sign-in" }).click();
   await expect(sheet).toBeHidden();
   expect(calls).toEqual(["delete"]);

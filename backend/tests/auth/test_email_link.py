@@ -551,7 +551,7 @@ def test_smtp_sends_with_starttls_and_login(fake_smtp: type[FakeSmtp]) -> None:
             smtp_host="smtp.example",
             smtp_username="user",
             smtp_password="pw",
-            mail_from="Open Antiquity <signin@example.org>",
+            mail_from="OpenAntiquity <signin@example.org>",
         )
     )
     mailer.send(Message(to="ann@example.org", subject="Hi", body="Link"))
@@ -561,7 +561,7 @@ def test_smtp_sends_with_starttls_and_login(fake_smtp: type[FakeSmtp]) -> None:
     assert names == ["starttls", "login", "send", "quit"]
     sent = server.calls[2][1]
     assert sent["To"] == "ann@example.org"
-    assert sent["From"] == "Open Antiquity <signin@example.org>"
+    assert sent["From"] == "OpenAntiquity <signin@example.org>"
 
 
 def test_smtp_failure_is_an_upstream_error_and_logs_no_address(
@@ -649,7 +649,7 @@ def test_the_outbox_exists_only_where_the_development_sign_in_does(
     env(DEV_LOGIN="false")
     mounted = client_for(create_app(include_dev_routes=True))
     LogMailer.outbox.append(
-        Message("a@example.org", "Your Open Antiquity sign-in link", "https://x/#token=abc")
+        Message("a@example.org", "Your OpenAntiquity sign-in link", "https://x/#token=abc")
     )
     response = mounted.get(OUTBOX, params={"to": "a@example.org"})
     assert response.status_code == 404

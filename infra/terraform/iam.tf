@@ -4,13 +4,13 @@
 
 locals {
   workload_titles = {
-    "service"         = "Open Antiquity web service"
-    "schema"          = "Open Antiquity schema creation"
-    "ingest"          = "Open Antiquity record ingest"
-    "scan-channels"   = "Open Antiquity channel scan"
-    "refresh-sources" = "Open Antiquity source refresh"
-    "elevation-copy"  = "Open Antiquity elevation copy"
-    "national-build"  = "Open Antiquity national overview"
+    "service"         = "OpenAntiquity web service"
+    "schema"          = "OpenAntiquity schema creation"
+    "ingest"          = "OpenAntiquity record ingest"
+    "scan-channels"   = "OpenAntiquity channel scan"
+    "refresh-sources" = "OpenAntiquity source refresh"
+    "elevation-copy"  = "OpenAntiquity elevation copy"
+    "national-build"  = "OpenAntiquity national overview"
   }
 
   # Bucket roles by workload. objectUser reads, writes, replaces, deletes and
@@ -88,7 +88,7 @@ resource "google_storage_bucket_iam_member" "workload" {
 # run those jobs (jobs.tf grants roles/run.invoker on each).
 resource "google_service_account" "scheduler" {
   account_id   = "${var.name}-scheduler"
-  display_name = "Open Antiquity scheduler"
+  display_name = "OpenAntiquity scheduler"
 
   depends_on = [google_project_service.enabled]
 }

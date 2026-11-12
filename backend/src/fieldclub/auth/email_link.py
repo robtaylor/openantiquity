@@ -140,12 +140,12 @@ def link_message(settings: Settings, email: str, token: str, next_path: str) -> 
     url = f"{settings.public_url.rstrip('/')}{LINK_PAGE}{query}#token={token}"
     minutes = int(LINK_LIFETIME.total_seconds() // 60)
     body = (
-        "Here is your link to sign in to Open Antiquity:\n\n"
+        "Here is your link to sign in to OpenAntiquity:\n\n"
         f"{url}\n\n"
         f"It works once, for the next {minutes} minutes. If you didn't ask for it, ignore this email "
         "and nothing will happen.\n"
     )
-    return Message(to=email, subject="Your Open Antiquity sign-in link", body=body, link=url)
+    return Message(to=email, subject="Your OpenAntiquity sign-in link", body=body, link=url)
 
 
 def _from_this_browser(link: MagicLink, browser: str | None) -> bool:

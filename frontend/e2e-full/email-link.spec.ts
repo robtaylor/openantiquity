@@ -39,7 +39,7 @@ test("signs straight in from a link opened in the browser that asked, and the li
 
   await page.goto(link);
   // A new account: the welcome step is owed, and the token has left the address.
-  await expect(page.getByRole("dialog", { name: "Welcome to Open Antiquity" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Welcome to OpenAntiquity" })).toBeVisible();
   expect(page.url()).not.toContain("token=");
   expect(new URL(page.url()).pathname).toBe("/account");
   const me = await page.request.get("/api/v1/auth/me");
@@ -81,7 +81,7 @@ test("signs in from a link opened in another browser only when the person types 
 
   await panel.getByLabel("Your email address").fill(email.toUpperCase());
   await panel.getByRole("button", { name: "Sign me in" }).click();
-  await expect(other.getByRole("dialog", { name: "Welcome to Open Antiquity" })).toBeVisible();
+  await expect(other.getByRole("dialog", { name: "Welcome to OpenAntiquity" })).toBeVisible();
   const me = await other.request.get("/api/v1/auth/me");
   expect(me.status()).toBe(200);
   expect(await me.json()).toMatchObject({ email });
@@ -131,7 +131,7 @@ test("never saves drafts left in a browser to the account a link from elsewhere 
   const panel = page.getByRole("complementary", { name: "Signing in" });
   await panel.getByLabel("Your email address").fill(sender);
   await panel.getByRole("button", { name: "Sign me in" }).click();
-  await expect(page.getByRole("dialog", { name: "Welcome to Open Antiquity" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Welcome to OpenAntiquity" })).toBeVisible();
 
   // The draft was not taken over: it stays in this browser, nobody's, and nothing was sent.
   await page.waitForTimeout(500);

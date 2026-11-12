@@ -286,7 +286,7 @@ def test_lidar_attribution_is_the_environment_agency_wording_under_ogl() -> None
         in layers.LIDAR_ATTRIBUTION
     )
     catalogue = dump()
-    # Open Antiquity's own: the comparison layers others publish carry their own credit.
+    # OpenAntiquity's own: the comparison layers others publish carry their own credit.
     lidar = [
         view
         for view in catalogue["views"]

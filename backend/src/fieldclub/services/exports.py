@@ -12,7 +12,7 @@ generalises.
 The columns follow what HER officers import: a name, a grid reference with
 easting and northing, the monument type as a FISH thesaurus term, the
 period, a description, a summary of the evidence, who compiled it, when, and
-the licence. Open Antiquity adds its own id, address, tier and how precise the
+the licence. OpenAntiquity adds its own id, address, tier and how precise the
 position is.
 """
 

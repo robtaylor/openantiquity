@@ -1,6 +1,6 @@
-# Open Antiquity: product design
+# OpenAntiquity: product design
 
-Open Antiquity is a shared map for finding and checking archaeological earthworks in UK LIDAR data. You open it and you're looking at terrain processed to show banks, ditches and mounds a few centimetres high. You mark what you see. Other people check it, add evidence from old maps, aerial photos and heritage records, and the finding's confidence rises as independent people and independent sources agree.
+OpenAntiquity is a shared map for finding and checking archaeological earthworks in UK LIDAR data. You open it and you're looking at terrain processed to show banks, ditches and mounds a few centimetres high. You mark what you see. Other people check it, add evidence from old maps, aerial photos and heritage records, and the finding's confidence rises as independent people and independent sources agree.
 
 The name says what it is. An antiquity is the old word, still used on Ordnance Survey maps, for something left by the past that survives in the ground. "Open" is how the work is done: anyone can look at the map, anyone aged 16 or over can take part, and what people add is published under an open licence. It follows the Victorian field clubs, societies of amateurs who went out together to look at antiquities.
 

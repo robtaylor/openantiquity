@@ -102,7 +102,7 @@ EXPECTED_ROLES = {
     ("moderator", "expert"): {"member": None, "trusted": None},
     ("moderator", "moderator"): {},
     ("moderator", "admin"): {},
-    # An admin makes and unmakes moderators too, and admins are made outside Open Antiquity.
+    # An admin makes and unmakes moderators too, and admins are made outside OpenAntiquity.
     ("admin", "member"): {"trusted": "not_eligible", "expert": None, "moderator": None},
     ("admin", "moderator"): {"member": None, "trusted": None, "expert": None},
     ("admin", "admin"): {},

@@ -23,7 +23,7 @@ beforeEach(() => {
 async function openWelcome(routes: Record<string, Parameters<ApiRoutes["on"]>[1]> = {}) {
   const api = routeApi(harness.fetchMock(), { "GET /auth/me": () => json(newcomerFixture()), ...routes });
   renderShell("/");
-  const sheet = await screen.findByRole("dialog", { name: "Welcome to Open Antiquity" });
+  const sheet = await screen.findByRole("dialog", { name: "Welcome to OpenAntiquity" });
   return { api, sheet, w: within(sheet) };
 }
 
@@ -57,7 +57,7 @@ describe("the welcome sheet", () => {
     const { api, w } = await openWelcome();
     await userEvent.clear(w.getByLabelText("Your name on the map"));
     await userEvent.type(w.getByLabelText("Your name on the map"), "9 lives");
-    await userEvent.click(w.getByRole("button", { name: "Join Open Antiquity" }));
+    await userEvent.click(w.getByRole("button", { name: "Join OpenAntiquity" }));
     expect(w.getByText(/A name is 3 to 30 letters/)).toBeInTheDocument();
     expect(w.getByText("Choose your age band.")).toBeInTheDocument();
     expect(w.getByText("Tick the box to accept the contributor terms.")).toBeInTheDocument();
@@ -69,7 +69,7 @@ describe("the welcome sheet", () => {
     await userEvent.click(w.getByRole("radio", { name: "16 or 17" }));
     expect(w.getByText(/Other people will see only your handle/)).toBeInTheDocument();
     await userEvent.click(w.getByRole("checkbox", { name: "I accept the contributor terms" }));
-    await userEvent.click(w.getByRole("button", { name: "Join Open Antiquity" }));
+    await userEvent.click(w.getByRole("button", { name: "Join OpenAntiquity" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(api.callsTo("POST /auth/welcome")[0]?.body).toEqual({ age_band: "16_17", accept_terms: true });
   });
@@ -80,7 +80,7 @@ describe("the welcome sheet", () => {
     await userEvent.type(w.getByLabelText("Your name on the map"), "Barrow");
     await userEvent.click(w.getByRole("radio", { name: "18 or over" }));
     await userEvent.click(w.getByRole("checkbox", { name: "I accept the contributor terms" }));
-    await userEvent.click(w.getByRole("button", { name: "Join Open Antiquity" }));
+    await userEvent.click(w.getByRole("button", { name: "Join OpenAntiquity" }));
     expect(await w.findByText(/Someone already has that name/)).toBeInTheDocument();
     expect(w.getByLabelText("Your name on the map")).toHaveAccessibleDescription(/Someone already has that name/);
     expect(w.getByRole("radio", { name: "18 or over" })).toHaveAttribute("aria-checked", "true");
@@ -97,15 +97,15 @@ describe("the welcome sheet", () => {
     await userEvent.type(w.getByLabelText("Your name on the map"), "admin");
     await userEvent.click(w.getByRole("radio", { name: "18 or over" }));
     await userEvent.click(w.getByRole("checkbox", { name: "I accept the contributor terms" }));
-    await userEvent.click(w.getByRole("button", { name: "Join Open Antiquity" }));
+    await userEvent.click(w.getByRole("button", { name: "Join OpenAntiquity" }));
     expect(await w.findByText(/That name can't be used/)).toBeInTheDocument();
   });
 
   it("turns away someone under 16 kindly, and stores nothing", async () => {
     const { api, w } = await openWelcome({ "DELETE /auth/me": () => new Response(null, { status: 204 }) });
     await userEvent.click(w.getByRole("radio", { name: "Under 16" }));
-    expect(w.getByText("Open Antiquity is for people aged 16 and over")).toBeInTheDocument();
-    expect(w.queryByRole("button", { name: "Join Open Antiquity" })).toBeNull();
+    expect(w.getByText("OpenAntiquity is for people aged 16 and over")).toBeInTheDocument();
+    expect(w.queryByRole("button", { name: "Join OpenAntiquity" })).toBeNull();
     expect(w.queryByRole("checkbox")).toBeNull();
     await userEvent.click(w.getByRole("button", { name: "Remove my sign-in" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -120,7 +120,7 @@ describe("the welcome sheet", () => {
     });
     await userEvent.click(w.getByRole("radio", { name: "16 or 17" }));
     await userEvent.click(w.getByRole("checkbox", { name: "I accept the contributor terms" }));
-    await userEvent.click(w.getByRole("button", { name: "Join Open Antiquity" }));
+    await userEvent.click(w.getByRole("button", { name: "Join OpenAntiquity" }));
     expect(await w.findByText("Contributors must be 18 or over.")).toBeInTheDocument();
   });
 });

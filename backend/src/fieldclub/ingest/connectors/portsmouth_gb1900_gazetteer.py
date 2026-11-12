@@ -79,7 +79,7 @@ FIELDS = (
 # The work-list has no licence address. This is the one in the zip's licence file.
 LICENCE_URL = "https://creativecommons.org/licenses/by-sa/4.0/legalcode"
 CHANGES_STATEMENT = (
-    "Open Antiquity keeps only the labels that name antiquities, as transcribed, at the positions given."
+    "OpenAntiquity keeps only the labels that name antiquities, as transcribed, at the positions given."
 )
 RECORD_TYPE = "Label on the six-inch map"
 

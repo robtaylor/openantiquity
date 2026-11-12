@@ -100,7 +100,7 @@ describe("help wanted", () => {
     const panel = within(await screen.findByRole("complementary", { name: "Map detectives" }));
     const list = within(await panel.findByRole("list", { name: "Findings that need this" }));
     expect(list.getAllByRole("link")).toHaveLength(1);
-    expect(document.title).toBe("Map detectives · Help wanted · Open Antiquity");
+    expect(document.title).toBe("Map detectives · Help wanted · OpenAntiquity");
     await user.click(list.getByRole("link", { name: /Ring ditch by the long barrow/ }));
 
     const page = within(await screen.findByRole("complementary", { name: finding.title }));

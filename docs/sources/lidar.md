@@ -63,7 +63,7 @@ The address is `https://environment.data.gov.uk/tiles/collections/survey/{produc
 
 ## Summary
 
-EA is the Environment Agency, SG the Scottish Government, NLS the National Library of Scotland, HES Historic Environment Scotland. Reuse is the Decision 0004 class and Mode the Decision 0007 access mode. Decision 0007 defines live as a query by the user's browser with nothing stored on our servers. Elevation that Open Antiquity's server would fetch on demand and keep in a cache stores a copy, so this table gives it `bulk` and the open question is in the last section. Sources to read about but not use carry `deeplink`.
+EA is the Environment Agency, SG the Scottish Government, NLS the National Library of Scotland, HES Historic Environment Scotland. Reuse is the Decision 0004 class and Mode the Decision 0007 access mode. Decision 0007 defines live as a query by the user's browser with nothing stored on our servers. Elevation that OpenAntiquity's server would fetch on demand and keep in a cache stores a copy, so this table gives it `bulk` and the open question is in the last section. Sources to read about but not use carry `deeplink`.
 
 | Source | Publisher | Coverage | Licence | Reuse | Mode | Records |
 |---|---|---|---|---|---|---|

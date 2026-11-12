@@ -51,7 +51,7 @@ describe("the recent mentions across the map", () => {
     const finding = mention.getByRole("link", { name: /About the finding/ });
     expect(finding).toHaveAttribute("href", "/f/f-ring");
     expect(finding).toHaveTextContent(pageFixture().title);
-    expect(document.title).toBe("Recent mentions · Open Antiquity");
+    expect(document.title).toBe("Recent mentions · OpenAntiquity");
     // The rail shows the Activity mode as the one open.
     expect(screen.getByRole("link", { name: "Activity" })).toHaveClass("fc-rail__link--active");
   });

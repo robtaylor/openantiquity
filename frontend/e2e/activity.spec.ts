@@ -86,7 +86,7 @@ test("the feed says what happened in plain sentences and opens each finding", as
     /^Ring ditch by the long barrow had a second look\.4 minutes ago$/,
     /^Mary Anning marked Round barrow in SU 10 69\.1 hour ago\s*Somewhere in square SU 10 69$/,
   ]);
-  await expect(page).toHaveTitle("Activity · Open Antiquity");
+  await expect(page).toHaveTitle("Activity · OpenAntiquity");
 
   // Narrowing to a kind asks the server for that kind.
   const asked = page.waitForRequest((request) => new URL(request.url()).searchParams.get("kind") === "finding_created");

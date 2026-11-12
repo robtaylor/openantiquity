@@ -68,7 +68,7 @@ Roles
 
 A moderator makes a member trusted, puts a trusted member back, and marks an
 archaeologist as expert or takes that away. Only an admin makes or unmakes a
-moderator. Admins are made outside Open Antiquity, nobody changes their own
+moderator. Admins are made outside OpenAntiquity, nobody changes their own
 role, a banned account's role doesn't change, and a member becomes trusted
 only once they have fifty points (Decision 0005). A new role weighs the
 person's own findings and their evidence from then on, so the findings those
@@ -1040,7 +1040,7 @@ def check_role_change(actor: User, target: User, new_role: Role) -> None:
     if actor.has_id(target.id):
         raise RoleChangeForbiddenError("Nobody changes their own role.")
     if Role.ADMIN in (current, new_role):
-        raise RoleChangeForbiddenError("Admins are made and unmade outside Open Antiquity.")
+        raise RoleChangeForbiddenError("Admins are made and unmade outside OpenAntiquity.")
     if Role.MODERATOR in (current, new_role) and Role(actor.role) is not Role.ADMIN:
         raise RoleChangeForbiddenError("Only an admin makes or unmakes a moderator.")
     assert {current, new_role} <= MODERATOR_MANAGED_ROLES | {Role.MODERATOR}
@@ -1079,7 +1079,7 @@ def check_may_ban(actor: User, target: User) -> None:
         raise BanForbiddenError("You can't ban or unban yourself.")
     role = Role(target.role)
     if role is Role.ADMIN:
-        raise BanForbiddenError("An admin can't be banned from inside Open Antiquity.")
+        raise BanForbiddenError("An admin can't be banned from inside OpenAntiquity.")
     if role is Role.MODERATOR and Role(actor.role) is not Role.ADMIN:
         raise BanForbiddenError("Only an admin can ban or unban a moderator.")
 

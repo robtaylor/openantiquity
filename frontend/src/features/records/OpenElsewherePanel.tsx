@@ -122,7 +122,7 @@ function LinkItem({ link, tagged }: { link: ContextLink; tagged: boolean }) {
 
 /**
  * `/elsewhere?lon=&lat=`: the same spot in other people's viewers, which we
- * can't show inside Open Antiquity, each opening in a new tab. Without a spot in
+ * can't show inside OpenAntiquity, each opening in a new tab. Without a spot in
  * the address it uses the middle of the map.
  */
 export function OpenElsewherePanel() {

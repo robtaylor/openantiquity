@@ -632,7 +632,7 @@ const vocab: Vocab = {
 };
 
 export const metaFixture: Meta = {
-  app: { name: "Open Antiquity", version: "0.1.0", contribution_licence: "CC BY 4.0" },
+  app: { name: "OpenAntiquity", version: "0.1.0", contribution_licence: "CC BY 4.0" },
   auth: {
     providers: [
       { id: "google", label: "Google", enabled: true },

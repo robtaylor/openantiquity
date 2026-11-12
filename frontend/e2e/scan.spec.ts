@@ -49,7 +49,7 @@ test("frames a square near the map, and ends it with one press and goes on with 
   await openMap(page, `/scan${VIEW}`);
   await expect(place(page, FIRST)).toBeVisible();
   await expect(panel(page).getByText("2 people have looked it over so far.")).toBeVisible();
-  await expect(page).toHaveTitle("Scan a square · Open Antiquity");
+  await expect(page).toHaveTitle("Scan a square · OpenAntiquity");
   // Asked near the middle of the map the panel leaves in sight, rounded to about 100 m.
   const near = Number(squares.asked[0]?.searchParams.get("lon"));
   expect(Math.abs(near - SQUARE_SPOT[0])).toBeLessThan(0.03);

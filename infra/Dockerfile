@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# Open Antiquity: one image for the service and every job, run as Fly Machines.
+# OpenAntiquity: one image for the service and every job, run as Fly Machines.
 #
 #   docker buildx build -f infra/Dockerfile --platform linux/amd64 -t fieldclub .
 #

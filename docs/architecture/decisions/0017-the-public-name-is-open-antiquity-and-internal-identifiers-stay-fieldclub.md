@@ -1,10 +1,10 @@
-# Decision 0017 — The public name is Open Antiquity and internal identifiers stay fieldclub
+# Decision 0017 — The public name is OpenAntiquity and internal identifiers stay fieldclub
 
 **Status:** Proposed.
 
 **Current architecture:** [ARCHITECTURE.md, "Conventions"](../../ARCHITECTURE.md#conventions).
 
-**TL;DR.** In the context of a product not yet public, facing a name with an unwanted second meaning whose nearest domains belonged to other people, we chose to call it Open Antiquity everywhere a person outside can see and to leave the identifier `fieldclub` in the code and the cloud project, accepting two names for one thing in exchange for a rename that touched text and not structure.
+**TL;DR.** In the context of a product not yet public, facing a name with an unwanted second meaning whose nearest domains belonged to other people, we chose to call it OpenAntiquity everywhere a person outside can see and to leave the identifier `fieldclub` in the code and the cloud project, accepting two names for one thing in exchange for a rename that touched text and not structure.
 
 ## Context
 
@@ -15,13 +15,13 @@ The owner raised two problems with the name on 2026-11-11.
 - It reads to many people as field sports, "rich folk shooting animals", and "club" suggests membership. The intended sense, the Victorian naturalists' and antiquarian field clubs, is the less common one.
 - `fieldclub.uk`, `fieldclub.co.uk` and `fieldclub.org` belonged to other people. Only `fieldclub.org.uk` was free.
 
-The owner chose Open Antiquity, checked that trade marks were clear, and registered `openantiquity.org`, `openantiquity.com` and `openantiquity.co.uk` the same day. No project, organisation or journal of that exact name was found. The journal *Antiquity* calls its free-to-read section "Antiquity Open".
+The owner chose the name, first written as two words, "Open" and "Antiquity", and settled on 2026-11-12 on one word in camel case, OpenAntiquity, to be used everywhere. They checked that trade marks were clear, and registered `openantiquity.org`, `openantiquity.com` and `openantiquity.co.uk` the same day. No project, organisation or journal of that exact name was found. The journal *Antiquity* calls its free-to-read section "Antiquity Open".
 
 A Google Cloud project's id can never be changed, and by then the project held the database, the secrets and an elevation copy in progress.
 
 ## Decision
 
-1. The public name was Open Antiquity. It replaced Field Club in the interface, the API's text, emails, the `User-Agent` sent to data publishers (`OpenAntiquity/<version>`), the names of downloaded files, the id column of an export (`openantiquity_id`), the living docs and every letter not yet sent.
+1. The public name was OpenAntiquity. It replaced Field Club in the interface, the API's text, emails, the `User-Agent` sent to data publishers (`OpenAntiquity/<version>`), the names of downloaded files, the id column of an export (`openantiquity_id`), the living docs and every letter not yet sent.
 2. The same went for the names a visitor's browser is asked to hold and an API user has to send, because both are shown to people: the three cookies became `openantiquity_session`, `openantiquity_oauth` and `openantiquity_email_link`, which the privacy notice names, and the request header became `X-OpenAntiquity-Client`, which the API reference names. Two pairs of response models that shared a name were given names of their own, so the API reference no longer showed them with the package path.
 3. The site's address was `openantiquity.org`. The `.com` and `.co.uk` were held to redirect to it.
 4. The internal identifier stayed `fieldclub`: the package, the settings prefix, the command names, the CSS prefix `fc-`, the keys the interface keeps in the browser's storage, the database and its channel names, and every cloud resource name.
@@ -34,14 +34,14 @@ A Google Cloud project's id can never be changed, and by then the project held t
 - **Keep Field Club and register `fieldclub.org.uk`** — rejected because of the second meaning, and because the three nearest domains would carry mistyped traffic to other people.
 - **Rename the identifier too** — rejected because it would have touched over 400 files, every setting and every cloud resource for no visible gain, and the project id could not follow in any case.
 - **A new cloud project under the new name** — rejected because the database, secrets and elevation copy would have had to be made again. The one place a visitor could meet the old identifier was the run.app address, which shows the service's name, and a domain hides that.
-- **Other names** — Humps and Bumps, Low Sun, Fieldwalk, Lay of the Land, Read the Land and Spot Height were all free. The owner preferred Open Antiquity, which also says how the work is done.
+- **Other names** — Humps and Bumps, Low Sun, Fieldwalk, Lay of the Land, Read the Land and Spot Height were all free. The owner preferred OpenAntiquity, which also says how the work is done.
 - **Wait until launch** — rejected because the sign-in providers' consent screens, the domain and the letters all carry the name, and each would have needed changing later.
 
 ## Consequences
 
 - People see one name, and it has a domain in `.org`, `.com` and `.co.uk`.
 - The word "open" is a promise: contributions are published under an open licence with an open download, and the name now depends on that staying true.
-- The code has two names for one thing. A new contributor has to learn that `fieldclub` is Open Antiquity.
+- The code has two names for one thing. A new contributor has to learn that `fieldclub` is OpenAntiquity.
 - The cloud project id, bucket names and the run.app address still say `fieldclub`.
 - Two organisations hold a letter under the old name, and Defra's supply request (ticket DSP3-11967) was made the day before the change.
 

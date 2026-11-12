@@ -17,7 +17,7 @@ fields follow the project rather than the work list: the licence is spelt
 "Open Government Licence v3.0", as in `layers.py` and the other connectors;
 the category is `elevation`, because the work list's `lidar_index` is a
 record category and nothing here is a record; and `access` is the
-`SourceAccess` of Decision 0007, how Open Antiquity holds the data, which is
+`SourceAccess` of Decision 0007, how OpenAntiquity holds the data, which is
 `bulk` for both, although the survey index is read over WFS (the work list's
 `access_method` is how it is fetched).
 

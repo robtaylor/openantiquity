@@ -5,7 +5,7 @@
 resource "google_monitoring_notification_channel" "budget" {
   for_each = toset(var.budget.emails)
 
-  display_name = "Open Antiquity budget: ${each.value}"
+  display_name = "OpenAntiquity budget: ${each.value}"
   type         = "email"
   labels = {
     email_address = each.value

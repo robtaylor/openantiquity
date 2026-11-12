@@ -30,7 +30,7 @@ osm_client_id    = ""
 mail = {
   host     = ""
   username = ""
-  from     = "Open Antiquity <signin@example.org>"
+  from     = "OpenAntiquity <signin@example.org>"
 }
 
 # currency must be the billing account's own.

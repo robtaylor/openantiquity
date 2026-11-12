@@ -351,7 +351,7 @@ class FieldVisitNotices(BaseModel):
 
 
 class FindReporting(BaseModel):
-    """Where to report an object found in one nation. Open Antiquity stores nothing about finds."""
+    """Where to report an object found in one nation. OpenAntiquity stores nothing about finds."""
 
     scheme: str
     # The scheme's own site, or null where none is known.

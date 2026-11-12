@@ -353,7 +353,7 @@ function ProfilePage({ meta, profile }: { meta: Meta; profile: Profile }) {
       {profile.is_me ? null : (
         <div className="fc-profile__foot">
           <p className="fc-finding__hint">
-            Open Antiquity has no private messages. To talk to someone, comment on a finding.
+            OpenAntiquity has no private messages. To talk to someone, comment on a finding.
           </p>
           <div className="fc-profile__actions">
             <ReportButton target={{ kind: "user", id: profile.handle }} ownerHandle={profile.handle} />

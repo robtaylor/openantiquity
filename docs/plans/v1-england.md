@@ -4,7 +4,7 @@
 
 ## Goal
 
-A deployed Open Antiquity covering England. People explore 1 m LIDAR in archaeological visualisations, mark findings, check each other's findings up the confidence ladder, and link them to England's open heritage records. This plan implements Decisions 0001 to 0009.
+A deployed OpenAntiquity covering England. People explore 1 m LIDAR in archaeological visualisations, mark findings, check each other's findings up the confidence ladder, and link them to England's open heritage records. This plan implements Decisions 0001 to 0009.
 
 ## Prerequisites
 
@@ -20,7 +20,7 @@ A deployed Open Antiquity covering England. People explore 1 m LIDAR in archaeol
 - The development database holds about 1.45 million records from 31 sources, a gazetteer of 273,525 place names, and the nation and county boundaries.
 - Decisions 0010 to 0024 were written during the build, each from a review finding, a seam between tracks or an owner's choice. All are Proposed until WS9 checks them against the code.
 - The security and privacy review of the finished code ran on 2026-11-12, and its fixes are on `main` (WS9).
-- The project was renamed from Field Club to Open Antiquity on 2026-11-11, and `openantiquity.org` was registered (Decision 0017). The internal identifier is still `fieldclub`.
+- The project was renamed from Field Club to OpenAntiquity on 2026-11-11, and `openantiquity.org` was registered (Decision 0017). The internal identifier is still `fieldclub`.
 - The Google Cloud project `fieldclub-uk` runs the service and its jobs, held back from the public (`service_public = false`), since 2026-11-11. The tables exist, and the whole-country elevation copy finished at 01:58 UTC on 2026-11-12: 5,877 converted tiles, 126.4 GB. The deployment is moving to Fly.io (WS8), and an image built from `main` no longer runs on Google. On Fly, since 2026-11-12, the web app answers on openantiquity.org with its database, and the elevation and the national overview are in their Tigris bucket. OpenStreetMap sign-in is on.
 - Defra supplied England's 2022 composite DTM in bulk on the day it was asked, ticket DSP3-11967. See `owner-actions.md` and `../sources/lidar-england-bulk-supply.md`. Eleven tiles around Avebury and Stonehenge are in the local mirror folder for development.
 

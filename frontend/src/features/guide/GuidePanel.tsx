@@ -124,7 +124,7 @@ function Views({ meta }: { meta: Meta }) {
       </ul>
       {credit ? (
         <p className="fc-guide__credit">
-          The pictures in this guide are drawn by Open Antiquity from LIDAR elevation: <Attribution html={credit} />
+          The pictures in this guide are drawn by OpenAntiquity from LIDAR elevation: <Attribution html={credit} />
           {lines ? (
             <>
               {" "}
@@ -315,9 +315,7 @@ function Ground({ meta }: { meta: Meta }) {
           </ul>
         </div>
       </div>
-      <p>
-        The law is different in each nation. Before you log a visit, Open Antiquity shows the rules for where it is:
-      </p>
+      <p>The law is different in each nation. Before you log a visit, OpenAntiquity shows the rules for where it is:</p>
       {nations.map(([nation, lines]) => {
         const route = meta.notices.find_reporting[nation];
         return (

@@ -85,7 +85,7 @@ test("guide", async ({ page }) => {
 test("about", async ({ page }) => {
   await answerJson(page, "/context/live-sources", { items: [liveSourceFixture()] });
   await openMap(page, `/about${VIEW}`);
-  const panel = page.getByRole("complementary", { name: "About Open Antiquity" });
+  const panel = page.getByRole("complementary", { name: "About OpenAntiquity" });
   await panel.waitFor();
   await shoot(page, "about");
   await sheetTo(page, "full");
@@ -108,7 +108,7 @@ test("about", async ({ page }) => {
 test("about while the live sources load and when they fail", async ({ page }) => {
   await page.route(apiRoute("/context/live-sources"), () => undefined);
   await openMap(page, `/about${VIEW}`);
-  const panel = page.getByRole("complementary", { name: "About Open Antiquity" });
+  const panel = page.getByRole("complementary", { name: "About OpenAntiquity" });
   await sheetTo(page, "full");
   await scrollTo(panel.getByRole("heading", { name: "Where the data comes from" }));
   await shoot(page, "about-loading");
@@ -144,7 +144,7 @@ test("notices", async ({ page }) => {
 test("welcome sheet link", async ({ page }) => {
   await fakeSession(page, newcomerFixture());
   await openMap(page, `/${VIEW}`);
-  const sheet = page.getByRole("dialog", { name: "Welcome to Open Antiquity" });
+  const sheet = page.getByRole("dialog", { name: "Welcome to OpenAntiquity" });
   await sheet.waitFor();
   await sheet.getByRole("link", { name: /Read the contributor terms/ }).scrollIntoViewIfNeeded();
   await shoot(page, "welcome-terms-link");

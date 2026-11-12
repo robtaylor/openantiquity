@@ -51,7 +51,7 @@ function NoticeLinks() {
   );
 }
 
-/** `/about`: what Open Antiquity is, who runs it, where its data comes from, and the notices. */
+/** `/about`: what OpenAntiquity is, who runs it, where its data comes from, and the notices. */
 export function AboutPanel({ meta }: { meta: Meta }) {
   useNoticeFromHash();
   const name = meta.app.name;

@@ -71,7 +71,7 @@ function UnderSixteen() {
   }
   return (
     <div className="fc-account-stack">
-      <Notice tone="info" title="Open Antiquity is for people aged 16 and over">
+      <Notice tone="info" title="OpenAntiquity is for people aged 16 and over">
         <p>
           So you can't join yet, sorry. You can still explore the map, look at every finding and try marking things,
           which stays in this browser.
@@ -229,7 +229,7 @@ function WelcomeForm({ me, meta }: { me: Me; meta: Meta }) {
             ) : null}
           </div>
           <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? "Joining…" : "Join Open Antiquity"}
+            {busy ? "Joining…" : "Join OpenAntiquity"}
           </Button>
         </>
       )}
@@ -245,7 +245,7 @@ export function WelcomeSheet({ meta }: { meta: Meta }) {
     <Dialog
       open={open}
       className="fc-account-sheet"
-      title="Welcome to Open Antiquity"
+      title="Welcome to OpenAntiquity"
       onClose={() => {
         if (useAccountUi.getState().sheet === "welcome") useAccountUi.getState().close();
       }}

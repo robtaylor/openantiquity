@@ -262,7 +262,7 @@ export interface Meta {
     version: string;
     contribution_licence: string;
     /**
-     * Who to write to about Open Antiquity: `FIELDCLUB_CONTACT` in the backend's
+     * Who to write to about OpenAntiquity: `FIELDCLUB_CONTACT` in the backend's
      * settings. The backend doesn't send it yet, so the about pages say
      * where it will be given until it appears.
      */

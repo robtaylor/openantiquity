@@ -4,7 +4,7 @@
 # dependencies = []
 # ///
 # ruff: noqa: T201 - a command-line tool: what it prints is its output
-"""Build the jobs app's image and start Open Antiquity's jobs as Fly machines in that app.
+"""Build the jobs app's image and start OpenAntiquity's jobs as Fly machines in that app.
 
     uv run infra/fly_jobs.py [--commit SHA | --image REF] [--dry-run] <job> ...
 
@@ -293,7 +293,7 @@ def find_scheduled(settings: Settings) -> str | None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="fly_jobs.py", description="Start Open Antiquity's jobs on Fly.io.")
+    parser = argparse.ArgumentParser(prog="fly_jobs.py", description="Start OpenAntiquity's jobs on Fly.io.")
     which = parser.add_mutually_exclusive_group()
     which.add_argument("--commit", help="the commit whose image to run (default: HEAD)")
     which.add_argument("--image", help="a whole image reference instead")

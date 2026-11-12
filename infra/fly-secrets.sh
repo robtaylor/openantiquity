@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Set an Open Antiquity app's secrets on Fly.io without showing them.
+# Set an OpenAntiquity app's secrets on Fly.io without showing them.
 #
 #   bash infra/fly-secrets.sh <web|jobs> [--session-key] [--defra] [--from <file>]
 #                             [--replace] [--env-file <path>] [--known-hosts <path>]

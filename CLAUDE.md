@@ -1,4 +1,4 @@
-# Open Antiquity
+# OpenAntiquity
 
 A collaborative map for finding and checking archaeological earthworks in UK LIDAR data.
 

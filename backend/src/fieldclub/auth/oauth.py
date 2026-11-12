@@ -463,7 +463,7 @@ class Facebook(OAuthProvider):
             "GET",
             f"{graph}/me",
             "The Facebook profile call",
-            # No picture: Open Antiquity shows none, so it asks for none.
+            # No picture: OpenAntiquity shows none, so it asks for none.
             params={"fields": "id,name,email", "appsecret_proof": proof},
             headers={"Authorization": f"Bearer {access_token}"},
         )

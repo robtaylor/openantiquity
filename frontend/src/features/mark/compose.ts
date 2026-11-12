@@ -11,9 +11,9 @@ export type MarkProblemField = "point" | "featureClass" | "outline";
 
 export type Composed = { ok: true; draft: FindingDraft } | { ok: false; field: MarkProblemField; message: string };
 
-/** Said when the mark is somewhere Open Antiquity doesn't cover, by the server or before asking it. */
+/** Said when the mark is somewhere OpenAntiquity doesn't cover, by the server or before asking it. */
 export const OUTSIDE_MESSAGE =
-  "Open Antiquity covers the land of Great Britain, Ireland and their islands. Move the mark onto it.";
+  "OpenAntiquity covers the land of Great Britain, Ireland and their islands. Move the mark onto it.";
 
 /**
  * Turn the form into what is sent, or say what is missing. Only the point

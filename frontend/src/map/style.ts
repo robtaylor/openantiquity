@@ -460,7 +460,7 @@ export function buildStyle(
 
   return {
     version: 8,
-    name: "Open Antiquity",
+    name: "OpenAntiquity",
     // Sliders and the sun dial drive paint properties directly, so changes must not ease in.
     transition: { duration: 0, delay: 0 },
     ...(glyphs ? { glyphs: absoluteUrl(glyphs, origin) } : {}),

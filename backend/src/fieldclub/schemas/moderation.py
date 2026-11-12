@@ -237,7 +237,7 @@ class ModPerson(ModUser):
     """One person as a moderator sees them, banned and deleted accounts included.
 
     No email address and no sign-in identities: a moderator acts on the
-    account, and never needs to reach the person outside Open Antiquity.
+    account, and never needs to reach the person outside OpenAntiquity.
     """
 
     # True for an account its owner deleted. Its name has gone, and nothing can be done to it.

@@ -56,7 +56,7 @@ test("someone's page shows what they found and helped with, and lets a signed-in
   const panel = page.getByRole("complementary", { name: "Mary Anning" });
   await expect(panel.getByText("Trusted member", { exact: true })).toBeVisible();
   await expect(panel.getByText("Joined October 2026")).toBeVisible();
-  await expect(page).toHaveTitle("Mary Anning · Open Antiquity");
+  await expect(page).toHaveTitle("Mary Anning · OpenAntiquity");
   await expect(panel.getByRole("list", { name: "Findings" }).getByRole("link")).toHaveCount(2);
   await expect(panel.getByRole("tab")).toHaveText(["Found", "Helped"]);
 

@@ -2,7 +2,7 @@
 
 England has 83 Historic Environment Records (HERs). This page lists each one with the class the follow-up research gave it on 2026-11-10, the licence it found, the address of any machine-readable source, and the share of England's area it covers. The headline: three HERs were bulk-ingestable, fifteen had a public queryable service, 53 were deep link only and twelve had no public online record found. Openly licensed HER data covered 2.9% of England's area, or 7.5% if Lincolnshire's caveated licence was accepted.
 
-The source records are in [England records](records-england.md). The research behind this table was a follow-up on England's undesignated site records. Nothing here describes what Open Antiquity's code does, because none of it is built. Classes are the research's, not Open Antiquity's decisions. The three access modes in [Decision 0007](../architecture/decisions/0007-the-record-index-stores-only-what-licences-allow.md) map onto them as `bulk`, `live` and `deeplink`.
+The source records are in [England records](records-england.md). The research behind this table was a follow-up on England's undesignated site records. Nothing here describes what OpenAntiquity's code does, because none of it is built. Classes are the research's, not OpenAntiquity's decisions. The three access modes in [Decision 0007](../architecture/decisions/0007-the-record-index-stores-only-what-licences-allow.md) map onto them as `bulk`, `live` and `deeplink`.
 
 ## Totals
 

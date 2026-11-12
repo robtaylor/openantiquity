@@ -230,11 +230,11 @@ describe("Shell", () => {
     const rail = screen.getByRole("navigation", { name: "Modes" });
     expect(within(rail).getByRole("link", { name: "Second look" })).toHaveAttribute("aria-current", "page");
     expect(within(rail).getByRole("link", { name: "Explore" })).not.toHaveAttribute("aria-current");
-    expect(document.title).toBe("Second look · Open Antiquity");
+    expect(document.title).toBe("Second look · OpenAntiquity");
 
     await user.click(within(panel).getByRole("button", { name: "Close panel" }));
     expect(screen.queryByRole("complementary")).toBeNull();
-    expect(document.title).toBe("Open Antiquity");
+    expect(document.title).toBe("OpenAntiquity");
     // The map was never torn down.
     expect(map.removed).toBe(false);
     expect(liveMaps()).toHaveLength(1);
@@ -248,7 +248,7 @@ describe("Shell", () => {
     ["/help", "Help wanted", null],
     ["/i/xyz", "Investigation", null],
     ["/u/QuietBarrow42", "Profile", "@QuietBarrow42"],
-    ["/about", "About Open Antiquity", null],
+    ["/about", "About OpenAntiquity", null],
     ["/guide", "Guide", null],
     ["/no/such/page", "Page not found", null],
   ])("titles the panel at %s", async (path, title, subtitle) => {

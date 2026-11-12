@@ -443,8 +443,8 @@ LEFT_OUT: dict[str, str] = {
     + " A colour ramp in which earthworks don't show.",
     "daera-ni-coastal-dtm-relief": _NOT_THIS_RELEASE.format("the Northern Ireland coast")
     + " Its tile size was assumed, not recorded.",
-    "esri-world-imagery": "Esri's terms expect an ArcGIS account, which Open Antiquity doesn't have.",
-    "esri-wayback-43291": "Esri's terms expect an ArcGIS account, which Open Antiquity doesn't have.",
+    "esri-world-imagery": "Esri's terms expect an ArcGIS account, which OpenAntiquity doesn't have.",
+    "esri-wayback-43291": "Esri's terms expect an ArcGIS account, which OpenAntiquity doesn't have.",
     "eox-s2cloudless-2025": (
         "The research recorded no attribution for the 2018 and later layers: "
         "the line it gives names 2016 data."

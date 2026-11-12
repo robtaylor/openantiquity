@@ -1,7 +1,7 @@
 # Changelog
 
-All notable changes to Open Antiquity are recorded here. The format follows
-[Keep a Changelog](https://keepachangelog.com/). Open Antiquity is a deployed
+All notable changes to OpenAntiquity are recorded here. The format follows
+[Keep a Changelog](https://keepachangelog.com/). OpenAntiquity is a deployed
 service, so entries are dated, not versioned.
 
 ## [Unreleased]
@@ -11,7 +11,7 @@ service, so entries are dated, not versioned.
 Nothing is live yet. When the first version opens, this is what it does for you.
 
 - The code is open. It is published at github.com/robtaylor/openantiquity under the GNU Affero General Public License, version 3, so anyone may read it, change it and run their own copy, and whoever runs a changed copy has to share its source.
-- It is called Open Antiquity, at openantiquity.org. While it was being built it was called Field Club, and two early letters to record holders carry that name.
+- It is called OpenAntiquity, at openantiquity.org. While it was being built it was called Field Club, and two early letters to record holders carry that name.
 - You can look at England's LIDAR as slope, sky-view, relief and other views made for spotting earthworks, and light it from any direction you like. You don't need an account to look at anything.
 - Designated sites and other heritage records sit on the same map, each with who published it and under what licence. Where a record office doesn't let us keep its records, the map asks it directly or links to its own site.
 - You can mark something you think is there. Other people then take a second look without seeing what you said, and the finding climbs from "Spotted" to "Seen by others" and on as people agree and add evidence.
@@ -30,10 +30,10 @@ Nothing is live yet. When the first version opens, this is what it does for you.
 - Positions written in full-width figures, plus codes and short links to map sites are hidden or refused like grid references.
 - Once you have signed in with an emailed link, that browser can still ask for a link when strangers have asked for too many for your address.
 - Names that pass for staff or for a deleted account, such as "Site Moderator" or "Former member (deleted)", are refused, and changing your handle again and again can't reserve names.
-- Pages from Open Antiquity make your browser fetch nothing from Google, Facebook or the other sign-in providers: profile pictures from them aren't shown.
+- Pages from OpenAntiquity make your browser fetch nothing from Google, Facebook or the other sign-in providers: profile pictures from them aren't shown.
 - Possible burial mounds and other sites at risk from looting are shown as a one-kilometre square to anyone who isn't signed in.
 - There are no private messages. Everything people say about a finding is public and attached to it.
-- If you find an object, Open Antiquity records nothing about it and tells you who to report it to in your part of the UK.
+- If you find an object, OpenAntiquity records nothing about it and tells you who to report it to in your part of the UK.
 - A second look counts the moment you press your answer. You can then say what you think it is, or not, before you see what the finder and everyone else said. If you leave in between, you're offered the same choice when you come back.
 - If a protected finding's title or note says where it is more closely than its one-kilometre square, the form says which one and what to take out.
 - When a video, article, podcast or paper talks about a finding, you can add it to the finding's page. You see what the link is before you save it, and a video opens at the moment the finding comes up.
@@ -92,7 +92,7 @@ For whoever runs the service, as it moves to Fly.io (Decision 0018):
 
 ### Security
 
-- Every page and answer is sent with a Content-Security-Policy, and no other site may show Open Antiquity in a frame.
+- Every page and answer is sent with a Content-Security-Policy, and no other site may show OpenAntiquity in a frame.
 - A request body over 1 MB is refused before it is read, except a photo, which may be 15 MB.
 - The API's interactive docs and its schema aren't served in production.
 - Production refuses a secret key shorter than 32 characters and cookies that aren't Secure.
@@ -100,7 +100,7 @@ For whoever runs the service, as it moves to Fly.io (Decision 0018):
 - A session ends after 90 days without use and a year after sign-in, and `POST /auth/logout-everywhere` ends all of yours at once.
 - Expired sessions, and sign-in links a day after they are spent or expire, are deleted by `fieldclub-jobs purge-sign-ins`, and by every hourly `fieldclub-jobs due` run on Fly.
 - An emailed sign-in link opened in another browser signs in only when you type the address it was sent to, and a stranger asking for links to your address can no longer use up your allowance or spend the link you're about to click.
-- Handles and display names that pass for Open Antiquity, its staff or a former member, in look-alike letters or with hyphens, are refused, and a handle someone gives up is held back from others for a year.
+- Handles and display names that pass for OpenAntiquity, its staff or a former member, in look-alike letters or with hyphens, are refused, and a handle someone gives up is held back from others for a year.
 - A mention's or an evidence item's link on a protected finding reaches only people who see the finding exactly, and a map link to the spot is refused on such a finding.
 - Saved map views and height profiles near a protected finding are held back, and the area is coarsened, in investigations, for people who see the finding only as its square.
 - Outlines and areas have at most 2,000 points.

@@ -260,7 +260,7 @@ def _csv_row(entry: Entry) -> list[Any] | None:
     item = entry.view.item
     if entry.finding is not None:
         row = asdict(entry.finding.row)
-        row |= {"attribution": f"{row['compiler']}, Open Antiquity", "source": "Open Antiquity"}
+        row |= {"attribution": f"{row['compiler']}, OpenAntiquity", "source": "OpenAntiquity"}
     elif entry.view.record is not None:
         row = _record_row(entry.view.record)
     else:
@@ -443,7 +443,7 @@ def _licences_html(export: InvestigationExport) -> str:
     )
     return (
         "<section><h2>Licences and attribution</h2>"
-        "<p>Findings, notes and everything else contributed to Open Antiquity are under "
+        "<p>Findings, notes and everything else contributed to OpenAntiquity are under "
         f"{_e(CONTRIBUTION_LICENCE)}. "
         "Records keep their own source's licence and attribution, listed here.</p>"
         f"{table}</section>"
@@ -477,9 +477,9 @@ def to_html(export: InvestigationExport) -> str:
         f'<meta http-equiv="Content-Security-Policy" content="{_e(REPORT_CSP)}">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         '<meta name="referrer" content="no-referrer">'
-        f"<title>{_e(export.title)} - Open Antiquity</title>"
+        f"<title>{_e(export.title)} - OpenAntiquity</title>"
         f"<style>{_STYLE}</style></head><body>"
-        '<header><p class="kicker">Open Antiquity investigation</p>'
+        '<header><p class="kicker">OpenAntiquity investigation</p>'
         f"<h1>{_e(export.title)}</h1>{summary}"
         f'<p class="meta">By {_e(people)}. {_e(visibility)}. '
         f"Exported {_e(export.exported_at.strftime('%d %B %Y'))} from {_link(export.url)}.</p></header>"

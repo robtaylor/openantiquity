@@ -25,12 +25,12 @@ test("signs in, joins, signs out, signs in again and deletes the account", async
 
   // First sign-in: the welcome step is owed.
   await devSignIn(page, handle);
-  const welcome = page.getByRole("dialog", { name: "Welcome to Open Antiquity" });
+  const welcome = page.getByRole("dialog", { name: "Welcome to OpenAntiquity" });
   await expect(welcome).toBeVisible();
   await expect(welcome.getByLabel("Your name on the map")).toHaveValue(handle);
   await welcome.getByRole("radio", { name: "18 or over" }).click();
   await welcome.getByRole("checkbox", { name: "I accept the contributor terms" }).check();
-  await welcome.getByRole("button", { name: "Join Open Antiquity" }).click();
+  await welcome.getByRole("button", { name: "Join OpenAntiquity" }).click();
   await expect(welcome).toBeHidden();
 
   // The account page shows them, and the server agrees.

@@ -23,7 +23,7 @@ resource "google_service_account" "deployer" {
   count = local.federate ? 1 : 0
 
   account_id   = "${var.name}-deployer"
-  display_name = "Open Antiquity deploy workflow"
+  display_name = "OpenAntiquity deploy workflow"
 
   depends_on = [google_project_service.enabled]
 }

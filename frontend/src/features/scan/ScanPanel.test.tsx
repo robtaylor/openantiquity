@@ -96,7 +96,7 @@ describe("a square to scan", () => {
     await waitFor(() => expect(map.getLayer(SQUARE_LAYERS.outline)).toBeDefined());
     expect(map.sourceData(SQUARE_SOURCES.outline)).toMatchObject({ features: [expect.anything()] });
     expect(map.sourceData(SQUARE_SOURCES.shade)).toMatchObject({ features: [expect.anything()] });
-    expect(document.title).toBe("Scan a square · Open Antiquity");
+    expect(document.title).toBe("Scan a square · OpenAntiquity");
   });
 
   it("keeps the square through the layer panel, and takes it off the map on leaving the scan", async () => {

@@ -1,4 +1,4 @@
-# Running Open Antiquity on Fly.io
+# Running OpenAntiquity on Fly.io
 
 This is the runbook for the deployment on Fly.io: what the owner does once, what a deploy is afterwards, how to roll back, and what to watch. It also records the sizing and cost reasoning behind the defaults. Decision 0018 chose Fly.io, and the spike `docs/architecture/decisions/spikes/hosting-on-fly-io.md` measured what it rests on.
 

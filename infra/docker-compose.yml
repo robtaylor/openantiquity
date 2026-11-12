@@ -1,4 +1,4 @@
-# Local development services for Open Antiquity.
+# Local development services for OpenAntiquity.
 #
 #   docker compose -f infra/docker-compose.yml up -d db
 #

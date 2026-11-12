@@ -39,7 +39,7 @@ export interface NoticeEntry {
 export function ContactAddress({ meta }: { meta: Meta }) {
   const contact = meta.app.contact?.trim();
   if (!contact) {
-    return <>the address that will be given here before Open Antiquity opens to everyone</>;
+    return <>the address that will be given here before OpenAntiquity opens to everyone</>;
   }
   if (contact.startsWith("https://")) {
     return (
@@ -70,8 +70,8 @@ export function DraftBanner() {
       <div>
         <strong>Draft</strong>
         <p>
-          These words haven't been settled yet. The people who run Open Antiquity still have to check them, with legal
-          advice, before Open Antiquity opens to everyone. They describe what the site does today.
+          These words haven't been settled yet. The people who run OpenAntiquity still have to check them, with legal
+          advice, before OpenAntiquity opens to everyone. They describe what the site does today.
         </p>
       </div>
     </div>
@@ -123,7 +123,7 @@ function Terms({ meta }: { meta: Meta }) {
           What you add is public, published under <Licence meta={meta} />, so anyone may reuse it if they credit you.
         </li>
         <li>Add only your own work, or work you may share. Nothing about people that they haven't made public.</li>
-        <li>Be civil, and never use Open Antiquity to plan digging, detecting or trespass.</li>
+        <li>Be civil, and never use OpenAntiquity to plan digging, detecting or trespass.</li>
         <li>If you leave, your details go, and what you published stays, credited to “Former member”.</li>
       </InShort>
 
@@ -134,12 +134,12 @@ function Terms({ meta }: { meta: Meta }) {
           other people who have answered the same finding. Nobody else learns how you answered.
         </p>
         <p>
-          Where a finding's exact place is hidden to protect the site, Open Antiquity hides it everywhere it shows the
+          Where a finding's exact place is hidden to protect the site, OpenAntiquity hides it everywhere it shows the
           finding, including grid references and coordinates written in what you add.
         </p>
         <p>
           You keep the rights to what you add. By saving it you publish it under {licence}, so anyone may copy, share
-          and build on it, for any purpose, as long as they credit Open Antiquity and the name you use on the map. You
+          and build on it, for any purpose, as long as they credit OpenAntiquity and the name you use on the map. You
           accept these terms once, on the welcome step after your first sign-in.
         </p>
       </More>
@@ -164,11 +164,11 @@ function Terms({ meta }: { meta: Meta }) {
         <ul>
           <li>Be civil. Disagree with the evidence, not the person.</li>
           <li>
-            Never use Open Antiquity to plan anything illegal: digging, metal detecting where it isn't allowed, or
+            Never use OpenAntiquity to plan anything illegal: digging, metal detecting where it isn't allowed, or
             trespass.
           </li>
           <li>
-            Open Antiquity has no private messages. Don't use comments to arrange to meet people you don't know, and
+            OpenAntiquity has no private messages. Don't use comments to arrange to meet people you don't know, and
             never to meet anyone under 18.
           </li>
         </ul>
@@ -223,14 +223,14 @@ function Privacy({ meta }: { meta: Meta }) {
 
       <h4>Who looks after your information</h4>
       <p>
-        Open Antiquity is a free, non-commercial project. Who runs it will be named here before it opens to everyone. To
+        OpenAntiquity is a free, non-commercial project. Who runs it will be named here before it opens to everyone. To
         ask about your information, write to <WriteTo meta={meta} />.
       </p>
 
       <More title="Looking without an account">
         <p>
-          Open Antiquity sets no cookies until you start to sign in, and has no advertising and no tracking. Anything
-          you mark or answer before you sign in stays in your browser as a draft, in its local storage, and is sent only
+          OpenAntiquity sets no cookies until you start to sign in, and has no advertising and no tracking. Anything you
+          mark or answer before you sign in stays in your browser as a draft, in its local storage, and is sent only
           when you sign in. Signing in from the same tab saves what you made there as yours, except a second look, which
           waits for you to send it. Anything else left in the browser, perhaps by someone else, is saved only if you say
           it's yours. Whoever uses the browser after you can see that a draft is there, but not what it says or where,
@@ -376,7 +376,7 @@ function Reporting({ meta }: { meta: Meta }) {
           doesn't, they close the report. Either way they write down why.
         </li>
         <li>The person who posted it isn't told who reported it.</li>
-        <li>You aren't told the outcome, because Open Antiquity sends nothing private between members.</li>
+        <li>You aren't told the outcome, because OpenAntiquity sends nothing private between members.</li>
         <li>You can report the same thing once while a report is open.</li>
       </ul>
 
@@ -401,7 +401,7 @@ function Takedown({ meta }: { meta: Meta }) {
 
       <h4>Asking us to take something down</h4>
       <p>
-        If something on Open Antiquity is about you or your land, is untrue, or shouldn't be public, write to{" "}
+        If something on OpenAntiquity is about you or your land, is untrue, or shouldn't be public, write to{" "}
         <WriteTo meta={meta} />, whether or not you have an account. Please send:
       </p>
       <ul>
@@ -443,7 +443,7 @@ export const NOTICES: readonly NoticeEntry[] = [
   {
     id: "privacy",
     title: "Privacy notice",
-    summary: "What Open Antiquity keeps about you, and why.",
+    summary: "What OpenAntiquity keeps about you, and why.",
     Body: Privacy,
   },
   {

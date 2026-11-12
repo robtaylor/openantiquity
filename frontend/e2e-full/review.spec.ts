@@ -55,10 +55,10 @@ test("a second account answers a finding through the queue, signing in on the wa
     const sheet = page.getByRole("dialog", { name: "Sign in" });
     await sheet.getByLabel("Development sign-in").fill(`Reviewer${tag}`);
     await sheet.getByRole("button", { name: "Sign in", exact: true }).click();
-    const welcome = page.getByRole("dialog", { name: "Welcome to Open Antiquity" });
+    const welcome = page.getByRole("dialog", { name: "Welcome to OpenAntiquity" });
     await welcome.getByRole("radio", { name: "18 or over" }).click();
     await welcome.getByRole("checkbox", { name: "I accept the contributor terms" }).check();
-    await welcome.getByRole("button", { name: "Join Open Antiquity" }).click();
+    await welcome.getByRole("button", { name: "Join OpenAntiquity" }).click();
 
     // An answer given before signing in waits for the person to say it is theirs: it is final once sent.
     await expect(look.getByText(/given in this browser before you signed in/)).toBeVisible();

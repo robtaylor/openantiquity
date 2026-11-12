@@ -1,4 +1,4 @@
-# Open Antiquity's public service on Fly.io: the API, the tiles and the built
+# OpenAntiquity's public service on Fly.io: the API, the tiles and the built
 # frontend, from infra/Dockerfile. Deployed from the repository root with
 #
 #   fly deploy --image-label "$(git rev-parse HEAD)"
@@ -85,7 +85,7 @@ kill_timeout = 10
   AWS_REGION = "auto"
   # The emailed sign-in link, once there is a mail relay. Its password is a secret.
   # FIELDCLUB_MAIL_BACKEND = "smtp"
-  # FIELDCLUB_MAIL_FROM = "Open Antiquity <hello@openantiquity.org>"
+  # FIELDCLUB_MAIL_FROM = "OpenAntiquity <hello@openantiquity.org>"
   # FIELDCLUB_SMTP_HOST = "<relay host>"
   # FIELDCLUB_SMTP_USERNAME = "<relay user>"
   # A sign-in provider is offered once its id is here and its secret is set.

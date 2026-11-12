@@ -1,8 +1,8 @@
-"""Open Antiquity: a collaborative map for finding and checking archaeological earthworks."""
+"""OpenAntiquity: a collaborative map for finding and checking archaeological earthworks."""
 
 from importlib.metadata import PackageNotFoundError, version
 
-APP_NAME = "Open Antiquity"
+APP_NAME = "OpenAntiquity"
 
 try:
     __version__ = version("fieldclub")

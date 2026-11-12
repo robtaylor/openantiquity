@@ -249,11 +249,11 @@ describe("the drafts bar", () => {
     putDraft(PROBE, { note: "a" });
     noteSignInStarted("provider");
     renderApp();
-    const welcome = within(await screen.findByRole("dialog", { name: "Welcome to Open Antiquity" }));
+    const welcome = within(await screen.findByRole("dialog", { name: "Welcome to OpenAntiquity" }));
     expect(saved).toEqual([]);
     await userEvent.click(welcome.getByRole("radio", { name: "18 or over" }));
     await userEvent.click(welcome.getByRole("checkbox", { name: "I accept the contributor terms" }));
-    await userEvent.click(welcome.getByRole("button", { name: "Join Open Antiquity" }));
+    await userEvent.click(welcome.getByRole("button", { name: "Join OpenAntiquity" }));
     const b = await bar();
     await userEvent.click(await b.findByRole("button", { name: "Check" }));
     await userEvent.click(b.getByRole("button", { name: "Send" }));

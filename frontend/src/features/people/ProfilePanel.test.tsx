@@ -69,7 +69,7 @@ describe("a person's page", () => {
     ).toBeInTheDocument();
     expect(panel.getByText("Joined October 2026")).toBeInTheDocument();
     expect(panel.getByText("Walks the downs most weekends.")).toBeInTheDocument();
-    expect(document.title).toBe("Mary Anning · Open Antiquity");
+    expect(document.title).toBe("Mary Anning · OpenAntiquity");
 
     const found = await panel.findByRole("list", { name: "Findings" });
     expect(within(found).getAllByRole("link")).toHaveLength(2);

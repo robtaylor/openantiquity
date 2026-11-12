@@ -269,7 +269,7 @@ function candidatesOf(body: unknown, reading: LiveReading): Candidates {
     case "mediawiki_query":
       return fromWikiPages(body, reading);
     default:
-      throw new LiveResponseError(`Open Antiquity can't read answers in the form "${reading.format}"`);
+      throw new LiveResponseError(`OpenAntiquity can't read answers in the form "${reading.format}"`);
   }
 }
 

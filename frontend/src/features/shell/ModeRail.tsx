@@ -69,7 +69,7 @@ export function ModeRail({ compact = false }: { compact?: boolean }) {
   const main = MODES.filter((mode) => mode.id !== "account");
   return (
     <nav className={compact ? "fc-rail fc-rail--compact" : "fc-rail"} aria-label="Modes">
-      <NavLink to="/" className="fc-rail__brand" aria-label="Open Antiquity: back to the map">
+      <NavLink to="/" className="fc-rail__brand" aria-label="OpenAntiquity: back to the map">
         <BrandMark />
       </NavLink>
       <div className="fc-rail__group">

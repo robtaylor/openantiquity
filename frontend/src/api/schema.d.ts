@@ -2841,7 +2841,7 @@ export interface components {
         };
         /**
          * FindReporting
-         * @description Where to report an object found in one nation. Open Antiquity stores nothing about finds.
+         * @description Where to report an object found in one nation. OpenAntiquity stores nothing about finds.
          */
         FindReporting: {
             /** Scheme */
@@ -3831,7 +3831,7 @@ export interface components {
          * @description One person as a moderator sees them, banned and deleted accounts included.
          *
          *     No email address and no sign-in identities: a moderator acts on the
-         *     account, and never needs to reach the person outside Open Antiquity.
+         *     account, and never needs to reach the person outside OpenAntiquity.
          */
         ModPerson: {
             actions: components["schemas"]["PersonActionsOut"];

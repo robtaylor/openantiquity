@@ -918,7 +918,7 @@ COVERAGE_RECORD_TYPES: frozenset[str] = frozenset({MAPPING_PROJECT_AREA})
 
 
 class SourceAccess(StrEnum):
-    """How Open Antiquity may hold a source's data, per Decision 0007.
+    """How OpenAntiquity may hold a source's data, per Decision 0007.
 
     A `bulk` source is downloaded and stored in `records`. A `live` source is
     queried by the browser and never stored on our servers. A `deeplink`
@@ -1216,7 +1216,7 @@ class FindReportingInfo:
     text: str
 
 
-# Open Antiquity stores nothing about a find. Where someone mentions one, the tool
+# OpenAntiquity stores nothing about a find. Where someone mentions one, the tool
 # shows this. The Portable Antiquities Scheme covers England and Wales, and its
 # site terms allow links to its home page only. Northern Ireland has no
 # Portable Antiquities Scheme: the 1995 Order sends finds to the Ulster Museum,

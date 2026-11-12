@@ -1,4 +1,4 @@
-# Open Antiquity
+# OpenAntiquity
 
 A shared map for finding and checking archaeological earthworks in UK LIDAR data.
 
@@ -33,7 +33,7 @@ The checks are `uv run pytest`, `uv run ruff check .` and `uv run pyright` in `b
 
 The code is free software under the GNU Affero General Public License, version 3. The text is in [`LICENSE`](LICENSE). If you run a changed copy as a service, the licence asks you to offer its source to the people who use it.
 
-Copyright © 2026 the Open Antiquity contributors.
+Copyright © 2026 the OpenAntiquity contributors.
 
 Three things here are not the project's own code and keep their own terms:
 

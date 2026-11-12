@@ -10,7 +10,7 @@
 
 When this was written the repository had no `LICENSE` file, no licence field in `backend/pyproject.toml` or `frontend/package.json`, and no `README.md`. It had been pushed to a public GitHub repository on 2026-11-12, `robtaylor/openantiquity`, so the code could be read but not reused.
 
-Open Antiquity is a hosted service, and its value is the map people share. Decision 0004 made the project non-commercial. What people add on the site was already published under CC BY 4.0 (`CONTRIBUTION_LICENCE` in `vocab.py`), and each external source keeps its publisher's licence (Decision 0007).
+OpenAntiquity is a hosted service, and its value is the map people share. Decision 0004 made the project non-commercial. What people add on the site was already published under CC BY 4.0 (`CONTRIBUTION_LICENCE` in `vocab.py`), and each external source keeps its publisher's licence (Decision 0007).
 
 The owner was asked on 2026-11-12, with the AGPL recommended and Apache-2.0 named as the permissive alternative, and chose the AGPL version 3.
 
@@ -19,7 +19,7 @@ The licences of what the code depends on were read that day from the installed p
 ## Decision
 
 1. The project's own code is under the GNU Affero General Public License, version 3 and no later version: `AGPL-3.0-only`. The text is in `LICENSE` at the root, and both packages name it.
-2. The copyright line names "the Open Antiquity contributors". No operating entity had been chosen when this was written.
+2. The copyright line names "the OpenAntiquity contributors". No operating entity had been chosen when this was written.
 3. The licence covers the project's own code and documents. What people add on the site stays under CC BY 4.0, and data from other publishers, the test fixtures included, keeps its publisher's licence. The `README.md` says so.
 4. The terrain views stay credited to the Relief Visualization Toolbox, whose algorithms they reimplement and which is under Apache-2.0.
 

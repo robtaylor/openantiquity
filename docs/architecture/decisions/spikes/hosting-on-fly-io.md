@@ -4,7 +4,7 @@
 
 ## Question
 
-Can Open Antiquity run on Fly.io, with Fly's Managed Postgres and Tigris object storage, keeping every guarantee it has on Google Cloud today?
+Can OpenAntiquity run on Fly.io, with Fly's Managed Postgres and Tigris object storage, keeping every guarantee it has on Google Cloud today?
 
 ## Why this is in question
 

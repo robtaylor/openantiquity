@@ -146,7 +146,7 @@ run "providers_are_wired_only_when_configured" {
 
   variables {
     google_client_id = "example.apps.googleusercontent.com"
-    mail             = { host = "smtp.example.org", username = "fieldclub", from = "Open Antiquity <signin@example.org>" }
+    mail             = { host = "smtp.example.org", username = "fieldclub", from = "OpenAntiquity <signin@example.org>" }
   }
 
   assert {
