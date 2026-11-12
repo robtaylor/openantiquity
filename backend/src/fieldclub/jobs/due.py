@@ -4,7 +4,9 @@ Fly starts a scheduled machine hourly, daily, weekly or monthly, at a time of
 its own choosing within the interval. The channel scan runs every six hours
 and the source refresh nightly, so one machine is started hourly and runs
 `fieldclub-jobs due`, which asks this module what to run. Nothing is kept
-between runs: the answer comes from the database and the clock.
+between runs: the answer comes from the database and the clock. Every run
+also deletes expired sessions and old sign-in links (`sessions.purge`), which
+needs no deciding.
 
 - The scan is due when some channel is watched and none has been checked in
   the last six hours less an hour. The hour is the room Fly takes in starting

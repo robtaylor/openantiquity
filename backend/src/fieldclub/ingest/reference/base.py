@@ -41,7 +41,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from fieldclub import http
 from fieldclub.config import Settings, get_settings
 from fieldclub.db import Base, SessionLocal
-from fieldclub.ingest.base import BRITISH_ISLES, BBox, SourceInfo
+from fieldclub.ingest.base import BRITISH_ISLES, BBox, SourceInfo, without_empty_parts
 from fieldclub.ingest.errors import (
     EmptyIngestError,
     IngestError,
@@ -124,6 +124,8 @@ def _check_geometry(source_key: str, row: dict[str, Any]) -> BaseGeometry:
         )
     if not geom.is_valid:
         raise InvalidRecordError(f"{source_key}: the geometry of {row.get('name')!r} is not valid.")
+    # GEOS calls a polygon with an empty hole valid and then crashes on it, and PostGIS refuses to store it.
+    geom, _ = without_empty_parts(geom)
     return geom
 
 

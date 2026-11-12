@@ -108,7 +108,10 @@ def test_streams_leave_room_for_everything_else() -> None:
 
     assert limits["type"] == "requests"
     assert limits["soft_limit"] < limits["hard_limit"]
-    assert int(WEB["env"]["FIELDCLUB_EVENTS_MAX_STREAMS"]) == limits["hard_limit"] - 4
+    streams = int(WEB["env"]["FIELDCLUB_EVENTS_MAX_STREAMS"])
+    assert streams == limits["hard_limit"] - 4
+    # The application refuses to start when one address may hold more than a quarter of them.
+    assert int(WEB["env"]["FIELDCLUB_EVENTS_MAX_PER_ADDRESS"]) == streams // 4
 
 
 def test_health_checks_ask_the_route_the_application_has() -> None:

@@ -13,14 +13,14 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any, ClassVar
 
 import httpx
-from shapely.geometry import Point, Polygon
-from shapely.geometry.base import BaseGeometry
+from shapely.geometry import GeometryCollection, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon
+from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
 from shapely.prepared import prep
 
 from fieldclub import credits, http
@@ -85,6 +85,53 @@ def geometry_in_britain_and_ireland(geometry: BaseGeometry) -> bool:
 def bbox_in_bbox(outer: BBox, inner: tuple[float, float, float, float]) -> bool:
     """Whether `inner`, such as a geometry's `.bounds`, lies wholly inside `outer`."""
     return outer[0] <= inner[0] and outer[1] <= inner[1] and inner[2] <= outer[2] and inner[3] <= outer[3]
+
+
+_MULTIPART_TYPES: dict[str, Callable[[Any], BaseGeometry]] = {
+    "MultiPoint": MultiPoint,
+    "MultiLineString": MultiLineString,
+    "MultiPolygon": MultiPolygon,
+    "GeometryCollection": GeometryCollection,
+}
+
+
+def without_empty_parts(geom: BaseGeometry) -> tuple[BaseGeometry, bool]:
+    """A geometry without its empty members and empty holes, and whether any were removed.
+
+    Every shape from a publisher goes through this before it is stored or tested
+    against another: the runner's records and the reference loaders' rows.
+
+    PostGIS takes the point for `centroid` from the highest-dimension member,
+    so `GEOMETRYCOLLECTION(POINT(...), POLYGON EMPTY)` would be stored with an
+    empty centroid and never be found by a distance query.
+
+    A polygon with an empty hole is valid to GEOS, which then crashes the
+    process in `contains`, `covers`, `within` and `relate`
+    (https://github.com/libgeos/geos/issues/1604). PostGIS refuses to store
+    one, which would fail the whole run for one publisher's slip.
+    """
+    if isinstance(geom, Polygon):
+        holes = [ring for ring in geom.interiors if not ring.is_empty]
+        if geom.is_empty or len(holes) == len(geom.interiors):
+            return geom, False
+        return Polygon(geom.exterior, holes), True
+    if not isinstance(geom, BaseMultipartGeometry):
+        return geom, False
+    kept: list[BaseGeometry] = []
+    changed = False
+    for part in geom.geoms:
+        # A collection holding nothing but empty members is itself empty.
+        if part.is_empty:
+            changed = True
+            continue
+        part, part_changed = without_empty_parts(part)
+        changed = changed or part_changed
+        kept.append(part)
+    if not changed:
+        return geom, False
+    rebuild = _MULTIPART_TYPES.get(geom.geom_type)
+    assert rebuild is not None, f"don't know how to rebuild a {geom.geom_type}"
+    return rebuild(kept), True
 
 
 _KEY_PATTERN = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")

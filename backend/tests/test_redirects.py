@@ -31,6 +31,9 @@ def test_another_name_is_sent_to_the_same_path_on_the_site(client: TestClient, h
 
     assert response.status_code == 308
     assert response.headers["location"] == "https://openantiquity.org/f/7K3QXM?tab=notes&x=%2F"
+    # The security headers go on the redirect too, so a browser keeps to https for the other name as well.
+    assert response.headers["strict-transport-security"].startswith("max-age=")
+    assert response.headers["x-content-type-options"] == "nosniff"
 
 
 def test_the_name_is_matched_without_its_port_or_case(client: TestClient) -> None:

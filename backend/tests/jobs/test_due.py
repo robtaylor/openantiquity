@@ -1,4 +1,4 @@
-"""`fieldclub-jobs due`: one hourly run decides whether the channel scan and the source refresh are due."""
+"""`fieldclub-jobs due`: one hourly run clears old sign-ins and runs the scan and the refresh when due."""
 
 from __future__ import annotations
 
@@ -6,10 +6,13 @@ import logging
 from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
+import time_machine
 from sqlalchemy.orm import Session
 
+from fieldclub.auth import sessions
 from fieldclub.jobs import channels, cli, due, sources
-from fieldclub.models import WatchChannel
+from fieldclub.models import UserSession, WatchChannel
+from tests.helpers import MakeUser, count
 
 CHANNEL = "UCabcdefghijklmnopqrstuv"
 OTHER = "UCzyxwvutsrqponmlkjihgfe"
@@ -140,3 +143,35 @@ def test_a_failed_refresh_makes_the_run_exit_non_zero(db: Session, monkeypatch: 
     at(monkeypatch, NOON.replace(hour=due.REFRESH_HOUR_UTC))
 
     assert cli.main(["due"]) == 1
+
+
+def test_every_hourly_run_deletes_expired_sessions(
+    db: Session, make_user: MakeUser, ran: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = make_user()
+    with time_machine.travel(datetime(2020, 1, 1, tzinfo=UTC), tick=False):
+        sessions.create_session(db, user)
+    live = sessions.create_session(db, user)
+    db.commit()
+    at(monkeypatch, NOON)
+
+    assert cli.main(["due"]) == 0
+
+    assert ran == []
+    db.expire_all()
+    assert count(db, UserSession) == 1
+    assert sessions.resolve_session(db, live) is not None
+
+
+def test_a_failed_purge_still_lets_the_rest_run_and_the_run_exits_non_zero(
+    db: Session, ran: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken(*_: object, **__: object) -> sessions.Purged:
+        raise RuntimeError("the database went away")
+
+    monkeypatch.setattr(sessions, "purge", broken)
+    watch(db)
+    at(monkeypatch, NOON.replace(hour=due.REFRESH_HOUR_UTC))
+
+    assert cli.main(["due"]) == 1
+    assert ran == ["scan-channels", "refresh-sources"]

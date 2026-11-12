@@ -58,7 +58,7 @@ For whoever runs the service, as it moves to Fly.io (Decision 0018):
 - A full ingest run whose lock went with its database connection fails with `ingest_lock_lost` instead of deleting records.
 - The deployment is now Fly.io: `fly.toml` for the web app, a second app for the jobs that alone holds Defra's login, `infra/fly_jobs.py` to build the jobs app's own image and start each job as a machine under a time limit, `infra/fly-secrets.sh` to set secrets without showing them, and `deploy.yml` deploying with a deploy token from main. `infra/README.md` is the new runbook. The Google Cloud deployment stays in `infra/terraform` until the cut-over, and an image built from main no longer runs there.
 - `FIELDCLUB_REDIRECT_HOSTS` lists the site's other names. A request for one is answered 308 with the same path on `FIELDCLUB_PUBLIC_URL`.
-- `fieldclub-jobs due` runs whichever of the channel scan and the source refresh is due, for a scheduler that can only start it every hour.
+- `fieldclub-jobs due` deletes old sign-ins, then runs whichever of the channel scan and the source refresh is due, for a scheduler that can only start it every hour.
 - `FIELDCLUB_TERRAIN_API_FETCH=false` stops the API adding tiles to the mirror, for a web app that holds no supply login: a tile it lacks is answered `elevation_unavailable` without writing anything.
 - The settings refuse a mirror and national overview folder that are the same or one inside the other, and an overview build removes only its own build files.
 - A misnamed or missing bucket is now an error at the first read or write, instead of an empty folder or an elevation lock that waits and then says "being prepared".
@@ -94,13 +94,14 @@ For whoever runs the service, as it moves to Fly.io (Decision 0018):
 - Production refuses a secret key shorter than 32 characters and cookies that aren't Secure.
 - The session cookie is `__Host-openantiquity_session`, which another site on a neighbouring address can't set.
 - A session ends after 90 days without use and a year after sign-in, and `POST /auth/logout-everywhere` ends all of yours at once.
-- Expired sessions, and sign-in links a day after they are spent or expire, are deleted by `fieldclub-jobs purge-sign-ins`.
+- Expired sessions, and sign-in links a day after they are spent or expire, are deleted by `fieldclub-jobs purge-sign-ins`, and by every hourly `fieldclub-jobs due` run on Fly.
 - An emailed sign-in link opened in another browser signs in only when you type the address it was sent to, and a stranger asking for links to your address can no longer use up your allowance or spend the link you're about to click.
 - Handles and display names that pass for Open Antiquity, its staff or a former member, in look-alike letters or with hyphens, are refused, and a handle someone gives up is held back from others for a year.
 - A mention's or an evidence item's link on a protected finding reaches only people who see the finding exactly, and a map link to the spot is refused on such a finding.
 - Saved map views and height profiles near a protected finding are held back, and the area is coarsened, in investigations, for people who see the finding only as its square.
 - Outlines and areas have at most 2,000 points.
-- Map tiles are limited to 600 a minute from one address, and one address may hold at most eight live update streams.
+- Map tiles are limited to 2,400 a minute from one address, and one address may hold at most eight live update streams, six on each machine on Fly.
+- A shape with an empty or malformed part, such as a polygon with an empty hole, is refused before the geometry library sees it. One request with such an outline used to end the whole API process (a fault in GEOS, reported as [libgeos/geos#1604](https://github.com/libgeos/geos/issues/1604)). A publisher's polygon with an empty hole is stored without it.
 - A second look and a vote count at the weight of the role their giver had when they gave it, and keep counting through a ban.
 - A page whose server names an odd character set is read as UTF-8, and a page that breaks the reader no longer causes an error.
 - Record addresses from publishers are kept only when they are web addresses, and record names and summaries are cut to length.

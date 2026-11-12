@@ -10,8 +10,9 @@ Each job logs a one-line summary and exits 0 when everything it tried
 worked, or 1 when anything failed, so the scheduler can raise the alarm.
 A failure doesn't stop the rest of the run.
 
-`due` is for a scheduler that starts it every hour: it runs whichever of the
-other two is due (`fieldclub.jobs.due`), the scan first.
+`due` is for a scheduler that starts it every hour: it clears old sign-ins,
+then runs whichever of the scan and the refresh is due (`fieldclub.jobs.due`),
+the scan first.
 """
 
 from __future__ import annotations
@@ -60,7 +61,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     commands.add_parser("refresh-sources", help="run each bulk source whose data is older than it should be")
     commands.add_parser(
-        "due", help="run whichever of scan-channels and refresh-sources is due, for an hourly start"
+        "due",
+        help="for an hourly start: purge sign-ins, then run whichever of the scan and the refresh is due",
     )
     commands.add_parser("purge-sign-ins", help="delete expired sessions and old sign-in links")
 
@@ -84,13 +86,18 @@ def refresh_sources() -> int:
 
 
 def run_due() -> int:
+    # Every hour and first, because the privacy notice says how soon these are deleted. It is two deletes.
+    try:
+        failed = purge_sign_ins() != 0
+    except Exception:
+        logger.exception("purge-sign-ins failed")
+        failed = True
     with SessionLocal() as db:
         wanted = due.what_is_due(db, due.utc_now())
     logger.info("due: %s", ", ".join(wanted.names()) or "nothing")
-    failed = False
     if wanted.scan_channels:
         defaults = channels.ScanLimits()
-        failed = scan_channels(defaults.max_channels, defaults.delay_s) != 0
+        failed = scan_channels(defaults.max_channels, defaults.delay_s) != 0 or failed
     if wanted.refresh_sources:
         failed = refresh_sources() != 0 or failed
     return 1 if failed else 0

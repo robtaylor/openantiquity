@@ -5,7 +5,7 @@ Imports nothing of the database, so ingest adapters use it too.
 
 from __future__ import annotations
 
-import math
+import sys
 from typing import Any, NamedTuple
 
 from fieldclub.errors import ValidationFailedError
@@ -54,8 +54,15 @@ def _is_position(value: Any) -> bool:
         isinstance(value, list | tuple)
         and len(value) in (2, 3)
         and all(isinstance(number, int | float) and not isinstance(number, bool) for number in value)
-        and all(math.isfinite(number) for number in value)
+        # False for NaN and the infinities, and for a whole number too large to be a float,
+        # which `math.isfinite` would raise on.
+        and all(abs(number) <= sys.float_info.max for number in value)
     )
+
+
+def _is_known_type(value: Any) -> bool:
+    # A list or an object can't be looked up, so ask first.
+    return isinstance(value, str) and value in _PARTS
 
 
 def check_shape(
@@ -64,8 +71,11 @@ def check_shape(
     """Check a GeoJSON geometry's structure, and count its positions and parts, before shapely sees it.
 
     GEOS can crash the whole process on a shape with an empty part, such as
-    a polygon with an empty hole, so every list must be the right depth and
+    a polygon with an empty hole (https://github.com/libgeos/geos/issues/1604,
+    seen in GEOS 3.13.1 and 3.14.1), so every list must be the right depth and
     hold enough positions: a line two, a ring four, ending where it starts.
+    Keep the check whatever GEOS is installed: a shape must never be able to
+    end the process.
     Counting stops as soon as there are too many positions or parts, so a
     huge shape costs no more than the counting up to the limit. Each
     type has a fixed depth, so nothing recurses.
@@ -74,7 +84,7 @@ def check_shape(
         members = data.get("geometries")
         if not isinstance(members, list | tuple) or not members:
             raise ValidationFailedError(_EMPTY)
-        if not all(isinstance(member, dict) and member.get("type") in _PARTS for member in members):
+        if not all(isinstance(member, dict) and _is_known_type(member.get("type")) for member in members):
             raise ValidationFailedError(MALFORMED)
     else:
         members = [data]
@@ -95,8 +105,13 @@ def check_shape(
                     parts += 1
                     if len(value) < part.least:
                         raise ValidationFailedError(_EMPTY if part.least == 1 else _SHORT[part.closed])
-                    if part.closed and list(value[0]) != list(value[-1]):
-                        raise ValidationFailedError(_SHORT[True])
+                    if part.closed:
+                        first, last = value[0], value[-1]
+                        if not (isinstance(first, list | tuple) and isinstance(last, list | tuple)):
+                            raise ValidationFailedError(MALFORMED)
+                        # A list and a tuple of the same numbers are the same position.
+                        if list(first) != list(last):
+                            raise ValidationFailedError(_SHORT[True])
                 below.extend(value)
                 # Every list holds a position at least, so too many lists is too many positions.
                 if len(below) > max_points or parts > max_parts:

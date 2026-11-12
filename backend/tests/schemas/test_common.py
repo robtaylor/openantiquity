@@ -348,10 +348,20 @@ _RING = [[-1.8, 51.45], [-1.799, 51.45], [-1.799, 51.451], [-1.8, 51.45]]
         {"type": "Point", "coordinates": [-1.8, float("nan")]},
         {"type": "Point", "coordinates": [True, 51.45]},
         {"type": "LineString", "coordinates": [[-1.8, 51.45], [[-1.79, 51.45]]]},
+        # A ring whose ends aren't positions at all.
+        {"type": "Polygon", "coordinates": [[1, 2, 3, 1]]},
+        {"type": "Polygon", "coordinates": [[None, [-1.799, 51.45], [-1.799, 51.451], None]]},
+        {"type": "MultiPolygon", "coordinates": [[["ab", [-1.799, 51.45], [-1.799, 51.451], "ab"]]]},
+        # A whole number too large to be a coordinate, which Python can't turn into a float.
+        {"type": "Point", "coordinates": [10**400, 51.45]},
+        {"type": "LineString", "coordinates": [[-1.8, 51.45], [-1.79, -(10**400)]]},
         # A collection of nothing, or holding a broken member or another collection.
         {"type": "GeometryCollection", "geometries": []},
         {"type": "GeometryCollection", "geometries": [{"type": "Polygon", "coordinates": [_RING, []]}]},
         {"type": "GeometryCollection", "geometries": [{"type": "GeometryCollection", "geometries": []}]},
+        # A member whose type isn't a word at all.
+        {"type": "GeometryCollection", "geometries": [{"type": ["Point"], "coordinates": [-1.8, 51.45]}]},
+        {"type": "GeometryCollection", "geometries": [{"type": {}, "coordinates": [-1.8, 51.45]}]},
     ],
 )
 def test_from_geojson_refuses_shapes_with_empty_or_short_parts(geometry: dict) -> None:

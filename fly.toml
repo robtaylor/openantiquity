@@ -71,6 +71,8 @@ kill_timeout = 10
   FIELDCLUB_EVENTS_MAX_STREAM_S = "540"
   # The hard limit below less four, so tiles and JSON always have four slots.
   FIELDCLUB_EVENTS_MAX_STREAMS = "26"
+  # A quarter of that, the most the application lets one address hold on one machine.
+  FIELDCLUB_EVENTS_MAX_PER_ADDRESS = "6"
   FIELDCLUB_SHUTDOWN_GRACE_S = "5"
   # The endpoint `fly storage create` sets as a secret, which takes precedence.
   AWS_ENDPOINT_URL_S3 = "https://fly.storage.tigris.dev"

@@ -41,7 +41,7 @@ from functools import cache
 from typing import Any
 
 import shapely
-from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
+from shapely.geometry.base import BaseGeometry
 from sqlalchemy import (
     Engine,
     LargeBinary,
@@ -61,7 +61,14 @@ from sqlalchemy.orm import Session, sessionmaker
 from fieldclub.config import get_settings
 from fieldclub.db import SessionLocal
 from fieldclub.errors import ConflictError, InvalidBboxError
-from fieldclub.ingest.base import BBox, Connector, RecordIn, SourceInfo, fill_attribution
+from fieldclub.ingest.base import (
+    BBox,
+    Connector,
+    RecordIn,
+    SourceInfo,
+    fill_attribution,
+    without_empty_parts,
+)
 from fieldclub.ingest.errors import ConnectorNotConfiguredError as ConnectorNotConfiguredError
 from fieldclub.ingest.errors import (
     EmptyIngestError,
@@ -141,40 +148,6 @@ def check_bbox(bbox: BBox) -> BBox:
 
 
 # How to put each kind of multi-part geometry back together from its members.
-_MULTIPART_TYPES: dict[str, Callable[[Any], BaseGeometry]] = {
-    "MultiPoint": shapely.MultiPoint,
-    "MultiLineString": shapely.MultiLineString,
-    "MultiPolygon": shapely.MultiPolygon,
-    "GeometryCollection": shapely.GeometryCollection,
-}
-
-
-def _without_empty_parts(geom: BaseGeometry) -> tuple[BaseGeometry, bool]:
-    """A multi-part geometry or collection without its empty members, and whether any were removed.
-
-    PostGIS takes the point for `centroid` from the highest-dimension member,
-    so `GEOMETRYCOLLECTION(POINT(...), POLYGON EMPTY)` would be stored with an
-    empty centroid and never be found by a distance query.
-    """
-    if not isinstance(geom, BaseMultipartGeometry):
-        return geom, False
-    kept: list[BaseGeometry] = []
-    changed = False
-    for part in geom.geoms:
-        # A collection holding nothing but empty members is itself empty.
-        if part.is_empty:
-            changed = True
-            continue
-        part, part_changed = _without_empty_parts(part)
-        changed = changed or part_changed
-        kept.append(part)
-    if not changed:
-        return geom, False
-    rebuild = _MULTIPART_TYPES.get(geom.geom_type)
-    assert rebuild is not None, f"don't know how to rebuild a {geom.geom_type}"
-    return rebuild(kept), True
-
-
 def _clean_geometry(record_id: str, geom: Any, bounds: BBox) -> tuple[BaseGeometry, bool]:
     """Check a record's geometry. Returns it in 2D, and whether it had to be repaired."""
     if not isinstance(geom, BaseGeometry):
@@ -183,7 +156,7 @@ def _clean_geometry(record_id: str, geom: Any, bounds: BBox) -> tuple[BaseGeomet
         )
     if geom.is_empty:
         raise InvalidRecordError(f"Record {record_id}: the geometry is empty.")
-    geom, dropped_empty_parts = _without_empty_parts(geom)
+    geom, dropped_empty_parts = without_empty_parts(geom)
     assert not geom.is_empty, "a non-empty geometry has at least one non-empty part"
     geom = shapely.force_2d(geom)
     west, south, east, north = geom.bounds
@@ -197,7 +170,7 @@ def _clean_geometry(record_id: str, geom: Any, bounds: BBox) -> tuple[BaseGeomet
     repaired = dropped_empty_parts
     if not geom.is_valid:
         # Repair can leave empty members behind, so trim again.
-        geom, _ = _without_empty_parts(shapely.make_valid(geom))
+        geom, _ = without_empty_parts(shapely.make_valid(geom))
         repaired = True
         if geom.is_empty or not geom.is_valid:
             raise InvalidRecordError(

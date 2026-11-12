@@ -765,6 +765,31 @@ def test_empty_members_of_a_parsed_multipart_geometry_are_dropped(
     assert db.scalar(select(func.ST_IsEmpty(Record.centroid))) is False
 
 
+_TRIANGLE = "(-1.86 51.42, -1.84 51.42, -1.84 51.44, -1.86 51.42)"
+_REAL_HOLE = "(-1.85 51.425, -1.845 51.425, -1.845 51.43, -1.85 51.425)"
+
+
+@pytest.mark.parametrize(
+    ("wkt", "holes"),
+    [
+        (f"POLYGON ({_TRIANGLE}, EMPTY)", 0),
+        (f"POLYGON ({_TRIANGLE}, EMPTY, {_REAL_HOLE})", 1),
+        (f"MULTIPOLYGON (({_TRIANGLE}, EMPTY))", 0),
+        (f"GEOMETRYCOLLECTION (POINT (-1.85 51.43), POLYGON ({_TRIANGLE}, EMPTY))", 0),
+    ],
+)
+def test_empty_holes_of_a_polygon_are_dropped(db: Session, wkt: str, holes: int) -> None:
+    # GEOS calls such a polygon valid, then crashes the process in `contains`, `covers`, `within` and
+    # `relate` (https://github.com/libgeos/geos/issues/1604), and PostGIS refuses to store it.
+    run = run_connector(FakeConnector([record("holed", geom=shapely.from_wkt(wkt))]))
+    assert run.stats is not None
+    assert run.stats["repaired"] == 1
+    stored = to_shape(db.scalars(select(Record)).one().geom)
+    polygons = [part for part in shapely.get_parts(stored) if part.geom_type == "Polygon"]
+    assert len(polygons) == 1
+    assert [ring.is_empty for ring in polygons[0].interiors] == [False] * holes
+
+
 def test_a_geometry_of_nothing_but_empty_members_is_refused(db: Session) -> None:
     with pytest.raises(IngestFailedError) as caught:
         run_connector(FakeConnector([record("hollow", geom=GeometryCollection([Polygon(), Point()]))]))
