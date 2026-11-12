@@ -84,6 +84,8 @@ def build_vocab() -> schema.Vocab:
                 exact_for=[viewer for viewer in vocab.SensitivityViewer if viewer in item.exact_for],
             )
             for item in vocab.SENSITIVITY_LEVELS
+            # Only the levels a finding can be set to (Decision 0032).
+            if item.id in vocab.OFFERED_SENSITIVITIES
         ],
     )
 

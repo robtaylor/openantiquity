@@ -20,18 +20,20 @@ def test_a_moderator_lowers_a_level_as_well_as_raising_it(
     lowered = client.put(path, json={"level": "open", "reason": "A field boundary, not a barrow."})
     assert lowered.status_code == 200, lowered.text
     assert lowered.json()["sensitivity"] == "open"
-    raised = client.put(path, json={"level": "restricted", **REASON})
-    assert raised.json()["sensitivity"] == "restricted"
+    raised = client.put(path, json={"level": "protected", **REASON})
+    assert raised.json()["sensitivity"] == "protected"
     # Setting the level it has is no change, and isn't logged.
-    assert client.put(path, json={"level": "restricted", **REASON}).status_code == 200
+    assert client.put(path, json={"level": "protected", **REASON}).status_code == 200
+    # Restricted is no longer a level a moderator can set either (Decision 0032).
+    assert client.put(path, json={"level": "restricted", **REASON}).status_code == 422
     entries = log_entries(db)
     assert [(e.action, e.data) for e in entries] == [
         ("change_sensitivity", {"from": "protected", "to": "open"}),
-        ("change_sensitivity", {"from": "open", "to": "restricted"}),
+        ("change_sensitivity", {"from": "open", "to": "protected"}),
     ]
     assert entries[0].reason == "A field boundary, not a barrow."
     db.refresh(barrow)
-    assert barrow.sensitivity == "restricted"
+    assert barrow.sensitivity == "protected"
 
 
 def test_only_moderators_use_the_moderators_route(
@@ -41,7 +43,7 @@ def test_only_moderators_use_the_moderators_route(
     barrow = create(db, finder, feature_class="round_barrow")
     for who in (finder, make_user(Role.TRUSTED), make_user(Role.EXPERT)):
         response = client_as(who).put(
-            f"{API}/mod/findings/{barrow.public_id}/sensitivity", json={"level": "restricted", **REASON}
+            f"{API}/mod/findings/{barrow.public_id}/sensitivity", json={"level": "open", **REASON}
         )
         assert (response.status_code, error_code(response)) == (403, "moderators_only")
     missing = client_as(make_user(Role.MODERATOR)).put(
@@ -95,7 +97,7 @@ def test_a_moderator_raising_someone_elses_level_through_the_ordinary_route_is_l
     finder, moderator = make_user(handle="Finder"), make_user(Role.MODERATOR, handle="Mod")
     finding = create(db, finder)
     raised = client_as(moderator).put(
-        f"{API}/findings/{finding.public_id}/sensitivity", json={"level": "restricted"}
+        f"{API}/findings/{finding.public_id}/sensitivity", json={"level": "protected"}
     )
     assert raised.status_code == 200, raised.text
     (entry,) = log_entries(db)
@@ -105,9 +107,9 @@ def test_a_moderator_raising_someone_elses_level_through_the_ordinary_route_is_l
         "finding",
         finding.id,
     )
-    assert entry.data == {"from": "open", "to": "restricted"}
+    assert entry.data == {"from": "open", "to": "protected"}
     # Asking for the level it already has changes nothing and logs nothing.
-    client_as(moderator).put(f"{API}/findings/{finding.public_id}/sensitivity", json={"level": "restricted"})
+    client_as(moderator).put(f"{API}/findings/{finding.public_id}/sensitivity", json={"level": "protected"})
     assert len(log_entries(db)) == 1
 
 
@@ -117,9 +119,9 @@ def test_a_finder_or_trusted_member_raising_a_level_is_not_moderation(
     finder = make_user(Role.MODERATOR, handle="ModeratorFinder")
     own = create(db, finder)
     other = create(db, make_user(), lon=-1.85, lat=51.43)
-    client_as(finder).put(f"{API}/findings/{own.public_id}/sensitivity", json={"level": "restricted"})
+    client_as(finder).put(f"{API}/findings/{own.public_id}/sensitivity", json={"level": "protected"})
     trusted = make_user(Role.TRUSTED)
-    client_as(trusted).put(f"{API}/findings/{other.public_id}/sensitivity", json={"level": "restricted"})
+    client_as(trusted).put(f"{API}/findings/{other.public_id}/sensitivity", json={"level": "protected"})
     db.expire_all()
-    assert (own.sensitivity, other.sensitivity) == ("restricted", "restricted")
+    assert (own.sensitivity, other.sensitivity) == ("protected", "protected")
     assert log_entries(db) == []

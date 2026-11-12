@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from fieldclub.models import Evidence, Finding, User
 from fieldclub.services import findings
 from fieldclub.services.findings import EvidenceFields
-from fieldclub.vocab import EvidenceKind, FeatureClass, Sensitivity, Visible
+from fieldclub.vocab import OFFERED_SENSITIVITIES, EvidenceKind, FeatureClass, Sensitivity, Visible
 from tests.findings.support import API, add_desk_evidence, answer, create
 from tests.helpers import ClientAs, MakeUser, error_code
 
@@ -89,9 +89,13 @@ def _holds(flag: dict[str, Any], response: Any, where: str) -> None:
 
 
 def _next_level(finding: Finding, step: int) -> str | None:
+    """The offered level next above or below the finding's. Restricted is not offered (Decision 0032)."""
     order = list(Sensitivity)
-    index = order.index(Sensitivity(finding.sensitivity)) + step
-    return order[index].value if 0 <= index < len(order) else None
+    rank = order.index(Sensitivity(finding.sensitivity))
+    beside = [level for level in OFFERED_SENSITIVITIES if (order.index(level) - rank) * step > 0]
+    if not beside:
+        return None
+    return (beside[0] if step > 0 else beside[-1]).value
 
 
 # Each action's route, called as the case's viewer. None when there is nothing to call.

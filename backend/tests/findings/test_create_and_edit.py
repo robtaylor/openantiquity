@@ -272,12 +272,11 @@ def test_level_changes_follow_decision_0005(db: Session, client_as: ClientAs, ma
     path = f"{API}/findings/{finding.public_id}/sensitivity"
     assert client_as(make_user()).put(path, json={"level": "protected"}).status_code == 403
     assert client_as(finder).put(path, json={"level": "protected"}).json()["sensitivity"] == "protected"
-    assert client_as(make_user("trusted")).put(path, json={"level": "restricted"}).json()["sensitivity"] == (
-        "restricted"
-    )
+    # Restricted is no longer a level anyone can set (Decision 0032).
+    assert client_as(make_user("trusted")).put(path, json={"level": "restricted"}).status_code == 422
     lowered = client_as(finder).put(path, json={"level": "open"})
     assert error_code(lowered) == "sensitivity_change_forbidden"
-    assert error_code(client_as(make_user("trusted")).put(path, json={"level": "protected"})) == (
+    assert error_code(client_as(make_user("trusted")).put(path, json={"level": "open"})) == (
         "sensitivity_change_forbidden"
     )
     # A moderator lowers a level only through the moderation route, which logs it with a reason.

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Literal, get_args
 
 # --------------------------------------------------------------------------
 # People
@@ -42,7 +43,7 @@ ROLES: tuple[RoleInfo, ...] = (
     RoleInfo(Role.MEMBER, "Member", 1.0, "Someone who has signed in."),
     RoleInfo(Role.TRUSTED, "Trusted member", 1.5, "A member whose contributions have earned fifty points."),
     RoleInfo(Role.EXPERT, "Archaeologist", 3.0, "A recognised archaeologist or records officer."),
-    RoleInfo(Role.MODERATOR, "Moderator", 1.5, "Looks after reports and restricted locations."),
+    RoleInfo(Role.MODERATOR, "Moderator", 1.5, "Looks after reports and protected locations."),
     RoleInfo(Role.ADMIN, "Admin", 1.5, "Runs the service."),
 )
 
@@ -772,6 +773,17 @@ class Sensitivity(StrEnum):
 SENSITIVITY_ORDER: tuple[Sensitivity, ...] = tuple(Sensitivity)
 
 
+# The levels a finding can be set to (Decision 0032). `restricted` is dropped
+# because it kept a finding's exact place from people who could draw beside
+# it. It stays in `Sensitivity` until a later sweep, so a stored finding can
+# still be read, but no request takes it. Request models use this type, so the
+# OpenAPI schema and a refusal both name the offered levels alone.
+OfferedSensitivity = Literal["open", "protected"]
+OFFERED_SENSITIVITIES: tuple[Sensitivity, ...] = tuple(
+    Sensitivity(value) for value in get_args(OfferedSensitivity)
+)
+
+
 def sensitivity_rank(level: Sensitivity | str) -> int:
     """Position in `SENSITIVITY_ORDER`, starting at 0 for open."""
     return SENSITIVITY_ORDER.index(Sensitivity(level))
@@ -1331,8 +1343,7 @@ class LiveFormat(StrEnum):
 
 SENSITIVITY_NOTICE = (
     "Some findings have their position hidden to protect the site, and are shown as a one-kilometre "
-    "square. Signed-in members see protected findings exactly. Only the finder, trusted members, "
-    "archaeologists and moderators see restricted findings exactly."
+    "square to anyone who hasn't signed in. Signed-in members see protected findings exactly."
 )
 
 CONTRIBUTION_LICENCE = "CC BY 4.0"
@@ -1413,6 +1424,7 @@ def _check_complete() -> None:
     assert set(FIND_REPORTING) == set(Nation), "every nation needs a route for reporting a find"
     assert set(AGE_BAND_YOUNGEST) == set(AgeBand), "every age band needs its youngest age"
     assert SENSITIVITY_ORDER[0] is Sensitivity.OPEN
+    assert list(OFFERED_SENSITIVITIES) == sorted(OFFERED_SENSITIVITIES, key=sensitivity_rank)
     assert [info.base_score for info in TIERS] == sorted(info.base_score for info in TIERS)
 
 

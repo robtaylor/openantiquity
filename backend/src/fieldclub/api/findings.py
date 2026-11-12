@@ -29,7 +29,7 @@ from fieldclub.schemas.findings import (
 )
 from fieldclub.services import exports, findings, moderation
 from fieldclub.services.findings import OUTLINE_TYPES, FindingFilters, FindingSort
-from fieldclub.vocab import FeatureClass, FindingState, Tier
+from fieldclub.vocab import FeatureClass, FindingState, Sensitivity, Tier
 
 router = APIRouter(tags=["findings"])
 
@@ -243,7 +243,7 @@ def change_sensitivity(
     A moderator raising someone else's finding here is logged too, with no reason.
     """
     finding = findings.lock_finding(db, public_id, user)
-    moderation.raise_sensitivity(db, finding, user, body.level)
+    moderation.raise_sensitivity(db, finding, user, Sensitivity(body.level))
     db.commit()
     private(response)
     return detail(db, finding, user)

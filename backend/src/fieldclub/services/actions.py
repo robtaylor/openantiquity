@@ -54,7 +54,7 @@ from fieldclub.config import get_settings
 from fieldclub.errors import AppError, UnauthorisedError, UserNotFoundError
 from fieldclub.models import Evidence, Finding, Observation, User
 from fieldclub.services import findings, moderation, review, sensitivity
-from fieldclub.vocab import SENSITIVITY_ORDER, Role, Sensitivity, sensitivity_rank
+from fieldclub.vocab import OFFERED_SENSITIVITIES, Role, Sensitivity, sensitivity_rank
 
 ALREADY_ANSWERED = "already_answered"
 ANSWER_WITHDRAWN = "answer_withdrawn"
@@ -125,9 +125,15 @@ def _contributor(viewer: User | None) -> tuple[User | None, Action]:
 
 
 def _level_beside(finding: Finding, step: int) -> Sensitivity | None:
-    """The level one above (`step` 1) or below (-1) the finding's, or None at the end."""
-    index = sensitivity_rank(finding.sensitivity) + step
-    return SENSITIVITY_ORDER[index] if 0 <= index < len(SENSITIVITY_ORDER) else None
+    """The offered level next above (`step` 1) or below (-1) the finding's, or None at the end.
+
+    Only the levels a request may carry count (Decision 0032), so a page never
+    offers a change its route would refuse.
+    """
+    rank = sensitivity_rank(finding.sensitivity)
+    if step > 0:
+        return next((level for level in OFFERED_SENSITIVITIES if sensitivity_rank(level) > rank), None)
+    return next((level for level in reversed(OFFERED_SENSITIVITIES) if sensitivity_rank(level) < rank), None)
 
 
 def _nothing(code: str) -> Callable[[], None]:

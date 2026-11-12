@@ -57,7 +57,7 @@ def routes(db: Session, make_user: MakeUser, make_finding: MakeFinding) -> list[
         Route(
             "POST", f"/mod/reports/{report.id}/resolve", {"outcome": "upheld", "note": "Spam."}, MODERATORS
         ),
-        Route("PUT", f"/mod/findings/{pid}/sensitivity", {"level": "restricted", **REASON}, MODERATORS),
+        Route("PUT", f"/mod/findings/{pid}/sensitivity", {"level": "protected", **REASON}, MODERATORS),
         Route("GET", "/mod/users/eligible", None, MODERATORS),
         Route("GET", "/mod/users/Target", None, MODERATORS),
         Route("PUT", "/mod/users/Target/role", {"role": "expert", **REASON}, MODERATORS),

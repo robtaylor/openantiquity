@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from fieldclub.models import User
 from fieldclub.services import sensitivity
-from fieldclub.vocab import SENSITIVITY_LEVELS, Role, Sensitivity, SensitivityViewer
+from fieldclub.vocab import OFFERED_SENSITIVITIES, SENSITIVITY_LEVELS, Role, Sensitivity, SensitivityViewer
 from tests.helpers import MakeFinding, MakeUser
 
 FEW = frozenset(
@@ -114,5 +114,9 @@ def test_meta_serves_the_words(client: TestClient) -> None:
             "exact_for": [kind.value for kind in SensitivityViewer if kind in level.exact_for],
         }
         for level in SENSITIVITY_LEVELS
+        if level.id in OFFERED_SENSITIVITIES
     ]
-    assert [item["label"] for item in served] == ["Open", "Protected", "Restricted"]
+    # Restricted is dropped (Decision 0032). Its words stay for a stored finding until the sweep.
+    assert [item["label"] for item in served] == ["Open", "Protected"]
+    for item in served:
+        assert "restricted" not in f"{item['who_sees']} {item['square_sentence']}".lower(), item["id"]

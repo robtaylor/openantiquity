@@ -16,7 +16,14 @@ from fieldclub.schemas.findings import ActionOut
 from fieldclub.schemas.media import REASON_MAX, media_url
 from fieldclub.services import moderation
 from fieldclub.services.actions import PersonActions
-from fieldclub.vocab import ModerationActionKind, ReportReason, ReportStatus, ReportTarget, Role, Sensitivity
+from fieldclub.vocab import (
+    ModerationActionKind,
+    OfferedSensitivity,
+    ReportReason,
+    ReportStatus,
+    ReportTarget,
+    Role,
+)
 
 NOTE_MAX = 2000
 TARGET_REF_MAX = 64
@@ -54,7 +61,7 @@ class RoleIn(ReasonIn):
 
 
 class ModSensitivityIn(ReasonIn):
-    level: Sensitivity
+    level: OfferedSensitivity
 
 
 # --------------------------------------------------------------------------

@@ -75,7 +75,7 @@ def test_a_protected_finding_refuses_a_position_in_its_title_or_description(
         "body.title",
         "body.description",
     ]
-    only = _create(client, feature_class="enclosure", sensitivity="restricted", description="At ///a.bb.ccc")
+    only = _create(client, feature_class="enclosure", sensitivity="protected", description="At ///a.bb.ccc")
     assert error_code(only) == "position_in_text"
     assert [detail["field"] for detail in only.json()["error"]["details"]] == ["body.description"]
     # The 1 km square, and an open finding, are fine.

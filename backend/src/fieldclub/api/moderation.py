@@ -34,7 +34,7 @@ from fieldclub.schemas.moderation import (
     RoleIn,
 )
 from fieldclub.services import actions, moderation
-from fieldclub.vocab import ReportReason, ReportStatus, ReportTarget
+from fieldclub.vocab import ReportReason, ReportStatus, ReportTarget, Sensitivity
 
 
 def require_moderator(user: Contributor) -> User:
@@ -149,7 +149,7 @@ def set_sensitivity(
     public_id: TargetRef, body: ModSensitivityIn, moderator: Moderator, db: Db, response: Response
 ) -> FindingDetail:
     """Set a finding's location level, lower as well as higher. The reason goes in the moderation log."""
-    finding = moderation.set_sensitivity(db, public_id, moderator, body.level, body.reason)
+    finding = moderation.set_sensitivity(db, public_id, moderator, Sensitivity(body.level), body.reason)
     db.commit()
     private(response)
     return detail(db, finding, moderator)

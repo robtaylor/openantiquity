@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from fieldclub.vocab import Sensitivity
+from fieldclub.vocab import OFFERED_SENSITIVITIES, Sensitivity
 from tests.findings import test_leaks as leaks
 from tests.helpers import error_code
 from tests.moderation.support import API, REASON
@@ -33,7 +33,11 @@ def test_the_moderators_level_route_answers_only_moderators(
         f"{API}/mod/findings/{finding.public_id}/sensitivity", json={"level": level.value, **REASON}
     )
     where = f"PUT /mod/findings/{{id}}/sensitivity as {viewer} ({level})"
-    if viewer == "moderator":
+    if viewer == "moderator" and level not in OFFERED_SENSITIVITIES:
+        # Nobody can set the dropped level (Decision 0032), so the request is refused before it is read.
+        assert response.status_code == 422, response.text
+        leaks.check(response.text, set(), where=where)
+    elif viewer == "moderator":
         assert response.status_code == 200, response.text
         leaks.check(response.text, leaks.SEES[viewer], {level}, where=where)
         assert response.json()["location"]["obscured"] is False
