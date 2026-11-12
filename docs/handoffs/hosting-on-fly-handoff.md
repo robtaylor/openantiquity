@@ -16,7 +16,7 @@ See docs/handoff-discipline.md for the migration table.
 
 **Goal of this thread:** move the deployment from Google Cloud to Fly.io (Decision 0018). The application, the Fly configuration, the scripts and the runbook are on `main`, tested offline. On 2026-11-12 the two apps and the elevation bucket were made, and England's converted elevation was copied from Google into Tigris and checked. No machine of the real deployment exists yet, and Fly has no database for it.
 
-**Next session should pick up:** ask the owner the question under follow-up 1 and the one under follow-up 2, then carry out [`infra/README.md`](../../infra/README.md) from step 2. Do every cloud step in the main session: sub-agents and workflow agents don't touch Fly, Google or Gandi and don't read `.env`.
+**Next session should pick up:** get the owner's answers to follow-ups 1 and 2, then carry out [`infra/README.md`](../../infra/README.md) from step 2. Do every cloud step in the main session: sub-agents and workflow agents don't touch Fly, Google or Gandi and don't read `.env`.
 
 **Verification command:**
 
@@ -26,13 +26,13 @@ git status --short && git log --oneline -1
 cd backend && uv run pytest -q tests/infra tests/test_config.py tests/test_storage.py
 # Expect: all pass. tests/infra/test_fly_config.py starts the application with fly.toml's settings
 fly apps list --org openantiquity
-# Expect: openantiquity and openantiquity-jobs, pending, and the spike's two apps until follow-up 2 deletes them
+# Expect: openantiquity and openantiquity-jobs alone, with no machines. The spike's apps were deleted on 2026-11-12
 fly machine list --app openantiquity-jobs
 # Expect: none, until step 7 of the runbook starts a job
 fly storage list --org openantiquity
-# Expect: openantiquity-elevation, and openantiquity-spike-mirror until follow-up 2
+# Expect: openantiquity-elevation alone
 fly mpg list --org openantiquity
-# Expect: only the cluster openantiquity-spike, until follow-up 2 deletes it and step 2 makes `openantiquity`
+# Expect: none, until step 2 makes `openantiquity`
 fly secrets list --app openantiquity-jobs
 # Expect: the five names `fly storage create` set and no RCLONE_ name
 gcloud storage ls --project fieldclub-uk 'gs://fieldclub-uk-elevation/england/mirror/**' | wc -l
@@ -47,7 +47,7 @@ gcloud storage ls --project fieldclub-uk 'gs://fieldclub-uk-elevation/england/mi
 | `b7682bc` | Send each Fly secret on standard input, and name the database flags | `fly secrets import` strips a pair of quotes from around a value, so each secret goes through `fly secrets set NAME=-` |
 | `e818793` | Record that Defra's supply answers a Fly machine, in the hosting spike | Two connections at once from `lhr`, 17 to 22 MiB/s each |
 | `2a6f347` | Join the security fixes to the Fly move, and widen the crash guard | The per-address stream limit Fly needs to start, and the hourly machine deleting old sign-ins |
-| The commit that last changed this file | Copy the elevation into Tigris, and record the spend check | Runbook step 1, the elevation bucket of step 3 and the copy of step 8, done on Fly. Decision 0025. The runbook and the plan say what the platform did |
+| The commit that last changed this file | Copy the elevation into Tigris, and record the spend check | Runbook step 1, the elevation bucket of step 3 and the copy of step 8, done on Fly. Decision 0025. The runbook and the plan say what the platform did. The spike's cluster, apps and bucket were deleted afterwards |
 
 ## Open follow-ups (priority-ordered)
 
@@ -66,13 +66,20 @@ What was found while answering, for the record to carry:
 - A check at each deployment can't run from GitHub, whose token reaches only the web app, so it would be a third command by hand in the runbook's "A deploy". It shouldn't gate the web deploy. Against an empty bucket it would fetch the whole country from Defra, so it wants a cap on how many tiles it will fetch unasked.
 - No document says why the web app holds no supply login. Decision 0018, point 7, states the rule alone. The Google deployment had a switch for it, `service_fetches_elevation`, applied as false. The record should give the reason: the login was issued to the owner under a Defra ticket, a public service has no use for it once the mirror is whole, and the web app's key can't write the elevation bucket.
 
-### 2. Delete what the spike left on Fly (minutes, once the owner says so)
+### 2. A second choice for the owner: Managed Postgres, or Postgres on a machine of our own
 
-The owner was asked on 2026-11-12 and hasn't answered. The spike's resources still exist and the database cluster is billed: `openantiquity-spike` (Managed Postgres Basic, id `w867508pyykr3pk4`, $38 a month pro rata, about $1.30 to $1.45 a day with its storage), the apps `openantiquity-spike` and `openantiquity-spike-web`, and the Tigris bucket `openantiquity-spike-mirror`. The app `openantiquity-spike` runs a 1 GB machine and holds Defra's login as secrets. Nothing in the runbook uses any of them, and the checks made on 2026-11-12 ran on the real jobs app. The recommendation put to the owner is to delete all four, the cluster first.
+Asked by the owner on 2026-11-12, after the database's costs, and not yet decided. No database has been made, and step 2 of the runbook waits on the answer. If the owner chooses our own Postgres, it needs a decision record that replaces point 2 of Decision 0018, and a new step 2.
+
+What was found for the comparison:
+
+- Fly's Managed Postgres page says every plan has high availability with automatic failover, backups and connection pooling, that storage is billed on usage at $0.28 a GB, and that a major version upgrade is ours to do with `pg_dump` into a new cluster. It names no alerts on the cluster's metrics.
+- The spike's cluster, on the Basic plan, took a backup every hour without being asked: a full one a day, a differential every six hours and incrementals between. How long they are kept wasn't found, and a restore hasn't been tried.
+- A Postgres on one machine keeps its data on one volume on one host. Fly snapshots a volume daily and keeps five days by default. Its volumes page says data written since the last snapshot is lost if the host fails.
+- Decision 0018 put the saving at about $25 a month. The application, the runbook and the spike are all built against Managed Postgres.
 
 ### 3. Carry out the runbook, steps 2 to 7 (half a day)
 
-[`infra/README.md`](../../infra/README.md), "Once: setting up". Step 1 is done. In step 3 the elevation bucket is done: don't run that `fly storage create` again. Say what a step costs before creating anything with a monthly charge. The runbook's "Estimated monthly cost" puts the whole deployment at about $51 to $62 a month at rest, of which Managed Postgres Basic is $38 and its storage $8 to $20. The owner asked for the database's costs on 2026-11-12 and hasn't yet said to create it. The runbook's last section, "What can only be checked on the real platform", lists each command and flag not yet run for real. Check each as it is first used and correct the runbook where the platform differs. Secrets go to Fly with `bash infra/fly-secrets.sh`, which reads `.env` itself and hands each value to `fly` on standard input. Nobody prints, reads or pastes a secret. `fly storage create` prints the new key: send its output through a filter that drops any line naming a key.
+[`infra/README.md`](../../infra/README.md), "Once: setting up". Step 1 is done. In step 3 the elevation bucket is done: don't run that `fly storage create` again. Say what a step costs before creating anything with a monthly charge. The runbook's "Estimated monthly cost" puts the whole deployment at about $51 to $62 a month at rest, of which Managed Postgres Basic is $38 and its storage $8 to $20. The database waits on follow-up 2. The runbook's last section, "What can only be checked on the real platform", lists each command and flag not yet run for real. Check each as it is first used and correct the runbook where the platform differs. Secrets go to Fly with `bash infra/fly-secrets.sh`, which reads `.env` itself and hands each value to `fly` on standard input. Nobody prints, reads or pastes a secret. `fly storage create` prints the new key: send its output through a filter that drops any line naming a key.
 
 ### 4. The national overview, the first ingests and the hourly machine (some hours)
 

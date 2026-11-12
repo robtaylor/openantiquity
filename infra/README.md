@@ -272,7 +272,7 @@ uv run infra/fly_jobs.py --commit <previous commit> schedule
 
 The jobs app's image of that commit is still in its repository if `build` ran for it; otherwise check the commit out and run `build` first. A schema change can't be rolled back this way. The schema command only adds what is missing, so an older image runs against a newer schema as long as nothing it uses was removed.
 
-Managed Postgres keeps backups. `fly mpg backup list` lists them and `fly mpg restore <cluster-id> --backup-id <id>`, or `--pitr-time <RFC 3339 time>`, restores one into a new cluster ([`fly mpg restore`](https://docs.fly.io/flyctl/mpg-restore/)). The original is left alone. Attach the new cluster to both apps and deploy. How long Fly keeps them wasn't found; check before relying on them.
+Managed Postgres keeps backups. `fly mpg backup list` lists them and `fly mpg restore <cluster-id> --backup-id <id>`, or `--pitr-time <RFC 3339 time>`, restores one into a new cluster ([`fly mpg restore`](https://docs.fly.io/flyctl/mpg-restore/)). The original is left alone. Attach the new cluster to both apps and deploy. The spike's cluster took one every hour without being asked: a full backup a day, a differential every six hours and incrementals between. How long Fly keeps them wasn't found, and no restore has been tried; check both before relying on them.
 
 ## What to watch
 
@@ -407,7 +407,7 @@ What these figures leave out:
 
 - London's machine prices.
 - Data from the machines to Tigris, which Fly's pricing page says is billed separately, at a rate it didn't give. The copy on 2026-11-12 sent 126 GB that way, so November's invoice will show the rate.
-- Whether the database's storage is billed on the 10 GB asked for or on what the cluster reports as allocated. The spike's cluster, made with the default 10 GB, reports 20 GB allocated and one replica.
+- Whether the database's storage is billed once or for each node's copy. Fly's Managed Postgres page says storage is billed on usage and replicated across the cluster's nodes. The spike's cluster, made with the default 10 GB, reported 2.3 GB used, 20 GB allocated and one replica.
 - Managed Postgres backups, if they are charged.
 - A real traffic pattern. The light-use row is a guess with its working shown.
 
