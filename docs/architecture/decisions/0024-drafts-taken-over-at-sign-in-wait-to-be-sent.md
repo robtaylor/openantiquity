@@ -26,7 +26,7 @@ A review of the security fixes on 2026-11-12 showed with a test against the real
 
 ## Decision
 
-1. Every draft taken over at sign-in is `held`, whatever its kind, and is saved only when the person presses "Send" on it, or "Send all" in the drafts bar, or "Send it and see how it compares" on a second look's card.
+1. Every draft taken over at sign-in is `held`, whatever its kind, and is saved only when the person presses "Send" on it, or "Send all" in the drafts bar, or "Send it and see how it compares" on a second look's card, or "Save finding" on the draft's own form. The last was added on 2026-11-12, after the owner pressed it on the live site and nothing happened: the form showed the draft, and its button kept it without sending it.
 2. The drafts bar says how many are waiting, and why: they were made in this tab before the sign-in, and someone else may have used it first.
 3. Everything else in Decision 0022 stands: which drafts can be taken over, by which sign-in, and how other people's drafts are shown.
 

@@ -6,8 +6,8 @@ import type { Meta } from "../../api/meta.js";
 import { useMapStore } from "../../map/store.js";
 import { toast } from "../../ui/toastStore.js";
 import { AccountRequiredError, useRequireAccount } from "../account/requireAccount.js";
-import { useSession } from "../account/session.js";
-import { DraftBusyError, DraftTooLargeError, newId } from "../drafts/store.js";
+import { accountIdentity, useSession } from "../account/session.js";
+import { type Draft, DraftBusyError, DraftTooLargeError, newId, sendHeldDraft } from "../drafts/store.js";
 import { positionFields } from "../finding/positionInText.js";
 import { createFinding } from "../findings/api.js";
 import { findingKeys } from "../findings/keys.js";
@@ -59,7 +59,8 @@ export function draftPath(draftId: string): string {
  * this browser and the sign-in sheet opens over the form (Decision 0002).
  * The address becomes the draft's, so a provider's round trip comes back to
  * it. Once the person is ready the drafts machinery saves it, exactly once,
- * and the panel opens the finding it became.
+ * and the panel opens the finding it became. A draft taken over at sign-in
+ * waits for the person's say-so (Decision 0024): pressing Save here gives it.
  */
 export function useSaveMark(meta: Meta): () => Promise<void> {
   const session = useSession();
@@ -67,6 +68,7 @@ export function useSaveMark(meta: Meta): () => Promise<void> {
   const client = useQueryClient();
   const navigate = useNavigate();
   const { ready } = session;
+  const account = ready && session.me ? accountIdentity(session.me) : null;
   /** The save itself, for a toast's "Try again", which sends the form as it is by then. */
   const again = useRef<() => Promise<void>>(async () => {});
   /**
@@ -77,9 +79,9 @@ export function useSaveMark(meta: Meta): () => Promise<void> {
 
   const keepAsDraft = useCallback(
     async (draft: FindingDraft, draftId: string | null): Promise<void> => {
-      let id: string;
+      let kept: Draft;
       try {
-        id = findingDrafts.put(draft, draftId ?? undefined).id;
+        kept = findingDrafts.put(draft, draftId ?? undefined);
       } catch (error) {
         if (error instanceof DraftTooLargeError || error instanceof DraftBusyError) {
           toast(error.message, { kind: "error" });
@@ -87,10 +89,15 @@ export function useSaveMark(meta: Meta): () => Promise<void> {
         }
         throw error;
       }
-      useMarkStore.setState({ draftId: id });
-      navigate(draftPath(id), { replace: true });
-      // Once ready, the drafts machinery sends it. Sending it here too could save it twice.
-      if (ready) return;
+      useMarkStore.setState({ draftId: kept.id });
+      navigate(draftPath(kept.id), { replace: true });
+      // Once ready, the drafts machinery sends it, so nothing is sent from here: that could
+      // save it twice. A draft taken over at sign-in is held until the person says so
+      // (Decision 0024). Pressing Save on its own form is them saying so, which lifts the hold.
+      if (ready) {
+        if (kept.held && account !== null) sendHeldDraft(kept.id, account);
+        return;
+      }
       try {
         await requireAccount();
       } catch (error) {
@@ -100,7 +107,7 @@ export function useSaveMark(meta: Meta): () => Promise<void> {
         if (back) navigate(back.path, { replace: true });
       }
     },
-    [navigate, ready, requireAccount],
+    [account, navigate, ready, requireAccount],
   );
 
   const saveNow = useCallback(

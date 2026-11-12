@@ -337,6 +337,38 @@ describe("saving, signed in", () => {
 });
 
 describe("saving, signed out", () => {
+  it("sends a draft taken over at sign-in when Save is pressed on its own form", async () => {
+    const user = userEvent.setup();
+    const draft = findingDrafts.put({
+      point: [-1.8542, 51.4286],
+      feature_class: "round_barrow",
+      period: "unknown",
+      title: "Round barrow or mound in SU 10 69",
+      description: "",
+      outline: null,
+      view_state: {},
+    });
+    // Made before a provider's sign-in from this tab, which sends the person back here.
+    noteSignInStarted("provider");
+    const routes = routeApi(harness.fetchMock(), {
+      "GET /auth/me": () => json(meFixture()),
+      "POST /findings": (call) => json(createdFinding(call.body as FindingCreate, "abc123"), 201),
+    });
+    renderShell(`/mark/${draft.id}`, <Address />);
+    await mapReady();
+
+    // Taken over and held: nothing is sent until the person says so (Decision 0024).
+    const save = await panel().findByRole("button", { name: "Save finding" });
+    await waitFor(() => expect(listDrafts()[0]?.held).toBe(true));
+    expect(routes.callsTo("POST /findings")).toHaveLength(0);
+
+    // Pressing Save on the draft's own form is the person saying so.
+    await user.click(save);
+    await waitFor(() => expect(routes.callsTo("POST /findings")).toHaveLength(1));
+    await waitFor(() => expect(address()).toBe("/f/abc123"));
+    expect(listDrafts()).toEqual([]);
+  });
+
   it("keeps it as a draft at its own address and opens the sign-in sheet, sending nothing", async () => {
     const user = userEvent.setup();
     const { map, routes } = await openMarking(false);
