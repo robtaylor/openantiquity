@@ -17,6 +17,9 @@ Nothing is live yet. When the first version opens, this is what it does for you.
 - While you take a second look, the heritage records are hidden as well as the findings, so a record at the spot can't answer the question for you. They come back once you've answered.
 - You can try marking, answering and scanning before you join. What you do is kept in your browser, and saved to your account when you sign in.
 - Signing in is with Google, Apple, Microsoft, Facebook or OpenStreetMap, or an emailed link. You must be 16 or over to add anything.
+- Nothing anyone links, writes or draws beside a protected finding gives away more than its one-kilometre square to people who see only the square: map links, saved map views, height profiles and an investigation's notes and area included.
+- Nobody can tell how a named person answered a second look from what happens when their role changes or they are banned.
+- Pages from Open Antiquity make your browser fetch nothing from Google, Facebook or the other sign-in providers: profile pictures from them aren't shown.
 - Possible burial mounds and other sites at risk from looting are shown as a one-kilometre square to anyone who isn't signed in.
 - There are no private messages. Everything people say about a finding is public and attached to it.
 - If you find an object, Open Antiquity records nothing about it and tells you who to report it to in your part of the UK.
@@ -72,3 +75,28 @@ For whoever runs the service, as it moves to Fly.io (Decision 0018):
 - Profiles, a Report button on findings, evidence, comments, photos, mentions, investigations and profiles, the moderators' queue and log, and photo approval.
 - The guide to reading LIDAR, the about page with its credits, and four draft notices: contributor terms, privacy, reporting and takedown.
 - Downloads are named `openantiquity-…`, an export's id column is `openantiquity_id`, the cookies are `openantiquity_session`, `openantiquity_oauth` and `openantiquity_email_link`, and requests that change data carry `X-OpenAntiquity-Client`.
+
+### Security
+
+- Every page and answer is sent with a Content-Security-Policy, and no other site may show Open Antiquity in a frame.
+- A request body over 1 MB is refused before it is read, except a photo, which may be 15 MB.
+- The API's interactive docs and its schema aren't served in production.
+- Production refuses a secret key shorter than 32 characters and cookies that aren't Secure.
+- The session cookie is `__Host-openantiquity_session`, which another site on a neighbouring address can't set.
+- A session ends after 90 days without use and a year after sign-in, and `POST /auth/logout-everywhere` ends all of yours at once.
+- Expired sessions, and sign-in links a day after they are spent or expire, are deleted by `fieldclub-jobs purge-sign-ins`.
+- An emailed sign-in link opened in another browser signs in only when you type the address it was sent to, and a stranger asking for links to your address can no longer use up your allowance or spend the link you're about to click.
+- Handles and display names that pass for Open Antiquity, its staff or a former member, in look-alike letters or with hyphens, are refused, and a handle someone gives up is held back from others for a year.
+- A mention's or an evidence item's link on a protected finding reaches only people who see the finding exactly, and a map link to the spot is refused on such a finding.
+- Saved map views and height profiles near a protected finding are held back, and the area is coarsened, in investigations, for people who see the finding only as its square.
+- Outlines and areas have at most 2,000 points.
+- Map tiles are limited to 600 a minute from one address, and one address may hold at most eight live update streams.
+- A second look and a vote count at the weight of the role their giver had when they gave it, and keep counting through a ban.
+- A page whose server names an odd character set is read as UTF-8, and a page that breaks the reader no longer causes an error.
+- Record addresses from publishers are kept only when they are web addresses, and record names and summaries are cut to length.
+
+### Removed
+
+- `avatar_url` from every person in the API, and from `PATCH /auth/me`.
+- `findings_reassessed` from the moderators' ban and unban answers.
+- `confirm` from `POST /auth/email/verify`, which takes the typed `email` instead.
