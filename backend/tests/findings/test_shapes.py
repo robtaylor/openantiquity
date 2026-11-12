@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
+from shapely import wkt
 from shapely.geometry import LineString, Point, Polygon
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
 from fieldclub.errors import BadRequestError, ConflictError, ValidationFailedError
-from fieldclub.models import Activity
+from fieldclub.models import Activity, Finding
 from fieldclub.models.common import to_db_geometry
 from fieldclub.services import findings, sensitivity, shapes
 from fieldclub.services.findings import NotFinderError
@@ -296,3 +299,67 @@ def test_a_shape_change_records_whoever_made_it_and_leaves_permission_to_the_cal
     (change,) = changes_of(db, finding)
     assert change.user_id == suggester.id
     assert finding.shape_revision == 1
+
+
+# --------------------------------------------------------------------------
+# Backfill
+# --------------------------------------------------------------------------
+
+
+def _shape_columns(db: Session) -> list[tuple]:
+    return list(
+        db.execute(
+            select(
+                Finding.id,
+                func.ST_AsText(Finding.outline_mid),
+                func.ST_AsText(Finding.outline_low),
+                Finding.shape_kind,
+                Finding.shape_length_m,
+                Finding.path,
+                Finding.shape_revision,
+                Finding.updated_at,
+            ).order_by(Finding.id)
+        ).all()
+    )
+
+
+def test_the_backfill_fills_old_outlines_once_and_leaves_everything_else(
+    db: Session, make_user: MakeUser, caplog: pytest.LogCaptureFixture
+) -> None:
+    finder = make_user()
+    line = LineString([(LON + i * 0.0001, LAT + (i % 2) * 0.00001) for i in range(50)])
+    ring = Polygon([(LON, LAT), (LON + 0.004, LAT), (LON + 0.004, LAT + 0.004), (LON, LAT + 0.004)])
+    old = []
+    for outline in (line, ring):
+        finding = findings.create_finding(db, finder, location=Point(LON, LAT), feature_class="enclosure")
+        finding.outline = to_db_geometry(outline)
+        old.append(finding)
+    drawn_now = drawn(db, finder, meridian(0, 0.01))
+    point_only = findings.create_finding(db, finder, location=Point(LON, LAT), feature_class="enclosure")
+    db.commit()
+    before = {row[0]: row for row in _shape_columns(db)}
+
+    caplog.set_level(logging.INFO, logger="fieldclub.services.shapes")
+    assert shapes.main(["backfill"]) == 0
+    db.expire_all()
+    after = {row[0]: row for row in _shape_columns(db)}
+    for finding, outline in zip(old, (line, ring), strict=True):
+        _, mid, low, kind, length, path, revision, updated = after[finding.id]
+        assert (kind, path, revision, updated) == (
+            shapes.kind_of(outline).value,
+            None,
+            0,
+            before[finding.id][7],
+        )
+        assert length == pytest.approx(shapes.length_m(outline), rel=1e-6)
+        assert wkt.loads(mid).equals_exact(shapes.simplified(outline, shapes.SIMPLIFY_MID_DEG), 1e-7)
+        assert wkt.loads(low).equals_exact(shapes.simplified(outline, shapes.SIMPLIFY_LOW_DEG), 1e-7)
+    # A shape saved through a path, and a finding with none, are left as they were.
+    assert after[drawn_now.id] == before[drawn_now.id]
+    assert after[point_only.id] == before[point_only.id]
+    assert "filled 2" in caplog.text
+
+    assert shapes.main(["backfill"]) == 0
+    db.expire_all()
+    assert {row[0]: row for row in _shape_columns(db)} == after
+    assert "filled 0" in caplog.text

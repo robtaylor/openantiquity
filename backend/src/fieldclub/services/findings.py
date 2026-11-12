@@ -219,11 +219,6 @@ BRITISH_ISLES = Polygon(
 )
 assert BRITISH_ISLES.is_valid, "the British Isles outline crosses itself"
 
-# The types an outline saved before paths existed may have. A request's
-# `outline` must now be a LineString or a one-ring Polygon
-# (`shapes.path_from_outline`), and the limits are in `services.shapes`.
-OUTLINE_TYPES = ("Polygon", "MultiPolygon", "LineString", "MultiLineString")
-
 
 def check_in_british_isles(geometry: BaseGeometry) -> None:
     """Refuse a geometry that isn't wholly inside the British Isles and on one of their grids."""

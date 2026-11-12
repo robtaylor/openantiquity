@@ -25,13 +25,22 @@ suites both read.
    one-ring Polygon. Every coordinate is rounded to 7 decimal places, the
    tapped points as they are read.
 
-Nothing here touches the database, so the backfill and the tests use it
+Nothing here touches the database but `backfill`, so the tests use it
 directly. Checking that a shape lies in the British Isles is
 `services.findings.check_in_british_isles`, which runs after these limits.
+
+    python -m fieldclub.services.shapes backfill
+
+fills the simplified copies, the kind and the length of every outline saved
+before paths existed, so the map can draw it at every zoom. It is safe to
+run again, and changes nothing the second time. Run it once by hand after
+the deploy that brings paths.
 """
 
 from __future__ import annotations
 
+import argparse
+import logging
 import math
 import sys
 from collections.abc import Iterator, Mapping, Sequence
@@ -41,13 +50,20 @@ from typing import Any
 
 import numpy as np
 import shapely
+from geoalchemy2.shape import to_shape
 from pyproj import Geod
 from shapely.geometry import LineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import nearest_points
+from sqlalchemy import or_, select, update
+from sqlalchemy.orm import Session
 
 from fieldclub.errors import ValidationFailedError
+from fieldclub.models import Finding
+from fieldclub.models.common import to_db_geometry
 from fieldclub.vocab import PointKind, ShapeChangeKind, ShapeKind
+
+logger = logging.getLogger(__name__)
 
 CURVE = "catmull-rom-centripetal-1"
 
@@ -571,3 +587,81 @@ def added_view(old: Path, new: Path) -> dict[str, float] | None:
         )
     zoom = max(VIEW_MIN_ZOOM, math.floor(min(zooms)))
     return {"lon": round((west + east) / 2, 6), "lat": round(lat, 6), "zoom": zoom}
+
+
+# --------------------------------------------------------------------------
+# Filling in outlines saved before paths
+# --------------------------------------------------------------------------
+
+# Findings read and written at a time, each batch in its own transaction.
+BACKFILL_BATCH = 200
+
+
+def backfill(db: Session, *, batch: int = BACKFILL_BATCH) -> int:
+    """Fill `outline_mid`, `outline_low`, `shape_kind` and `shape_length_m` where an outline lacks any.
+
+    Only outlines saved before paths lack them. The path is left alone: it is
+    derived when the finding is read (`stored_path`) and stored when it is
+    next saved. `updated_at` is kept, since nobody changed the finding.
+    Commits each batch, and says how many findings it filled.
+    """
+    assert batch > 0, "a batch holds a finding at least"
+    unfilled = or_(
+        Finding.outline_mid.is_(None),
+        Finding.outline_low.is_(None),
+        Finding.shape_kind.is_(None),
+        Finding.shape_length_m.is_(None),
+    )
+    filled, after = 0, 0
+    while rows := db.execute(
+        select(Finding.id, Finding.outline)
+        .where(Finding.id > after, Finding.outline.is_not(None), unfilled)
+        .order_by(Finding.id)
+        .limit(batch)
+    ).all():
+        for finding_id, outline in rows:
+            assert outline is not None, "only findings with an outline are read"
+            geometry = to_shape(outline)
+            assert not geometry.is_empty, f"finding {finding_id} has an empty outline"
+            db.execute(
+                update(Finding)
+                .where(Finding.id == finding_id)
+                .values(
+                    outline_mid=to_db_geometry(simplified(geometry, SIMPLIFY_MID_DEG)),
+                    outline_low=to_db_geometry(simplified(geometry, SIMPLIFY_LOW_DEG)),
+                    shape_kind=kind_of(geometry).value,
+                    shape_length_m=length_m(geometry),
+                    updated_at=Finding.updated_at,
+                )
+            )
+        db.commit()
+        filled += len(rows)
+        after = rows[-1].id
+    return filled
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """`python -m fieldclub.services.shapes backfill`: see `backfill`."""
+    parser = argparse.ArgumentParser(
+        prog="python -m fieldclub.services.shapes",
+        description="Fill what outlines saved before paths lack. Safe to run again.",
+    )
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("backfill", help="fill what outlines saved before paths lack")
+    parser.parse_args(argv)
+    # Imported here, so the shapes and the tests that use them need no database settings.
+    from fieldclub.config import get_settings
+    from fieldclub.db import SessionLocal
+
+    logging.basicConfig(level=get_settings().log_level)
+    with SessionLocal() as db:
+        filled = backfill(db)
+    logger.info("Backfill filled %d outlines saved before paths", filled)
+    return 0
+
+
+if __name__ == "__main__":
+    # The canonical module, not this `__main__` copy, as `fieldclub.db` does.
+    from fieldclub.services.shapes import main as _canonical_main
+
+    sys.exit(_canonical_main())
