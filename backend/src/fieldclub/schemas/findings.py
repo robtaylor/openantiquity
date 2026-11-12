@@ -133,18 +133,15 @@ class Location(ApiModel):
     grid_ref: str | None
     # The compact square, such as `SU1069`, when obscured.
     square: str | None
-    # The drawn outline. Always null when obscured.
+    # The drawn shape, on a finding's page only (`LocationDetail`). Always null
+    # in a list, so a page of long lines costs nothing, and when obscured.
     outline: GeoJSONGeometry | None
     # `line` or `area` for a finding drawn as one. Always null when obscured.
     shape_kind: ShapeKind | None = None
 
 
-def location_out(finding: Finding, viewer: User | None, *, with_outline: bool = True) -> Location:
-    """The one way a response gets a finding's position.
-
-    `with_outline=False` leaves the outline out, for an answer that draws only
-    the point, so the outline isn't decoded for nothing.
-    """
+def location_out(finding: Finding, viewer: User | None) -> Location:
+    """The one way a response gets a finding's position: its point, with no shape."""
     seen = sensitivity.visible_location(finding, viewer)
     return Location(
         lon=round(seen.lon, 6),
@@ -152,7 +149,7 @@ def location_out(finding: Finding, viewer: User | None, *, with_outline: bool = 
         obscured=seen.obscured,
         grid_ref=seen.grid_ref,
         square=seen.square,
-        outline=geojson_geometry(seen.outline) if with_outline else None,
+        outline=None,
         shape_kind=seen.shape_kind,
     )
 
@@ -261,7 +258,7 @@ def location_detail(
     shape = sensitivity.visible_shape(
         finding, viewer, changes, added_since_looked_m=added_since_looked_m, may_change=may_change
     )
-    where = location_out(finding, viewer, with_outline=False)
+    where = location_out(finding, viewer)
     return LocationDetail(
         **where.model_dump(exclude={"outline"}),
         outline=geojson_geometry(shape.outline, decimals=shapes.DECIMALS),
@@ -765,8 +762,7 @@ def finding_feature(
     finding: Finding, viewer: User | None, shape: BaseGeometry | None = None
 ) -> FindingFeature:
     """`shape` comes from `services.findings.map_shapes`, which gives one only to an exact viewer."""
-    # The map's point is the anchor, so the outline isn't needed.
-    where = location_out(finding, viewer, with_outline=False)
+    where = location_out(finding, viewer)
     assert shape is None or not where.obscured, "an obscured finding has no shape on the map"
     return FindingFeature(
         id=finding.public_id,
@@ -903,7 +899,7 @@ def review_view(
     `new_part` (`review.new_part_view`) moves the place to the added part
     and zooms to frame it.
     """
-    where = location_out(finding, viewer, with_outline=False)
+    where = location_out(finding, viewer)
     view = ViewState.from_stored(finding.view_state)
     if new_part is None:
         return where, view

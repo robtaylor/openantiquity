@@ -251,6 +251,8 @@ def _record_row(result: RecordResult) -> dict[str, Any]:
         "url": record.url or "",
         "tier": "",
         "position_precision_m": round(precision) if precision is not None else None,
+        "shape_kind": None,
+        "shape_length_m": None,
         "attribution": source.attribution,
         "source": source.name,
     }

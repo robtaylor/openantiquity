@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import pytest
@@ -28,8 +28,8 @@ from fieldclub.services.events import Announcement, EventHub, StreamFilter
 from fieldclub.vocab import FeatureClass, Sensitivity, Visible
 from tests.activity.support import API, add_map, comment, follow
 from tests.findings.support import answer, create
-from tests.findings.test_leaks import LEVELS, POINTS, SEES, check
-from tests.helpers import ClientFor, MakeUser
+from tests.findings.test_leaks import LEVELS, POINTS, SEES, check, draw_line, extend_line
+from tests.helpers import ClientFor, MakeUser, lon_lat
 
 VIEWERS = ("signed_out", "member", "finder", "trusted", "moderator")
 
@@ -39,6 +39,11 @@ class World:
     people: dict[str, User]
     findings: dict[Sensitivity, Finding]
     client: Callable[[str], TestClient]
+    # Each level's line, extended after its second looks.
+    lines: dict[Sensitivity, Finding] = field(default_factory=dict)
+
+    def every(self) -> list[tuple[Sensitivity, Finding]]:
+        return [*self.findings.items(), *self.lines.items()]
 
 
 @pytest.fixture
@@ -52,8 +57,9 @@ def world(db: Session, make_user: MakeUser, app: FastAPI, client_for: ClientFor)
     }
     helpers = [make_user("trusted", handle=f"Helper{n}") for n in (1, 2)]
     made: dict[Sensitivity, Finding] = {}
+    lines: dict[Sensitivity, Finding] = {}
     for level, (lon, lat) in POINTS.items():
-        finding = create(
+        made[level] = create(
             db,
             finder,
             lon=lon,
@@ -63,9 +69,12 @@ def world(db: Session, make_user: MakeUser, app: FastAPI, client_for: ClientFor)
             outline=box(lon - 0.0005, lat - 0.0005, lon + 0.0005, lat + 0.0005),
             title=f"A {level} enclosure",
         )
+        lines[level] = draw_line(db, finder, level)
+    for level, finding in [*made.items(), *lines.items()]:
+        lon, lat = lon_lat(finding.location)
         follow(db, finding, people["member"], people["trusted"], people["moderator"])
         for helper in helpers:
-            answer(db, finding, helper, Visible.YES, feature_class=FeatureClass.ENCLOSURE)
+            answer(db, finding, helper, Visible.YES, feature_class=FeatureClass(finding.feature_class))
         evidence_id = add_map(db, finding, helpers[0])
         # A link that gives the position, as one added before the finding was raised would be:
         # adding it to a finding that isn't open is refused.
@@ -73,12 +82,14 @@ def world(db: Session, make_user: MakeUser, app: FastAPI, client_for: ClientFor)
         db.commit()
         comment(db, finding, helpers[1])
         assert finding.sensitivity == level.value
-        made[level] = finding
+    # Extended after the second looks, which records `shape_extended` and tells the followers.
+    for level, line in lines.items():
+        extend_line(db, finder, line, level)
 
     def client(viewer: str) -> TestClient:
         return client_for(app, None if viewer == "signed_out" else people[viewer])
 
-    return World(people, made, client)
+    return World(people, made, client, lines)
 
 
 def get(world: World, viewer: str, path: str, **params: Any) -> str:
@@ -91,10 +102,15 @@ def get(world: World, viewer: str, path: str, **params: Any) -> str:
 def test_the_feed(world: World, viewer: str) -> None:
     allowed = SEES[viewer]
     check(get(world, viewer, "/activity", limit=200), allowed, allowed, where="feed")
-    for level, finding in world.findings.items():
+    for level, finding in world.every():
         shown = allowed & {level}
         text = get(world, viewer, "/activity", finding=finding.public_id)
         check(text, shown, shown, where=f"feed of the {level} finding")
+    # That a line grew is shape: it is listed only where the line is seen exactly.
+    extended = json.loads(get(world, viewer, "/activity", limit=200, kind="shape_extended"))["items"]
+    assert {item["finding"]["public_id"] for item in extended} == {
+        world.lines[level].public_id for level in allowed
+    }
 
 
 @pytest.mark.parametrize("viewer", VIEWERS)
@@ -145,7 +161,7 @@ def test_a_persons_own_second_looks(
     response = client_for(app, person).get(
         f"{API}/users/{helper}/contributions", params={"kind": "second_look"}
     )
-    assert len(response.json()["items"]) == len(LEVELS)
+    assert len(response.json()["items"]) == 2 * len(LEVELS)
     check(response.text, SEES["trusted"], SEES["trusted"], where=f"{helper}'s own second looks")
 
 
@@ -177,9 +193,7 @@ def test_stream_payloads_carry_no_position(world: World, db: Session) -> None:
                     {
                         "id": row.id,
                         "kind": row.kind,
-                        "finding": next(
-                            f.public_id for f in world.findings.values() if f.id == row.finding_id
-                        ),
+                        "finding": next(f.public_id for _, f in world.every() if f.id == row.finding_id),
                         "investigation": None,
                         "actor": None,
                     }
@@ -193,7 +207,16 @@ def test_stream_payloads_carry_no_position(world: World, db: Session) -> None:
         return got
 
     got = asyncio.run(announced())
-    assert len(got) == db.query(Activity).count()
+    # That a protected or restricted line grew isn't announced: the public feed doesn't list it.
+    unlisted = {
+        row.id
+        for row in db.query(Activity)
+        if row.kind == "shape_extended" and db.get_one(Finding, row.finding_id).sensitivity != "open"
+    }
+    assert len(unlisted) == len(LEVELS) - 1
+    assert sorted(item.id for item in got) == sorted(
+        row.id for row in db.query(Activity) if row.id not in unlisted
+    )
     for item in got:
         assert set(asdict(item)) == {"id", "kind", "finding", "investigation", "actor"}
         check(json.dumps(asdict(item)), set(), where=f"stream event {item.kind}")

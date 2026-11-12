@@ -3,17 +3,19 @@
 Every route that returns a finding, or anything derived from its position,
 is called as a signed-out visitor, a member, the finder, a
 trusted member and a moderator, against an open, a protected and a
-restricted finding. Each finding sits at its own point, so a response that
-holds several can be checked for each one separately. The check searches the
-whole response body for the exact position in every form it could take:
-degrees, both grid references, and easting and northing.
+restricted finding drawn as an area, and one drawn as a line and extended.
+Each finding sits at its own point, so a response that holds several can be
+checked for each one separately. The check searches the whole response body
+for the exact position in every form it could take: degrees, both grid
+references, and easting and northing, and for a line every point it was
+drawn through, the view framing its extension and its length.
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
 import pytest
@@ -26,10 +28,10 @@ from sqlalchemy.orm import Session
 from fieldclub import gridref
 from fieldclub.models import Activity, Finding, Notification, User
 from fieldclub.models.common import db_point
-from fieldclub.services import findings, sensitivity
+from fieldclub.services import findings, sensitivity, shapes
 from fieldclub.services.findings import EvidenceFields
 from fieldclub.vocab import EvidenceKind, FeatureClass, Outcome, Relation, Sensitivity, Visible
-from tests.findings.support import API, answer, create
+from tests.findings.support import API, answer, create, outline_of
 from tests.helpers import MakeUser, add_record, add_source, lon_lat
 
 VIEWERS = ("signed_out", "member", "finder", "trusted", "moderator")
@@ -41,6 +43,61 @@ POINTS = {
     Sensitivity.PROTECTED: (-1.812947, 51.402583),
     Sensitivity.RESTRICTED: (-1.776491, 51.384219),
 }
+
+# Each level's line: three points drawn first, so the anchor is the middle one,
+# and a fourth added later. None is near anything else in the tests.
+LINES = {
+    Sensitivity.OPEN: (
+        (-1.887412, 51.437218), (-1.871936, 51.431574), (-1.856283, 51.425961), (-1.840617, 51.420337),
+    ),
+    Sensitivity.PROTECTED: (
+        (-1.846159, 51.415382), (-1.830694, 51.409741), (-1.815228, 51.404107), (-1.799763, 51.398462),
+    ),
+    Sensitivity.RESTRICTED: (
+        (-1.790384, 51.396152), (-1.774917, 51.390518), (-1.759452, 51.384873), (-1.743986, 51.379238),
+    ),
+}  # fmt: skip
+
+
+def line_path(level: Sensitivity, *, extended: bool) -> shapes.Path:
+    points = LINES[level] if extended else LINES[level][:3]
+    return shapes.read_path({"points": [{"lon": lon, "lat": lat, "kind": "corner"} for lon, lat in points]})
+
+
+def draw_line(db: Session, finder: User, level: Sensitivity) -> Finding:
+    """The level's line, drawn by `finder` with no point, so the server places its anchor. Committed."""
+    finding = findings.create_finding(
+        db,
+        finder,
+        path=line_path(level, extended=False),
+        feature_class=FeatureClass.ROAD,
+        requested_sensitivity=level,
+        title=f"A {level} road",
+    )
+    db.commit()
+    assert lon_lat(finding.location) == LINES[level][1], "the anchor is the middle point"
+    return finding
+
+
+def extend_line(db: Session, finder: User, finding: Finding, level: Sensitivity) -> None:
+    findings.update_finding(
+        db, findings.lock(db, finding), finder, {"path": line_path(level, extended=True), "path_revision": 0}
+    )
+    db.commit()
+    assert lon_lat(finding.location) == LINES[level][1], "extending keeps the anchor"
+
+
+def _line_strings(level: Sensitivity) -> list[str]:
+    """What only someone who sees the level's line exactly may read of it, beyond its anchor."""
+    drawn, extended = (shapes.shape_of(line_path(level, extended=e)) for e in (False, True))
+    view = shapes.added_view(drawn.path, extended.path)
+    assert view is not None, "the fourth point extends the line"
+    found = [f"{abs(lon):.6f}" for lon, _ in LINES[level]] + [f"{lat:.6f}" for _, lat in LINES[level]]
+    found += [f"{abs(view['lon'])}", f"{view['lat']}"]
+    # Its length, and what the extension added, as whole metres and the point after them.
+    found += [f"{int(extended.length_m)}.", f"{int(extended.length_m - drawn.length_m)}."]
+    return found
+
 
 # What each viewer sees on a page or the map (Decision 0005).
 SEES = {
@@ -54,8 +111,7 @@ SEES = {
 DOWNLOADS = {**SEES, "member": {Sensitivity.OPEN}}
 
 
-def exact_strings(level: Sensitivity) -> list[str]:
-    lon, lat = POINTS[level]
+def _point_strings(lon: float, lat: float) -> list[str]:
     _, easting, northing = gridref.to_grid(lon, lat)
     return [
         f"{abs(lon):.6f}",
@@ -67,6 +123,11 @@ def exact_strings(level: Sensitivity) -> list[str]:
         str(round(easting)),
         str(round(northing)),
     ]
+
+
+def exact_strings(level: Sensitivity) -> list[str]:
+    """The level's area finding's exact point, and its line's anchor, points, view and length."""
+    return [*_point_strings(*POINTS[level]), *_point_strings(*LINES[level][1]), *_line_strings(level)]
 
 
 # The time of day in an ISO timestamp, down to its fraction of a second.
@@ -90,11 +151,23 @@ def check(
             assert leaked, f"{where}: the {level} finding's exact position should be there"
 
 
+KINDS = ("area", "line")
+
+
 @dataclass
 class World:
     people: dict[str, User]
+    # Each level's finding drawn as an area.
     findings: dict[Sensitivity, Finding]
     client: Callable[[str], TestClient]
+    # Each level's finding drawn as a line, answered and then extended.
+    lines: dict[Sensitivity, Finding] = field(default_factory=dict)
+
+    def of(self, kind: str, level: Sensitivity) -> Finding:
+        return (self.findings if kind == "area" else self.lines)[level]
+
+    def every(self) -> list[tuple[Sensitivity, Finding]]:
+        return [*self.findings.items(), *self.lines.items()]
 
 
 @pytest.fixture
@@ -109,9 +182,9 @@ def world(db: Session, make_user: MakeUser, app: FastAPI, client_for: Callable[.
     # Two trusted helpers lift every finding to Seen, so the help-wanted list
     # offers evidence tasks, which show obscured positions.
     helpers = [make_user("trusted", handle=f"Helper{n}") for n in (1, 2)]
-    made = {}
+    made, lines = {}, {}
     for level, (lon, lat) in POINTS.items():
-        finding = create(
+        made[level] = create(
             db,
             finder,
             lon=lon,
@@ -121,8 +194,11 @@ def world(db: Session, make_user: MakeUser, app: FastAPI, client_for: Callable[.
             outline=box(lon - 0.0005, lat - 0.0005, lon + 0.0005, lat + 0.0005),
             title=f"A {level} enclosure",
         )
+        lines[level] = draw_line(db, finder, level)
+    for level, finding in [*made.items(), *lines.items()]:
+        lon, lat = lon_lat(finding.location)
         for helper in helpers:
-            answer(db, finding, helper, Visible.YES, feature_class=FeatureClass.ENCLOSURE)
+            answer(db, finding, helper, Visible.YES, feature_class=FeatureClass(finding.feature_class))
         mapped, _ = findings.add_evidence(
             db,
             findings.lock(db, finding),
@@ -151,12 +227,16 @@ def world(db: Session, make_user: MakeUser, app: FastAPI, client_for: Callable[.
         db.commit()
         assert finding.sensitivity == level.value
         assert finding.tier == "seen"
-        made[level] = finding
+    # Extended after the second looks, so each line asks for a look at its new part.
+    for level, line in lines.items():
+        extend_line(db, finder, line, level)
+        assert line.tier == "seen"
+        assert "look_at_new_part" in line.open_steps
 
     def client(viewer: str) -> TestClient:
         return client_for(app, None if viewer == "signed_out" else people[viewer])
 
-    return World(people, made, client)
+    return World(people, made, client, lines)
 
 
 @pytest.mark.parametrize("viewer", VIEWERS)
@@ -166,20 +246,51 @@ def test_lists_and_the_map(world: World, viewer: str) -> None:
     assert page.status_code == 200
     check(page.text, SEES[viewer], SEES[viewer], where="GET /findings")
     by_id = {item["public_id"]: item for item in page.json()["items"]}
-    for level, finding in world.findings.items():
+    for level, finding in world.every():
         item = by_id[finding.public_id]
         assert item["location"]["obscured"] is (level not in SEES[viewer])
-        assert (item["location"]["outline"] is None) is (level not in SEES[viewer])
+        # A list carries no shape for anyone, and says what kind it is only to exact viewers.
+        assert item["location"]["outline"] is None
+        seen = level in SEES[viewer]
+        assert item["location"]["shape_kind"] == (finding.shape_kind if seen else None)
 
-    geojson = client.get(f"{API}/findings", params={"bbox": "-1.9,51.35,-1.7,51.45", "format": "geojson"})
-    assert geojson.status_code == 200
-    check(geojson.text, SEES[viewer], SEES[viewer], where="GET /findings?format=geojson")
-    features = {f["id"]: f for f in geojson.json()["features"]}
-    assert set(features) == {f.public_id for f in world.findings.values()}
-    for level, finding in world.findings.items():
-        props = features[finding.public_id]["properties"]
-        assert props["obscured"] is (level not in SEES[viewer])
-        assert (props["square"] is None) is (level in SEES[viewer])
+    for zoom in (9, 13, 16):
+        geojson = client.get(
+            f"{API}/findings", params={"bbox": "-1.9,51.35,-1.7,51.45", "format": "geojson", "zoom": zoom}
+        )
+        assert geojson.status_code == 200
+        check(geojson.text, SEES[viewer], SEES[viewer], where=f"GET /findings?format=geojson&zoom={zoom}")
+        features = {f["id"]: f for f in geojson.json()["features"]}
+        assert set(features) == {f.public_id for _, f in world.every()}
+        for level, finding in world.every():
+            props = features[finding.public_id]["properties"]
+            assert props["obscured"] is (level not in SEES[viewer])
+            assert (props["square"] is None) is (level in SEES[viewer])
+            assert (props["shape"] is None) is (level not in SEES[viewer])
+
+
+@pytest.mark.parametrize("viewer", VIEWERS)
+@pytest.mark.parametrize("level", LEVELS)
+def test_a_box_on_a_line_s_far_end_finds_it_only_for_those_who_see_it_exactly(
+    world: World, viewer: str, level: Sensitivity
+) -> None:
+    """A box matches a line by its shape only for exact viewers: for anyone else, by its square."""
+    lon, lat = LINES[level][-1]
+    line = world.lines[level]
+    assert gridref.gridref_at(lon, lat, 4) != gridref.gridref_at(*LINES[level][1], 4), (
+        "the end is in another square"
+    )
+    tight = f"{lon - 0.0005},{lat - 0.0005},{lon + 0.0005},{lat + 0.0005}"
+    for fmt in ("geojson", "json"):
+        found = world.client(viewer).get(f"{API}/findings", params={"bbox": tight, "format": fmt})
+        assert found.status_code == 200
+        body = found.json()
+        ids = {
+            item["id"] if fmt == "geojson" else item["public_id"]
+            for item in body.get("features", body.get("items", []))
+        }
+        assert (line.public_id in ids) is (level in SEES[viewer]), fmt
+        check(found.text, SEES[viewer], where=f"a box on the {level} line's end")
 
 
 @pytest.mark.parametrize("viewer", VIEWERS)
@@ -208,14 +319,40 @@ def test_a_box_round_the_exact_point_finds_only_what_the_viewer_may_see(
 
 @pytest.mark.parametrize("viewer", VIEWERS)
 @pytest.mark.parametrize("level", LEVELS)
-def test_a_finding_page(world: World, viewer: str, level: Sensitivity) -> None:
-    finding = world.findings[level]
+@pytest.mark.parametrize("kind", KINDS)
+def test_a_finding_page(world: World, viewer: str, level: Sensitivity, kind: str) -> None:
+    finding = world.of(kind, level)
     response = world.client(viewer).get(f"{API}/findings/{finding.public_id}")
     assert response.status_code == 200
     allowed = {level} & SEES[viewer]
-    check(response.text, allowed, allowed, where=f"GET /findings/{{id}} ({level})")
+    check(response.text, allowed, allowed, where=f"GET /findings/{{id}} ({level} {kind})")
     body = response.json()
     assert body["location"]["obscured"] is (level not in SEES[viewer])
+    shape = body["location"]["shape"]
+    if level not in SEES[viewer]:
+        # That the shape changed, and when, and nothing of its kind, size, place or what was added.
+        assert (body["location"]["outline"], body["location"]["path"], body["location"]["shape_kind"]) == (
+            None,
+            None,
+            None,
+        )
+        assert shape == {
+            "kind": None,
+            "length_m": None,
+            "revision": None,
+            "extent": None,
+            "changes": [
+                {"kind": "changed", "on": c["on"], "added_length_m": None, "added_view": None}
+                for c in shape["changes"]
+            ],
+            "added_since_looked_m": None,
+            "looked_at": None,
+        }
+        assert "look_at_new_part" not in [step["code"] for step in body["assessment"]["next_steps"]]
+        assert '"line"' not in response.text
+    else:
+        assert shape["kind"] == kind
+        assert (shape["looked_at"] is not None) is (viewer == "finder")
     for item in body["evidence"]:
         assert item["redacted"] is (level not in SEES[viewer])
         if item["redacted"]:
@@ -225,12 +362,19 @@ def test_a_finding_page(world: World, viewer: str, level: Sensitivity) -> None:
 @pytest.mark.parametrize("viewer", VIEWERS)
 @pytest.mark.parametrize("level", LEVELS)
 @pytest.mark.parametrize("fmt", ["csv", "geojson"])
-def test_downloads_of_one_finding(world: World, viewer: str, level: Sensitivity, fmt: str) -> None:
-    finding = world.findings[level]
+@pytest.mark.parametrize("kind", KINDS)
+def test_downloads_of_one_finding(world: World, viewer: str, level: Sensitivity, fmt: str, kind: str) -> None:
+    finding = world.of(kind, level)
     response = world.client(viewer).get(f"{API}/findings/{finding.public_id}/export", params={"format": fmt})
     assert response.status_code == 200
     allowed = {level} & DOWNLOADS[viewer]
-    check(response.text, allowed, allowed, where=f"export {fmt} ({level})")
+    check(response.text, allowed, allowed, where=f"export {fmt} ({level} {kind})")
+    if fmt == "geojson":
+        (feature,) = response.json()["features"]
+        exact = level in DOWNLOADS[viewer]
+        assert (feature["properties"]["outline"] is not None) is exact
+        assert feature["properties"]["shape_kind"] == (kind if exact else None)
+        assert (feature["properties"]["shape_length_m"] is not None) is exact
 
 
 @pytest.mark.parametrize("viewer", VIEWERS)
@@ -251,7 +395,7 @@ def test_review_cards_are_only_for_findings_the_viewer_sees_exactly(world: World
     assert response.status_code == 200
     offered = {card["public_id"] for card in response.json()["items"]}
     own = set(LEVELS) if viewer == "finder" else set()
-    expected = {world.findings[level].public_id for level in SEES[viewer] - own}
+    expected = {f.public_id for level, f in world.every() if level in SEES[viewer] - own}
     assert offered == expected
     check(response.text, SEES[viewer] - own, where="GET /review/next")
 
@@ -261,17 +405,26 @@ def test_help_wanted(world: World, viewer: str) -> None:
     response = world.client(viewer).get(f"{API}/review/tasks")
     assert response.status_code == 200
     check(response.text, SEES[viewer], where="GET /review/tasks")
-    strand = next(group for group in response.json()["groups"] if group["code"] == "need_strand")
-    assert strand["total"] == 3
+    groups = {group["code"]: group for group in response.json()["groups"]}
+    strand = groups["need_strand"]
+    assert strand["total"] == 6
     for item in strand["items"]:
-        level = next(lv for lv, f in world.findings.items() if f.public_id == item["public_id"])
+        level = next(lv for lv, f in world.every() if f.public_id == item["public_id"])
         assert item["place"]["obscured"] is (level not in SEES[viewer])
+        assert item["place"]["outline"] is None
+    # The new part of a line is shape, so it is offered only where the line is seen exactly.
+    new_part = {item["public_id"] for item in groups["look_at_new_part"]["items"]}
+    own = set(LEVELS) if viewer == "finder" else set()
+    assert new_part == {world.lines[level].public_id for level in SEES[viewer] - own}
 
 
 @pytest.mark.parametrize("viewer", VIEWERS)
 @pytest.mark.parametrize("level", LEVELS)
-def test_comments_and_answers_carry_no_position(world: World, viewer: str, level: Sensitivity) -> None:
-    finding = world.findings[level]
+@pytest.mark.parametrize("kind", KINDS)
+def test_comments_and_answers_carry_no_position(
+    world: World, viewer: str, level: Sensitivity, kind: str
+) -> None:
+    finding = world.of(kind, level)
     client = world.client(viewer)
     comments = client.get(f"{API}/findings/{finding.public_id}/comments")
     assert comments.status_code == 200
@@ -283,8 +436,11 @@ def test_comments_and_answers_carry_no_position(world: World, viewer: str, level
 
 @pytest.mark.parametrize("viewer", ["member", "trusted", "moderator"])
 @pytest.mark.parametrize("level", LEVELS)
-def test_writes_answer_with_what_the_writer_may_see(world: World, viewer: str, level: Sensitivity) -> None:
-    finding = world.findings[level]
+@pytest.mark.parametrize("kind", KINDS)
+def test_writes_answer_with_what_the_writer_may_see(
+    world: World, viewer: str, level: Sensitivity, kind: str
+) -> None:
+    finding = world.of(kind, level)
     client = world.client(viewer)
     allowed = {level} & SEES[viewer]
 
@@ -327,8 +483,11 @@ def test_writes_answer_with_what_the_writer_may_see(world: World, viewer: str, l
 def test_activity_and_notifications_never_hold_an_exact_position(world: World, db: Session) -> None:
     rows = db.scalars(select(Activity)).all()
     assert rows
+    assert {row.finding_id for row in rows if row.kind == "shape_extended"} == {
+        f.id for f in world.lines.values()
+    }
     for row in rows:
-        finding = next(f for f in world.findings.values() if f.id == row.finding_id)
+        finding = next(f for _, f in world.every() if f.id == row.finding_id)
         assert row.location is not None
         assert lon_lat(row.location) == pytest.approx(sensitivity.square_centre(finding), abs=1e-9)
         check(str(row.data), set(), where=f"activity {row.kind}")
@@ -349,7 +508,7 @@ def test_the_sql_visibility_clause_agrees_with_sees_exact(world: World, db: Sess
     for viewer in [None, *world.people.values()]:
         clause = sensitivity.as_sql(sensitivity.sees_exact_clause(viewer))
         in_sql = set(db.scalars(select(Finding.id).where(clause)))
-        in_python = {f.id for f in world.findings.values() if sensitivity.sees_exact(f, viewer)}
+        in_python = {f.id for _, f in world.every() if sensitivity.sees_exact(f, viewer)}
         assert in_sql == in_python, f"viewer {viewer}"
 
 
@@ -387,14 +546,15 @@ def _move_within_square(db: Session, finding: Finding) -> None:
 
 @pytest.mark.parametrize("viewer", VIEWERS)
 @pytest.mark.parametrize("level", LEVELS)
-def test_suggested_records(world: World, db: Session, viewer: str, level: Sensitivity) -> None:
+@pytest.mark.parametrize("kind", KINDS)
+def test_suggested_records(world: World, db: Session, viewer: str, level: Sensitivity, kind: str) -> None:
     """Distances, order and the set returned all start from the position the viewer may see.
 
     For a viewer who sees only the square, moving the finding within its square
     changes nothing in the answer, so nothing in it can depend on the exact point.
     """
     _records_around(db)
-    finding = world.findings[level]
+    finding = world.of(kind, level)
     path = f"{API}/findings/{finding.public_id}/suggested-records"
     client = world.client(viewer)
     before = client.get(path, params={"limit": 50})
@@ -413,17 +573,25 @@ def test_suggested_records(world: World, db: Session, viewer: str, level: Sensit
 
 @pytest.mark.parametrize("viewer", VIEWERS)
 @pytest.mark.parametrize("level", LEVELS)
+@pytest.mark.parametrize("kind", KINDS)
 def test_the_search_box_flies_to_what_the_viewer_may_see(
-    world: World, viewer: str, level: Sensitivity
+    world: World, viewer: str, level: Sensitivity, kind: str
 ) -> None:
-    finding = world.findings[level]
+    finding = world.of(kind, level)
     response = world.client(viewer).get(f"{API}/geo/search", params={"q": finding.public_id.lower()})
     assert response.status_code == 200
     allowed = {level} & SEES[viewer]
     check(response.text, allowed, allowed, where=f"GET /geo/search ({level})")
     [hit] = [item for item in response.json()["items"] if item["type"] == "finding"]
     assert hit["obscured"] is (level not in SEES[viewer])
-    assert (hit["bbox"] is None) is (level in SEES[viewer])
+    if level not in SEES[viewer]:
+        assert hit["bbox"] is not None
+    elif kind == "line":
+        # An exact viewer flies to the whole line.
+        lons, lats = zip(*LINES[level], strict=True)
+        assert hit["bbox"] == pytest.approx([min(lons), min(lats), max(lons), max(lats)])
+    else:
+        assert hit["bbox"] == pytest.approx(list(outline_of(finding).bounds))
     assert response.headers["cache-control"] == "private, no-cache"
 
 
@@ -438,7 +606,7 @@ def test_a_records_linked_findings(world: World, db: Session, viewer: str) -> No
     source = add_source(db)
     record = add_record(db, source, "Enclosure on the down", *POINTS[Sensitivity.PROTECTED])
     db.commit()
-    for finding in world.findings.values():
+    for _, finding in world.every():
         findings.add_evidence(
             db,
             findings.lock(db, finding),
@@ -451,4 +619,4 @@ def test_a_records_linked_findings(world: World, db: Session, viewer: str) -> No
     assert response.headers["cache-control"] == "private, no-cache"
     check(response.text, SEES[viewer], where="GET /records/{id}/findings")
     listed = {item["public_id"] for item in response.json()["items"]}
-    assert listed == {world.findings[level].public_id for level in SEES[viewer]}
+    assert listed == {f.public_id for level, f in world.every() if level in SEES[viewer]}

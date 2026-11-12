@@ -34,6 +34,7 @@ if it carries a position.
 from __future__ import annotations
 
 import importlib
+import inspect
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -430,6 +431,24 @@ def test_each_route_that_returns_a_position_has_a_leak_test() -> None:
         if expect.leak_test is not None:
             test = leak_test(expect.leak_test)
             assert callable(test), f"{key}: there is no {expect.leak_test}"
+
+
+def test_every_leak_test_includes_a_line_finding() -> None:
+    """A protected or restricted line's shape must not reach anyone who sees only its square (Decision 0030).
+
+    So each module a row's leak test lives in builds the leak world's lines,
+    `tests.findings.test_leaks.draw_line`, or uses that world itself.
+    """
+    for key, expect in ROUTES.items():
+        if expect.leak_test is None:
+            continue
+        test = leak_test(expect.leak_test)
+        assert test is not None, f"{key}: there is no {expect.leak_test}"
+        module = importlib.import_module(test.__module__)
+        source = inspect.getsource(module)
+        assert module is test_leaks or "draw_line(" in source or "world = leaks.world" in source, (
+            f"{key}: {expect.leak_test} has no line finding"
+        )
 
 
 def test_every_write_says_who_may_make_it_and_every_read_how_it_is_checked() -> None:

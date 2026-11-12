@@ -6,15 +6,26 @@ import csv
 import io
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import event, select
 from sqlalchemy.orm import Session
 
 from fieldclub.models import Comment, Finding, Follow, Notification
 from fieldclub.schemas.findings import URL_MAX
 from fieldclub.services import exports, findings
 from fieldclub.vocab import EvidenceKind, FeatureClass, Visible
-from tests.findings.support import API, LAT, LON, add_desk_evidence, answer, create, point
-from tests.helpers import ClientAs, MakeUser, error_code
+from tests.findings.support import (
+    API,
+    LAT,
+    LON,
+    add_desk_evidence,
+    answer,
+    create,
+    drawn,
+    meridian,
+    outline_of,
+    point,
+)
+from tests.helpers import ClientAs, MakeUser, error_code, lon_lat
 
 # --------------------------------------------------------------------------
 # Lists
@@ -151,6 +162,40 @@ def test_geojson_export(db: Session, client, make_user: MakeUser) -> None:
     assert feature["geometry"]["coordinates"] == [LON, LAT]
     assert feature["properties"]["monument_type"] == "ENCLOSURE"
     assert feature["properties"]["obscured"] is False
+
+
+def test_a_line_downloads_as_its_anchor_with_its_whole_shape_kind_and_length(
+    db: Session, client, make_user: MakeUser
+) -> None:
+    author = make_user()
+    lines = [drawn(db, author, meridian(0, 0.01, 0.02, lon=LON + i * 0.001)) for i in range(5)]
+    line = lines[0]
+    response = client.get(f"{API}/findings/{line.public_id}/export")
+    (feature,) = response.json()["features"]
+    assert feature["geometry"] == {"type": "Point", "coordinates": list(lon_lat(line.location))}
+    assert feature["properties"]["outline"]["coordinates"] == [list(xy) for xy in outline_of(line).coords]
+    assert feature["properties"]["shape_kind"] == "line"
+    assert feature["properties"]["shape_length_m"] == pytest.approx(line.shape_length_m, abs=0.1)
+    (row,) = csv.DictReader(
+        io.StringIO(client.get(f"{API}/findings/{line.public_id}/export?format=csv").text)
+    )
+    assert (row["shape_kind"], float(row["shape_length_m"])) == (
+        "line",
+        pytest.approx(line.shape_length_m, abs=0.1),
+    )
+    # The shapes of a whole download are read together, not one query each.
+    ids = [f.id for f in lines]
+    db.expire_all()
+    statements: list[str] = []
+    listen = lambda *args: statements.append(args[2])  # noqa: E731
+    event.listen(db.get_bind(), "before_cursor_execute", listen)
+    try:
+        chosen = list(db.scalars(select(Finding).where(Finding.id.in_(ids))))
+        shapes = [item.outline for item in exports.export_rows(db, chosen, None)]
+    finally:
+        event.remove(db.get_bind(), "before_cursor_execute", listen)
+    assert all(shape is not None for shape in shapes)
+    assert len(statements) <= 5, "\n".join(s[:60] + " ... " + s[-90:] for s in statements)
 
 
 def test_a_filtered_export_pages(db: Session, client, make_user: MakeUser) -> None:

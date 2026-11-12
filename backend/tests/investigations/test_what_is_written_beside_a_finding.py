@@ -21,11 +21,11 @@ from sqlalchemy.orm import Session
 
 from fieldclub import gridref
 from fieldclub.models import Finding, Investigation, InvestigationItem
-from fieldclub.services import findings, investigations, sensitivity
+from fieldclub.services import findings, investigations, sensitivity, shapes
 from fieldclub.services.text_positions import PLACEHOLDER
 from fieldclub.vocab import FeatureClass, InvestigationItemKind, InvestigationRole, Sensitivity, Visibility
 from tests.findings.support import create
-from tests.helpers import MakeUser
+from tests.helpers import MakeUser, lon_lat
 from tests.investigations.support import API, add, make, url
 
 # The barrow, at a point nothing else in the test uses.
@@ -421,3 +421,47 @@ def test_a_member_downloads_a_protected_finding_s_neighbours_at_its_square(
         download = client.get(url(notebook, f"/export?format={form}")).text
         assert _leaks(download) == [], form
     assert "51.402583" in client_for(app, finder).get(url(notebook, "/export?format=geojson")).text
+
+
+def test_what_is_drawn_beside_a_restricted_road_far_from_its_anchor_is_held_back(
+    db: Session, world: World, make_user: MakeUser
+) -> None:
+    """The guard measures to the whole line, not only to its anchor (Decision 0030)."""
+    surveyor = make_user(handle="Surveyor")
+    # A road 40 km long drawn first, so its anchor is near its middle, 20 km from either end.
+    road_lon = -2.5
+    road = findings.create_finding(
+        db,
+        world.finder,
+        path=shapes.read_path(
+            {"points": [{"lon": road_lon, "lat": lat, "kind": "corner"} for lat in (51.0, 51.18, 51.36)]}
+        ),
+        feature_class=FeatureClass.ROAD,
+        requested_sensitivity=Sensitivity.RESTRICTED,
+    )
+    db.commit()
+    assert abs(lon_lat(road.location)[1] - 51.18) < 1e-6
+    # About 1.4 km east of the road's southern end, 20 km from its anchor.
+    beside = road_lon + 0.02
+    walk = make(
+        db, surveyor, Visibility.PUBLIC, title="A walk south", area=box(beside, 51.0, beside + 0.001, 51.001)
+    )
+    add(
+        db, walk, surveyor, kind=InvestigationItemKind.PROFILE,
+        data={"line": {"type": "LineString", "coordinates": [[beside, 51.0], [beside, 51.01]]}},
+    )  # fmt: skip
+    add(
+        db, walk, surveyor, kind=InvestigationItemKind.VIEW,
+        data={"centre": [beside, 51.005], "zoom": 17, "layer": "slope"}, title="Bank",
+    )  # fmt: skip
+    for viewer in ("signed_out", "member"):
+        client = world.clients[viewer]
+        items = client.get(url(walk, "/items")).json()["items"]
+        assert [item["unavailable"] for item in items] == ["near_protected", "near_protected"], viewer
+        assert all(item["view"] is None and item["profile"] is None for item in items)
+        area = shape(client.get(url(walk)).json()["area"])
+        # Shown as whole squares, not as drawn.
+        assert area.area > box(beside, 51.0, beside + 0.001, 51.001).area * 50
+    for viewer in ("finder", "trusted"):
+        items = world.clients[viewer].get(url(walk, "/items")).json()["items"]
+        assert [item["unavailable"] for item in items] == [None, None], viewer

@@ -32,12 +32,13 @@ def assert_private(response, where: str) -> None:
 
 
 @pytest.mark.parametrize("level", leaks.LEVELS)
+@pytest.mark.parametrize("kind", leaks.KINDS)
 def test_a_photo_goes_only_to_those_who_see_its_finding_exactly(
-    world: leaks.World, db: Session, level: Sensitivity
+    world: leaks.World, db: Session, level: Sensitivity, kind: str
 ) -> None:
-    finding = world.findings[level]
+    finding = world.of(kind, level)
     finder = world.people["finder"]
-    waiting = photo(db, finder, data=jpeg(colour=(len(level.value), 40, 80)))
+    waiting = photo(db, finder, data=jpeg(colour=(len(level.value), 40 + len(kind), 80)))
     findings.add_evidence(
         db,
         findings.lock(db, finding),

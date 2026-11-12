@@ -35,6 +35,7 @@ from fieldclub.services.sensitivity import (
     square_centre,
     starting_sensitivity,
     visible_location,
+    visible_shape,
 )
 from fieldclub.vocab import FeatureClass, Sensitivity
 from tests.helpers import MakeFinding, MakeUser, lon_lat
@@ -89,7 +90,7 @@ def assert_exact(seen: VisibleLocation, lon: float = LON, lat: float = LAT) -> N
 
 def assert_square(seen: VisibleLocation, square: str = "SU1069") -> None:
     assert seen.obscured is True
-    assert seen.outline is None
+    assert seen.shape_kind is None
     assert seen.square == square
     assert seen.grid_ref == gridref.parse_gridref(square).format()
     assert (seen.lon, seen.lat) == pytest.approx(gridref.centre_of_square(square), abs=1e-9)
@@ -108,14 +109,16 @@ def test_every_viewer_against_every_level(
     finding = make_finding(finder, lon=LON, lat=LAT, sensitivity=level, outline=to_db_geometry(OUTLINE))
     viewer = viewer_for(viewer_kind, finder, make_user, db)
     seen = visible_location(finding, viewer)
+    shape = visible_shape(finding, viewer, ())
     assert sees_exact(finding, viewer) is VIEWER_TABLE[viewer_kind][level]
     if VIEWER_TABLE[viewer_kind][level]:
         assert_exact(seen)
-        assert seen.outline is not None
-        assert seen.outline.equals_exact(OUTLINE, 1e-9)
+        assert shape.outline is not None
+        assert shape.outline.equals_exact(OUTLINE, 1e-9)
         assert seen.grid_ref == "SU 1023 6996"
     else:
         assert_square(seen)
+        assert (shape.outline, shape.extent, shape.kind) == (None, None, None)
         # What a generalised viewer sees is exactly the stored public position.
         assert (seen.lon, seen.lat) == pytest.approx(lon_lat(finding.location_public), abs=1e-12)
 

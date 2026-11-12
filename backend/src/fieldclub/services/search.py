@@ -174,7 +174,8 @@ def as_finding(db: Session, text: str, viewer: User | None) -> GeoHit | None:
         return None
     seen = sensitivity.visible_location(finding, viewer)
     square = seen.square_polygon()
-    bbox = square.bounds if square is not None else None
+    # The square for someone who sees only that, and the whole line or shape for anyone else.
+    bbox = square.bounds if square is not None else sensitivity.visible_shape(finding, viewer, ()).extent
     saved_zoom = finding.view_state.get("zoom") if isinstance(finding.view_state, dict) else None
     exact_zoom = int(saved_zoom) if isinstance(saved_zoom, int | float) else 17
     zoom = 14 if seen.obscured else exact_zoom

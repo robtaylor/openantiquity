@@ -8,7 +8,7 @@ form it could take.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 import pytest
@@ -21,8 +21,8 @@ from fieldclub.models import Finding, Mention, User
 from fieldclub.services import mentions
 from fieldclub.vocab import FeatureClass, MentionKind, Sensitivity
 from tests.findings.support import create
-from tests.findings.test_leaks import LEVELS, POINTS, SEES, VIEWERS, check
-from tests.helpers import MakeUser
+from tests.findings.test_leaks import LEVELS, POINTS, SEES, VIEWERS, check, draw_line, extend_line
+from tests.helpers import MakeUser, lon_lat
 from tests.mentions.support import API
 
 # Not fetched: a port we don't fetch from, so no answer needs recording.
@@ -34,6 +34,11 @@ class World:
     people: dict[str, User]
     findings: dict[Sensitivity, Finding]
     client: Callable[[str], TestClient]
+    # Each level's line, extended after it was drawn.
+    lines: dict[Sensitivity, Finding] = field(default_factory=dict)
+
+    def every(self) -> list[tuple[Sensitivity, Finding]]:
+        return [*self.findings.items(), *self.lines.items()]
 
 
 @pytest.fixture
@@ -45,9 +50,9 @@ def world(db: Session, make_user: MakeUser, app: FastAPI, client_for: Callable[.
         "moderator": make_user("moderator", handle="Moderator"),
     }
     adder = make_user(handle="Presenter")
-    made = {}
+    made, lines = {}, {}
     for level, (lon, lat) in POINTS.items():
-        finding = create(
+        made[level] = create(
             db,
             people["finder"],
             lon=lon,
@@ -57,8 +62,12 @@ def world(db: Session, make_user: MakeUser, app: FastAPI, client_for: Callable[.
             outline=box(lon - 0.0005, lat - 0.0005, lon + 0.0005, lat + 0.0005),
             title=f"A {level} enclosure",
         )
+        lines[level] = draw_line(db, people["finder"], level)
+        extend_line(db, people["finder"], lines[level], level)
+    for level, finding in [*made.items(), *lines.items()]:
+        lon, lat = lon_lat(finding.location)
         assert finding.sensitivity == level.value
-        mentions.add(db, finding, adder, STORY.format(level.value))
+        mentions.add(db, finding, adder, STORY.format(f"{level.value}-{finding.shape_kind}"))
         # A map link to the exact spot, as stored had it been added while the finding was open:
         # adding one to a finding that isn't open is refused.
         link = f"https://www.google.com/maps/@{lat:.6f},{lon:.6f},18z"
@@ -69,12 +78,11 @@ def world(db: Session, make_user: MakeUser, app: FastAPI, client_for: Callable[.
             )
         )  # fmt: skip
         db.commit()
-        made[level] = finding
 
     def client(viewer: str) -> TestClient:
         return client_for(app, None if viewer == "signed_out" else people[viewer])
 
-    return World(people, made, client)
+    return World(people, made, client, lines)
 
 
 @pytest.mark.parametrize("viewer", VIEWERS)
@@ -86,17 +94,16 @@ def test_the_feed_shows_each_position_as_the_viewer_may_see_it(world: World, vie
     by_finding = {item["finding"]["public_id"]: item for item in response.json()["items"]}
     for item in response.json()["items"]:
         level = next(
-            level
-            for level, finding in world.findings.items()
-            if finding.public_id == item["finding"]["public_id"]
+            level for level, finding in world.every() if finding.public_id == item["finding"]["public_id"]
         )
         if item["title"] == "On the map":
             assert (item["url"] is None) is (level not in SEES[viewer])
-    assert set(by_finding) == {f.public_id for f in world.findings.values()}
-    for level, finding in world.findings.items():
+    assert set(by_finding) == {f.public_id for _, f in world.every()}
+    for level, finding in world.every():
         location = by_finding[finding.public_id]["finding"]["location"]
         assert location["obscured"] is (level not in SEES[viewer])
-        assert (location["outline"] is None) is (level not in SEES[viewer])
+        assert location["outline"] is None
+        assert location["shape_kind"] == (finding.shape_kind if level in SEES[viewer] else None)
         assert (location["square"] is None) is (level in SEES[viewer])
 
 
@@ -112,13 +119,13 @@ def test_every_page_of_the_feed_is_checked(world: World, viewer: str) -> None:
         cursor = page.json()["next_cursor"]
         if cursor is None:
             break
-    assert seen == 2 * len(LEVELS)
+    assert seen == 4 * len(LEVELS)
 
 
 @pytest.mark.parametrize("viewer", VIEWERS)
 def test_a_findings_own_list_carries_no_position(world: World, viewer: str) -> None:
     """No position of its own, and a mention's address only to those who see the finding exactly."""
-    for level, finding in world.findings.items():
+    for level, finding in world.every():
         listed = world.client(viewer).get(f"{API}/findings/{finding.public_id}/mentions")
         assert listed.status_code == 200
         check(listed.text, SEES[viewer] & {level}, where="GET /findings/{id}/mentions")

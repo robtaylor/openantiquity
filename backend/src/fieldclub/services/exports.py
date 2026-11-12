@@ -25,8 +25,9 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from shapely.geometry.base import BaseGeometry
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, undefer
 
 from fieldclub import gridref
 from fieldclub.config import get_settings
@@ -83,6 +84,10 @@ class ExportRow:
     url: str
     tier: str
     position_precision_m: int
+    # `line` or `area`, and its geodesic length or perimeter in metres, for a
+    # download that may carry the shape exactly. The shape itself is the GeoJSON's `outline`.
+    shape_kind: str | None
+    shape_length_m: float | None
 
 
 COLUMNS: tuple[str, ...] = tuple(ExportRow.__dataclass_fields__)
@@ -92,6 +97,8 @@ COLUMNS: tuple[str, ...] = tuple(ExportRow.__dataclass_fields__)
 class Exported:
     row: ExportRow
     location: sensitivity.VisibleLocation
+    # The whole line or shape, for a download that may carry it exactly.
+    outline: BaseGeometry | None = None
 
 
 def _evidence_summary(items: Sequence[Evidence], shown: Callable[[str | None], str | None]) -> str:
@@ -119,12 +126,16 @@ def export_rows(db: Session, chosen: Sequence[Finding], viewer: User | None) -> 
             .order_by(Evidence.id)
         ):
             evidence[item.finding_id].append(item)
+        # Each shape in one query, not one each: the ORM fills in what it hasn't loaded.
+        shaped = select(Finding).where(Finding.id.in_(ids))
+        db.scalars(shaped.options(undefer(Finding.outline), undefer(Finding.path))).all()
     authors = findings.users_by_id(db, (finding.author_id for finding in chosen))
     base = get_settings().public_url.rstrip("/")
     exported = []
     for finding in chosen:
         where = export_location(finding, viewer)
         reader = viewer if downloads_exact(finding, viewer) else None
+        shape = sensitivity.visible_shape(finding, reader, (), whole=True)
 
         def shown(text: str | None, finding: Finding = finding, reader: User | None = reader) -> str | None:
             return sensitivity.visible_text(finding, reader, text)
@@ -148,8 +159,10 @@ def export_rows(db: Session, chosen: Sequence[Finding], viewer: User | None) -> 
             url=f"{base}/f/{finding.public_id}",
             tier=_TIERS[finding.tier],
             position_precision_m=1000 if where.obscured else 10,
+            shape_kind=shape.kind.value if shape.kind is not None else None,
+            shape_length_m=round(shape.length_m, 1) if shape.length_m is not None else None,
         )
-        exported.append(Exported(row, where))
+        exported.append(Exported(row, where, shape.outline))
     return exported
 
 
@@ -194,7 +207,7 @@ def to_feature_collection(rows: Sequence[Exported]) -> GeoJSONFeatureCollection:
                 properties={
                     **asdict(item.row),
                     "obscured": item.location.obscured,
-                    "outline": to_geojson(item.location.outline),
+                    "outline": to_geojson(item.outline),
                 },
             )
             for item in rows

@@ -113,8 +113,9 @@ class Finding(Base):
     location_public: Mapped[WKBElement] = mapped_column(point())
     # The full shape, derived from `path` (`services.shapes`): a LineString or a
     # one-ring Polygon. An outline saved before paths existed may be any line
-    # or polygon, and has no path until it is next saved.
-    outline: Mapped[WKBElement | None] = mapped_column(any_geometry())
+    # or polygon, and has no path until it is next saved. Loaded only when
+    # read: no list sends it, and a line may have 50,000 vertices.
+    outline: Mapped[WKBElement | None] = mapped_column(any_geometry(), deferred=True)
     # The points the finder tapped and whether the shape is closed, as
     # `services.shapes.Path.to_json` writes them. The source of truth for `outline`.
     # It and the simplified copies are loaded only when read: a list of findings needs none of them.

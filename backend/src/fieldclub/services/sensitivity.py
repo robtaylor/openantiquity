@@ -73,7 +73,7 @@ from shapely.geometry import Point, Polygon, box
 from shapely.geometry.base import BaseGeometry
 from sqlalchemy import BigInteger, ColumnElement, and_, cast, false, func, not_, or_, select, true
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session, aliased, undefer
 
 from fieldclub import gridref
 from fieldclub.errors import DataIntegrityError, ForbiddenError
@@ -125,14 +125,14 @@ class VisibleLocation:
     lat: float
     # True when the position has been coarsened to the middle of a 1 km square.
     obscured: bool
-    # The drawn outline. Always None when obscured.
-    outline: BaseGeometry | None
     # `SU 1025 6996` when exact, the 1 km reference `SU 10 69` when obscured.
     grid_ref: str | None
     # The compact 1 km square, such as `SU1069`, when obscured. The frontend
     # draws this square in place of a marker.
     square: str | None
-    # `line` or `area`. Always None when obscured.
+    # `line` or `area`. Always None when obscured, and for an outline saved
+    # before kinds were until the backfill fills it. The shape itself is
+    # `visible_shape`'s to give.
     shape_kind: ShapeKind | None = None
     # The same square as a grid reference, when obscured.
     square_ref: gridref.GridRef | None = field(default=None, compare=False, repr=False)
@@ -280,15 +280,13 @@ def visible_location(finding: Finding, viewer: User | None) -> VisibleLocation:
     """The position of `finding` that `viewer` may see. `viewer` is None for the public."""
     lon, lat = _exact_point(finding)
     if sees_exact(finding, viewer):
-        outline = to_shape(finding.outline) if finding.outline is not None else None
         return VisibleLocation(
             lon=lon,
             lat=lat,
             obscured=False,
-            outline=outline,
             grid_ref=finding.grid_ref,
             square=None,
-            shape_kind=_shape_kind(finding, outline),
+            shape_kind=ShapeKind(finding.shape_kind) if finding.shape_kind is not None else None,
         )
     square = _square(lon, lat, finding.public_id)
     lon, lat = square.centre()
@@ -296,7 +294,6 @@ def visible_location(finding: Finding, viewer: User | None) -> VisibleLocation:
         lon=lon,
         lat=lat,
         obscured=True,
-        outline=None,
         grid_ref=square.format(),
         square=square.format(compact=True),
         square_ref=square,
@@ -334,7 +331,8 @@ class VisibleShape:
     revision: int | None = None
     # West, south, east, north of the shape.
     extent: tuple[float, float, float, float] | None = None
-    # The shape simplified for the page (`outline_mid`), so a long road costs a phone little.
+    # The shape simplified for the page (`outline_mid`), so a long road costs a
+    # phone little, or the whole of it for a download.
     outline: BaseGeometry | None = None
     # The tapped points, as `shapes.Path.to_json` writes them.
     path: dict[str, Any] | None = None
@@ -351,6 +349,7 @@ def visible_shape(
     *,
     added_since_looked_m: float | None = None,
     may_change: bool = False,
+    whole: bool = False,
 ) -> VisibleShape:
     """The shape of `finding` and its `changes`, oldest first, as `viewer` may know them.
 
@@ -358,7 +357,9 @@ def visible_shape(
     (`shapes.stored_path`), and the kind of its geometry. `added_since_looked_m`
     is `looked_at.new_part`'s length. `may_change` is whether the viewer may
     change the finding (`actions.edit`): only then do they get `looked_at`,
-    to draw under the path while they change it.
+    to draw under the path while they change it. `whole` gives the whole shape
+    as `outline`, for a download, in place of the page's simplified one: pass
+    a download's reader only when `downloads_exact`, and None otherwise.
     """
     assert all(change.finding_id == finding.id for change in changes), "a change of another finding"
     if not sees_exact(finding, viewer):
@@ -368,7 +369,7 @@ def visible_shape(
             )
         )
     full = to_shape(finding.outline) if finding.outline is not None else None
-    shown = to_shape(finding.outline_mid) if finding.outline_mid is not None else full
+    shown = to_shape(finding.outline_mid) if not whole and finding.outline_mid is not None else full
     path = shapes.stored_path(finding.path, full)
     return VisibleShape(
         changes=tuple(
@@ -627,6 +628,26 @@ def _in_metres(geometry: BaseGeometry, lon: float, lat: float) -> BaseGeometry:
     return shapely.transform(geometry, lambda coords: (coords - origin) * scale)
 
 
+def _near_shape(geometry: BaseGeometry, shape: BaseGeometry) -> bool:
+    """Whether `geometry` comes within `NEAR_HIDDEN_M` of `shape`, which may be a 600 km line.
+
+    Only the part of `shape` round `geometry` is measured, in metres about
+    the middle of `geometry`, where a degree's metres are close to true.
+    """
+    west, south, east, north = geometry.bounds
+    piece = shapely.clip_by_rect(
+        shape,
+        west - NEAR_HIDDEN_DEGREES,
+        south - NEAR_HIDDEN_DEGREES,
+        east + NEAR_HIDDEN_DEGREES,
+        north + NEAR_HIDDEN_DEGREES,
+    )
+    if piece.is_empty:
+        return False
+    lon, lat = (west + east) / 2, (south + north) / 2
+    return _in_metres(geometry, lon, lat).distance(_in_metres(piece, lon, lat)) <= NEAR_HIDDEN_M
+
+
 @dataclass(frozen=True)
 class PositionGuard:
     """What a reader may see of what people wrote and drew beside some findings.
@@ -634,18 +655,24 @@ class PositionGuard:
     `hidden` holds the exact points of the findings the reader doesn't see
     exactly (or, for a download, doesn't download exactly) that the writing
     is about: those an investigation holds or has held, and those near
-    anything drawn in it. While there is one, every piece of free text loses
-    the positions written in it (`text`), an address is given only when it
-    is rebuilt from an identifier (`url`), a view or a line that comes
-    within `NEAR_HIDDEN_M` of one is held back (`near`), and an area that
-    does is shown as the whole grid squares it covers (`area`). What the
-    reader added themselves is theirs to see (`for_item`). Everything is left
-    as it is for a reader who sees every finding exactly.
+    anything drawn in it. `hidden_shapes` holds the lines and areas of those
+    that have one (Decision 0030). While there is one, every piece of free
+    text loses the positions written in it (`text`), an address is given
+    only when it is rebuilt from an identifier (`url`), a view or a line
+    that comes within `NEAR_HIDDEN_M` of one's point or shape is held back
+    (`near`), and an area that does is shown as the whole grid squares it
+    covers (`area`). What the reader added themselves is theirs to see
+    (`for_item`). Everything is left as it is for a reader who sees every
+    finding exactly.
     """
 
     hidden: tuple[tuple[float, float], ...] = ()
     # The reader, whose own items are shown to them as they made them.
     reader_id: int | None = None
+    hidden_shapes: tuple[BaseGeometry, ...] = ()
+
+    def __post_init__(self) -> None:
+        assert len(self.hidden_shapes) <= len(self.hidden), "every hidden shape is a hidden finding's"
 
     def for_item(self, added_by: int) -> PositionGuard:
         """The guard for an item added by `added_by`: none when the reader added it."""
@@ -661,11 +688,14 @@ class PositionGuard:
         return rebuilt if rebuilt is not None and not text_positions.holds_position(rebuilt) else None
 
     def near(self, geometry: BaseGeometry) -> bool:
-        """Whether `geometry` comes within `NEAR_HIDDEN_M` of a finding the reader sees only as a square."""
+        """Whether `geometry` comes within `NEAR_HIDDEN_M` of a finding the reader sees only as a square.
+
+        Near its point, or anywhere along its line or area.
+        """
         for lon, lat in self.hidden:
             if _in_metres(geometry, lon, lat).distance(Point(0, 0)) <= NEAR_HIDDEN_M:
                 return True
-        return False
+        return any(_near_shape(geometry, shape) for shape in self.hidden_shapes)
 
     def area(self, geometry: BaseGeometry | None, squares: BaseGeometry | None) -> BaseGeometry | None:
         """The area as drawn, or its `square_cover` when it comes near a hidden finding.
@@ -698,8 +728,11 @@ def hidden_near(
 ) -> list[Finding]:
     """Findings `viewer` doesn't see exactly (or download exactly) that may lie near any of `shapes`.
 
+    Near by their point, or by their line or area.
+
     A first test, generous by `NEAR_HIDDEN_DEGREES`, whatever investigation
-    or none holds them: `PositionGuard.near` decides.
+    or none holds them: `PositionGuard.near` decides. Their shapes are
+    loaded with them, since the guard measures to them.
 
     A finding a moderator has hidden is left out. Nobody this guard works
     for can see it at all, so holding back what is drawn near it would say
@@ -709,14 +742,17 @@ def hidden_near(
     collected = [shape for shape in shapes if not shape.is_empty]
     if exact is True or not collected:
         return []
-    everything = shapely.GeometryCollection(collected)
+    everything = func.ST_GeomFromText(shapely.GeometryCollection(collected).wkt, 4326)
     return list(
         db.scalars(
-            select(Finding).where(
+            select(Finding)
+            .options(undefer(Finding.outline))
+            .where(
                 not_(as_sql(exact)),
                 Finding.hidden_at.is_(None),
-                func.ST_DWithin(
-                    Finding.location, func.ST_GeomFromText(everything.wkt, 4326), NEAR_HIDDEN_DEGREES
+                or_(
+                    func.ST_DWithin(Finding.location, everything, NEAR_HIDDEN_DEGREES),
+                    func.ST_DWithin(Finding.outline, everything, NEAR_HIDDEN_DEGREES),
                 ),
             )
         )
@@ -738,18 +774,26 @@ def position_guard(
     items are shown to them as made, except in a download.
     """
     exact = downloads_exact if download else sees_exact
-    hidden = {finding.id: _exact_point(finding) for finding in findings if not exact(finding, viewer)}
+    hidden = {finding.id: finding for finding in findings if not exact(finding, viewer)}
     drawn = shapely.GeometryCollection(list(shapes))
     for finding in near:
         if finding.id in hidden or exact(finding, viewer) or drawn.is_empty:
             continue
-        point = _exact_point(finding)
-        if PositionGuard((point,)).near(drawn):
-            hidden[finding.id] = point
+        if _guard_for([finding]).near(drawn):
+            hidden[finding.id] = finding
     # A download keeps the stricter rule even for the reader's own items: a member's own view of a
     # protected finding is still that finding's exact position (Decision 0005, rule 8).
     active = active_viewer(viewer) if not download else None
-    return PositionGuard(tuple(hidden.values()), active.id if active is not None else None)
+    return _guard_for(list(hidden.values()), active.id if active is not None else None)
+
+
+def _guard_for(hidden: Sequence[Finding], reader_id: int | None = None) -> PositionGuard:
+    """The guard for `hidden`, findings the reader may not see exactly: their points and their shapes."""
+    return PositionGuard(
+        tuple(_exact_point(finding) for finding in hidden),
+        reader_id,
+        tuple(to_shape(finding.outline) for finding in hidden if finding.outline is not None),
+    )
 
 
 def near_hidden_clause(viewer: User | None, geometry: Any) -> ColumnElement[bool]:
@@ -763,13 +807,20 @@ def near_hidden_clause(viewer: User | None, geometry: Any) -> ColumnElement[bool
     exact = sees_exact_clause(viewer)
     if exact is True:
         return false()
+
+    def within(column: Any) -> ColumnElement[bool]:
+        return and_(
+            func.ST_DWithin(column, geometry, NEAR_HIDDEN_DEGREES),
+            func.ST_DWithin(func.geography(geometry), func.geography(column), NEAR_HIDDEN_M * 1.05),
+        )
+
+    # Near its point, or anywhere along its line or area (Decision 0030).
     return (
         select(Finding.id)
         .where(
             not_(as_sql(exact)),
             Finding.hidden_at.is_(None),
-            func.ST_DWithin(Finding.location, geometry, NEAR_HIDDEN_DEGREES),
-            func.ST_DWithin(func.geography(geometry), func.geography(Finding.location), NEAR_HIDDEN_M * 1.05),
+            or_(within(Finding.location), within(Finding.outline)),
         )
         .exists()
     )

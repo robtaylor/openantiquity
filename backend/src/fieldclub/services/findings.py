@@ -1209,7 +1209,7 @@ def map_shapes(
     `MAP_CLIP_MARGIN_M`, so a 600 km road costs a map view only the part in
     it. A shape left empty by the cut is left out.
     """
-    wanted = [f.id for f in chosen if f.outline is not None and sensitivity.sees_exact(f, viewer)]
+    wanted = [f.id for f in chosen if sensitivity.sees_exact(f, viewer)]
     if not wanted:
         return {}
     column = _map_shape_column(zoom)
@@ -1218,7 +1218,11 @@ def map_shapes(
         margin_lat = MAP_CLIP_MARGIN_M / _METRES_PER_DEGREE
         margin_lon = margin_lat / math.cos(math.radians((south + north) / 2))
         column = func.ST_ClipByBox2D(column, func.ST_Expand(geo.envelope(bbox), margin_lon, margin_lat))
-    rows = db.execute(select(Finding.id, func.ST_AsBinary(column)).where(Finding.id.in_(wanted))).all()
+    rows = db.execute(
+        select(Finding.id, func.ST_AsBinary(column)).where(
+            Finding.id.in_(wanted), Finding.outline.is_not(None)
+        )
+    ).all()
     found = {finding_id: wkb.loads(bytes(data)) for finding_id, data in rows if data is not None}
     return {finding_id: geometry for finding_id, geometry in found.items() if not geometry.is_empty}
 

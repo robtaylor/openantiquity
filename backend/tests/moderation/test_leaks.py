@@ -25,10 +25,11 @@ REFUSED = {
 
 @pytest.mark.parametrize("viewer", leaks.VIEWERS)
 @pytest.mark.parametrize("level", leaks.LEVELS)
+@pytest.mark.parametrize("kind", leaks.KINDS)
 def test_the_moderators_level_route_answers_only_moderators(
-    world: leaks.World, viewer: str, level: Sensitivity
+    world: leaks.World, viewer: str, level: Sensitivity, kind: str
 ) -> None:
-    finding = world.findings[level]
+    finding = world.of(kind, level)
     response = world.client(viewer).put(
         f"{API}/mod/findings/{finding.public_id}/sensitivity", json={"level": level.value, **REASON}
     )
