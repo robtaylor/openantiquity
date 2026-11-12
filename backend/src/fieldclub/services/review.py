@@ -171,6 +171,8 @@ class Answer(Detail):
 
     visible: Visible
     detail_follows: bool = False
+    # The finding's `shape_revision` the answer was given on, when the client says.
+    shape_revision: int | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -219,6 +221,20 @@ def check_may_answer(finding: Finding, user: User) -> None:
     findings.require_exact(finding, user)
 
 
+def check_shape_seen(finding: Finding, revision: int | None) -> None:
+    """Refuse an answer given on a shape the finder has since changed. Hold the lock.
+
+    Otherwise the answer would be credited to ground the person never saw:
+    `looked_at` would grow by it and `look_at_new_part` would clear. An
+    answer that names no revision, from a page opened before answers named
+    one, is taken as given on the shape as it is now.
+    """
+    if revision is not None and revision != finding.shape_revision:
+        raise findings.ShapeChangedError(
+            "The finder changed the shape since you opened it. Look at it again and give your answer."
+        )
+
+
 def put_observation(db: Session, finding: Finding, user: User, answer: Answer) -> AnswerResult:
     """Give your second look, or change its note, and reassess the finding under its lock.
 
@@ -228,10 +244,13 @@ def put_observation(db: Session, finding: Finding, user: User, answer: Answer) -
     it was taken back, unless it matches. An answer sent with
     `detail_follows` is stored, counts and isn't revealed. Sent again
     without it, with the same `visible`, its detail is added as `reveal`
-    adds it.
+    adds it. An answer that names the `shape_revision` it was given on is
+    refused with `ShapeChangedError` when the shape has changed since
+    (`check_shape_seen`), and nothing is stored.
     """
     findings.lock(db, finding)
     check_may_answer(finding, user)
+    check_shape_seen(finding, answer.shape_revision)
     observation = findings.my_observation(db, finding, user)
     if observation is not None and observation.revealed_at is None:
         if observation.visible != answer.visible.value:

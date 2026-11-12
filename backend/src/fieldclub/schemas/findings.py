@@ -823,6 +823,11 @@ class ObservationIn(ObservationDetailIn):
 
     visible: Visible
     detail_follows: bool = False
+    # The `shape_revision` of the finding as it was shown, from the review card,
+    # the task or `location.shape.revision`. When the shape has changed since,
+    # the answer is refused with 409 `shape_changed` and nothing is stored.
+    # Left out, the answer is taken as given on the shape as it is now.
+    shape_revision: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def _detail_later(self) -> ObservationIn:
@@ -888,6 +893,8 @@ class ReviewCard(ApiModel):
     public_id: str
     place: ReviewPlace
     view_state: ViewState
+    # The finding's shape revision, which the answer names (`ObservationIn.shape_revision`).
+    shape_revision: int
 
 
 def review_view(
@@ -929,6 +936,9 @@ class TaskItem(ApiModel):
     view_state: ViewState
     step: NextStepOut | None
     finding: TaskFinding | None
+    # The finding's shape revision, which an answer names (`ObservationIn.shape_revision`).
+    # Null for a viewer who sees only the square, who can't answer.
+    shape_revision: int | None = None
 
 
 class StrandCount(ApiModel):

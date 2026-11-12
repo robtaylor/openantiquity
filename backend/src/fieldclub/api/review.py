@@ -67,6 +67,7 @@ def _card(db: Session, finding: Finding, viewer: User | None) -> ReviewCard:
         public_id=finding.public_id,
         place=ReviewPlace(lon=where.lon, lat=where.lat, grid_ref=where.grid_ref),
         view_state=view,
+        shape_revision=finding.shape_revision,
     )
 
 
@@ -127,4 +128,5 @@ def _task(db: Session, task: review.Task, viewer: User | None) -> TaskItem:
             if task.step is not None
             else None
         ),
+        shape_revision=None if place.obscured else finding.shape_revision,
     )

@@ -161,6 +161,13 @@ All under `/api/v1`. Mutating requests carry `X-OpenAntiquity-Client: web` as ev
 - Only the finder: 403 `not_finder`, as today.
 - The server classifies the change. It is `extended` when the old points appear unchanged and in order as one run inside the new path, the new path adds points only before or after that run, and `closed` is unchanged. Otherwise it is `reshaped`, `closed`, `opened`, `drawn` (no shape before) or `removed`.
 
+**`PUT /findings/{public_id}/observation`** adds `shape_revision: int | null`, the revision of the shape the answer was given on. A review card (`GET /review/next`) and a help-wanted task (`GET /review/tasks`) carry the finding's `shape_revision`, and the finding page has it as `location.shape.revision`.
+
+- When it is sent and differs from the finding's, the answer is 409 `shape_changed`, the code `PATCH` uses, and nothing is stored. The client shows the finding again. Otherwise an answer would be credited to a shape the reviewer never saw, and `looked_at` would grow by ground nobody looked at.
+- Left out, the answer is taken as given on the shape as it is now, so a tab opened before the deploy still works.
+- The comparison is made under the finding's row lock, which serialises answers and edits.
+- A task gives `shape_revision` only to a viewer who sees the finding exactly, the only people who can answer. A viewer who sees only the square already gets one `changes` entry for every change, so the number would tell them nothing new.
+
 **`FindingDetail.location`** gains, for a viewer who sees the finding exactly:
 
 ```json
@@ -196,7 +203,7 @@ All under `/api/v1`. Mutating requests carry `X-OpenAntiquity-Client: web` as ev
 
 The owner decided this. In the code:
 
-- An answer stores `shape_revision` when it is given. The ladder, its weights and Decision 0019's rule are untouched, because nothing reassesses on a shape change.
+- An answer stores `shape_revision` when it is given, and is refused when it names an older one (see "The API contract"). The ladder, its weights and Decision 0019's rule are untouched, because nothing reassesses on a shape change.
 - Every change writes a `finding_shape_changes` row, with `path_before` kept for moderators and for a later undo.
 - An extension records `added_view`: the centre of the added part and a zoom that frames it, worked out on the server from the added vertices.
 - The finding page says, to everyone who sees it exactly, "4.2 km added since the last second look" with a button that opens the map at `added_view`, and lists each change on the timeline.

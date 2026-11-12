@@ -97,6 +97,23 @@ def test_an_area_is_looked_at_by_its_edge_and_a_spot_by_its_point(db: Session, m
     assert seen_on(spot).equals(Point(LON, LAT))
 
 
+def test_an_answer_naming_a_shape_that_has_since_changed_is_refused_and_stores_nothing(
+    db: Session, make_user: MakeUser
+) -> None:
+    finder, helper = make_user(), make_user()
+    finding = drawn(db, finder, meridian(0, 0.01))
+    edit(db, finding, finder, path=meridian(0, 0.01, 0.3), path_revision=0)
+    with pytest.raises(findings.ShapeChangedError):
+        answer(db, finding, helper, Visible.YES, shape_revision=0)
+    db.rollback()
+    assert db.scalars(select(Observation)).all() == []
+    assert finding.looked_at is None
+    # Naming the shape as it is now, or naming none, as a tab opened before the change does, is answered.
+    answer(db, finding, helper, Visible.YES, shape_revision=1)
+    answer(db, finding, make_user(), Visible.YES)
+    assert db.scalars(select(Observation.shape_revision)).all() == [1, 1]
+
+
 # --------------------------------------------------------------------------
 # Extending, and what it asks of second looks
 # --------------------------------------------------------------------------
@@ -390,3 +407,31 @@ def test_help_wanted_and_the_queue_frame_the_new_part(
     (card,) = [card for card in cards if card["public_id"] == public_id]
     assert (card["place"]["lon"], card["place"]["lat"]) == pytest.approx((view["lon"], view["lat"]))
     assert card["view_state"]["zoom"] == view["zoom"]
+
+
+def test_an_answer_over_http_names_the_shape_it_was_given_on(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    finder, helper = make_user(), make_user()
+    public_id = _line(client_as, finder)
+    reviewer = client_as(helper)
+    cards = reviewer.get(f"{API}/review/next", params={"limit": 50}).json()["items"]
+    (card,) = [card for card in cards if card["public_id"] == public_id]
+    assert card["shape_revision"] == 0
+    groups = reviewer.get(f"{API}/review/tasks").json()["groups"]
+    tasks = [item for group in groups for item in group["items"] if item["public_id"] == public_id]
+    assert tasks
+    assert {task["shape_revision"] for task in tasks} == {0}
+
+    assert _extend(client_as, finder, public_id, 0, 0, 0.01, 0.03).status_code == 200
+    stale = reviewer.put(
+        f"{API}/findings/{public_id}/observation", json={"visible": "yes", "shape_revision": 0}
+    )
+    assert (stale.status_code, error_code(stale)) == (409, "shape_changed")
+    assert db.scalars(select(Observation)).all() == []
+    fresh = reviewer.put(
+        f"{API}/findings/{public_id}/observation", json={"visible": "yes", "shape_revision": 1}
+    )
+    assert fresh.status_code == 200, fresh.text
+    unnamed = client_as(make_user()).put(f"{API}/findings/{public_id}/observation", json={"visible": "yes"})
+    assert unnamed.status_code == 200, unnamed.text

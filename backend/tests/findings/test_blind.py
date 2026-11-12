@@ -22,7 +22,7 @@ from tests.helpers import ClientAs, MakeFinding, MakeUser, error_code
 # Words that appear only in the finder's claim or in other people's answers.
 CLAIM = {"title": "Zebra ring on the down", "description": "Quokka-shaped bank", "period": Period.ROMAN}
 ANSWER_NOTE = "Narwhal tusk shadow"
-CARD_KEYS = {"public_id", "place", "view_state"}
+CARD_KEYS = {"public_id", "place", "view_state", "shape_revision"}
 PLACE_KEYS = {"lon", "lat", "grid_ref"}
 VIEW_KEYS = {"layer", "zoom", "bearing", "pitch", "sun_azimuth", "sun_altitude", "exaggeration"}
 
