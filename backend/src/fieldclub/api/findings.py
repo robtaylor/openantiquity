@@ -27,8 +27,9 @@ from fieldclub.schemas.findings import (
     SensitivityChange,
     finding_feature,
 )
-from fieldclub.services import exports, findings, moderation
-from fieldclub.services.findings import OUTLINE_TYPES, FindingFilters, FindingSort
+from fieldclub.schemas.findings import Path as PathIn
+from fieldclub.services import exports, findings, moderation, shapes
+from fieldclub.services.findings import FindingFilters, FindingSort
 from fieldclub.vocab import FeatureClass, FindingState, Sensitivity, Tier
 
 router = APIRouter(tags=["findings"])
@@ -120,20 +121,31 @@ def list_findings(
     format: Literal["json", "geojson"] = "json",
     limit: Annotated[int | None, Query(ge=1, le=GEOJSON_MAX_LIMIT)] = None,
     cursor: CursorQuery = None,
+    zoom: Annotated[
+        int,
+        Query(
+            ge=findings.MAP_ZOOM_MIN,
+            le=findings.MAP_ZOOM_MAX,
+            description="The map's zoom, which sets how simplified GeoJSON shapes are",
+        ),
+    ] = findings.MAP_ZOOM_DEFAULT,
 ) -> Page[FindingSummary] | FindingFeatureCollection:
     """Findings as this viewer may see them, as a page or as GeoJSON for the map.
 
     `bbox` matches the position the viewer may see, so an obscured finding
-    matches by the centre of its square. A page holds up to 200; GeoJSON up to
-    1000, with the next page's cursor as `next_cursor`.
+    matches by the centre of its square, and a line or shape the viewer sees
+    exactly matches wherever it crosses the box. A page holds up to 200;
+    GeoJSON up to 1000, with the next page's cursor as `next_cursor`, and each
+    exact shape simplified for `zoom` and cut to the box.
     """
     private(response)
     if format == "geojson":
         page = findings.list_findings(
             db, viewer, filters, limit=limit or GEOJSON_DEFAULT_LIMIT, cursor=cursor
         )
+        drawn = findings.map_shapes(db, page.findings, viewer, zoom=zoom, bbox=filters.bbox)
         return FindingFeatureCollection(
-            features=[finding_feature(finding, viewer) for finding in page.findings],
+            features=[finding_feature(finding, viewer, drawn.get(finding.id)) for finding in page.findings],
             next_cursor=page.next_cursor,
         )
     if limit is not None and limit > MAX_LIMIT:
@@ -155,20 +167,19 @@ def list_findings(
     dependencies=[Depends(rate_limit("findings_create", 60, per_seconds=3600))],
 )
 def create_finding(body: FindingCreate, user: Contributor, db: Db, response: Response) -> FindingDetail:
-    """Mark a finding. A point and a feature class are all it needs.
+    """Mark a finding. A point or a path, and a feature class, are all it needs.
 
     With a `client_ref` the same person has sent before, this answers 200
     with the finding that request made, and stores nothing.
     """
-    location = from_geojson(body.location, allowed=["Point"])
-    outline = from_geojson(body.outline, allowed=OUTLINE_TYPES) if body.outline is not None else None
     fields = {
-        "location": location,
+        "location": from_geojson(body.location, allowed=["Point"]) if body.location is not None else None,
         "feature_class": body.feature_class,
         "title": body.title,
         "description": body.description,
         "period": body.period,
-        "outline": outline,
+        "path": _read_path(body.path),
+        "outline": from_geojson(body.outline) if body.outline is not None else None,
         "view_state": body.view_state.to_stored() if body.view_state is not None else None,
         "requested_sensitivity": body.sensitivity,
     }
@@ -204,8 +215,10 @@ def update_finding(
         changes["location"] = from_geojson(body.location, allowed=["Point"]) if body.location else None
         if changes["location"] is None:
             raise BadRequestError("A finding always has a location.", code="location_required")
+    if "path" in changes:
+        changes["path"] = _read_path(body.path)
     if "outline" in changes:
-        changes["outline"] = from_geojson(body.outline, allowed=OUTLINE_TYPES) if body.outline else None
+        changes["outline"] = from_geojson(body.outline) if body.outline else None
     if "view_state" in changes:
         changes["view_state"] = body.view_state.to_stored() if body.view_state is not None else None
     finding = findings.lock_finding(db, public_id, user)
@@ -213,6 +226,10 @@ def update_finding(
     db.commit()
     private(response)
     return detail(db, finding, user)
+
+
+def _read_path(path: PathIn | None) -> shapes.Path | None:
+    return shapes.read_path(path.model_dump()) if path is not None else None
 
 
 @router.post(

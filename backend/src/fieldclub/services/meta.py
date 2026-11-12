@@ -1,4 +1,5 @@
-"""Builds the `/meta` document: vocabularies, the ladder's numbers, layers, providers, sources and terrain."""
+"""Builds the `/meta` document: vocabularies, the ladder's numbers, layers, providers, sources, terrain and
+the limits on shapes."""
 
 from __future__ import annotations
 
@@ -12,7 +13,7 @@ from fieldclub.auth.providers import provider_statuses
 from fieldclub.config import Settings
 from fieldclub.layers import TileVersion, build_layers, default_tile_version
 from fieldclub.schemas import meta as schema
-from fieldclub.services import record_tiles, records, sensitivity
+from fieldclub.services import record_tiles, records, sensitivity, shapes
 from fieldclub.services.confidence import STEP_RULES, THRESHOLDS
 from fieldclub.services.findings import FIELD_KINDS, OFFICIAL_KINDS
 from fieldclub.terrain.catalogue import england_catalogue
@@ -212,4 +213,12 @@ def build_meta(
         notices=build_notices(),
         terrain=terrain_state(terrain),
         ladder=build_ladder(),
+        shapes=schema.ShapeLimits(
+            path_max_points=shapes.PATH_MAX_POINTS,
+            shape_max_vertices=shapes.SHAPE_MAX_VERTICES,
+            shape_max_across_m=shapes.SHAPE_MAX_ACROSS_M,
+            line_max_length_m=shapes.LINE_MAX_LENGTH_M,
+            shape_max_gap_m=shapes.SHAPE_MAX_GAP_M,
+            curve=shapes.CURVE,
+        ),
     )

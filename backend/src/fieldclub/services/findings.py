@@ -17,8 +17,9 @@ Comments stay open to everyone signed in.
 
 Positions: nothing here returns a position. Responses get one from
 `schemas.findings.location_out`, which goes through `services.sensitivity`.
-List queries choose the column by viewer in `sensitivity.visible_position_clause`, so a
-signed-out visitor's filters touch `location_public` only.
+List queries choose the column by viewer in `sensitivity.visible_match_clause`, so a
+signed-out visitor's filters touch `location_public` only, and the shape of an
+open finding.
 
 Services flush and never commit.
 """
@@ -34,6 +35,7 @@ from enum import StrEnum
 from typing import Any
 
 from geoalchemy2.shape import to_shape
+from shapely import wkb
 from shapely.geometry import Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from sqlalchemy import (
@@ -604,16 +606,9 @@ def shape_from_request(path: shapes.Path | None, outline: BaseGeometry | None) -
 
 
 def stored_path(finding: Finding) -> shapes.Path | None:
-    """The finding's path. For an outline saved before paths, the all-corner path it is, if it is one.
-
-    None for a finding without a shape, and for an old outline that is
-    several parts or has holes, which can be replaced but not changed.
-    """
-    if finding.path is not None:
-        return shapes.read_path(finding.path)
-    if finding.outline is not None:
-        return shapes.path_from_outline(to_shape(finding.outline))
-    return None
+    """`shapes.stored_path` for a finding. The outline is read only when there is no path."""
+    outline = to_shape(finding.outline) if finding.path is None and finding.outline is not None else None
+    return shapes.stored_path(finding.path, outline)
 
 
 def _shape_columns(shape: shapes.Shape | None) -> dict[str, Any]:
@@ -1039,7 +1034,7 @@ def findings_query(viewer: User | None, filters: FindingFilters) -> Select[Findi
     """The findings this viewer may list, filtered and sorted. No cursor or limit."""
     query = select(Finding).where(not_hidden_clause(viewer))
     if filters.bbox is not None:
-        query = query.where(sensitivity.visible_position_clause(viewer, geo.envelope(filters.bbox)))
+        query = query.where(sensitivity.visible_match_clause(viewer, geo.envelope(filters.bbox)))
     if filters.tier:
         query = query.where(Finding.tier.in_([tier.value for tier in filters.tier]))
     if filters.state:
@@ -1110,6 +1105,56 @@ def list_findings(
     rows = db.scalars(query.limit(limit + 1)).all()
     items, next_cursor = paginate(rows, limit, lambda finding: _cursor_key(finding, filters.sort))
     return FindingPage(items, next_cursor)
+
+
+# The zooms the map asks for findings at, and the column each draws a shape
+# from: `outline_low` below 13, `outline_mid` to 15, `outline` from 16. An
+# outline saved before the simplified copies were is drawn whole until the
+# backfill fills them.
+MAP_ZOOM_MIN = 9
+MAP_ZOOM_MAX = 22
+MAP_ZOOM_DEFAULT = 14
+# A shape is cut to the box the map asked for, widened by this, so a line
+# drawn to the edge of the screen doesn't stop short of it.
+MAP_CLIP_MARGIN_M = 500
+_METRES_PER_DEGREE = 111_320
+
+
+def _map_shape_column(zoom: int) -> Any:
+    assert MAP_ZOOM_MIN <= zoom <= MAP_ZOOM_MAX, f"zoom {zoom} is outside the map's zooms"
+    if zoom < 13:
+        return func.coalesce(Finding.outline_low, Finding.outline)
+    if zoom <= 15:
+        return func.coalesce(Finding.outline_mid, Finding.outline)
+    return Finding.outline
+
+
+def map_shapes(
+    db: Session,
+    chosen: Sequence[Finding],
+    viewer: User | None,
+    *,
+    zoom: int,
+    bbox: tuple[float, float, float, float] | None,
+) -> dict[int, BaseGeometry]:
+    """The shape to draw for each of `chosen` this viewer sees exactly, by finding id.
+
+    Simplified for `zoom` and cut in the database to `bbox` widened by
+    `MAP_CLIP_MARGIN_M`, so a 600 km road costs a map view only the part in
+    it. A shape left empty by the cut is left out.
+    """
+    wanted = [f.id for f in chosen if f.outline is not None and sensitivity.sees_exact(f, viewer)]
+    if not wanted:
+        return {}
+    column = _map_shape_column(zoom)
+    if bbox is not None:
+        _, south, _, north = bbox
+        margin_lat = MAP_CLIP_MARGIN_M / _METRES_PER_DEGREE
+        margin_lon = margin_lat / math.cos(math.radians((south + north) / 2))
+        column = func.ST_ClipByBox2D(column, func.ST_Expand(geo.envelope(bbox), margin_lon, margin_lat))
+    rows = db.execute(select(Finding.id, func.ST_AsBinary(column)).where(Finding.id.in_(wanted))).all()
+    found = {finding_id: wkb.loads(bytes(data)) for finding_id, data in rows if data is not None}
+    return {finding_id: geometry for finding_id, geometry in found.items() if not geometry.is_empty}
 
 
 # --------------------------------------------------------------------------
@@ -1550,6 +1595,8 @@ class FindingView:
     following: bool
     # The nation as this viewer may know it (`sensitivity.visible_nation`).
     nation: str | None
+    # Every change to the shape, oldest first, for `sensitivity.visible_shape`.
+    shape_changes: list[FindingShapeChange]
 
 
 def finding_view(db: Session, finding: Finding, viewer: User | None) -> FindingView:
@@ -1566,4 +1613,11 @@ def finding_view(db: Session, finding: Finding, viewer: User | None) -> FindingV
         my_observation=mine,
         following=is_following(db, viewer, finding),
         nation=sensitivity.visible_nation(db, finding, viewer),
+        shape_changes=list(
+            db.scalars(
+                select(FindingShapeChange)
+                .where(FindingShapeChange.finding_id == finding.id)
+                .order_by(FindingShapeChange.revision)
+            )
+        ),
     )

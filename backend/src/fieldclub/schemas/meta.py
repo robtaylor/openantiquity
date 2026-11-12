@@ -477,6 +477,25 @@ class Ladder(BaseModel):
     ruled_out: RuledOutRule
 
 
+# --------------------------------------------------------------------------
+# Lines and shapes
+# --------------------------------------------------------------------------
+
+
+class ShapeLimits(BaseModel):
+    """The limits on a finding's line or shape and the curve's name, from `services.shapes`.
+
+    The frontend reads them here rather than keeping copies, so the two can't drift.
+    """
+
+    path_max_points: int
+    shape_max_vertices: int
+    shape_max_across_m: int
+    line_max_length_m: int
+    shape_max_gap_m: int
+    curve: str
+
+
 class Meta(BaseModel):
     app: AppInfo
     auth: AuthInfo
@@ -486,3 +505,4 @@ class Meta(BaseModel):
     notices: Notices
     terrain: TerrainState
     ladder: Ladder
+    shapes: ShapeLimits

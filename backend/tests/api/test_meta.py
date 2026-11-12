@@ -25,7 +25,17 @@ def meta(client: TestClient) -> dict:
 
 
 def test_top_level_keys(meta: dict) -> None:
-    assert list(meta) == ["app", "auth", "vocab", "layers", "sources", "notices", "terrain", "ladder"]
+    assert list(meta) == [
+        "app",
+        "auth",
+        "vocab",
+        "layers",
+        "sources",
+        "notices",
+        "terrain",
+        "ladder",
+        "shapes",
+    ]
 
 
 def test_app(meta: dict) -> None:

@@ -36,7 +36,7 @@ from fieldclub.models import (
     User,
 )
 from fieldclub.models.common import to_db_geometry
-from fieldclub.services import activity, findings, investigations, media, mentions, moderation
+from fieldclub.services import activity, findings, investigations, media, mentions, moderation, shapes
 from fieldclub.services.investigations import Need
 from fieldclub.vocab import (
     EvidenceKind,
@@ -47,7 +47,7 @@ from fieldclub.vocab import (
     Role,
     Visibility,
 )
-from tests.findings.support import add_desk_evidence, answer, create
+from tests.findings.support import LAT, LON, add_desk_evidence, answer, create
 from tests.helpers import ClientAs, MakeUser
 from tests.investigations.support import add, make
 from tests.moderation.support import comment, jpeg, photo
@@ -79,6 +79,8 @@ WHAT_DELETION_DOES: dict[tuple[str, str], str] = {
     ("investigation_members", "user_id"): GOES,
     ("investigation_items", "added_by"): STAYS,
     ("findings", "author_id"): STAYS,
+    # A finding's shape changes stay with the finding, as its author does.
+    ("finding_shape_changes", "user_id"): STAYS,
     ("observations", "user_id"): STAYS,
     ("evidence", "user_id"): STAYS,
     ("evidence", "verified_by"): STAYS,
@@ -120,6 +122,13 @@ def test_deleting_takes_personal_data_and_leaves_the_public_record(
     other = make_user(handle="Staying")
     moderator = make_user(Role.MODERATOR, handle="Moderator")
     finding = create(db, gone)
+    drawn = [{"lon": LON + i * 0.001, "lat": LAT, "kind": "corner"} for i in range(2)]
+    findings.update_finding(
+        db,
+        findings.lock(db, finding),
+        gone,
+        {"path": shapes.read_path({"points": drawn}), "path_revision": 0},
+    )
     theirs_elsewhere = create(db, other, lon=-1.85, lat=51.43)
     answer(db, theirs_elsewhere, gone)
     evidence, _ = add_desk_evidence(db, theirs_elsewhere, gone, EvidenceKind.AERIAL)

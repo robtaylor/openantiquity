@@ -269,6 +269,24 @@ def path_from_outline(outline: BaseGeometry) -> Path | None:
     )
 
 
+def stored_path(path: Mapping[str, Any] | None, outline: BaseGeometry | None) -> Path | None:
+    """A finding's path as stored, or for an outline saved before paths, the all-corner path it is.
+
+    None without a shape, and for an old outline of several parts or with
+    holes, which can be replaced but not changed.
+    """
+    if path is not None:
+        return read_path(path)
+    if outline is not None:
+        return path_from_outline(outline)
+    return None
+
+
+def kind_of(geometry: BaseGeometry) -> ShapeKind:
+    """Whether an outline is a line or an area, for one saved before `shape_kind` was."""
+    return ShapeKind.LINE if geometry.geom_type in ("LineString", "MultiLineString") else ShapeKind.AREA
+
+
 # --------------------------------------------------------------------------
 # The curve
 # --------------------------------------------------------------------------

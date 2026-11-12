@@ -332,9 +332,11 @@ def to_geojson(
     return _round_coordinates(dict(mapping(shapely_geometry)), decimals)
 
 
-def geojson_geometry(geometry: WKBElement | WKTElement | BaseGeometry | None) -> GeoJSONGeometry | None:
+def geojson_geometry(
+    geometry: WKBElement | WKTElement | BaseGeometry | None, *, decimals: int = 6
+) -> GeoJSONGeometry | None:
     """`to_geojson` as the response model."""
-    data = to_geojson(geometry)
+    data = to_geojson(geometry, decimals=decimals)
     return None if data is None else GeoJSONGeometry.model_validate(data)
 
 

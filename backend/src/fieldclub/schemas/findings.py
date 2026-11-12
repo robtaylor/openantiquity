@@ -20,8 +20,9 @@ from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, UrlConstraints, model_validator
+from shapely.geometry.base import BaseGeometry
 
-from fieldclub.models import Comment, Finding, Observation, User
+from fieldclub.models import Comment, Finding, FindingShapeChange, Observation, User
 from fieldclub.schemas.common import (
     ApiModel,
     GeoJSONFeatureCollection,
@@ -31,7 +32,7 @@ from fieldclub.schemas.common import (
     geojson_geometry,
     geojson_point,
 )
-from fieldclub.services import actions, review, sensitivity
+from fieldclub.services import actions, review, sensitivity, shapes
 from fieldclub.services.actions import Action
 from fieldclub.services.confidence import (
     ANSWER_CREDIT_KINDS,
@@ -52,8 +53,11 @@ from fieldclub.vocab import (
     OfferedSensitivity,
     Outcome,
     Period,
+    PointKind,
     Relation,
     Sensitivity,
+    ShapeChangeKind,
+    ShapeKind,
     Stance,
     Strand,
     Tier,
@@ -114,7 +118,11 @@ class ViewState(BaseModel):
 
 
 class Location(ApiModel):
-    """A finding's position as this viewer may see it (Decision 0005)."""
+    """A finding's position as this viewer may see it (Decision 0005).
+
+    For a finding drawn as a line or shape this is its anchor, the one point
+    everything that places a finding by a point uses.
+    """
 
     lon: float
     lat: float
@@ -126,6 +134,8 @@ class Location(ApiModel):
     square: str | None
     # The drawn outline. Always null when obscured.
     outline: GeoJSONGeometry | None
+    # `line` or `area` for a finding drawn as one. Always null when obscured.
+    shape_kind: ShapeKind | None = None
 
 
 def location_out(finding: Finding, viewer: User | None, *, with_outline: bool = True) -> Location:
@@ -142,6 +152,117 @@ def location_out(finding: Finding, viewer: User | None, *, with_outline: bool = 
         grid_ref=seen.grid_ref,
         square=seen.square,
         outline=geojson_geometry(seen.outline) if with_outline else None,
+        shape_kind=seen.shape_kind,
+    )
+
+
+# --------------------------------------------------------------------------
+# Lines and shapes
+# --------------------------------------------------------------------------
+
+
+class PathPoint(RequestModel):
+    """A point the finder tapped. A segment between two corners is straight."""
+
+    lon: float
+    lat: float
+    kind: PointKind
+
+
+class Path(RequestModel):
+    """The points a finding's line or shape goes through, in order (`services.shapes`).
+
+    An open path has two points or more and a closed one three or more,
+    without repeating the first. `curve` may be left out, and the server
+    writes it. The server derives the shape and checks the limits in
+    `GET /meta`'s `shapes`.
+    """
+
+    closed: bool = False
+    # Checked by the server, which refuses any other curve with `unknown_curve`.
+    curve: str | None = Field(default=None, max_length=64)
+    # Counted by the server, which refuses more than `shapes.path_max_points` with `path_too_many_points`.
+    points: list[PathPoint]
+
+
+class PathPointOut(ApiModel):
+    lon: float
+    lat: float
+    kind: PointKind
+
+
+class PathOut(ApiModel):
+    closed: bool
+    curve: str
+    points: list[PathPointOut]
+
+
+class AddedView(ApiModel):
+    """A centre and a zoom that frame what an extension added."""
+
+    lon: float
+    lat: float
+    zoom: float
+
+
+class ShapeChangeOut(ApiModel):
+    # `changed` for a viewer who sees only the square, who learns the date and nothing else.
+    kind: ShapeChangeKind | Literal["changed"]
+    on: date
+    added_length_m: float | None = None
+    added_view: AddedView | None = None
+
+
+class ShapeOut(ApiModel):
+    """A finding's shape as this viewer may know it.
+
+    For a viewer who sees only the square, every field is null but
+    `changes`, which says that the shape changed and when.
+    """
+
+    kind: ShapeKind | None
+    # The geodesic length of a line, or the perimeter of an area.
+    length_m: float | None
+    # The `path_revision` a change to the shape names.
+    revision: int | None
+    # West, south, east, north.
+    extent: list[float] | None
+    changes: list[ShapeChangeOut]
+    # The length extensions added since the newest second look. Null when no
+    # second look is older than an extension.
+    added_since_looked_m: float | None
+
+
+class LocationDetail(Location):
+    """A finding's position on its page, with its path and what has changed in its shape.
+
+    `outline` is the shape simplified to a few metres (`outline_mid`). The
+    full shape is in downloads, and the editor derives it from `path`.
+    """
+
+    path: PathOut | None
+    shape: ShapeOut
+
+
+def location_detail(
+    finding: Finding, viewer: User | None, changes: list[FindingShapeChange]
+) -> LocationDetail:
+    """The page's `location`, through `sensitivity.visible_location` and `visible_shape`."""
+    shape = sensitivity.visible_shape(finding, viewer, changes)
+    where = location_out(finding, viewer, with_outline=False)
+    return LocationDetail(
+        **where.model_dump(exclude={"outline"}),
+        outline=geojson_geometry(shape.outline, decimals=shapes.DECIMALS),
+        path=PathOut.model_validate(shape.path) if shape.path is not None else None,
+        shape=ShapeOut(
+            kind=shape.kind,
+            length_m=shape.length_m,
+            revision=shape.revision,
+            extent=list(shape.extent) if shape.extent is not None else None,
+            changes=[ShapeChangeOut.model_validate(change) for change in shape.changes],
+            # Worked out once second looks record the shape they were given at.
+            added_since_looked_m=None,
+        ),
     )
 
 
@@ -175,13 +296,19 @@ class NextStepOut(ApiModel):
 
 
 class FindingCreate(RequestModel):
-    """A new finding. Only the point and the feature class are required."""
+    """A new finding: a point or a path, or both, and the feature class.
 
-    location: GeoJSONGeometry
+    Without a point the server places one on the shape. `outline`, a
+    LineString or a one-ring Polygon read as a path of corners, is accepted
+    for a release, and never with a `path`.
+    """
+
+    location: GeoJSONGeometry | None = None
     feature_class: FeatureClass
     title: str | None = Field(default=None, min_length=1, max_length=TITLE_MAX)
     description: str | None = Field(default=None, max_length=TEXT_MAX)
     period: Period = Period.UNKNOWN
+    path: Path | None = None
     outline: GeoJSONGeometry | None = None
     view_state: ViewState | None = None
     # A request below the class default is honoured only from a moderator.
@@ -193,13 +320,20 @@ class FindingCreate(RequestModel):
 
 
 class FindingUpdate(RequestModel):
-    """Changes the finder makes. Fields left out are left alone. `outline: null` removes it."""
+    """Changes the finder makes. Fields left out are left alone.
+
+    `path` replaces the whole path and `path: null` removes the shape. Either
+    needs `path_revision`, the shape's `revision` it started from: another
+    is 409 `shape_changed`. `outline` is read as `path` is, for a release.
+    """
 
     location: GeoJSONGeometry | None = None
     feature_class: FeatureClass | None = None
     title: str | None = Field(default=None, min_length=1, max_length=TITLE_MAX)
     description: str | None = Field(default=None, max_length=TEXT_MAX)
     period: Period | None = None
+    path: Path | None = None
+    path_revision: int | None = Field(default=None, ge=0)
     outline: GeoJSONGeometry | None = None
     view_state: ViewState | None = None
 
@@ -437,6 +571,7 @@ class ObservationOut(ApiModel):
 class FindingDetail(FindingSummary):
     """A finding's page."""
 
+    location: LocationDetail  # pyright: ignore[reportIncompatibleVariableOverride]
     description: str | None
     nation: str | None
     view_state: ViewState
@@ -457,8 +592,10 @@ class FindingDetail(FindingSummary):
         tallies = (
             Tallies.from_assessment(assessment, finding.observation_count) if view.answers_visible else None
         )
+        fields = _summary_fields(finding, view.author, viewer)
+        fields["location"] = location_detail(finding, viewer, view.shape_changes)
         return cls(
-            **_summary_fields(finding, view.author, viewer),
+            **fields,
             description=sensitivity.visible_text(finding, viewer, finding.description),
             nation=view.nation,
             view_state=ViewState.from_stored(finding.view_state),
@@ -579,10 +716,16 @@ class FindingFeatureProperties(ApiModel):
     obscured: bool
     square: str | None
     grid_ref: str | None
+    # The line or shape, simplified for the zoom and cut to the box, for a
+    # viewer who sees the finding exactly. Null otherwise.
+    shape: GeoJSONGeometry | None = None
 
 
 class FindingFeature(BaseModel):
-    """A finding on the map: always a point, at the position this viewer may see."""
+    """A finding on the map: always a point, at the position this viewer may see.
+
+    A finding drawn as a line or shape carries it in `properties.shape`.
+    """
 
     type: Literal["Feature"] = "Feature"
     id: str
@@ -597,9 +740,13 @@ class FindingFeatureCollection(GeoJSONFeatureCollection):
     next_cursor: str | None = None
 
 
-def finding_feature(finding: Finding, viewer: User | None) -> FindingFeature:
-    # The map draws a point for each finding, so the outline isn't needed.
+def finding_feature(
+    finding: Finding, viewer: User | None, shape: BaseGeometry | None = None
+) -> FindingFeature:
+    """`shape` comes from `services.findings.map_shapes`, which gives one only to an exact viewer."""
+    # The map's point is the anchor, so the outline isn't needed.
     where = location_out(finding, viewer, with_outline=False)
+    assert shape is None or not where.obscured, "an obscured finding has no shape on the map"
     return FindingFeature(
         id=finding.public_id,
         geometry=geojson_point(where.lon, where.lat),
@@ -615,6 +762,7 @@ def finding_feature(finding: Finding, viewer: User | None) -> FindingFeature:
             obscured=where.obscured,
             square=where.square,
             grid_ref=where.grid_ref,
+            shape=geojson_geometry(shape, decimals=shapes.DECIMALS),
         ),
     )
 

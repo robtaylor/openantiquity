@@ -26,6 +26,10 @@ Things callers must not do:
 - Don't return `finding.location`, `finding.outline` or `finding.grid_ref`
   directly. Use the fields of `VisibleLocation`. The same goes for
   `finding.nation`, which comes from the exact position: use `visible_nation`.
+  A finding's line or shape (`path`, `outline_mid`, `outline_low`, its kind,
+  length and changes) is shape too: serve it through `visible_shape`, or for
+  the map `services.findings.map_shapes`, and match a box against it only
+  through `visible_match_clause`.
 - Don't filter or sort by `findings.location` for someone who can't see it.
   A bounding-box search over exact positions lets anyone find a protected
   site by narrowing the box. Use `location_public`.
@@ -57,8 +61,9 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
 
 import numpy as np
@@ -71,9 +76,9 @@ from sqlalchemy.orm import Session
 
 from fieldclub import gridref
 from fieldclub.errors import DataIntegrityError, ForbiddenError
-from fieldclub.models import Finding, User
+from fieldclub.models import Finding, FindingShapeChange, User
 from fieldclub.models.common import db_point, point_lon_lat
-from fieldclub.services import geo, text_positions
+from fieldclub.services import geo, shapes, text_positions
 from fieldclub.vocab import (
     EXACT_LOCATION_ROLES,
     MODERATOR_ROLES,
@@ -82,6 +87,7 @@ from fieldclub.vocab import (
     FeatureClass,
     Role,
     Sensitivity,
+    ShapeKind,
     sensitivity_rank,
 )
 
@@ -125,6 +131,8 @@ class VisibleLocation:
     # The compact 1 km square, such as `SU1069`, when obscured. The frontend
     # draws this square in place of a marker.
     square: str | None
+    # `line` or `area`. Always None when obscured.
+    shape_kind: ShapeKind | None = None
     # The same square as a grid reference, when obscured.
     square_ref: gridref.GridRef | None = field(default=None, compare=False, repr=False)
 
@@ -198,6 +206,18 @@ def as_sql(clause: ColumnElement[bool] | bool) -> ColumnElement[bool]:
     return clause
 
 
+def visible_match_clause(viewer: User | None, area: ColumnElement[Any]) -> ColumnElement[bool]:
+    """Findings this viewer may find in `area`: by the position they may see, or by the shape.
+
+    A shape counts only where the viewer sees the finding exactly. Matched by
+    its shape, a protected line would tell anyone else that it passes through
+    the box.
+    """
+    exact = as_sql(sees_exact_clause(viewer))
+    by_shape = and_(exact, Finding.outline.is_not(None), func.ST_Intersects(Finding.outline, area))
+    return or_(visible_position_clause(viewer, area), by_shape)
+
+
 def visible_position_clause(viewer: User | None, area: ColumnElement[Any]) -> ColumnElement[bool]:
     """Findings whose position, as this viewer may see it, lies in `area`.
 
@@ -248,7 +268,13 @@ def visible_location(finding: Finding, viewer: User | None) -> VisibleLocation:
     if sees_exact(finding, viewer):
         outline = to_shape(finding.outline) if finding.outline is not None else None
         return VisibleLocation(
-            lon=lon, lat=lat, obscured=False, outline=outline, grid_ref=finding.grid_ref, square=None
+            lon=lon,
+            lat=lat,
+            obscured=False,
+            outline=outline,
+            grid_ref=finding.grid_ref,
+            square=None,
+            shape_kind=_shape_kind(finding, outline),
         )
     square = _square(lon, lat, finding.public_id)
     lon, lat = square.centre()
@@ -260,6 +286,80 @@ def visible_location(finding: Finding, viewer: User | None) -> VisibleLocation:
         grid_ref=square.format(),
         square=square.format(compact=True),
         square_ref=square,
+    )
+
+
+def _shape_kind(finding: Finding, outline: BaseGeometry | None) -> ShapeKind | None:
+    """The stored kind, or for an outline saved before kinds were, the kind of `outline`."""
+    if finding.shape_kind is not None:
+        return ShapeKind(finding.shape_kind)
+    return shapes.kind_of(outline) if outline is not None else None
+
+
+@dataclass(frozen=True)
+class VisibleShapeChange:
+    # A `ShapeChangeKind`, or `changed` for a viewer who sees only the square.
+    kind: str
+    on: date
+    added_length_m: float | None = None
+    added_view: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class VisibleShape:
+    """What a viewer may know of a finding's shape and its changes.
+
+    Someone who sees only the square learns that the shape changed and on
+    which days, and nothing of its size, kind or place. Everything else is
+    None for them.
+    """
+
+    changes: tuple[VisibleShapeChange, ...]
+    kind: ShapeKind | None = None
+    length_m: float | None = None
+    revision: int | None = None
+    # West, south, east, north of the shape.
+    extent: tuple[float, float, float, float] | None = None
+    # The shape simplified for the page (`outline_mid`), so a long road costs a phone little.
+    outline: BaseGeometry | None = None
+    # The tapped points, as `shapes.Path.to_json` writes them.
+    path: dict[str, Any] | None = None
+
+
+def visible_shape(
+    finding: Finding, viewer: User | None, changes: Sequence[FindingShapeChange]
+) -> VisibleShape:
+    """The shape of `finding` and its `changes`, oldest first, as `viewer` may know them.
+
+    An outline saved before paths is served with the all-corner path it is
+    (`shapes.stored_path`), and the kind of its geometry.
+    """
+    assert all(change.finding_id == finding.id for change in changes), "a change of another finding"
+    if not sees_exact(finding, viewer):
+        return VisibleShape(
+            changes=tuple(
+                VisibleShapeChange(kind="changed", on=change.created_at.date()) for change in changes
+            )
+        )
+    full = to_shape(finding.outline) if finding.outline is not None else None
+    shown = to_shape(finding.outline_mid) if finding.outline_mid is not None else full
+    path = shapes.stored_path(finding.path, full)
+    return VisibleShape(
+        changes=tuple(
+            VisibleShapeChange(
+                kind=change.kind,
+                on=change.created_at.date(),
+                added_length_m=change.added_length_m,
+                added_view=change.added_view,
+            )
+            for change in changes
+        ),
+        kind=_shape_kind(finding, full),
+        length_m=finding.shape_length_m,
+        revision=finding.shape_revision,
+        extent=full.bounds if full is not None else None,
+        outline=shown,
+        path=path.to_json() if path is not None else None,
     )
 
 

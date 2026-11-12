@@ -117,11 +117,12 @@ class Finding(Base):
     outline: Mapped[WKBElement | None] = mapped_column(any_geometry())
     # The points the finder tapped and whether the shape is closed, as
     # `services.shapes.Path.to_json` writes them. The source of truth for `outline`.
-    path: Mapped[JsonDict | None] = json_column()
+    # It and the simplified copies are loaded only when read: a list of findings needs none of them.
+    path: Mapped[JsonDict | None] = json_column(deferred=True)
     # `outline` simplified at 0.00005 degrees, for zooms 13 to 15 and the finding page.
-    outline_mid: Mapped[WKBElement | None] = mapped_column(any_geometry(spatial_index=False))
+    outline_mid: Mapped[WKBElement | None] = mapped_column(any_geometry(spatial_index=False), deferred=True)
     # `outline` simplified at 0.0005 degrees, for zooms 9 to 12.
-    outline_low: Mapped[WKBElement | None] = mapped_column(any_geometry())
+    outline_low: Mapped[WKBElement | None] = mapped_column(any_geometry(), deferred=True)
     shape_kind: Mapped[str | None] = mapped_column(Text)
     # The geodesic length of a line, or the perimeter of an area, in metres.
     shape_length_m: Mapped[float | None] = mapped_column(REAL)
@@ -288,8 +289,8 @@ class FindingShapeChange(Base):
     # the added part (`services.shapes.added_view`).
     added_length_m: Mapped[float | None] = mapped_column(REAL)
     added_view: Mapped[JsonDict | None] = json_column()
-    # The path as it was, for moderators and a later undo.
-    path_before: Mapped[JsonDict | None] = json_column()
+    # The path as it was, for moderators and a later undo. Loaded only when read.
+    path_before: Mapped[JsonDict | None] = json_column(deferred=True)
 
 
 class Evidence(Base):
