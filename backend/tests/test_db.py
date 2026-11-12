@@ -16,6 +16,7 @@ EXPECTED_TABLES = {
     "auth_identities",
     "sessions",
     "magic_links",
+    "released_handles",
     "reputation_events",
     "findings",
     "observations",

@@ -67,7 +67,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import delete, func, select, tuple_
+from sqlalchemy import case, delete, func, select, tuple_
 from sqlalchemy.orm import Session
 
 from fieldclub.auth import onboarding
@@ -480,6 +480,35 @@ class Listed:
     investigation: Investigation
     owner: User
     item_count: int
+    # What the viewer may see of its text and area, given the findings it holds.
+    guard: sensitivity.PositionGuard
+
+
+def held_findings(db: Session, investigation_ids: Iterable[int]) -> dict[int, list[Finding]]:
+    """The findings each investigation holds, whether or not the viewer may see them, by investigation id."""
+    wanted = set(investigation_ids)
+    held: dict[int, list[Finding]] = {investigation_id: [] for investigation_id in wanted}
+    if wanted:
+        rows = db.execute(
+            select(InvestigationItem.investigation_id, Finding)
+            .join(Finding, Finding.id == InvestigationItem.finding_id)
+            .where(InvestigationItem.investigation_id.in_(wanted))
+        )
+        for investigation_id, finding in rows:
+            held[investigation_id].append(finding)
+    return held
+
+
+def position_guard(
+    db: Session, investigation: Investigation, viewer: User | None, *, download: bool = False
+) -> sensitivity.PositionGuard:
+    """What `viewer` may see of what was written and drawn in `investigation` (`sensitivity.PositionGuard`).
+
+    The findings it holds decide, hidden and withdrawn ones included: a
+    finding taken off the page still lies where the notes and views put it.
+    """
+    held = held_findings(db, [investigation.id])[investigation.id]
+    return sensitivity.position_guard(held, viewer, download=download)
 
 
 def _item_count() -> Any:
@@ -502,9 +531,12 @@ def list_investigations(
 ) -> tuple[list[Listed], str | None]:
     """A page of investigations, most recently changed first.
 
-    `bbox` matches the area the investigation's editors drew. A private
-    investigation is only ever listed for its owner, and an unlisted one for
-    its members, the people invited to it, and moderators.
+    `bbox` matches the area the investigation's editors drew, as this viewer
+    may see it: an area near a finding it holds that the viewer sees only as a
+    square is matched by its box widened to the area grid, as it is shown
+    (`sensitivity.PositionGuard.area`), so narrowing the box can't find it out.
+    A private investigation is only ever listed for its owner, and an unlisted
+    one for its members, the people invited to it, and moderators.
     """
     query = select(Investigation, User, _item_count()).join(User, User.id == Investigation.owner_id)
     if scope is Scope.PUBLIC:
@@ -532,7 +564,12 @@ def list_investigations(
                 # Someone only invited isn't a member yet, so a hidden one is gone for them.
                 query = query.where(Investigation.hidden_at.is_(None))
     if bbox is not None:
-        query = query.where(func.ST_Intersects(Investigation.area, geo.envelope(bbox)))
+        held = (InvestigationItem.investigation_id == Investigation.id) & (
+            InvestigationItem.finding_id == Finding.id
+        )
+        near = sensitivity.near_hidden_clause(viewer, Investigation.area, held)
+        shown = case((near, sensitivity.snapped_box_sql(Investigation.area)), else_=Investigation.area)
+        query = query.where(func.ST_Intersects(shown, geo.envelope(bbox)))
     if cursor is not None:
         value, last_id = decode_cursor(cursor, 2)
         last_id = cursor_int(last_id)
@@ -544,7 +581,12 @@ def list_investigations(
             raise InvalidCursorError() from None
         query = query.where(tuple_(Investigation.updated_at, Investigation.id) < (after, last_id))
     query = query.order_by(Investigation.updated_at.desc(), Investigation.id.desc()).limit(limit + 1)
-    rows = [Listed(investigation, owner, count) for investigation, owner, count in db.execute(query)]
+    found = list(db.execute(query))
+    held = held_findings(db, (investigation.id for investigation, _, _ in found))
+    rows = [
+        Listed(investigation, owner, count, sensitivity.position_guard(held[investigation.id], viewer))
+        for investigation, owner, count in found
+    ]
     return paginate(rows, limit, lambda row: [row.investigation.updated_at.isoformat(), row.investigation.id])
 
 
@@ -902,6 +944,10 @@ class Unavailable(StrEnum):
     WITHDRAWN = "withdrawn"
     # A record that has left the index, or a finding that no longer exists.
     GONE = "gone"
+    # A saved map view or a height profile near a finding the investigation holds
+    # that the viewer sees only as a 1 km square: where it is would say where
+    # the finding is (`sensitivity.PositionGuard`).
+    NEAR_PROTECTED = "near_protected"
 
 
 @dataclass(frozen=True)

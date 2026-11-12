@@ -196,26 +196,22 @@ def change_role(handle: Handle, body: RoleIn, moderator: Moderator, db: Db) -> M
 
 @router.post("/users/{handle}/ban", response_model=Ban, dependencies=_writes)
 def ban(handle: Handle, body: ReasonIn, moderator: Moderator, db: Db) -> Ban:
-    """Ban someone. Their sessions end now, and their answers, evidence and votes stop counting."""
+    """Ban someone. Their sessions end now, and their evidence and verifications stop counting.
+
+    Their second looks and votes keep counting as they were given, so that a
+    ban can't show how they answered (Decision 0019).
+    """
     result = moderation.ban(db, handle, moderator, body.reason)
     db.commit()
-    return Ban(
-        user=ModUser.build(result.user),
-        sessions_ended=result.sessions_ended,
-        findings_reassessed=result.findings_reassessed,
-    )
+    return Ban(user=ModUser.build(result.user), sessions_ended=result.sessions_ended)
 
 
 @router.post("/users/{handle}/unban", response_model=Ban, dependencies=_writes)
 def unban(handle: Handle, body: ReasonIn, moderator: Moderator, db: Db) -> Ban:
-    """Lift a ban. Their work counts again at once."""
+    """Lift a ban. Their evidence and verifications count again at once."""
     result = moderation.unban(db, handle, moderator, body.reason)
     db.commit()
-    return Ban(
-        user=ModUser.build(result.user),
-        sessions_ended=result.sessions_ended,
-        findings_reassessed=result.findings_reassessed,
-    )
+    return Ban(user=ModUser.build(result.user), sessions_ended=result.sessions_ended)
 
 
 # --------------------------------------------------------------------------

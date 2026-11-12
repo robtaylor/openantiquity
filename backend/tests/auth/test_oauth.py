@@ -164,13 +164,13 @@ def test_an_identity_needs_a_usable_subject(sub: object) -> None:
         oauth.Google().identity({"sub": sub}, oauth.Callback())
 
 
-def test_only_https_pictures_and_well_formed_addresses_are_kept() -> None:
+def test_only_well_formed_addresses_are_kept_and_no_picture() -> None:
     identity = oauth.Google().identity(
-        {"sub": "g", "email": "not-an-address", "email_verified": True, "picture": "http://x/a.png"},
+        {"sub": "g", "email": "not-an-address", "email_verified": True, "picture": "https://x/a.png"},
         oauth.Callback(),
     )
     assert identity.email is None
-    assert identity.avatar_url is None
+    assert not hasattr(identity, "avatar_url")
 
 
 @pytest.mark.parametrize("name", ["google", "apple", "microsoft", "facebook", "osm"])

@@ -59,7 +59,6 @@ def test_a_profile(db: Session, make_user: MakeUser, client: TestClient, client_
     assert body == {
         "handle": "AnnDigs",
         "display_name": "Ann Smith",
-        "avatar_url": "https://provider.example/ann.png",
         "role": "trusted",
         "bio": "Parish surveys on the Downs.",
         "joined_at": body["joined_at"],
@@ -88,7 +87,7 @@ def test_16_to_17_and_unbanded_accounts_show_only_their_handle(
         terms_accepted_at=None if band is None else datetime(2026, 1, 1, tzinfo=UTC),
     )
     body = client.get(f"{API}/users/YoungDigger").json()
-    assert (body["display_name"], body["avatar_url"], body["bio"]) == ("YoungDigger", None, None)
+    assert (body["display_name"], body["bio"]) == ("YoungDigger", None)
     assert "Real Name" not in str(body)
     assert "07700" not in str(body)
     assert "age_band" not in body

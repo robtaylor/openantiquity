@@ -125,6 +125,18 @@ def _holding(db: Session, finding: Finding, address: unfurl.Address) -> Mention 
     )
 
 
+def _check_address_for_level(finding: Finding, address: unfurl.Address) -> None:
+    """Refuse a link that says where a protected or restricted finding is, such as a map link.
+
+    It is the slip a title is refused for (`findings.check_text_for_level`).
+    Readers who see only the square never get a mention's address in any case
+    (`sensitivity.visible_url`), which also covers a link added while the
+    finding was open.
+    """
+    for value in (address.url, address.canonical_url):
+        findings.check_text_for_level(finding.sensitivity, {"url": value})
+
+
 def _refuse_existing(found: Mention | None) -> None:
     if found is None:
         return
@@ -207,6 +219,7 @@ def add(
     """
     findings.check_open(finding)
     address = unfurl.canonical(url)
+    _check_address_for_level(finding, address)
     _refuse_existing(_holding(db, finding, address))
     if before_fetch is not None:
         before_fetch()
@@ -215,6 +228,8 @@ def add(
     if finding.hidden_at is not None and not findings.may_see_hidden(finding, user):
         raise findings.FindingNotFoundError()
     findings.check_open(finding)
+    # The level may have been raised while the address was fetched.
+    _check_address_for_level(finding, address)
     draft = Draft(
         address=address,
         kind=kind or address.kind,

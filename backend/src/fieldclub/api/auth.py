@@ -38,14 +38,15 @@ from fieldclub.auth.failures import FlowStateError, ProviderUnavailableError, Si
 from fieldclub.auth.flow import FLOW_COOKIE, new_flow, seal, state_matches, unseal
 from fieldclub.auth.mailer import LogMailer, get_mailer
 from fieldclub.auth.redirects import DEFAULT_NEXT, app_url, safe_next
-from fieldclub.auth.tokens import hash_token, new_token
-from fieldclub.config import SESSION_COOKIE, Settings
+from fieldclub.auth.tokens import hash_presented, hash_token, new_token
+from fieldclub.config import Settings
 from fieldclub.errors import AppError, NotFoundError
 from fieldclub.models import User
 from fieldclub.schemas.auth import (
     DevEmail,
     DevLogin,
     DevOutbox,
+    EmailSignedIn,
     EmailStart,
     EmailStarted,
     EmailVerify,
@@ -63,8 +64,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 dev_router = APIRouter(prefix="/auth", tags=["auth"])
 
 # Each emailed link goes to an inbox someone else may own, so an address has a
-# budget of its own as well as the caller's.
-_LINKS_PER_ADDRESS = ratelimit.get_limiter("auth_email_address", 5, per_seconds=3600)
+# budget for each caller, small enough that one stranger can't use up the
+# owner's, and a larger one for all callers together, which caps how much mail
+# a stranger can send to it.
+_LINKS_PER_ADDRESS_AND_CALLER = ratelimit.get_limiter("auth_email_address_caller", 3, per_seconds=3600)
+_LINKS_PER_ADDRESS = ratelimit.get_limiter("auth_email_address", 20, per_seconds=3600)
 
 # Settings are saved as people use the map, so the limit on the route is
 # generous. Changing handle is rare, and each change frees a name for someone
@@ -108,11 +112,10 @@ def get_session(user: OptionalUser) -> Me | None:
     dependencies=[Depends(rate_limit("auth_me_update", 120, per_seconds=3600))],
 )
 def update_me(body: MeUpdate, request: Request, user: CurrentUser, db: Db, settings: AppSettings) -> Me:
-    """Change your handle, display name, bio or settings, or remove your provider's picture.
+    """Change your handle, display name, bio or settings.
 
     A bio is free text on a public profile, so it is a contribution: writing
-    one needs a finished welcome step, like any other. Clearing it doesn't,
-    nor does removing the picture (`avatar_url: null`).
+    one needs a finished welcome step, like any other. Clearing it doesn't.
     """
     changes = body.model_dump(exclude_unset=True)
     if changes.get("bio"):
@@ -173,7 +176,19 @@ def delete_me(response: Response, user: CurrentUser, db: Db) -> None:
 )
 def logout(request: Request, response: Response, db: Db) -> None:
     """End this session. Safe to call when not signed in."""
-    sessions.revoke_session(db, request.cookies.get(SESSION_COOKIE))
+    sessions.revoke_session(db, cookies.session_token(request))
+    db.commit()
+    cookies.clear_session_cookie(response)
+
+
+@router.post(
+    "/logout-everywhere",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(rate_limit("auth_logout", 60, per_seconds=3600))],
+)
+def logout_everywhere(response: Response, user: CurrentUser, db: Db) -> None:
+    """End every session you have, in every browser, this one included."""
+    sessions.revoke_all_sessions(db, user)
     db.commit()
     cookies.clear_session_cookie(response)
 
@@ -198,7 +213,7 @@ def _begin_session(db: Db, user: User, request: Request, *, previous_hash: str |
     return signin.begin_session(
         db,
         user,
-        previous_token=request.cookies.get(SESSION_COOKIE),
+        previous_token=cookies.session_token(request),
         previous_hash=previous_hash,
         user_agent=request.headers.get("user-agent"),
         ip=client_ip(request),
@@ -231,7 +246,7 @@ def oauth_start(
     target = safe_next(next_path)
     try:
         chosen = oauth.get_provider(provider, settings)
-        flow = new_flow(chosen.id.value, target, presented_session=request.cookies.get(SESSION_COOKIE))
+        flow = new_flow(chosen.id.value, target, presented_session=cookies.session_token(request))
         url = chosen.authorization_url(settings, flow)
     except AppError as exc:
         logger.info("Sign-in with %.40r couldn't start: %s", provider, exc.code)
@@ -336,7 +351,9 @@ def _require_email_link(settings: Settings) -> None:
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(rate_limit("auth_email_start", 10, per_seconds=3600))],
 )
-def email_start(body: EmailStart, response: Response, db: Db, settings: AppSettings) -> EmailStarted:
+def email_start(
+    body: EmailStart, request: Request, response: Response, db: Db, settings: AppSettings
+) -> EmailStarted:
     """Email a one-time sign-in link, bound to this browser by a cookie.
 
     The answer is the same whether or not the address has an account.
@@ -344,9 +361,14 @@ def email_start(body: EmailStart, response: Response, db: Db, settings: AppSetti
     _require_email_link(settings)
     mailer = get_mailer(settings)
     assert mailer is not None, "the emailed link is enabled only with a mail backend"
-    ratelimit.enforce_key(_LINKS_PER_ADDRESS, f"email:{hash_token(email_link.rate_key(body.email))}")
-    browser = new_token()
-    token = email_link.create_link(db, body.email, browser=browser)
+    mailbox = hash_token(email_link.rate_key(body.email))
+    caller = ratelimit.caller_key(request, None)
+    ratelimit.enforce_key(_LINKS_PER_ADDRESS_AND_CALLER, f"email:{mailbox}:{caller}")
+    ratelimit.enforce_key(_LINKS_PER_ADDRESS, f"email:{mailbox}")
+    # A browser keeps its link cookie across asks, so asking again spends what it asked for before.
+    presented = request.cookies.get(email_link.LINK_COOKIE)
+    browser = presented if presented is not None and hash_presented(presented) is not None else new_token()
+    token = email_link.create_link(db, body.email, browser=browser, previous_browser=presented)
     db.commit()
     mailer.send(email_link.link_message(settings, body.email, token, safe_next(body.next)))
     cookies.set_link_cookie(response, browser)
@@ -355,26 +377,29 @@ def email_start(body: EmailStart, response: Response, db: Db, settings: AppSetti
 
 @router.post(
     "/email/verify",
-    response_model=Me,
+    response_model=EmailSignedIn,
     dependencies=[Depends(rate_limit("auth_email_verify", 30, per_seconds=3600))],
 )
 def email_verify(
     body: EmailVerify, request: Request, response: Response, db: Db, settings: AppSettings
-) -> Me:
+) -> EmailSignedIn:
     """Spend an emailed link and sign in. Unknown, used and expired links all fail with `link_invalid`.
 
     In a browser other than the one that asked for the link, this answers
-    `confirmation_required` with the masked address until posted with `confirm`.
+    `confirmation_required` with the masked address until posted with the
+    address the person types as `email`, and `email_mismatch` when that isn't
+    the address the link was sent to. `asked_here` says which kind of sign-in
+    this was.
     """
     _require_email_link(settings)
-    user = email_link.redeem(
-        db, body.token, browser=request.cookies.get(email_link.LINK_COOKIE), confirmed=body.confirm
+    redeemed = email_link.redeem(
+        db, body.token, browser=request.cookies.get(email_link.LINK_COOKIE), typed_email=body.email
     )
-    token = _begin_session(db, user, request)
+    token = _begin_session(db, redeemed.user, request)
     db.commit()
     cookies.set_session_cookie(response, token)
     cookies.clear_link_cookie(response)
-    return Me.from_user(user)
+    return EmailSignedIn(**Me.from_user(redeemed.user).model_dump(), asked_here=redeemed.asked_here)
 
 
 @dev_router.post(

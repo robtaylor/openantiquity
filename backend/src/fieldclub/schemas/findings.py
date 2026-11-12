@@ -127,8 +127,12 @@ class Location(ApiModel):
     outline: GeoJSONGeometry | None
 
 
-def location_out(finding: Finding, viewer: User | None) -> Location:
-    """The one way a response gets a finding's position."""
+def location_out(finding: Finding, viewer: User | None, *, with_outline: bool = True) -> Location:
+    """The one way a response gets a finding's position.
+
+    `with_outline=False` leaves the outline out, for an answer that draws only
+    the point, so the outline isn't decoded for nothing.
+    """
     seen = sensitivity.visible_location(finding, viewer)
     return Location(
         lon=round(seen.lon, 6),
@@ -136,7 +140,7 @@ def location_out(finding: Finding, viewer: User | None) -> Location:
         obscured=seen.obscured,
         grid_ref=seen.grid_ref,
         square=seen.square,
-        outline=geojson_geometry(seen.outline),
+        outline=geojson_geometry(seen.outline) if with_outline else None,
     )
 
 
@@ -531,7 +535,7 @@ def _evidence_out(
         stance=Stance(evidence.stance),
         title=sensitivity.visible_text(finding, viewer, evidence.title),
         note=sensitivity.visible_text(finding, viewer, evidence.note),
-        url=evidence.url if exact else None,
+        url=sensitivity.visible_url(finding, viewer, evidence.url),
         record_id=evidence.record_id if exact else None,
         source_key=data.get("source_key") if exact else None,
         reference=evidence.reference if exact else None,
@@ -593,7 +597,8 @@ class FindingFeatureCollection(GeoJSONFeatureCollection):
 
 
 def finding_feature(finding: Finding, viewer: User | None) -> FindingFeature:
-    where = location_out(finding, viewer)
+    # The map draws a point for each finding, so the outline isn't needed.
+    where = location_out(finding, viewer, with_outline=False)
     return FindingFeature(
         id=finding.public_id,
         geometry=geojson_point(where.lon, where.lat),

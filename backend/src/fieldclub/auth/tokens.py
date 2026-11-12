@@ -41,5 +41,5 @@ def hash_ip(ip: str) -> str:
     The key is the server secret, so the stored value can't be turned back into
     an address by trying all four billion of them.
     """
-    key = get_settings().secret_key.get_secret_value().encode("utf-8")
+    key = get_settings().signing_key
     return hmac.new(key, ip.encode("utf-8"), hashlib.sha256).hexdigest()[:32]

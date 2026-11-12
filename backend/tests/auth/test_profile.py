@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -148,3 +149,36 @@ def test_settings_must_be_plain_json(db: Session, make_user: MakeUser) -> None:
         update_profile(db, make_user(), settings={"opacity": float("nan")})
     with pytest.raises(ValidationFailedError, match="plain JSON"):
         update_profile(db, make_user(), settings={"when": object()})
+
+
+def test_a_handle_given_up_is_held_back_from_everyone_else_for_a_year(
+    db: Session, make_user: MakeUser
+) -> None:
+    """Old @mentions and /u/ links mustn't pass to a stranger the moment someone changes their name."""
+    import time_machine
+
+    from fieldclub.auth import accounts, profile
+    from fieldclub.auth.handles import HANDLE_COOLING_OFF, HandleHeldBackError
+
+    start = datetime(2026, 11, 10, 9, 0, tzinfo=UTC)
+    owner, stranger = make_user(handle="BarrowBeth"), make_user()
+    with time_machine.travel(start, tick=False):
+        profile.update_profile(db, owner, handle="BethOfTheBarrows")
+        db.commit()
+        with pytest.raises(HandleHeldBackError):
+            profile.update_profile(db, stranger, handle="barrowbeth")
+        db.rollback()
+        # Whoever gave it up may take it back.
+        profile.update_profile(db, owner, handle="BarrowBeth")
+        profile.update_profile(db, owner, handle="BethAgain")
+        db.commit()
+    with time_machine.travel(start + HANDLE_COOLING_OFF + timedelta(days=1), tick=False):
+        profile.update_profile(db, stranger, handle="BarrowBeth")
+        db.commit()
+    gone = make_user(handle="GoneGeorge")
+    with time_machine.travel(start, tick=False):
+        accounts.delete_account(db, gone)
+        db.commit()
+        with pytest.raises(HandleHeldBackError):
+            profile.update_profile(db, stranger, handle="GoneGeorge")
+    db.rollback()

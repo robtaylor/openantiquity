@@ -9,7 +9,7 @@ import logging
 import random
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from fieldclub.auth import sessions
@@ -19,11 +19,13 @@ from fieldclub.auth.handles import (
     InvalidDisplayNameError,
     claim_handle,
     generate_handle,
+    held_back,
+    release_handle,
     validate_display_name,
     validate_handle,
 )
 from fieldclub.errors import AppError
-from fieldclub.models import AuthIdentity, Follow, MagicLink, Notification, User
+from fieldclub.models import AuthIdentity, Follow, MagicLink, Notification, ReleasedHandle, User
 from fieldclub.services import ids, investigations, media
 from fieldclub.vocab import Role
 
@@ -60,7 +62,6 @@ def create_user(
     display_name: str | None = None,
     email: str | None = None,
     email_verified_at: datetime | None = None,
-    avatar_url: str | None = None,
     role: Role | str = Role.MEMBER,
     rng: random.Random | None = None,
 ) -> User:
@@ -83,10 +84,9 @@ def create_user(
             display_name=shown or handle,
             email=email,
             email_verified_at=email_verified_at,
-            avatar_url=avatar_url,
             role=role.value,
         )
-        if claim_handle(db, user):
+        if not held_back(db, handle, None) and claim_handle(db, user):
             return user
         logger.info("Generated handle %s is taken, trying another", handle)
     raise HandleGenerationError()
@@ -100,7 +100,9 @@ def suggest_handle(db: Session, *, rng: random.Random | None = None) -> str:
     """
     for attempt in range(MAX_ATTEMPTS):
         handle = generate_handle(rng, digits=_digits_for(attempt))
-        if db.scalar(select(User.id).where(User.handle == handle)) is None:
+        if db.scalar(select(User.id).where(User.handle == handle)) is None and not held_back(
+            db, handle, None
+        ):
             return handle
     raise HandleGenerationError()
 
@@ -185,6 +187,8 @@ def delete_account(db: Session, user: User, *, now: datetime | None = None) -> l
     # A photo is personal data: the evidence it was on stays without it.
     files = media.forget_account(db, user)
 
+    # Handles they gave up before stay held back, tied to nobody.
+    db.execute(update(ReleasedHandle).where(ReleasedHandle.user_id == user.id).values(user_id=None))
     user.email = None
     user.email_verified_at = None
     user.avatar_url = None
@@ -198,7 +202,8 @@ def delete_account(db: Session, user: User, *, now: datetime | None = None) -> l
 
 
 def _anonymise_handle(db: Session, user: User) -> None:
-    """Swap the handle for one that says nothing about who it was."""
+    """Swap the handle for one that says nothing about who it was, and hold the old one back."""
+    release_handle(db, user.handle, None)
     for _ in range(MAX_ATTEMPTS):
         candidate = f"{FORMER_HANDLE_PREFIX}{ids.generate()}{ids.generate()[:2]}"
         if claim_handle(db, user, candidate):

@@ -40,12 +40,10 @@ def google(subject: str = "g-1", email: str | None = "ann@example.org", *, verif
 
 
 def test_a_new_identity_makes_a_new_account_that_has_not_been_welcomed(db: Session) -> None:
-    user = signin.user_for_identity(
-        db, google(display_name="Ann Barrow", avatar_url="https://x/a.png"), now=NOW
-    )
+    user = signin.user_for_identity(db, google(display_name="Ann Barrow"), now=NOW)
     db.commit()
     assert user.display_name == "Ann Barrow"
-    assert user.avatar_url == "https://x/a.png"
+    assert user.avatar_url is None
     assert user.email == "ann@example.org"
     assert user.email_verified_at == NOW
     assert user.age_band is None

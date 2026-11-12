@@ -23,11 +23,11 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 import fieldclub.api
-from fieldclub import APP_NAME, __version__, http, safe_fetch
+from fieldclub import APP_NAME, __version__, http, safe_fetch, security
 from fieldclub.api.deps import PRIVATE_CACHE
 from fieldclub.auth.csrf import ClientHeaderMiddleware
 from fieldclub.auth.oauth import FORM_POST_CALLBACK_PATHS
-from fieldclub.config import Settings, get_settings
+from fieldclub.config import Environment, Settings, get_settings
 from fieldclub.db import create_schema, describe
 from fieldclub.errors import install_error_handlers
 from fieldclub.redirects import CanonicalHostMiddleware
@@ -36,6 +36,8 @@ from fieldclub.services import events
 logger = logging.getLogger(__name__)
 
 API_PREFIX = "/api/v1"
+DOCS_URL = "/api/docs"
+OPENAPI_URL = "/api/openapi.json"
 
 # Paths the single-page app never owns. An unknown URL under one of these is a
 # JSON 404, not the app's index.html.
@@ -46,6 +48,10 @@ RESERVED_ROOTS = frozenset({"api", "tiles", "healthz", "assets"})
 # callbacks a provider reaches with a cross-site POST (Apple's), which `state`
 # protects instead. See fieldclub.auth.csrf and fieldclub.auth.flow.
 CLIENT_HEADER_EXEMPT: frozenset[str] = frozenset(FORM_POST_CALLBACK_PATHS)
+
+
+# Sent on any response that sets a cookie.
+NO_STORE = "private, no-store"
 
 
 def _varies_by_cookie(headers: MutableHeaders) -> bool:
@@ -63,6 +69,10 @@ class PrivateByDefaultMiddleware:
     one viewer's answer to another, so private is the default and a route that
     is the same for everyone, such as a tile, says so with its own
     `Cache-Control`. Every private response varies by cookie.
+
+    A response that sets a cookie is never stored by anyone, whatever the
+    route said: a shared cache that kept a public answer carrying a
+    refreshed session cookie would hand that session to the next visitor.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -76,6 +86,8 @@ class PrivateByDefaultMiddleware:
         async def send_with_policy(message: Message) -> None:
             if message["type"] == "http.response.start":
                 headers = MutableHeaders(scope=message)
+                if "set-cookie" in headers:
+                    headers["Cache-Control"] = NO_STORE
                 headers.setdefault("Cache-Control", PRIVATE_CACHE)
                 if headers["Cache-Control"].startswith("private") and not _varies_by_cookie(headers):
                     headers.add_vary_header("Cookie")
@@ -239,23 +251,43 @@ def create_app(settings: Settings | None = None, *, include_dev_routes: bool | N
     settings = settings or get_settings()
     if include_dev_routes is None:
         include_dev_routes = settings.dev_login_enabled
+    # The interactive docs load their scripts from a CDN, so they never run on the
+    # production origin, where a signed-in visitor's session would be theirs. The
+    # schema stays off with them: `fieldclub-openapi` writes it for the frontend.
+    is_prod = settings.env is Environment.PROD
+    # Refuses to serve without the key that signs sign-ins, which only the API needs.
+    settings.require_signing_key()
     app = FastAPI(
         title=APP_NAME,
         version=__version__,
         summary="A collaborative map for finding and checking archaeological earthworks in UK LIDAR data.",
-        docs_url="/api/docs",
+        docs_url=None if is_prod else DOCS_URL,
         redoc_url=None,
-        openapi_url="/api/openapi.json",
+        openapi_url=None if is_prod else OPENAPI_URL,
+        swagger_ui_oauth2_redirect_url=None if is_prod else f"{DOCS_URL}/oauth2-redirect",
         generate_unique_id_function=_operation_id,
         lifespan=_lifespan,
     )
     install_error_handlers(app)
     # Middleware, not router dependencies, so that no route can be added without them.
+    # The last added runs first: the headers go on every answer, the body limit
+    # included, and the body limit runs before anything reads a body.
+    app.add_middleware(security.BodyLimitMiddleware)
     app.add_middleware(ClientHeaderMiddleware, exempt=CLIENT_HEADER_EXEMPT)
     app.add_middleware(PrivateByDefaultMiddleware)
     if settings.redirect_hosts:
-        # Added last, so it runs first: another name gets its redirect and nothing else.
+        # Added after everything that reads the request, so another name gets its redirect and nothing else.
         app.add_middleware(CanonicalHostMiddleware, hosts=settings.redirect_hosts, target=settings.public_url)
+    https = settings.public_url.startswith("https://")
+    index = settings.frontend_dist / "index.html"
+    # Added last, so it runs first: its headers go on every response, a redirect from another name included.
+    app.add_middleware(
+        security.SecurityHeadersMiddleware,
+        policy=security.content_security_policy(index if index.is_file() else None, https),
+        https=https,
+        # The development docs page loads Swagger UI from its CDN, which the policy refuses.
+        exempt=frozenset(path for path in (app.docs_url, app.swagger_ui_oauth2_redirect_url) if path),
+    )
 
     for found in discover_routers():
         if found.dev_only and not include_dev_routes:

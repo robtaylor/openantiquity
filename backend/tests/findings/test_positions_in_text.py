@@ -35,6 +35,11 @@ WRITTEN = {
     "mention_title": "Walk to SK 111 222",
     "mention_note": "From 51°25'43\"N 1°51'15\"W",
     "item_note": "Recheck at TL 333 444",
+    # Map links, as people paste them, in a comment, an evidence link and a mention's address.
+    "map_comment": "Bing https://www.bing.com/maps?cp=51.42879~-1.85403&lvl=18 and Google "
+    "https://www.google.com/maps/place/51%C2%B025%2743.5%22N+1%C2%B051%2715.5%22W",
+    "evidence_url": "https://www.openstreetmap.org/?mlat=51.42877&mlon=-1.85401#map=18/51.42877/-1.85401",
+    "mention_url": "https://www.openstreetmap.org/?mlat=51.42871&mlon=-1.85409",
 }
 POSITIONS = (
     "1025 6996",
@@ -46,6 +51,10 @@ POSITIONS = (
     "SK 111 222",
     '43"N',
     "333 444",
+    "42879",
+    "2743.5",
+    "42877",
+    "42871",
 )
 
 
@@ -135,12 +144,17 @@ class World:
         )  # fmt: skip
         add_desk_evidence(
             db, finding, self.helper, EvidenceKind.HISTORIC_MAP,
-            title=WRITTEN["evidence_title"], note=WRITTEN["evidence_note"],
+            title=WRITTEN["evidence_title"], note=WRITTEN["evidence_note"], url=WRITTEN["evidence_url"],
         )  # fmt: skip
         comment(db, finding, self.helper, WRITTEN["comment"])
+        comment(db, finding, self.helper, WRITTEN["map_comment"])
         answer(db, finding, self.member, Visible.YES, note=WRITTEN["answer_note"])
         made = mention(db, finding, self.helper, title=WRITTEN["mention_title"])
         made.note = WRITTEN["mention_note"]
+        # As `unfurl.canonical` stores an OpenStreetMap link: the fragment goes, the query stays.
+        linked = mention(db, finding, self.helper, title="Where it is")
+        linked.url = linked.canonical_url = WRITTEN["mention_url"]
+        linked.provider = "openstreetmap.org"
         notebook = make(db, self.helper)
         add(
             db, notebook, self.helper,
@@ -222,7 +236,11 @@ def test_those_who_see_the_exact_position_read_the_text_as_written(world: World,
     comments = client.get(f"{API}/findings/{world.finding.public_id}/comments").json()["items"]
     assert comments[0]["body"] == WRITTEN["comment"]
     listed = client.get(f"{API}/findings/{world.finding.public_id}/mentions").json()["items"]
-    assert (listed[0]["title"], listed[0]["note"]) == (WRITTEN["mention_title"], WRITTEN["mention_note"])
+    by_title = {item["title"]: item for item in listed}
+    assert by_title[WRITTEN["mention_title"]]["note"] == WRITTEN["mention_note"]
+    assert (
+        by_title["Where it is"]["url"] == by_title["Where it is"]["canonical_url"] == WRITTEN["mention_url"]
+    )
 
 
 def test_a_title_search_reads_the_hidden_title_for_those_who_see_only_the_square(world: World) -> None:
@@ -280,3 +298,50 @@ def test_a_stale_hidden_title_catches_up_the_next_time_the_finding_is_saved(
         assert finding.title_public == f"Bank at {PLACEHOLDER}"
         assert not found("123-456")
         assert found("Bank")
+
+
+@pytest.mark.parametrize("viewer", ["signed_out", "member"])
+def test_a_mention_s_address_reaches_only_those_who_see_the_exact_position(
+    world: World, db: Session, viewer: str
+) -> None:
+    """A page's address can say where the finding is in any form, so it goes only to those who see it.
+
+    A video's or a DOI's address is rebuilt from its identifier alone, so it is kept.
+    """
+    video = mention(db, world.finding, world.helper, title="On YouTube")
+    video.provider, video.url = "youtube", "https://youtu.be/dQw4w9WgXcQ?t=30&si=tracking"
+    video.canonical_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    video.thumbnail_url = "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
+    db.commit()
+    client = world.clients[viewer]
+    for path in (f"/findings/{world.finding.public_id}/mentions", "/mentions/recent"):
+        items = {item["title"]: item for item in client.get(API + path).json()["items"]}
+        assert (items["Where it is"]["url"], items["Where it is"]["canonical_url"]) == (None, None), path
+        assert items["On YouTube"]["url"] == items["On YouTube"]["canonical_url"] == video.canonical_url
+        assert items["On YouTube"]["thumbnail_url"] == video.thumbnail_url
+        assert "si=tracking" not in str(items)
+
+
+def test_a_map_link_is_refused_on_a_finding_that_is_not_open(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    finder = make_user()
+    client = client_as(finder)
+    protected = create(db, finder, feature_class=FeatureClass.ROUND_BARROW)
+    path = f"{API}/findings/{protected.public_id}"
+    for link in (WRITTEN["mention_url"], "https://www.bing.com/maps?cp=51.42879~-1.85403&lvl=18"):
+        refused = client.post(f"{path}/mentions", json={"url": link})
+        assert refused.status_code == 422, link
+        assert error_code(refused) == "position_in_text"
+        assert refused.json()["error"]["details"][0]["field"] == "body.url"
+        evidence = client_as(make_user()).post(
+            f"{path}/evidence", json={"kind": "historic_map", "title": "OS map", "url": link}
+        )
+        assert error_code(evidence) == "position_in_text", evidence.text
+    # The same links are fine on an open finding, whose position everyone sees.
+    open_one = create(db, finder, feature_class=FeatureClass.ENCLOSURE)
+    added = client_as(make_user()).post(
+        f"{API}/findings/{open_one.public_id}/evidence",
+        json={"kind": "historic_map", "title": "OS map", "url": WRITTEN["mention_url"]},
+    )
+    assert added.status_code == 201, added.text

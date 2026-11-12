@@ -877,3 +877,37 @@ def test_prepare_row_is_pure_and_shapes_the_upsert() -> None:
     geom = shapely.from_wkb(row["geom_wkb"])
     assert shapely.get_srid(geom) == 4326
     assert geom.equals(Point(-1.85, 51.43))
+
+
+@pytest.mark.parametrize(
+    ("given", "kept"),
+    [
+        ("https://www.heritagegateway.org.uk/Gateway/Results_Single.aspx?uid=1", True),
+        ("http://example.org/record/7", True),
+        ("javascript:alert(1)", False),
+        ("JAVASCRIPT:alert(1)", False),
+        ("data:text/html,<script>alert(1)</script>", False),
+        ("vbscript:msgbox(1)", False),
+        ("//example.org/no-scheme", False),
+        ("https://user:pass@example.org/", False),
+        ("https://example.org/a b", False),
+        ("https://example.org/\x00", False),
+        ("https://" + "a" * 2000 + ".org/", False),
+        ("", False),
+    ],
+)
+def test_only_web_addresses_are_kept_from_a_publisher(given: str, kept: bool) -> None:
+    """A record's address becomes a link on its page and, through evidence, in front of a moderator."""
+    started = datetime(2026, 11, 10, 12, 0, tzinfo=UTC)
+    row, _ = runner.prepare_row(record("A", url=given), SOURCE, (-11.5, 49.0, 2.5, 61.5), started)
+    assert row["url"] == (given if kept else None)
+
+
+def test_a_record_s_name_and_summary_are_cut_to_length() -> None:
+    started = datetime(2026, 11, 10, 12, 0, tzinfo=UTC)
+    row, _ = runner.prepare_row(
+        record("A", "n" * 5000, summary="s" * 100_000), SOURCE, (-11.5, 49.0, 2.5, 61.5), started
+    )
+    assert len(row["name"]) == runner.MAX_NAME_LENGTH
+    assert row["name"].endswith("…")
+    assert len(row["summary"]) == runner.MAX_SUMMARY_LENGTH

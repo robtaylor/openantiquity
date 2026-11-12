@@ -49,7 +49,6 @@ def test_newest_first_and_paged(db: Session, make_user: MakeUser, client: TestCl
         "handle": "Finder",
         "display_name": "Finder",
         "role": "member",
-        "avatar_url": None,
     }
     assert created["finding"]["public_id"] == finding.public_id
     assert created["finding"]["title"] == "Ditched enclosure"
@@ -256,6 +255,5 @@ def test_a_16_to_17_actor_shows_only_their_handle(
         "handle": "YoungDigger",
         "display_name": "YoungDigger",
         "role": "member",
-        "avatar_url": None,
     }
     assert "Real Name" not in client.get(f"{API}/activity").text

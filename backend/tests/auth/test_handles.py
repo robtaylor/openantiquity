@@ -173,3 +173,59 @@ def test_display_names_refuse_invisible_and_control_characters(name: str) -> Non
 def test_display_names_cannot_pass_for_staff_or_a_deleted_account(name: str) -> None:
     with pytest.raises(InvalidDisplayNameError, match="reserved"):
         validate_display_name(name)
+
+
+@pytest.mark.parametrize(
+    "handle",
+    [
+        "Open-Antiquity",
+        "Open_Antiquity",
+        "Field-Club",
+        "OpenAntiquityTeam",
+        "TheFieldClub",
+        "OpenAntiqu1ty",
+        "Admin-Team",
+        "Staff_Account",
+        "Moderator2",
+        "Admin1",
+        "Real_Admin",
+        "Adrnin",
+        "Former_Member",
+        "Former-7K3QXM9A",
+    ],
+)
+def test_handles_cannot_pass_for_the_project_its_staff_or_a_deleted_account(handle: str) -> None:
+    with pytest.raises(InvalidHandleError, match="reserved"):
+        validate_handle(handle)
+
+
+@pytest.mark.parametrize(
+    "handle", ["Badminton", "Staffordshire_Digger", "Modern_Muddy", "Rooted", "Fieldfare"]
+)
+def test_handles_that_only_contain_a_staff_word_are_fine(handle: str) -> None:
+    assert validate_handle(handle) == handle
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        # A Cyrillic A, S and o: drawn the same as the Latin letters.
+        "\u0410dmin",
+        "\u0405taff",
+        "F\u043ermer member",
+        "Open Antiquity Team",
+        "\u041epen \u0410ntiquity",
+        "Field Club official",
+        "Staff account",
+        "Mod 2",
+        "Fi\u0435ld Club",
+    ],
+)
+def test_display_names_in_look_alike_letters_cannot_pass_for_staff_either(name: str) -> None:
+    with pytest.raises(InvalidDisplayNameError, match="reserved"):
+        validate_display_name(name)
+
+
+@pytest.mark.parametrize("name", ["Badminton Club", "Staffordshire Digger", "The Moderator's Friend", "Ivan"])
+def test_ordinary_names_with_a_staff_word_in_them_are_fine(name: str) -> None:
+    assert validate_display_name(name) == name

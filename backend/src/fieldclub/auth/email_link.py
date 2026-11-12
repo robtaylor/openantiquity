@@ -16,23 +16,32 @@ The token travels in the link's fragment (`#token=`), which browsers never
 send to a server, so it stays out of access logs and `Referer` headers. The
 app reads it and posts it to `/auth/email/verify`.
 
-Asking for a link spends every earlier unspent link for the same address, so
-only the newest one works.
+Asking for a link again from the same browser spends the links that browser
+asked for before for that address, so only its newest works. A link someone
+else asked for, from another browser, is left alone: a stranger asking for
+your address can't spend the link you are about to click.
 
 A link is bound to the browser that asked for it. `/auth/email/start` sets the
 `openantiquity_email_link` cookie, a random value whose hash is stored on the link,
 and `/auth/email/verify` signs in straight away only when that cookie comes
 back. Anywhere else, for example on another device, verify answers
 `confirmation_required` with the address masked, spends nothing, and signs in
-only when posted again with `confirm`. Without this, someone could ask for a
-link to their own address, send it to a victim, and have the victim's browser
-signed in to the attacker's account, where the victim's drafts would then be
-saved (login CSRF). The app must show the masked address and let the person
-choose; it must never confirm on their behalf.
+only when posted again with the address the person types, which must be the
+one the link was sent to (`email_mismatch` otherwise). Without this, someone
+could ask for a link to their own address, send it to a victim, and have the
+victim's browser signed in to the attacker's account, where the victim's
+drafts would then be saved (login CSRF). A masked address alone isn't enough:
+anyone can pick an address with the victim's first letter at the same big
+domain. The victim types their own address, which isn't the attacker's.
+
+The answer says whether this browser asked for the link (`asked_here`). When
+it didn't, the app must not save drafts left in the browser without asking:
+the person may be signed in to someone else's account however careful they were.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
@@ -40,7 +49,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from fieldclub.auth import signin
-from fieldclub.auth.failures import LinkConfirmationRequiredError, LinkInvalidError
+from fieldclub.auth.failures import EmailMismatchError, LinkConfirmationRequiredError, LinkInvalidError
 from fieldclub.auth.mailer import Message
 from fieldclub.auth.providers import register_provider
 from fieldclub.auth.tokens import hash_presented, hash_token, new_token
@@ -51,9 +60,12 @@ from fieldclub.vocab import SignInProvider
 LINK_LIFETIME = timedelta(minutes=15)
 # The app's page that reads the token from the fragment and posts it.
 LINK_PAGE = "/signin/email"
-# The cookie that binds a link to the browser that asked for it, sent only to verify.
+# The cookie that binds a link to the browser that asked for it, sent only to
+# start, which spends the links this browser asked for before, and to verify.
 LINK_COOKIE = "openantiquity_email_link"
-VERIFY_PATH = "/api/v1/auth/email/verify"
+LINK_COOKIE_PATH = "/api/v1/auth/email"
+VERIFY_PATH = f"{LINK_COOKIE_PATH}/verify"
+START_PATH = f"{LINK_COOKIE_PATH}/start"
 
 register_provider(SignInProvider.EMAIL, lambda settings: settings.mail_backend is not None)
 
@@ -73,16 +85,28 @@ def masked(email: str) -> str:
     return f"{local[0]}***@{domain}"
 
 
-def create_link(db: Session, email: str, *, browser: str | None = None, now: datetime | None = None) -> str:
+def create_link(
+    db: Session,
+    email: str,
+    *,
+    browser: str | None = None,
+    previous_browser: str | None = None,
+    now: datetime | None = None,
+) -> str:
     """Store a new link for `email` and return its token. The caller commits, then sends.
 
-    Earlier unspent links for the address are spent. `browser` is the value of
-    the asking browser's link cookie.
+    `browser` is the value of the link cookie the asking browser is given.
+    `previous_browser` is the one it presented, if any: the earlier unspent
+    links it asked for for this address are spent. Nobody else's are.
     """
     now = now or datetime.now(UTC)
-    db.execute(
-        update(MagicLink).where(MagicLink.email == email, MagicLink.used_at.is_(None)).values(used_at=now)
-    )
+    previous = hash_presented(previous_browser)
+    if previous is not None:
+        db.execute(
+            update(MagicLink)
+            .where(MagicLink.email == email, MagicLink.browser_hash == previous, MagicLink.used_at.is_(None))
+            .values(used_at=now)
+        )
     token = new_token()
     db.add(
         MagicLink(
@@ -113,19 +137,31 @@ def _from_this_browser(link: MagicLink, browser: str | None) -> bool:
     return link.browser_hash is not None and link.browser_hash == hash_presented(browser)
 
 
+def _same_address(link: MagicLink, typed: str) -> bool:
+    return typed.strip().casefold() == link.email.casefold()
+
+
+@dataclass(frozen=True)
+class Redeemed:
+    user: User
+    # True when the browser that asked for the link redeemed it.
+    asked_here: bool
+
+
 def redeem(
     db: Session,
     token: str | None,
     *,
     browser: str | None = None,
-    confirmed: bool = False,
+    typed_email: str | None = None,
     now: datetime | None = None,
-) -> User:
+) -> Redeemed:
     """Spend a link and return the account it signs in to. The caller commits.
 
     `browser` is the link cookie the request carried. A link from another
-    browser is spent only when `confirmed`, and otherwise raises
-    `LinkConfirmationRequiredError` with the masked address.
+    browser is spent only when `typed_email` is the address it was sent to.
+    Without one it raises `LinkConfirmationRequiredError` with the masked
+    address, and with another `EmailMismatchError`. Neither spends it.
     """
     token_hash = hash_presented(token)
     if token_hash is None:
@@ -139,8 +175,12 @@ def redeem(
     link = db.scalars(select(MagicLink).where(*live)).one_or_none()
     if link is None:
         raise LinkInvalidError()
-    if not confirmed and not _from_this_browser(link, browser):
-        raise LinkConfirmationRequiredError(details={"email": masked(link.email)})
+    asked_here = _from_this_browser(link, browser)
+    if not asked_here:
+        if typed_email is None:
+            raise LinkConfirmationRequiredError(details={"email": masked(link.email)})
+        if not _same_address(link, typed_email):
+            raise EmailMismatchError()
     # Conditional, so two clicks at the same moment can't both sign in.
     spent = db.execute(
         update(MagicLink).where(MagicLink.id == link.id, *live).values(used_at=now).returning(MagicLink.id)
@@ -150,4 +190,4 @@ def redeem(
     user = signin.user_for_email(db, link.email, now=now)
     link.user_id = user.id
     db.flush()
-    return user
+    return Redeemed(user, asked_here)

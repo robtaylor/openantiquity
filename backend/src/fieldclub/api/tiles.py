@@ -22,6 +22,11 @@ wait draws it. These endpoints are `async` and draw each tile on threads of
 their own (`terrain/workers.py`), so tiles never hold the threads the rest of
 the API runs on. When those threads and their queue are full, a tile is
 answered 503 `tiles_busy` with a `Retry-After`.
+
+Each address may ask for `TILES_PER_MINUTE` terrain tiles a minute, counted
+together, so one client can't hold every tile thread and every request slot
+by asking for tiles nobody has drawn yet. A map being panned quickly asks for
+a few hundred.
 """
 
 from __future__ import annotations
@@ -32,6 +37,7 @@ from fastapi import APIRouter, Depends, Query
 from starlette.responses import Response
 
 from fieldclub.api.deps import IfNoneMatch, TerrainDep, body_etag, not_modified
+from fieldclub.ratelimit import rate_limit_by_address
 from fieldclub.terrain.render import RenderedTile
 from fieldclub.terrain.service import get_tile_workers
 from fieldclub.terrain.workers import TileWorkers
@@ -40,7 +46,13 @@ MOUNT_AT_ROOT = True
 
 # Left out of the OpenAPI schema: the frontend takes tile URLs from /meta, not
 # from the generated client, and the schema documents the /api/v1 API.
-router = APIRouter(prefix="/tiles", tags=["tiles"], include_in_schema=False)
+TILES_PER_MINUTE = 600
+router = APIRouter(
+    prefix="/tiles",
+    tags=["tiles"],
+    include_in_schema=False,
+    dependencies=[Depends(rate_limit_by_address("terrain_tiles", TILES_PER_MINUTE, per_seconds=60))],
+)
 
 IMMUTABLE = "public, max-age=31536000, immutable"
 UNVERSIONED = "public, max-age=3600"

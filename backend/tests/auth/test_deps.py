@@ -134,10 +134,10 @@ def test_using_a_session_refreshes_it_and_resends_the_cookie(
     assert "HttpOnly" in cookie
     assert "SameSite=lax" in cookie
     assert "Secure" in cookie
-    assert f"Max-Age={365 * 24 * 3600}" in cookie
+    assert f"Max-Age={90 * 24 * 3600}" in cookie
     db.expire_all()
     row = db.scalars(select(UserSession)).one()
-    assert row.expires_at == later + timedelta(days=365)
+    assert row.expires_at == later + timedelta(days=90)
 
 
 @pytest.mark.parametrize(

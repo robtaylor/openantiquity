@@ -50,6 +50,7 @@ from fieldclub.vocab import (
     Outcome,
     Period,
     Relation,
+    Role,
     Sensitivity,
     Stance,
     StateReason,
@@ -205,6 +206,7 @@ class Observation(Base):
         enum_check("explanation", Explanation),
         enum_check("tier_at_answer", Tier),
         enum_check("state_at_answer", FindingState),
+        enum_check("role_at_answer", Role),
     )
 
     id: Mapped[IdPk]
@@ -231,6 +233,10 @@ class Observation(Base):
     # counted, so its reveal can show the move the answer made.
     tier_at_answer: Mapped[str | None] = mapped_column(Text)
     state_at_answer: Mapped[str | None] = mapped_column(Text)
+    # The answerer's role when they answered, which sets the answer's weight for
+    # good. A later change of role or a ban moves no score through an answer,
+    # so neither can show how a named person answered (Decision 0019).
+    role_at_answer: Mapped[str] = mapped_column(Text)
 
 
 class Evidence(Base):
@@ -276,13 +282,19 @@ class EvidenceVote(Base):
     """An endorsement (+1) or objection (-1) to a piece of evidence."""
 
     __tablename__ = "evidence_votes"
-    __table_args__ = (CheckConstraint("value IN (-1, 1)", name="value_valid"),)
+    __table_args__ = (
+        CheckConstraint("value IN (-1, 1)", name="value_valid"),
+        enum_check("role_at_vote", Role),
+    )
 
     evidence_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("evidence.id", ondelete="CASCADE"), primary_key=True
     )
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), primary_key=True)
     value: Mapped[int] = mapped_column(SmallInteger)
+    # The voter's role when they voted, which sets the vote's weight, as an
+    # answer's role does (Decision 0019). An item gives its votes only as counts.
+    role_at_vote: Mapped[str] = mapped_column(Text)
     created_at: Mapped[CreatedAt]
 
 

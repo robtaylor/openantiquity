@@ -64,13 +64,23 @@ class LinkInvalidError(BadRequestError):
 class LinkConfirmationRequiredError(ConflictError):
     """A live link opened in a browser that didn't ask for it.
 
-    Nothing is spent. The app asks "Sign in as <masked address>?" and posts
-    again with `confirm`, and never confirms on the person's behalf: someone
+    Nothing is spent. The app asks the person to type their address and posts
+    again with it as `email`, and never fills it in on their behalf: someone
     can ask for a link to their own address and send it to somebody else.
     """
 
     code = "confirmation_required"
-    message = "This link was asked for in another browser. Confirm the address to sign in."
+    message = "This link was asked for in another browser. Type your email address to sign in."
+
+
+class EmailMismatchError(ConflictError):
+    """A link opened in another browser, confirmed with an address it wasn't sent to. Nothing is spent."""
+
+    code = "email_mismatch"
+    message = (
+        "This link was sent to a different address. If someone else sent it to you, it would sign "
+        "you in to their account, so ask for your own link."
+    )
 
 
 class EmailUnavailableError(ConflictError):

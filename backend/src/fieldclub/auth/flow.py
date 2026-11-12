@@ -98,7 +98,7 @@ def new_flow(
 
 
 def _key() -> bytes:
-    secret = get_settings().secret_key.get_secret_value().encode("utf-8")
+    secret = get_settings().signing_key
     return hmac.new(secret, _KEY_PURPOSE, hashlib.sha256).digest()
 
 

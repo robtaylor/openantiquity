@@ -22,7 +22,7 @@ from shapely.geometry import box
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fieldclub.models import Activity, Finding, User
+from fieldclub.models import Activity, Evidence, Finding, User
 from fieldclub.services import events, findings, sensitivity
 from fieldclub.services.events import Announcement, EventHub, StreamFilter
 from fieldclub.vocab import FeatureClass, Sensitivity, Visible
@@ -66,7 +66,11 @@ def world(db: Session, make_user: MakeUser, app: FastAPI, client_for: ClientFor)
         follow(db, finding, people["member"], people["trusted"], people["moderator"])
         for helper in helpers:
             answer(db, finding, helper, Visible.YES, feature_class=FeatureClass.ENCLOSURE)
-        add_map(db, finding, helpers[0], url=f"https://maps.example/view?lat={lat:.6f}&lon={lon:.6f}")
+        evidence_id = add_map(db, finding, helpers[0])
+        # A link that gives the position, as one added before the finding was raised would be:
+        # adding it to a finding that isn't open is refused.
+        db.get_one(Evidence, evidence_id).url = f"https://maps.example/view?lat={lat:.6f}&lon={lon:.6f}"
+        db.commit()
         comment(db, finding, helpers[1])
         assert finding.sensitivity == level.value
         made[level] = finding

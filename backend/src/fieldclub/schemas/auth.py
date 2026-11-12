@@ -21,8 +21,8 @@ from fieldclub.vocab import AgeBand, Role
 class Me(ApiModel):
     """The signed-in user, as they see themselves.
 
-    Unlike `PublicUser`, this shows the stored name and picture, because it
-    only ever goes to the account's owner.
+    Unlike `PublicUser`, this shows the stored name, because it only ever goes
+    to the account's owner.
     """
 
     # The account's own id, which never changes, so a browser can tell whose
@@ -33,7 +33,6 @@ class Me(ApiModel):
     handle: str
     display_name: str
     role: str
-    avatar_url: str | None = None
     email: str | None
     email_verified: bool
     reputation: float
@@ -52,7 +51,6 @@ class Me(ApiModel):
             handle=user.handle,
             display_name=user.display_name,
             role=user.role,
-            avatar_url=user.avatar_url,
             email=user.email,
             email_verified=user.email_verified_at is not None,
             reputation=user.reputation,
@@ -75,9 +73,6 @@ class MeUpdate(RequestModel):
     # Merged into the stored settings one top-level key at a time. A key set
     # to null is removed.
     settings: dict[str, Any] | None = None
-    # Null removes the picture a sign-in provider gave. Nothing else is
-    # accepted, because Open Antiquity stores no picture of its own.
-    avatar_url: None = None
 
 
 class Welcome(RequestModel):
@@ -140,6 +135,17 @@ class EmailVerify(RequestModel):
     """The token from the emailed link's fragment."""
 
     token: str = Field(min_length=1, max_length=MAX_TOKEN_LENGTH)
-    # The person said yes to "Sign in as <masked address>?". Needed only when the
-    # link is opened in a browser that didn't ask for it. Never sent unasked.
-    confirm: bool = False
+    # The address the person typed, when the link is opened in a browser that
+    # didn't ask for it. It must be the one the link was sent to. Never filled
+    # in on the person's behalf.
+    email: str | None = Field(default=None, min_length=1, max_length=MAX_EMAIL)
+
+
+class EmailSignedIn(Me):
+    """The person the emailed link signed in, and whether this browser asked for the link."""
+
+    # False when the link was asked for in another browser and confirmed here by
+    # typing the address. The person may then be signed in to an account that
+    # isn't theirs, so drafts left in this browser must not be saved without
+    # asking them first.
+    asked_here: bool

@@ -23,7 +23,19 @@ from fieldclub.errors import ConfigError
 
 # A placeholder for local development. Settings refuse to load it in production.
 DEV_SECRET_KEY = "dev-only-secret-change-me"
-SESSION_COOKIE = "openantiquity_session"
+# The shortest key production accepts. It signs the sign-in flow and keys the
+# hashes of addresses kept with sessions, so it must not be guessable.
+SECRET_KEY_MIN_LENGTH = 32
+_SECRET_KEY_NEEDED = (
+    f"FIELDCLUB_SECRET_KEY must be a random value of at least {SECRET_KEY_MIN_LENGTH} characters "
+    "in production."
+)
+# The session cookie. Its `__Host-` prefix makes the browser refuse it unless it
+# is Secure, for the whole site and for this host alone, so a page on another
+# subdomain can't plant a session of its own. Local development over plain
+# http can't set a Secure cookie, so there it goes by the bare name.
+SESSION_COOKIE = "__Host-openantiquity_session"
+INSECURE_SESSION_COOKIE = "openantiquity_session"
 CLIENT_HEADER = "X-OpenAntiquity-Client"
 CLIENT_HEADER_VALUE = "web"
 
@@ -157,10 +169,12 @@ class Settings(BaseSettings):
     # The live event stream, GET /events/stream (see fieldclub.services.events).
     # Events a client may fall behind by before it is dropped.
     events_queue_size: int = Field(default=64, ge=1, le=10_000)
-    # Streams open at once from one address, and in one process. Generous per
-    # address, because many people can share one (mobile networks, schools):
-    # the per-process cap and the rate limit on opening are what protect.
-    events_max_per_address: int = Field(default=50, ge=1)
+    # Streams open at once from one address, and in one process. One address
+    # may hold at most a quarter of a process's streams, so a few addresses
+    # can't take them all. A household or a school sharing one address and
+    # opening more falls back to asking now and then, as the frontend does
+    # whenever the stream is refused.
+    events_max_per_address: int = Field(default=8, ge=1)
     events_max_streams: int = Field(default=1000, ge=1)
     # Seconds between keep-alive comments, and the longest one stream lasts.
     events_heartbeat_s: float = Field(default=15.0, gt=0)
@@ -176,8 +190,14 @@ class Settings(BaseSettings):
     auto_create_schema: bool | None = None
 
     # Sessions and abuse limits
-    secret_key: SecretStr = SecretStr(DEV_SECRET_KEY)
-    session_days: int = Field(default=365, ge=1)
+    # Signs the sign-in flow and keys the hashes of addresses kept with sessions.
+    # Only what serves people needs it: production refuses to serve without one
+    # (`signing_key`), and a job that never signs anything starts without it.
+    secret_key: SecretStr | None = None
+    # A session ends after this many days without use, and after
+    # `session_max_days` from sign-in however much it is used.
+    session_days: int = Field(default=90, ge=1)
+    session_max_days: int = Field(default=365, ge=1)
     cookie_secure: bool | None = None
     ratelimit_enabled: bool = True
     # POST /auth/dev-login signs in as anyone by name. It has to be asked for,
@@ -335,8 +355,18 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _check_consistency(self) -> Self:
         is_prod = self.env is Environment.PROD
-        if is_prod and self.secret_key.get_secret_value() == DEV_SECRET_KEY:
-            raise ConfigError("FIELDCLUB_SECRET_KEY must be set to a long random value in production.")
+        key = self.secret_key.get_secret_value() if self.secret_key is not None else None
+        if is_prod and key is not None and (key == DEV_SECRET_KEY or len(key) < SECRET_KEY_MIN_LENGTH):
+            raise ConfigError(_SECRET_KEY_NEEDED)
+        if is_prod and self.cookie_secure is False:
+            raise ConfigError("FIELDCLUB_COOKIE_SECURE can't be false in production: cookies must be Secure.")
+        if self.events_max_per_address > max(1, self.events_max_streams // 4):
+            raise ConfigError(
+                "FIELDCLUB_EVENTS_MAX_PER_ADDRESS must be at most a quarter of FIELDCLUB_EVENTS_MAX_STREAMS, "
+                "so that a few addresses can't hold every stream."
+            )
+        if self.session_days > self.session_max_days:
+            raise ConfigError("FIELDCLUB_SESSION_DAYS can't be longer than FIELDCLUB_SESSION_MAX_DAYS.")
         if is_prod and self.dev_login:
             raise ConfigError(
                 "FIELDCLUB_DEV_LOGIN lets anyone sign in as anyone. It can't be on in production."
@@ -422,6 +452,23 @@ class Settings(BaseSettings):
         return self
 
     @property
+    def signing_key(self) -> bytes:
+        """The secret key, or the development placeholder outside production.
+
+        Production has no placeholder: asking for the key there without one set
+        raises, and `create_app` asks at start-up, so the API never serves without it.
+        """
+        if self.secret_key is not None:
+            return self.secret_key.get_secret_value().encode("utf-8")
+        if self.env is Environment.PROD:
+            raise ConfigError(_SECRET_KEY_NEEDED)
+        return DEV_SECRET_KEY.encode("utf-8")
+
+    def require_signing_key(self) -> None:
+        """Raise `ConfigError` unless there is a key to sign with: always outside production."""
+        self.signing_key  # noqa: B018 - reading it raises when there is none
+
+    @property
     def is_dev(self) -> bool:
         return self.env is Environment.DEV
 
@@ -436,6 +483,10 @@ class Settings(BaseSettings):
         if self.cookie_secure is not None:
             return self.cookie_secure
         return not self.is_dev
+
+    @property
+    def session_cookie_name(self) -> str:
+        return SESSION_COOKIE if self.session_cookie_secure else INSECURE_SESSION_COOKIE
 
     @property
     def should_create_schema(self) -> bool:

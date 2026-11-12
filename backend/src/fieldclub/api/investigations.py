@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 from typing import Annotated, Literal
 
-import shapely
 from fastapi import APIRouter, Depends, Path, Response, status
 from shapely.geometry.base import BaseGeometry
 
@@ -58,14 +57,12 @@ ItemId = Annotated[int, Path(ge=1, le=MAX_ID)]
 def _area(geometry: GeoJSONGeometry | None) -> BaseGeometry | None:
     if geometry is None:
         return None
-    area = from_geojson(geometry, allowed=AREA_TYPES)
-    if shapely.get_num_coordinates(area) > AREA_MAX_POINTS:
-        raise ValidationFailedError(f"An area has at most {AREA_MAX_POINTS} points.")
+    area = from_geojson(geometry, allowed=AREA_TYPES, max_points=AREA_MAX_POINTS)
     findings.check_in_british_isles(area)
     return area
 
 
-def _detail(db: Db, access: Access) -> InvestigationDetail:
+def _detail(db: Db, access: Access, viewer: User | None) -> InvestigationDetail:
     investigation = access.investigation
     counts = investigations.counts(db, investigation)
     owner = db.get(User, investigation.owner_id)
@@ -76,6 +73,7 @@ def _detail(db: Db, access: Access) -> InvestigationDetail:
         item_count=counts.items,
         member_count=counts.members,
         role=access.role,
+        guard=investigations.position_guard(db, investigation, viewer),
         invited_as=access.invited,
     )
 
@@ -83,7 +81,9 @@ def _detail(db: Db, access: Access) -> InvestigationDetail:
 def _item_out(db: Db, access: Access, item_id: int, viewer: User) -> InvestigationItemOut:
     item = investigations.get_item(db, access.investigation, item_id)
     (view,) = investigations.item_views(db, [item], viewer)
-    return InvestigationItemOut.build(view, viewer)
+    return InvestigationItemOut.build(
+        view, viewer, investigations.position_guard(db, access.investigation, viewer)
+    )
 
 
 # --------------------------------------------------------------------------
@@ -136,7 +136,7 @@ def create_investigation(
     )
     db.commit()
     private(response)
-    return _detail(db, Access(investigation, InvestigationRole.OWNER))
+    return _detail(db, Access(investigation, InvestigationRole.OWNER), user)
 
 
 @router.get("/investigations/{public_id}", response_model=InvestigationDetail)
@@ -145,7 +145,7 @@ def get_investigation(
 ) -> InvestigationDetail:
     """An investigation's page. A private one is found only by its owner."""
     private(response)
-    return _detail(db, investigations.load(db, public_id, viewer))
+    return _detail(db, investigations.load(db, public_id, viewer), viewer)
 
 
 @router.patch("/investigations/{public_id}", response_model=InvestigationDetail, dependencies=[EDIT_LIMIT])
@@ -167,7 +167,7 @@ def update_investigation(
     investigations.update_investigation(db, access, user, changes)
     db.commit()
     private(response)
-    return _detail(db, access)
+    return _detail(db, access, user)
 
 
 @router.delete(
@@ -194,9 +194,11 @@ def list_items(
         db, access.investigation, limit=page.limit, cursor=page.cursor
     )
     private(response)
+    guard = investigations.position_guard(db, access.investigation, viewer)
     return Page[InvestigationItemOut](
         items=[
-            InvestigationItemOut.build(view, viewer) for view in investigations.item_views(db, items, viewer)
+            InvestigationItemOut.build(view, viewer, guard)
+            for view in investigations.item_views(db, items, viewer)
         ],
         next_cursor=next_cursor,
     )
@@ -325,7 +327,7 @@ def accept_invitation(public_id: str, user: Contributor, db: Db, response: Respo
     member = investigations.accept_invitation(db, access, user)
     db.commit()
     private(response)
-    return _detail(db, Access(access.investigation, InvestigationRole(member.role)))
+    return _detail(db, Access(access.investigation, InvestigationRole(member.role)), user)
 
 
 @router.delete(

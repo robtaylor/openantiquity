@@ -144,7 +144,6 @@ def _link_or_create(db: Session, identity: ProviderIdentity, now: datetime) -> U
             display_name=identity.display_name,
             email=email,
             email_verified_at=now if email else None,
-            avatar_url=identity.avatar_url,
         )
     db.add(
         AuthIdentity(
@@ -201,6 +200,9 @@ def begin_session(
     the same sign-in, for a callback that arrives without the session cookie.
     """
     check_can_sign_in(user)
+    # A provider's picture address kept from before pictures were dropped is
+    # personal data nothing uses, so it goes at the next sign-in.
+    user.avatar_url = None
     sessions.revoke_session(db, previous_token)
     if previous_hash:
         sessions.revoke_session_by_hash(db, previous_hash)

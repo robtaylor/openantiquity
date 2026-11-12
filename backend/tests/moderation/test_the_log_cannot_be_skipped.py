@@ -25,6 +25,7 @@ FOR_THE_CALLER = {
     ("PATCH", f"{API}/auth/me"): "the caller's own account",
     ("DELETE", f"{API}/auth/me"): "the caller's own account",
     ("POST", f"{API}/auth/logout"): "the caller's own session",
+    ("POST", f"{API}/auth/logout-everywhere"): "the caller's own sessions",
     ("POST", f"{API}/auth/oauth/{{provider}}/callback"): "signs in",
     ("POST", f"{API}/auth/email/start"): "signs in",
     ("POST", f"{API}/auth/email/verify"): "signs in",

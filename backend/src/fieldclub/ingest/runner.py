@@ -79,6 +79,9 @@ from fieldclub.vocab import IngestStatus, Period, RecordCategory
 logger = logging.getLogger(__name__)
 
 MAX_EXTERNAL_ID_LENGTH = 500
+# The longest name and summary a record keeps. Longer ones are cut, marked with an ellipsis.
+MAX_NAME_LENGTH = 500
+MAX_SUMMARY_LENGTH = 20_000
 MAX_ERROR_LENGTH = 4000
 
 # First key of the two-part advisory lock. The second is a hash of the source key.
@@ -223,8 +226,12 @@ def plain_text(text: str) -> str:
     return text
 
 
-def _plain(text: str | None) -> str | None:
-    return plain_text(text) if text else None
+def _plain(text: str | None, limit: int | None = None) -> str | None:
+    return _cut(plain_text(text), limit) if text else None
+
+
+def _cut(text: str, limit: int | None) -> str:
+    return text if limit is None or len(text) <= limit else text[: limit - 1].rstrip() + "\u2026"
 
 
 def prepare_row(
@@ -236,7 +243,7 @@ def prepare_row(
         raise InvalidRecordError(
             f"A record from {info.key} has an unusable external_id: {record.external_id!r}."
         )
-    name = plain_text(record.name).strip() if isinstance(record.name, str) else ""
+    name = _cut(plain_text(record.name).strip(), MAX_NAME_LENGTH) if isinstance(record.name, str) else ""
     if not name:
         raise InvalidRecordError(f"Record {external_id}: a record needs a name.")
     try:
@@ -271,14 +278,16 @@ def prepare_row(
         "source_key": info.key,
         "external_id": external_id,
         "name": name,
-        "summary": _plain(record.summary),
+        "summary": _plain(record.summary, MAX_SUMMARY_LENGTH),
         "category": category.value,
         "record_type": _plain(record.record_type),
         "monument_types": [plain_text(term).strip() for term in monument_types] or None,
         "periods": [Period(period).value for period in periods] or None,
         "geom_wkb": shapely.to_wkb(shapely.set_srid(geom, SRID), include_srid=True),
         "precision_m": record.precision_m,
-        "url": record.url or None,
+        # A publisher's address goes into a link on the record's page and,
+        # through evidence, on a finding's: only http and https are kept.
+        "url": common.web_url(record.url),
         "raw": record.raw,
         "source_updated_at": record.source_updated_at,
         "ingested_at": ingested_at,

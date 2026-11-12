@@ -63,7 +63,6 @@ CALLBACK_PATH = "/api/v1/auth/oauth/{provider}/callback"
 MAX_SUBJECT = 255
 MAX_EMAIL = 320
 MAX_NAME = 200
-MAX_URL = 2048
 # Apple's `user` form field is a few dozen bytes of JSON. Anything bigger is not Apple's.
 MAX_APPLE_USER_FIELD = 2000
 
@@ -80,7 +79,6 @@ class ProviderIdentity:
     email: str | None = None
     email_verified: bool = False
     display_name: str | None = None
-    avatar_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -117,11 +115,6 @@ def _text(value: object, limit: int) -> str | None:
 def _email(value: object) -> str | None:
     email = _text(value, MAX_EMAIL)
     return email if email and email.count("@") == 1 and not email.startswith("@") else None
-
-
-def _https_url(value: object) -> str | None:
-    url = _text(value, MAX_URL)
-    return url if url and url.startswith("https://") else None
 
 
 def _subject(value: object) -> str:
@@ -267,7 +260,6 @@ class Google(OidcProvider):
             email=_email(claims.get("email")),
             email_verified=claims.get("email_verified") is True,
             display_name=_text(claims.get("name"), MAX_NAME),
-            avatar_url=_https_url(claims.get("picture")),
         )
 
 
@@ -471,14 +463,10 @@ class Facebook(OAuthProvider):
             "GET",
             f"{graph}/me",
             "The Facebook profile call",
-            params={"fields": "id,name,email,picture.width(256).height(256)", "appsecret_proof": proof},
+            # No picture: Open Antiquity shows none, so it asks for none.
+            params={"fields": "id,name,email", "appsecret_proof": proof},
             headers={"Authorization": f"Bearer {access_token}"},
         )
-        picture = profile.get("picture")
-        data = picture.get("data") if isinstance(picture, dict) else None
-        avatar = None
-        if isinstance(data, dict) and not data.get("is_silhouette"):
-            avatar = _https_url(data.get("url"))
         return ProviderIdentity(
             provider=self.id,
             subject=_subject(profile.get("id")),
@@ -486,7 +474,6 @@ class Facebook(OAuthProvider):
             # Facebook never says an address is verified.
             email_verified=False,
             display_name=_text(profile.get("name"), MAX_NAME),
-            avatar_url=avatar,
         )
 
 

@@ -8,12 +8,15 @@ import time_machine
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fieldclub.auth import sessions
+from fieldclub.auth import email_link, sessions
 from fieldclub.auth.tokens import hash_token
-from fieldclub.models import UserSession
+from fieldclub.models import MagicLink, UserSession
 from tests.helpers import MakeUser, count
 
 START = datetime(2026, 11, 10, 9, 0, tzinfo=UTC)
+# The settings' defaults: how long a session lasts unused, and at most from sign-in.
+IDLE = timedelta(days=90)
+MOST = timedelta(days=365)
 
 
 def test_create_session_stores_only_the_hash(db: Session, make_user: MakeUser) -> None:
@@ -25,7 +28,7 @@ def test_create_session_stores_only_the_hash(db: Session, make_user: MakeUser) -
     assert row.token_hash == hash_token(token)
     assert token not in (row.token_hash, row.user_agent, row.ip_hash)
     assert row.user_id == user.id
-    assert row.expires_at == START + timedelta(days=365)
+    assert row.expires_at == START + IDLE
     assert row.last_used_at == START
     assert row.user_agent == "Firefox"
     assert row.ip_hash is not None
@@ -70,10 +73,10 @@ def test_sessions_expire(db: Session, make_user: MakeUser) -> None:
     with time_machine.travel(START, tick=False):
         token = sessions.create_session(db, make_user())
         db.commit()
-    with time_machine.travel(START + timedelta(days=364, hours=23), tick=False):
+    with time_machine.travel(START + IDLE - timedelta(hours=1), tick=False):
         assert sessions.resolve_session(db, token) is not None
         db.rollback()
-    with time_machine.travel(START + timedelta(days=365, seconds=1), tick=False):
+    with time_machine.travel(START + IDLE + timedelta(seconds=1), tick=False):
         assert sessions.resolve_session(db, token) is None
 
 
@@ -87,9 +90,9 @@ def test_use_extends_a_session_at_most_once_an_hour(db: Session, make_user: Make
         resolved = sessions.resolve_session(db, token)
         assert resolved is not None
         assert resolved.refreshed is False
-        assert resolved.session.expires_at == START + timedelta(days=365)
+        assert resolved.session.expires_at == START + IDLE
 
-    later = START + timedelta(days=200)
+    later = START + timedelta(days=80)
     with time_machine.travel(later, tick=False):
         resolved = sessions.resolve_session(db, token)
         assert resolved is not None
@@ -97,13 +100,33 @@ def test_use_extends_a_session_at_most_once_an_hour(db: Session, make_user: Make
         db.commit()
     row = db.scalars(select(UserSession)).one()
     assert row.last_used_at == later
-    assert row.expires_at == later + timedelta(days=365)
+    assert row.expires_at == later + IDLE
     db.refresh(user)
     assert user.last_seen_at == later
 
-    # Still alive long after the original expiry, because it was used.
-    with time_machine.travel(START + timedelta(days=500), tick=False):
+    # Still alive after the original expiry, because it was used.
+    with time_machine.travel(START + timedelta(days=150), tick=False):
         assert sessions.resolve_session(db, token) is not None
+        db.commit()
+
+
+def test_a_session_ends_a_year_after_sign_in_however_often_it_is_used(
+    db: Session, make_user: MakeUser
+) -> None:
+    """A stolen or forgotten cookie, used every day, still stops working."""
+    with time_machine.travel(START, tick=False):
+        token = sessions.create_session(db, make_user())
+        db.commit()
+    day = START
+    while day < START + MOST - timedelta(days=30):
+        day += timedelta(days=30)
+        with time_machine.travel(day, tick=False):
+            assert sessions.resolve_session(db, token) is not None, day
+            db.commit()
+    row = db.scalars(select(UserSession)).one()
+    assert row.expires_at == START + MOST
+    with time_machine.travel(START + MOST + timedelta(seconds=1), tick=False):
+        assert sessions.resolve_session(db, token) is None
 
 
 def test_revoke_ends_one_session(db: Session, make_user: MakeUser) -> None:
@@ -132,17 +155,27 @@ def test_revoke_all_ends_every_session_of_one_user(db: Session, make_user: MakeU
     assert sessions.resolve_session(db, kept) is not None
 
 
-def test_purge_removes_only_expired_sessions(db: Session, make_user: MakeUser) -> None:
+def test_purge_removes_expired_sessions_and_old_sign_in_links(db: Session, make_user: MakeUser) -> None:
     user = make_user()
     with time_machine.travel(START, tick=False):
         sessions.create_session(db, user)
-    with time_machine.travel(START + timedelta(days=300), tick=False):
+        email_link.create_link(db, "stale@example.org", now=START)
+        spent = email_link.create_link(db, "spent@example.org", now=START)
+    later = START + timedelta(days=100)
+    with time_machine.travel(later, tick=False):
         fresh = sessions.create_session(db, user)
+        live = email_link.create_link(db, "live@example.org", now=later)
     db.commit()
-    assert sessions.purge_expired(db, now=START + timedelta(days=400)) == 1
+    used = db.scalars(select(MagicLink).where(MagicLink.token_hash == hash_token(spent))).one()
+    used.used_at = START
     db.commit()
+    purged = sessions.purge(db, now=later + timedelta(minutes=1))
+    db.commit()
+    assert (purged.sessions, purged.links) == (1, 2)
     assert count(db, UserSession) == 1
-    assert sessions.resolve_session(db, fresh, now=START + timedelta(days=400)) is not None
+    assert sessions.resolve_session(db, fresh, now=later + timedelta(minutes=1)) is not None
+    remaining = db.scalars(select(MagicLink)).one()
+    assert remaining.token_hash == hash_token(live)
 
 
 def test_a_deleted_account_is_signed_out_even_if_a_session_row_survives(

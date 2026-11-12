@@ -24,7 +24,6 @@ ME_KEYS = {
     "handle",
     "display_name",
     "role",
-    "avatar_url",
     "email",
     "email_verified",
     "reputation",
@@ -66,7 +65,7 @@ def test_dev_login_creates_a_named_member_and_signs_them_in(client: TestClient, 
     body = response.json()
     assert set(body) == ME_KEYS
     assert (body["handle"], body["display_name"], body["role"]) == ("TestRob", "TestRob", "member")
-    assert (body["avatar_url"], body["email"], body["email_verified"]) == (None, None, False)
+    assert (body["email"], body["email_verified"]) == (None, False)
     assert (body["reputation"], body["bio"], body["settings"]) == (0.0, None, {})
 
     user = db.scalars(select(User)).one()
@@ -141,10 +140,11 @@ def test_the_session_cookie_is_httponly_lax_and_secure(client: TestClient, db: S
     cookie = response.headers["set-cookie"]
     name, _, rest = cookie.partition("=")
     token, _, attributes = rest.partition(";")
-    assert name == SESSION_COOKIE == "openantiquity_session"
+    # `__Host-`: the browser takes it only Secure, for the whole site and this host alone.
+    assert name == SESSION_COOKIE == "__Host-openantiquity_session"
     flags = {part.strip().lower() for part in attributes.split(";")}
     assert {"httponly", "samesite=lax", "secure", "path=/"} <= flags
-    assert f"max-age={365 * 24 * 3600}" in flags
+    assert f"max-age={90 * 24 * 3600}" in flags
     assert "domain" not in attributes.lower()
 
     # The cookie holds the token. The database holds only its hash.
@@ -238,7 +238,6 @@ def test_me_shows_private_fields_to_their_owner(client_as: ClientAs, make_user: 
         "handle": "RidgewayRob",
         "display_name": "Rob",
         "role": "trusted",
-        "avatar_url": "https://example.org/rob.png",
         "email": "rob@example.org",
         "email_verified": True,
         "reputation": 62.5,
@@ -470,7 +469,7 @@ def test_delete_me_removes_the_account_and_signs_out_everywhere(
     assert response.status_code == 204
     assert response.content == b""
     cleared = response.headers["set-cookie"].lower()
-    assert cleared.startswith("openantiquity_session=")
+    assert cleared.startswith(f"{SESSION_COOKIE.lower()}=")
     assert "max-age=0" in cleared
 
     assert phone.get("/api/v1/auth/me").status_code == 401
@@ -576,7 +575,7 @@ def test_logout_ends_the_session_and_clears_the_cookie(
     assert response.status_code == 204
     assert response.content == b""
     cleared = response.headers["set-cookie"].lower()
-    assert cleared.startswith("openantiquity_session=")
+    assert cleared.startswith(f"{SESSION_COOKIE.lower()}=")
     assert "max-age=0" in cleared
     assert "httponly" in cleared
 
@@ -584,6 +583,26 @@ def test_logout_ends_the_session_and_clears_the_cookie(
     assert laptop.get("/api/v1/auth/me").status_code == 200, "other devices stay signed in"
     assert count(db, UserSession) == 1
     assert count(db, User) == 1
+
+
+def test_signing_out_everywhere_ends_every_session_of_that_person_only(
+    client_as: ClientAs, make_user: MakeUser, db: Session
+) -> None:
+    """A session left open on a lost or shared device can be ended without deleting the account."""
+    user, other = make_user(), make_user()
+    phone, laptop, theirs = client_as(user), client_as(user), client_as(other)
+    response = phone.post("/api/v1/auth/logout-everywhere")
+    assert response.status_code == 204
+    assert response.headers["set-cookie"].lower().startswith(f"{SESSION_COOKIE.lower()}=")
+    assert phone.get("/api/v1/auth/me").status_code == 401
+    assert laptop.get("/api/v1/auth/me").status_code == 401
+    assert theirs.get("/api/v1/auth/me").status_code == 200
+    assert count(db, UserSession) == 1
+    assert count(db, User) == 2
+
+
+def test_signing_out_everywhere_needs_a_session(client: TestClient) -> None:
+    assert client.post("/api/v1/auth/logout-everywhere").status_code == 401
 
 
 def test_a_replayed_cookie_does_not_work_after_logout(
@@ -626,6 +645,7 @@ def test_auth_routes_are_in_the_openapi_schema(client: TestClient) -> None:
         "/api/v1/auth/email/verify": ["post"],
         "/api/v1/auth/handle-suggestion": ["get"],
         "/api/v1/auth/logout": ["post"],
+        "/api/v1/auth/logout-everywhere": ["post"],
         "/api/v1/auth/me": ["delete", "get", "patch"],
         "/api/v1/auth/oauth/{provider}/callback": ["get", "post"],
         "/api/v1/auth/oauth/{provider}/start": ["get"],
@@ -691,11 +711,7 @@ def test_welcome_as_16_or_17_drops_the_provider_name_and_picture(client_as: Clie
         .post("/api/v1/auth/welcome", json={"age_band": "16_17", "accept_terms": True})
         .json()
     )
-    assert (body["handle"], body["display_name"], body["avatar_url"]) == (
-        "QuietBarrow42",
-        "QuietBarrow42",
-        None,
-    )
+    assert (body["handle"], body["display_name"]) == ("QuietBarrow42", "QuietBarrow42")
 
 
 @pytest.mark.parametrize(
@@ -798,35 +814,14 @@ def test_the_id_is_never_part_of_the_public_face_of_a_person(
     assert "id" not in schema["PublicUser"]["properties"]
 
 
-def test_patch_me_clears_the_picture_a_provider_gave(
-    client_as: ClientAs, make_user: MakeUser, db: Session
+def test_a_picture_kept_from_before_goes_at_the_next_sign_in(
+    app: FastAPI, client_for: ClientFor, make_user: MakeUser, db: Session
 ) -> None:
-    user = make_user(avatar_url="https://example.org/face.png")
-    browser = client_as(user)
-    response = browser.patch("/api/v1/auth/me", json={"avatar_url": None})
-    assert response.status_code == 200
-    assert response.json()["avatar_url"] is None
+    """Provider pictures aren't shown, so an address kept from before is personal data nothing uses."""
+    user = make_user(handle="TestRob", avatar_url="https://example.org/face.png")
+    assert client_for(app).post("/api/v1/auth/dev-login", json={"handle": "TestRob"}).status_code == 200
     db.refresh(user)
     assert user.avatar_url is None
-    # Leaving it out leaves it alone, and nothing but null is accepted: we store no picture of our own.
-    user.avatar_url = "https://example.org/face.png"
-    db.commit()
-    assert (
-        browser.patch("/api/v1/auth/me", json={"bio": ""}).json()["avatar_url"]
-        == "https://example.org/face.png"
-    )
-    refused = browser.patch("/api/v1/auth/me", json={"avatar_url": "https://example.org/other.png"})
-    assert refused.status_code == 422
-    db.refresh(user)
-    assert user.avatar_url == "https://example.org/face.png"
-
-
-def test_clearing_the_picture_needs_no_welcome_step(client_as: ClientAs, newcomer: User, db: Session) -> None:
-    newcomer.avatar_url = "https://example.org/new.png"
-    db.commit()
-    response = client_as(newcomer).patch("/api/v1/auth/me", json={"avatar_url": None})
-    assert response.status_code == 200
-    assert response.json()["avatar_url"] is None
 
 
 def test_session_answers_null_when_signed_out_and_the_person_when_signed_in(

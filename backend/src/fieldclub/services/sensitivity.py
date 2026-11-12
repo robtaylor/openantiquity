@@ -38,6 +38,14 @@ Things callers must not do:
   `visible_text`, which hides positions written in it from anyone who
   doesn't see the exact position. A search over titles matches
   `title_public` for them.
+- Don't serve a web address someone attached to a finding as it was typed.
+  Pass it through `visible_url`, which gives it only to those who see the
+  exact position: a map link is a position, and a page's address can carry
+  one in any form.
+- Don't serve what people wrote or drew beside a finding, such as an
+  investigation's notes, saved map views, height profiles and area, as it
+  was stored. Build a `PositionGuard` for the findings it holds and the
+  reader, and pass each through it.
 - Don't copy an exact position into another table, a cache or a tile, even
   while the finding is open. Store `square_centre(finding)`, which is the
   same at every level, and resolve the position to show through
@@ -47,13 +55,17 @@ Things callers must not do:
 from __future__ import annotations
 
 import logging
+import math
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
+import numpy as np
+import shapely
 from geoalchemy2.shape import to_shape
-from shapely.geometry import Polygon
+from shapely.geometry import Point, Polygon, box
 from shapely.geometry.base import BaseGeometry
-from sqlalchemy import ColumnElement, and_, false, func, not_, or_, true
+from sqlalchemy import ColumnElement, and_, false, func, not_, or_, select, true
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
@@ -267,6 +279,25 @@ def visible_text(finding: Finding | None, viewer: User | None, text: str | None)
     return text_positions.redact(text)
 
 
+def visible_url(
+    finding: Finding | None, viewer: User | None, url: str | None, *, rebuilt: str | None = None
+) -> str | None:
+    """A web address someone attached to `finding`, as `viewer` may follow it.
+
+    As stored for anyone who sees the exact position. Anyone else gets
+    `rebuilt`, an address made again from an identifier alone (a video's or
+    a DOI's, `unfurl.IDENTIFIER_PROVIDERS`), or nothing. An address is the
+    member's own text and can say where the finding is in any form, a map
+    link most of all, so it isn't judged by `text_positions` alone. `finding`
+    is None for one this viewer isn't shown, whose addresses go to nobody.
+    """
+    if url is None or (finding is not None and sees_exact(finding, viewer)):
+        return url
+    # An identifier can look like a position by chance (a video id such as
+    # `SU123456abc`), and then even the rebuilt address isn't given.
+    return rebuilt if rebuilt is not None and not text_positions.holds_position(rebuilt) else None
+
+
 def refresh_title_public(finding: Finding) -> None:
     """Set `finding.title_public`, the title a search matches for those who don't see it exactly."""
     finding.title_public = text_positions.redact(finding.title)
@@ -396,3 +427,119 @@ def raise_sensitivity(db: Session, finding: Finding, actor: User, level: Sensiti
     ):
         raise LowerThroughModerationError()
     return change_sensitivity(db, finding, actor, level)
+
+
+# --------------------------------------------------------------------------
+# What people wrote and drew beside a finding
+# --------------------------------------------------------------------------
+
+# A saved map view, a height profile or an area that comes this close to a
+# finding the reader sees only as a square is held back from them, or
+# coarsened. A view centred within this distance at any zoom, or a line or an
+# area reaching it, says where the finding is more closely than its square.
+NEAR_HIDDEN_M = 1500.0
+# The grid an area near such a finding is widened to: about a kilometre each way.
+AREA_GRID_LAT = 0.01
+AREA_GRID_LON = 0.016
+# Metres in a degree of latitude, and of longitude at the equator, near enough
+# for distances of a kilometre or two.
+_M_PER_DEG_LAT = 110_574.0
+_M_PER_DEG_LON = 111_320.0
+
+
+def snapped_box(geometry: BaseGeometry) -> Polygon:
+    """The bounding box of `geometry` widened to whole cells of the area grid.
+
+    The box's edges are grid lines, so however a box search is narrowed it
+    can't find more than the cells the shape touches. `snapped_box_sql` is
+    the same in SQL.
+    """
+    west, south, east, north = geometry.bounds
+    # Cell numbers: the first is the one the west or south edge is in, the last
+    # is at least one further, so even a shape on a grid line has a whole cell.
+    x0, y0 = math.floor(west / AREA_GRID_LON), math.floor(south / AREA_GRID_LAT)
+    x1 = max(math.ceil(east / AREA_GRID_LON), x0 + 1)
+    y1 = max(math.ceil(north / AREA_GRID_LAT), y0 + 1)
+    return box(x0 * AREA_GRID_LON, y0 * AREA_GRID_LAT, x1 * AREA_GRID_LON, y1 * AREA_GRID_LAT)
+
+
+def snapped_box_sql(column: Any) -> ColumnElement[Any]:
+    """`snapped_box` of a geometry column, in SQL, for a box search on what a reader may see."""
+    x0 = func.floor(func.ST_XMin(column) / AREA_GRID_LON)
+    y0 = func.floor(func.ST_YMin(column) / AREA_GRID_LAT)
+    x1 = func.greatest(func.ceil(func.ST_XMax(column) / AREA_GRID_LON), x0 + 1)
+    y1 = func.greatest(func.ceil(func.ST_YMax(column) / AREA_GRID_LAT), y0 + 1)
+    return func.ST_MakeEnvelope(
+        x0 * AREA_GRID_LON, y0 * AREA_GRID_LAT, x1 * AREA_GRID_LON, y1 * AREA_GRID_LAT, 4326
+    )
+
+
+def _in_metres(geometry: BaseGeometry, lon: float, lat: float) -> BaseGeometry:
+    """`geometry` in metres east and north of `lon, lat`, near enough for a kilometre or two."""
+    scale = np.array([_M_PER_DEG_LON * math.cos(math.radians(lat)), _M_PER_DEG_LAT])
+    origin = np.array([lon, lat])
+    return shapely.transform(geometry, lambda coords: (coords - origin) * scale)
+
+
+@dataclass(frozen=True)
+class PositionGuard:
+    """What a reader may see of what people wrote and drew beside some findings.
+
+    `hidden` holds the exact points of the findings among them the reader
+    doesn't see exactly (or, for a download, doesn't download exactly). While
+    there is one, every piece of free text loses the positions written in it
+    (`text`), an address that holds one is dropped (`url`), a view or a line
+    that comes within `NEAR_HIDDEN_M` of one is held back (`near`), and an
+    area that does is widened to whole cells of the area grid (`area`).
+    Everything is left as it is for a reader who sees every finding exactly.
+    """
+
+    hidden: tuple[tuple[float, float], ...] = ()
+
+    def text(self, value: str | None) -> str | None:
+        return text_positions.redact(value) if value and self.hidden else value
+
+    def url(self, value: str | None) -> str | None:
+        return None if value and self.hidden and text_positions.holds_position(value) else value
+
+    def near(self, geometry: BaseGeometry) -> bool:
+        """Whether `geometry` comes within `NEAR_HIDDEN_M` of a finding the reader sees only as a square."""
+        for lon, lat in self.hidden:
+            if _in_metres(geometry, lon, lat).distance(Point(0, 0)) <= NEAR_HIDDEN_M:
+                return True
+        return False
+
+    def area(self, geometry: BaseGeometry | None) -> BaseGeometry | None:
+        if geometry is None or not self.near(geometry):
+            return geometry
+        return snapped_box(geometry)
+
+
+def position_guard(
+    findings: Iterable[Finding], viewer: User | None, *, download: bool = False
+) -> PositionGuard:
+    """The guard for what was written beside `findings`, as `viewer` may read it or download it."""
+    exact = downloads_exact if download else sees_exact
+    return PositionGuard(tuple(_exact_point(finding) for finding in findings if not exact(finding, viewer)))
+
+
+def near_hidden_clause(viewer: User | None, geometry: Any, held: ColumnElement[bool]) -> ColumnElement[bool]:
+    """SQL: whether `geometry` comes near a finding matched by `held` that `viewer` sees only as a square.
+
+    `held` ties `Finding` to the row whose geometry this is. The distance is a
+    little longer than `PositionGuard.near`'s, whose metres are approximate, so
+    SQL never treats as far a shape that a response treats as near.
+    """
+    exact = sees_exact_clause(viewer)
+    if exact is True:
+        return false()
+    hidden = not_(as_sql(exact))
+    return (
+        select(Finding.id)
+        .where(
+            held,
+            hidden,
+            func.ST_DWithin(func.geography(geometry), func.geography(Finding.location), NEAR_HIDDEN_M * 1.05),
+        )
+        .exists()
+    )

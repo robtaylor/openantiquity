@@ -456,11 +456,11 @@ def test_one_observation_per_person_per_finding(
     db: Session, make_user: MakeUser, make_finding: MakeFinding
 ) -> None:
     finding, watcher = make_finding(), make_user()
-    db.add(Observation(finding_id=finding.id, user_id=watcher.id, visible="yes"))
+    db.add(Observation(finding_id=finding.id, user_id=watcher.id, visible="yes", role_at_answer="member"))
     db.commit()
     expect_violation(
         db,
-        Observation(finding_id=finding.id, user_id=watcher.id, visible="no"),
+        Observation(finding_id=finding.id, user_id=watcher.id, visible="no", role_at_answer="member"),
         match="uq_observations_finding_id_user_id",
     )
 
@@ -472,12 +472,13 @@ def test_one_observation_per_person_per_finding(
         ("feature_class", "spaceship", "feature_class_valid"),
         ("period", "jurassic", "period_valid"),
         ("explanation", "aliens", "explanation_valid"),
+        ("role_at_answer", "overlord", "role_at_answer_valid"),
     ],
 )
 def test_observation_checks(
     db: Session, make_user: MakeUser, make_finding: MakeFinding, column: str, value: str, constraint: str
 ) -> None:
-    columns = {"visible": "yes", column: value}
+    columns = {"visible": "yes", "role_at_answer": "member", column: value}
     observation = Observation(finding_id=make_finding().id, user_id=make_user().id, **columns)
     expect_violation(db, observation, match=constraint)
 
@@ -508,17 +509,25 @@ def test_evidence_vote_is_one_per_person_and_plus_or_minus_one(
     db.commit()
     assert evidence.stance == "supports"
 
-    db.add(EvidenceVote(evidence_id=evidence.id, user_id=voter.id, value=1))
+    db.add(EvidenceVote(evidence_id=evidence.id, user_id=voter.id, value=1, role_at_vote="member"))
     db.commit()
     with pytest.raises(IntegrityError, match="pk_evidence_votes"):
-        db.execute(insert(EvidenceVote).values(evidence_id=evidence.id, user_id=voter.id, value=-1))
+        db.execute(
+            insert(EvidenceVote).values(
+                evidence_id=evidence.id, user_id=voter.id, value=-1, role_at_vote="member"
+            )
+        )
     db.rollback()
     other = make_user()
     expect_violation(
-        db, EvidenceVote(evidence_id=evidence.id, user_id=other.id, value=2), match="value_valid"
+        db,
+        EvidenceVote(evidence_id=evidence.id, user_id=other.id, value=2, role_at_vote="member"),
+        match="value_valid",
     )
     expect_violation(
-        db, EvidenceVote(evidence_id=evidence.id, user_id=other.id, value=0), match="value_valid"
+        db,
+        EvidenceVote(evidence_id=evidence.id, user_id=other.id, value=0, role_at_vote="member"),
+        match="value_valid",
     )
 
 
@@ -566,7 +575,7 @@ def test_deleting_a_finding_removes_what_hangs_off_it(
         [
             evidence,
             comment,
-            Observation(finding_id=finding.id, user_id=other.id, visible="yes"),
+            Observation(finding_id=finding.id, user_id=other.id, visible="yes", role_at_answer="member"),
             Follow(user_id=other.id, finding_id=finding.id),
             Mention(
                 finding_id=finding.id, kind="article", url="https://x.example/a", canonical_url="x.example/a"
@@ -576,7 +585,7 @@ def test_deleting_a_finding_removes_what_hangs_off_it(
         ]
     )
     db.flush()
-    db.add(EvidenceVote(evidence_id=evidence.id, user_id=finding.author_id, value=1))
+    db.add(EvidenceVote(evidence_id=evidence.id, user_id=finding.author_id, value=1, role_at_vote="member"))
     db.add(Comment(finding_id=finding.id, user_id=other.id, body="Agreed.", parent_id=comment.id))
     db.commit()
 

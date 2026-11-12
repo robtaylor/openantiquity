@@ -14,15 +14,21 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 
 from fieldclub.api.deps import Db, IfNoneMatch, body_etag, not_modified, split_list
+from fieldclub.ratelimit import rate_limit_by_address
 from fieldclub.services import record_tiles
 
 MOUNT_AT_ROOT = True
 
-router = APIRouter(tags=["tiles"])
+# A map being panned quickly asks for a few hundred tiles a minute. Counted by address alone.
+TILES_PER_MINUTE = 600
+router = APIRouter(
+    tags=["tiles"],
+    dependencies=[Depends(rate_limit_by_address("record_tiles", TILES_PER_MINUTE, per_seconds=60))],
+)
 
 
 @router.get(

@@ -1,39 +1,47 @@
-"""The `openantiquity_session` cookie (HttpOnly, SameSite=Lax, Secure outside dev), the sign-in flow
-cookie, and the emailed link's browser cookie."""
+"""The `__Host-openantiquity_session` cookie (HttpOnly, SameSite=Lax, Secure; `openantiquity_session`
+in local development over http), the sign-in flow cookie, and the emailed link's browser cookie."""
 
 from __future__ import annotations
 
 from typing import Any
 
+from starlette.requests import Request
 from starlette.responses import Response
 
-from fieldclub.auth.email_link import LINK_COOKIE, LINK_LIFETIME, VERIFY_PATH
+from fieldclub.auth.email_link import LINK_COOKIE, LINK_COOKIE_PATH, LINK_LIFETIME
 from fieldclub.auth.flow import FLOW_COOKIE, FLOW_LIFETIME_S
 from fieldclub.auth.oauth import OAuthProvider, callback_path
 from fieldclub.auth.sessions import session_lifetime
-from fieldclub.config import SESSION_COOKIE, get_settings
+from fieldclub.config import get_settings
 
 
 def set_session_cookie(response: Response, token: str) -> None:
+    settings = get_settings()
     response.set_cookie(
-        SESSION_COOKIE,
+        settings.session_cookie_name,
         token,
         max_age=int(session_lifetime().total_seconds()),
         path="/",
         httponly=True,
         samesite="lax",
-        secure=get_settings().session_cookie_secure,
+        secure=settings.session_cookie_secure,
     )
 
 
 def clear_session_cookie(response: Response) -> None:
+    settings = get_settings()
     response.delete_cookie(
-        SESSION_COOKIE,
+        settings.session_cookie_name,
         path="/",
         httponly=True,
         samesite="lax",
-        secure=get_settings().session_cookie_secure,
+        secure=settings.session_cookie_secure,
     )
+
+
+def session_token(request: Request) -> str | None:
+    """The session token the request carries, if any."""
+    return request.cookies.get(get_settings().session_cookie_name)
 
 
 def _flow_cookie_attributes(provider: OAuthProvider) -> dict[str, Any]:
@@ -59,7 +67,7 @@ def clear_flow_cookie(response: Response, provider: OAuthProvider) -> None:
 
 def _link_cookie_attributes() -> dict[str, Any]:
     return {
-        "path": VERIFY_PATH,
+        "path": LINK_COOKIE_PATH,
         "httponly": True,
         "samesite": "lax",
         "secure": get_settings().session_cookie_secure,

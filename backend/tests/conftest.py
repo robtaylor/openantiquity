@@ -372,7 +372,6 @@ def newcomer(make_user: Callable[..., User]) -> User:
     return make_user(
         handle="QuietBarrow42",
         display_name="Robert Provider",
-        avatar_url="https://provider.example/rob.png",
         age_band=None,
         terms_accepted_at=None,
     )

@@ -6,6 +6,7 @@ import json
 from datetime import UTC, datetime
 
 import httpx
+import pytest
 import respx
 
 from fieldclub.services import unfurl
@@ -157,3 +158,38 @@ def test_a_failure_is_cached_too(offline: respx.MockRouter) -> None:
 def test_every_format_character_is_taken_out_of_page_text() -> None:
     assert unfurl.clean_text("a\ufeffb\nc\u00adx\u061cy\u202ez\u2066w", 100) == "ab cxyzw"
     assert unfurl.clean_text("\u200b\u202e", 100) is None
+
+
+def test_a_page_naming_a_codec_that_isnt_a_charset_is_read_as_utf8(offline: respx.MockRouter) -> None:
+    """`idna` raises on ordinary bytes and `punycode` takes seconds on half a megabyte."""
+    import time
+
+    for charset in ("idna", "punycode", "unicode_escape", "utf-7", "rot13", "nonsense"):
+        unfurl.clear_cache()
+        body = b"<title>Barrow \xc3\xa9t\xc3\xa9</title>" + b"x" * 400_000
+        serve("www.wiltshire-gazette.example", "/news/lost-enclosure", body, f"text/html; charset={charset}")
+        started = time.monotonic()
+        result = unfurl.unfurl(canonical(ARTICLE_URL))
+        assert time.monotonic() - started < 1.0, charset
+        assert result.status is FetchStatus.OK, charset
+        assert result.metadata.title == "Barrow été", charset
+
+
+def test_a_page_in_a_real_charset_is_read_in_it(offline: respx.MockRouter) -> None:
+    body = "<title>Barrow \u00e9t\u00e9</title>".encode("cp1252")
+    serve("www.wiltshire-gazette.example", "/news/lost-enclosure", body, 'text/html; charset="windows-1252"')
+    assert unfurl.unfurl(canonical(ARTICLE_URL)).metadata.title == "Barrow \u00e9t\u00e9"
+
+
+def test_a_page_that_breaks_the_reader_is_a_failed_fetch_not_an_error(
+    offline: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    serve_article()
+
+    def broken(html: str, page_url: str) -> unfurl.Metadata:
+        raise RecursionError("a hostile page")
+
+    monkeypatch.setattr(unfurl, "page_metadata", broken)
+    result = unfurl.unfurl(canonical(ARTICLE_URL))
+    assert result.status is FetchStatus.FAILED
+    assert result.metadata == unfurl.NOTHING

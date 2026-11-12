@@ -175,7 +175,8 @@ def test_evidence_counts_endorsements_and_disputes_as_the_engine_does(
         findings.vote(db, evidence.id, make_user(), value)
     expert = make_user("expert")
     findings.vote(db, evidence.id, expert, -1)
-    # A banned voter stops counting, as their vote does in the total.
+    # A banned voter's vote keeps counting, in the counts and the total alike: counts that
+    # moved when a named person was banned would say how they voted (Decision 0019).
     banned = make_user()
     findings.vote(db, evidence.id, banned, 1)
     db.commit()
@@ -185,9 +186,9 @@ def test_evidence_counts_endorsements_and_disputes_as_the_engine_does(
     db.commit()
 
     (item,) = client_as(make_user()).get(f"{API}/findings/{finding.public_id}").json()["evidence"]
-    assert (item["endorsements"], item["disputes"]) == (2, 2)
-    # Two members for, a member and an archaeologist against: 2 - 1 - 3.
-    assert item["vote_total"] == -2.0
+    assert (item["endorsements"], item["disputes"]) == (3, 2)
+    # Three members for, a member and an archaeologist against: 3 - 1 - 3.
+    assert item["vote_total"] == -1.0
 
     # An assessment stored before the engine kept the disputers still shows them, as they are counted live.
     db.refresh(finding)
@@ -197,7 +198,7 @@ def test_evidence_counts_endorsements_and_disputes_as_the_engine_does(
     finding.assessment = stored
     db.commit()
     (item,) = client_as(make_user()).get(f"{API}/findings/{finding.public_id}").json()["evidence"]
-    assert (item["endorsements"], item["disputes"]) == (2, 2)
+    assert (item["endorsements"], item["disputes"]) == (3, 2)
 
 
 def test_evidence_endorsed_by_two_others_earns_its_contributor_a_point(
@@ -420,3 +421,27 @@ def test_a_link_to_a_stored_record_survives_the_record_leaving_the_index(
         "fake-monuments",
     )
     assert kept["standing"] is True
+
+
+def test_a_record_s_address_is_copied_into_evidence_only_when_it_is_a_web_address(
+    db: Session, make_user: MakeUser
+) -> None:
+    """A record stored before ingest checked addresses can't put a script link in front of a moderator."""
+    source = add_source(db, "test-source", category="monument")
+    good = add_record(db, source, "Barrow", -1.85, 51.43, url="https://example.org/record/1")
+    bad = add_record(db, source, "Hostile", -1.85, 51.43, url="javascript:alert(1)")
+    db.commit()
+    finding = create(db, make_user())
+    helper = make_user()
+    kept, dropped = (
+        findings.add_evidence(
+            db,
+            findings.lock(db, finding),
+            helper,
+            EvidenceFields(kind=EvidenceKind.RECORD_LINK, record_id=record.id, relation=Relation.RELATED),
+        )[0]
+        for record in (good, bad)
+    )
+    assert kept.url == "https://example.org/record/1"
+    assert dropped.url is None
+    assert dropped.reference == bad.external_id

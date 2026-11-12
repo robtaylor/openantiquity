@@ -216,3 +216,23 @@ def test_a_kept_page_for_another_request_or_an_old_one_is_asked_for_again(tmp_pa
     assert route.call_count == 2
     read("2", timedelta(seconds=-1))
     assert route.call_count == 3
+
+
+@pytest.mark.parametrize(
+    "elsewhere",
+    [
+        "http://169.254.169.254/computeMetadata/v1/",
+        "http://api.example/works?cursor=2",
+        "https://api.example:8443/works?cursor=2",
+        "https://internal.example/works?cursor=2",
+        "https://user:pw@api.example/works?cursor=2",
+        "file:///etc/passwd",
+    ],
+)
+@respx.mock
+def test_a_next_page_on_another_server_is_refused_unasked(elsewhere: str) -> None:
+    """The next page's address is the publisher's to give, so it could point anywhere."""
+    respx.get(URL).mock(return_value=linked(["a"], elsewhere, 5))
+    with pytest.raises(UpstreamFormatError, match="another server"):
+        list(make().items(URL, items="data", next_url="links.next"))
+    assert len(respx.calls) == 1

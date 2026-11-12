@@ -9,6 +9,7 @@ from pydantic import StringConstraints
 
 from fieldclub.api.deps import Contributor, Db, OptionalUser, private, rate_limit
 from fieldclub.errors import BadRequestError
+from fieldclub.ratelimit import rate_limit_by_address
 from fieldclub.schemas.common import parse_bbox
 from fieldclub.schemas.squares import CoverageCollection, SquareOut, SurveyIn, SurveyOut, coverage_feature
 from fieldclub.services import squares
@@ -74,7 +75,8 @@ def record_survey(ref: str, body: SurveyIn, user: Contributor, db: Db, response:
 @router.get(
     "/coverage",
     response_model=CoverageCollection,
-    dependencies=[Depends(rate_limit("squares_coverage", 1200, per_seconds=3600))],
+    # By address alone: the answer is public, so it must never carry a refreshed session cookie.
+    dependencies=[Depends(rate_limit_by_address("squares_coverage", 1200, per_seconds=3600))],
 )
 def get_coverage(
     db: Db,

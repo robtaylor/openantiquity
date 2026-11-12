@@ -123,16 +123,17 @@ def world(db: Session, make_user: MakeUser, app: FastAPI, client_for: Callable[.
         )
         for helper in helpers:
             answer(db, finding, helper, Visible.YES, feature_class=FeatureClass.ENCLOSURE)
-        findings.add_evidence(
+        mapped, _ = findings.add_evidence(
             db,
             findings.lock(db, finding),
             helpers[0],
             EvidenceFields(
-                kind=EvidenceKind.HISTORIC_MAP,
-                title="First edition map",
-                url=f"https://maps.example/view?lat={lat:.6f}&lon={lon:.6f}",
+                kind=EvidenceKind.HISTORIC_MAP, title="First edition map", url="https://maps.example/"
             ),
         )
+        # A link that gives the position is refused on a finding that isn't open, so this is one
+        # added while it was open, before it was raised: those who see only the square never get it.
+        mapped.url = f"https://maps.example/view?lat={lat:.6f}&lon={lon:.6f}"
         findings.add_evidence(
             db,
             findings.lock(db, finding),

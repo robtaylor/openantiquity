@@ -18,6 +18,8 @@ from fieldclub.config import (
 from fieldclub.errors import ConfigError
 from tests.helpers import settings
 
+LONG_KEY = "a-long-random-value-of-forty-characters!"
+
 ENV_EXAMPLE = Path(__file__).resolve().parents[1] / ".env.example"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -48,7 +50,7 @@ TIGRIS = {
 def prod_env(clean_env: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
     """The least a production deployment has to set."""
     clean_env.setenv("FIELDCLUB_ENV", "prod")
-    clean_env.setenv("FIELDCLUB_SECRET_KEY", "a-long-random-value")
+    clean_env.setenv("FIELDCLUB_SECRET_KEY", LONG_KEY)
     clean_env.setenv("FIELDCLUB_TRUSTED_PROXY_HOPS", "1")
     clean_env.setenv("FIELDCLUB_TERMS_URL", "https://example.org/terms")
     return clean_env
@@ -72,7 +74,7 @@ def test_defaults_suit_local_development(clean_env: pytest.MonkeyPatch) -> None:
 
 def test_environment_variables_use_the_fieldclub_prefix(clean_env: pytest.MonkeyPatch) -> None:
     clean_env.setenv("FIELDCLUB_ENV", "prod")
-    clean_env.setenv("FIELDCLUB_SECRET_KEY", "a-long-random-value")
+    clean_env.setenv("FIELDCLUB_SECRET_KEY", LONG_KEY)
     clean_env.setenv("FIELDCLUB_TRUSTED_PROXY_HOPS", "1")
     clean_env.setenv("FIELDCLUB_TERMS_URL", "/terms")
     clean_env.setenv("FIELDCLUB_PORT", "9000")
@@ -95,11 +97,52 @@ def test_port_falls_back_to_the_platform_s_variable(clean_env: pytest.MonkeyPatc
 def test_production_refuses_the_development_secret(clean_env: pytest.MonkeyPatch) -> None:
     clean_env.setenv("FIELDCLUB_ENV", "prod")
     clean_env.setenv("FIELDCLUB_TRUSTED_PROXY_HOPS", "1")
-    with pytest.raises(ConfigError, match="FIELDCLUB_SECRET_KEY"):
-        settings()
     clean_env.setenv("FIELDCLUB_SECRET_KEY", DEV_SECRET_KEY)
     with pytest.raises(ConfigError, match="FIELDCLUB_SECRET_KEY"):
         settings()
+
+
+def test_production_serves_nothing_without_a_secret_but_a_job_may_run_without_one(
+    clean_env: pytest.MonkeyPatch,
+) -> None:
+    """Only what signs needs the key, so a job that never signs anything needn't be given it."""
+    from fieldclub.main import create_app
+
+    clean_env.setenv("FIELDCLUB_ENV", "prod")
+    clean_env.setenv("FIELDCLUB_TRUSTED_PROXY_HOPS", "1")
+    clean_env.setenv("FIELDCLUB_TERMS_URL", "/about#terms")
+    keyless = settings()
+    with pytest.raises(ConfigError, match="FIELDCLUB_SECRET_KEY"):
+        keyless.require_signing_key()
+    with pytest.raises(ConfigError, match="FIELDCLUB_SECRET_KEY"):
+        create_app(keyless)
+    # Outside production the placeholder stands in.
+    assert settings(env="dev").signing_key == DEV_SECRET_KEY.encode()
+
+
+@pytest.mark.parametrize("key", ["x", "a" * 31])
+def test_production_refuses_a_short_secret(clean_env: pytest.MonkeyPatch, key: str) -> None:
+    """The key signs the sign-in flow and keys the address hashes, so it must not be guessable."""
+    clean_env.setenv("FIELDCLUB_ENV", "prod")
+    clean_env.setenv("FIELDCLUB_TRUSTED_PROXY_HOPS", "1")
+    clean_env.setenv("FIELDCLUB_TERMS_URL", "/about#terms")
+    clean_env.setenv("FIELDCLUB_SECRET_KEY", key)
+    with pytest.raises(ConfigError, match="at least 32"):
+        settings()
+    clean_env.setenv("FIELDCLUB_SECRET_KEY", "a" * 32)
+    assert settings().env is Environment.PROD
+
+
+def test_production_refuses_cookies_that_are_not_secure(clean_env: pytest.MonkeyPatch) -> None:
+    clean_env.setenv("FIELDCLUB_ENV", "prod")
+    clean_env.setenv("FIELDCLUB_TRUSTED_PROXY_HOPS", "1")
+    clean_env.setenv("FIELDCLUB_TERMS_URL", "/about#terms")
+    clean_env.setenv("FIELDCLUB_SECRET_KEY", LONG_KEY)
+    clean_env.setenv("FIELDCLUB_COOKIE_SECURE", "false")
+    with pytest.raises(ConfigError, match="FIELDCLUB_COOKIE_SECURE"):
+        settings()
+    clean_env.setenv("FIELDCLUB_COOKIE_SECURE", "true")
+    assert settings().session_cookie_secure is True
 
 
 # --------------------------------------------------------------------------
@@ -148,7 +191,7 @@ def test_production_refuses_to_start_with_dev_login_on(prod_env: pytest.MonkeyPa
 
 def test_production_must_say_how_many_proxies_it_is_behind(clean_env: pytest.MonkeyPatch) -> None:
     clean_env.setenv("FIELDCLUB_ENV", "prod")
-    clean_env.setenv("FIELDCLUB_SECRET_KEY", "a-long-random-value")
+    clean_env.setenv("FIELDCLUB_SECRET_KEY", LONG_KEY)
     clean_env.setenv("FIELDCLUB_TERMS_URL", "/terms")
     with pytest.raises(ConfigError, match="FIELDCLUB_TRUSTED_PROXY_HOPS"):
         settings()
@@ -175,7 +218,7 @@ def test_cloud_run_refuses_anything_but_production(
     clean_env: pytest.MonkeyPatch, marker: str, env: str | None
 ) -> None:
     clean_env.setenv(marker, "fieldclub-api")
-    clean_env.setenv("FIELDCLUB_SECRET_KEY", "a-long-random-value")
+    clean_env.setenv("FIELDCLUB_SECRET_KEY", LONG_KEY)
     clean_env.setenv("FIELDCLUB_TRUSTED_PROXY_HOPS", "1")
     if env is not None:
         clean_env.setenv("FIELDCLUB_ENV", env)
@@ -501,7 +544,7 @@ def test_env_file_is_read_unless_switched_off(tmp_path: Path, clean_env: pytest.
         assert get_settings().session_days == 12
         clean_env.setenv("FIELDCLUB_ENV_FILE", "")
         reset_settings()
-        assert get_settings().session_days == 365
+        assert get_settings().session_days == 90
     finally:
         clean_env.undo()
         reset_settings()
@@ -602,7 +645,18 @@ def test_the_shutdown_grace_is_whole_seconds(clean_env: pytest.MonkeyPatch) -> N
     assert Settings().shutdown_grace_s == 3
 
 
-def test_many_people_behind_one_address_can_all_have_live_events(clean_env: pytest.MonkeyPatch) -> None:
-    # A mobile network or a school puts many people behind one address, and a
-    # browser that is refused a stream doesn't try again.
-    assert settings().events_max_per_address >= 50
+def test_one_address_can_hold_at_most_a_quarter_of_the_streams(clean_env: pytest.MonkeyPatch) -> None:
+    """A few addresses mustn't be able to take every stream a process serves.
+
+    A household or a school behind one address that opens more streams than
+    this falls back to asking now and then, as the frontend does whenever the
+    stream is refused.
+    """
+    defaults = settings()
+    assert 4 <= defaults.events_max_per_address <= defaults.events_max_streams // 4
+    clean_env.setenv("FIELDCLUB_EVENTS_MAX_STREAMS", "16")
+    clean_env.setenv("FIELDCLUB_EVENTS_MAX_PER_ADDRESS", "5")
+    with pytest.raises(ConfigError, match="FIELDCLUB_EVENTS_MAX_PER_ADDRESS"):
+        settings()
+    clean_env.setenv("FIELDCLUB_EVENTS_MAX_PER_ADDRESS", "4")
+    assert settings().events_max_per_address == 4

@@ -43,10 +43,14 @@ Bans
 ====
 
 A ban ends the person's sessions at once, and from then on every request
-they make is treated as signed out (`auth.deps`). Their second looks, votes,
-evidence and verifications stop counting, and their evidence leaves finding
-pages and exports, while the ban lasts: every finding they touched is
-reassessed straight away, with no actor. Their square surveys stop counting
+they make is treated as signed out (`auth.deps`). Their evidence and
+verifications stop counting, and their evidence leaves finding pages and
+exports, while the ban lasts: every finding their evidence, verifications or
+own findings bear on is reassessed straight away, with no actor. Their
+second looks and votes keep counting as they were given (Decision 0019):
+nobody who hasn't answered may learn who answered what, and a score that
+moved the moment a named person was banned would say how they had answered,
+to the moderator and to anyone watching the profile vanish and the feed. Their square surveys stop counting
 too (`squares.counted_clause`), and their events and notifications leave
 every list (`services.feed`). Their findings and comments stay,
 because other people's work sits on them; a moderator hides any that need
@@ -66,8 +70,11 @@ A moderator makes a member trusted, puts a trusted member back, and marks an
 archaeologist as expert or takes that away. Only an admin makes or unmakes a
 moderator. Admins are made outside Open Antiquity, nobody changes their own
 role, a banned account's role doesn't change, and a member becomes trusted
-only once they have fifty points (Decision 0005). A role changes the weight
-of everything the person has done, so their findings are reassessed.
+only once they have fifty points (Decision 0005). A new role weighs the
+person's own findings and their evidence from then on, so the findings those
+bear on are reassessed. Answers and votes keep the weight of the role they
+were given with (Decision 0019), so a moderator who changes someone's role
+and changes it back learns nothing about how they answered.
 
 The log
 =======
@@ -998,32 +1005,32 @@ def get_person(db: Session, handle: str) -> User:
     return user
 
 
-def contributed_findings(db: Session, user: User) -> list[int]:
-    """Every finding the person marked, answered, added evidence to, voted on or verified, by id."""
+def standing_findings(db: Session, user: User) -> list[int]:
+    """The findings the person's role or standing bears on, by id: theirs, and those with their evidence.
+
+    Their findings, evidence and verifications are named on each page, so a
+    change there says nothing new. Findings they only answered or voted on
+    are left out: answers and votes keep the weight they were given with
+    (Decision 0019), so reassessing those would change nothing, and a burst
+    of events on them would say which findings the person had answered.
+    """
     touched = union(
         select(Finding.id).where(Finding.author_id == user.id),
-        select(Observation.finding_id).where(Observation.user_id == user.id),
         select(Evidence.finding_id).where((Evidence.user_id == user.id) | (Evidence.verified_by == user.id)),
-        select(Evidence.finding_id)
-        .join(EvidenceVote, EvidenceVote.evidence_id == Evidence.id)
-        .where(EvidenceVote.user_id == user.id),
     ).subquery()
     return sorted(db.scalars(select(touched.c[0])))
 
 
-def reassess_contributions(db: Session, user: User) -> int:
-    """Reassess every finding the person touched, after their weight or standing changed.
+def reassess_standing(db: Session, user: User) -> None:
+    """Reassess the findings the person's role or standing bears on, after a moderator changed it.
 
-    The changes come from a moderator, not from anyone's answer, but the
-    events carry no actor so that nobody is named. Findings are locked in id
-    order, as every other path that locks several does.
+    The events carry no actor so that nobody is named. Findings are locked in
+    id order, as every other path that locks several does.
     """
-    finding_ids = contributed_findings(db, user)
-    for finding_id in finding_ids:
+    for finding_id in standing_findings(db, user):
         finding = db.get(Finding, finding_id)
         assert finding is not None
         findings.reassess(db, findings.lock(db, finding), None)
-    return len(finding_ids)
 
 
 def check_role_change(actor: User, target: User, new_role: Role) -> None:
@@ -1062,7 +1069,7 @@ def change_role(db: Session, handle: str, actor: User, new_role: Role, reason: s
         reason,
         {"from": before.value, "to": new_role.value},
     )
-    reassess_contributions(db, target)
+    reassess_standing(db, target)
     return target
 
 
@@ -1081,11 +1088,10 @@ def check_may_ban(actor: User, target: User) -> None:
 class BanResult:
     user: User
     sessions_ended: int
-    findings_reassessed: int
 
 
 def ban(db: Session, handle: str, actor: User, reason: str, *, now: datetime | None = None) -> BanResult:
-    """Ban someone: end their sessions now, and stop their answers, evidence and votes counting."""
+    """Ban someone: end their sessions now, and stop their evidence and verifications counting."""
     target = get_user(db, handle, lock=True)
     check_may_ban(actor, target)
     if target.is_banned:
@@ -1094,7 +1100,8 @@ def ban(db: Session, handle: str, actor: User, reason: str, *, now: datetime | N
     db.flush()
     ended = revoke_all_sessions(db, target)
     log_action(db, actor, ModerationActionKind.BAN, ReportTarget.USER, target.id, reason, {"sessions": ended})
-    return BanResult(target, ended, reassess_contributions(db, target))
+    reassess_standing(db, target)
+    return BanResult(target, ended)
 
 
 def unban(db: Session, handle: str, actor: User, reason: str) -> BanResult:
@@ -1106,7 +1113,8 @@ def unban(db: Session, handle: str, actor: User, reason: str) -> BanResult:
     target.banned_at = None
     db.flush()
     log_action(db, actor, ModerationActionKind.UNBAN, ReportTarget.USER, target.id, reason)
-    return BanResult(target, 0, reassess_contributions(db, target))
+    reassess_standing(db, target)
+    return BanResult(target, 0)
 
 
 # --------------------------------------------------------------------------

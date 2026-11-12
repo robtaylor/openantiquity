@@ -291,3 +291,68 @@ def test_level_changes_follow_decision_0005(db: Session, client_as: ClientAs, ma
     db.expire_all()
     assert Sensitivity(finding.sensitivity) is Sensitivity.OPEN
     assert lon_lat(finding.location_public) == pytest.approx((LON, LAT))
+
+
+def _ring(points: int, lon: float = LON, lat: float = LAT, radius: float = 0.0005) -> list[list[float]]:
+    import math
+
+    ring = [
+        [lon + radius * math.cos(2 * math.pi * i / points), lat + radius * math.sin(2 * math.pi * i / points)]
+        for i in range(points)
+    ]
+    return [*ring, ring[0]]
+
+
+def test_an_outline_has_at_most_two_thousand_points(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    """Every list of findings carries the outline, so one huge outline costs every visitor."""
+    from fieldclub.schemas.common import GEOMETRY_MAX_POINTS
+
+    client = client_as(make_user())
+    fits = {"type": "Polygon", "coordinates": [_ring(GEOMETRY_MAX_POINTS - 1)]}
+    made = client.post(
+        f"{API}/findings", json={"location": point(), "feature_class": "enclosure", "outline": fits}
+    )
+    assert made.status_code == 201, made.text
+    path = f"{API}/findings/{made.json()['public_id']}"
+    huge = {"type": "Polygon", "coordinates": [_ring(GEOMETRY_MAX_POINTS)]}
+    refused = client.post(
+        f"{API}/findings", json={"location": point(), "feature_class": "enclosure", "outline": huge}
+    )
+    assert refused.status_code == 422
+    assert error_code(refused) == "geometry_too_complex"
+    assert error_code(client.patch(path, json={"outline": huge})) == "geometry_too_complex"
+    # Many small parts count too.
+    parts = {
+        "type": "MultiPolygon",
+        "coordinates": [
+            [
+                [
+                    [LON + i * 1e-5, LAT],
+                    [LON + i * 1e-5 + 5e-6, LAT],
+                    [LON + i * 1e-5, LAT + 5e-6],
+                    [LON + i * 1e-5, LAT],
+                ]
+            ]
+            for i in range(300)
+        ],
+    }
+    assert error_code(client.patch(path, json={"outline": parts})) == "geometry_too_complex"
+    assert count(db, Finding) == 1
+
+
+def test_the_map_answer_draws_points_and_carries_no_outline(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    client = client_as(make_user())
+    outline = {"type": "Polygon", "coordinates": [_ring(500)]}
+    assert (
+        client.post(
+            f"{API}/findings", json={"location": point(), "feature_class": "enclosure", "outline": outline}
+        ).status_code
+        == 201
+    )
+    features = client.get(f"{API}/findings", params={"format": "geojson"}).json()["features"]
+    assert [feature["geometry"]["type"] for feature in features] == ["Point"]
+    assert "outline" not in str(features)

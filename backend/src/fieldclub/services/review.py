@@ -262,6 +262,7 @@ def put_observation(db: Session, finding: Finding, user: User, answer: Answer) -
         # Kept for the reveal, which is where the move this answer makes is shown.
         tier_at_answer=finding.tier if answer.detail_follows else None,
         state_at_answer=finding.state if answer.detail_follows else None,
+        role_at_answer=user.role,
         **answer.columns(),
     )
     db.add(observation)
@@ -394,15 +395,10 @@ def list_observations(
     """
     if not findings.answers_visible(finding, viewer, findings.my_observation(db, finding, viewer)):
         raise AnswerFirstError()
+    # Every answer that counts, a banned person's included (Decision 0019).
     query = (
         select(Observation)
-        .join(User, User.id == Observation.user_id)
-        # A banned person's answers stop counting, so they aren't listed either.
-        .where(
-            Observation.finding_id == finding.id,
-            Observation.withdrawn_at.is_(None),
-            User.banned_at.is_(None),
-        )
+        .where(Observation.finding_id == finding.id, Observation.withdrawn_at.is_(None))
         .order_by(Observation.id)
     )
     if cursor is not None:

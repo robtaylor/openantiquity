@@ -33,6 +33,7 @@ fetched data.
 
 from __future__ import annotations
 
+import codecs
 import ipaddress
 import logging
 import re
@@ -123,13 +124,39 @@ class Fetched:
         return self.status == 304
 
     def text(self) -> str:
-        """The body as text, in the charset the server named, or UTF-8."""
-        match = re.search(r"charset=([\w.-]+)", self.headers.get("content-type", ""), re.IGNORECASE)
-        encoding = match.group(1) if match else "utf-8"
+        """The body as text, in the charset the server named if it is a text charset, or UTF-8.
+
+        A server names whatever it likes. Only `TEXT_CHARSETS` are honoured:
+        a codec such as `idna` raises on ordinary bytes, `punycode` takes
+        seconds over half a megabyte, and the escape codecs turn bytes into
+        other characters altogether.
+        """
+        match = re.search(r"charset=\"?([\w.:-]+)", self.headers.get("content-type", ""), re.IGNORECASE)
+        return self.content.decode(text_charset(match.group(1) if match else None), errors="replace")
+
+
+# The charsets a fetched page may be read in: the ones web pages are written in.
+# Anything else is read as UTF-8, with bytes it can't read replaced.
+TEXT_CHARSETS = frozenset(
+    codecs.lookup(name).name
+    for name in (
+        "utf-8", "utf-16", "utf-16-le", "utf-16-be", "ascii", "iso-8859-1", "iso-8859-15",
+        "cp1250", "cp1251", "cp1252", "cp1253", "cp1254", "cp1257", "mac-roman",
+        "shift_jis", "euc-jp", "iso2022-jp", "gb2312", "gbk", "gb18030", "big5", "euc-kr", "koi8-r",
+    )
+)  # fmt: skip
+
+
+def text_charset(named: str | None) -> str:
+    """The codec to read a body in: the one `named`, if it is one of `TEXT_CHARSETS`, or UTF-8."""
+    if named:
         try:
-            return self.content.decode(encoding, errors="replace")
+            codec = codecs.lookup(named).name
         except LookupError:
-            return self.content.decode("utf-8", errors="replace")
+            return "utf-8"
+        if codec in TEXT_CHARSETS:
+            return codec
+    return "utf-8"
 
 
 # `getaddrinfo` has no timeout of its own, so it runs in one of these and is

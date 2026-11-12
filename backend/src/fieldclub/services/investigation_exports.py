@@ -5,7 +5,13 @@ carries the generalised position of a protected or restricted finding unless
 the person downloading is its finder or trusted (Decision 0005, rule 8). A
 finding the viewer may not see because it is hidden, and a withdrawn
 finding, are left out of the GeoJSON and the spreadsheet. The report keeps a
-line saying an item is no longer available, with nothing of it.
+line saying an item is no longer available, with nothing of it. Everything
+else people wrote and drew goes through the investigation's `PositionGuard`
+for that download rule (`services.investigations.position_guard`): when a
+finding it holds is carried at its square, the title, summary, notes and
+every item's text lose the positions written in them, a saved view or
+height profile near that finding goes without its place, and a reference's
+link that holds a position is dropped.
 
 Licences: every record carries its source's licence and attribution
 (Decision 0004). Findings, notes and everything else people wrote are under
@@ -34,7 +40,7 @@ from fieldclub import gridref
 from fieldclub.config import get_settings
 from fieldclub.models import Investigation, User
 from fieldclub.schemas.common import GeoJSONFeature, GeoJSONGeometry, PublicUser, geojson_point
-from fieldclub.schemas.investigations import item_text
+from fieldclub.schemas.investigations import item_content, item_text
 from fieldclub.schemas.records import record_feature
 from fieldclub.services import exports, investigations, notes_markdown
 from fieldclub.services.investigations import ItemView, MemberView, Unavailable
@@ -63,6 +69,9 @@ class Entry:
     note: str | None
     # The download's row for a finding the viewer may see.
     finding: exports.Exported | None = None
+    # A view's, reference's or profile's content as the download may carry it, None
+    # for a view or profile held back near a finding carried at its square.
+    data: dict[str, Any] | None = None
 
     @property
     def kind(self) -> InvestigationItemKind:
@@ -72,6 +81,10 @@ class Entry:
 @dataclass(frozen=True)
 class InvestigationExport:
     investigation: Investigation
+    # The investigation's own text as the download may carry it.
+    title: str
+    summary: str | None
+    notes: str | None
     owner: User
     members: list[MemberView]
     entries: list[Entry]
@@ -86,11 +99,13 @@ def gather(
     views = investigations.item_views(db, investigations.all_items(db, investigation), viewer)
     shown = [view.finding for view in views if view.finding is not None]
     rows = {item.row.openantiquity_id: item for item in exports.export_rows(db, shown, viewer)}
+    guard = investigations.position_guard(db, investigation, viewer, download=True)
     entries = [
         Entry(
             view,
-            *item_text(view, _reader(view, viewer)),
+            *item_text(view, _reader(view, viewer), guard),
             rows[view.finding.public_id] if view.finding is not None else None,
+            item_content(view.item, guard) if view.item.data is not None else None,
         )
         for view in views
     ]
@@ -99,6 +114,9 @@ def gather(
     base = get_settings().public_url.rstrip("/")
     return InvestigationExport(
         investigation=investigation,
+        title=guard.text(investigation.title) or investigation.title,
+        summary=guard.text(investigation.summary),
+        notes=guard.text(investigation.notes),
         owner=owner,
         # Invitations nobody has accepted aren't part of the work.
         members=[member for member in members if member.accepted],
@@ -147,9 +165,13 @@ def _feature(entry: Entry) -> GeoJSONFeature:
         feature = record_feature(view.record)
         feature.properties = {**feature.properties, **properties}
         return feature
-    data = item.data or {}
+    data = entry.data or {}
     properties["licence"] = CONTRIBUTION_LICENCE
     kind = entry.kind
+    if _withheld(entry):
+        return GeoJSONFeature(
+            id=f"item-{item.id}", geometry=None, properties={**properties, "withheld": WITHHELD}
+        )
     if kind is InvestigationItemKind.VIEW:
         lon, lat = data["centre"]
         return GeoJSONFeature(
@@ -167,6 +189,14 @@ def _feature(entry: Entry) -> GeoJSONFeature:
     return GeoJSONFeature(id=f"item-{item.id}", geometry=None, properties={**properties, **data})
 
 
+# What a download says of a view or profile it leaves out.
+WITHHELD = "Near a protected finding, so where it is isn't in this download."
+
+
+def _withheld(entry: Entry) -> bool:
+    return entry.kind in (InvestigationItemKind.VIEW, InvestigationItemKind.PROFILE) and entry.data is None
+
+
 def to_geojson(export: InvestigationExport) -> dict[str, Any]:
     """A FeatureCollection of every available item in order, with the investigation as a foreign member."""
     investigation = export.investigation
@@ -174,9 +204,9 @@ def to_geojson(export: InvestigationExport) -> dict[str, Any]:
         "type": "FeatureCollection",
         "investigation": {
             "public_id": investigation.public_id,
-            "title": investigation.title,
-            "summary": investigation.summary,
-            "notes": investigation.notes,
+            "title": export.title,
+            "summary": export.summary,
+            "notes": export.notes,
             "url": export.url,
             "owner": PublicUser.from_user(export.owner).display_name,
             "exported_at": export.exported_at.isoformat(),
@@ -345,8 +375,11 @@ def _record_html(result: RecordResult) -> tuple[str, str]:
 
 
 def _other_html(entry: Entry) -> tuple[str, str]:
-    data = entry.view.item.data or {}
+    data = entry.data or {}
     kind = entry.kind
+    default = {InvestigationItemKind.VIEW: "Saved map view", InvestigationItemKind.PROFILE: "Height profile"}
+    if _withheld(entry):
+        return default[kind], f'<p class="unavailable">{_e(WITHHELD)}</p>'
     if kind is InvestigationItemKind.VIEW:
         lon, lat = data["centre"]
         layers = " compared with ".join(_e(data[key]) for key in ("layer", "compare_layer") if data.get(key))
@@ -430,12 +463,11 @@ def to_html(export: InvestigationExport) -> str:
         Visibility.UNLISTED: "Unlisted",
         Visibility.PRIVATE: "Private",
     }[Visibility(investigation.visibility)]
-    summary = f'<p class="text">{_e(investigation.summary)}</p>' if investigation.summary else ""
+    summary = f'<p class="text">{_e(export.summary)}</p>' if export.summary else ""
     notes = (
         # Under the section's h2, so a note's own headings start at h3.
-        f'<section><h2>Notes</h2><div class="notes">{notes_markdown.render(investigation.notes, 3)}</div>'
-        "</section>"
-        if investigation.notes
+        f'<section><h2>Notes</h2><div class="notes">{notes_markdown.render(export.notes, 3)}</div></section>'
+        if export.notes
         else ""
     )
     items = "".join(_item_html(entry) for entry in export.entries)
@@ -446,10 +478,10 @@ def to_html(export: InvestigationExport) -> str:
         f'<meta http-equiv="Content-Security-Policy" content="{_e(REPORT_CSP)}">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         '<meta name="referrer" content="no-referrer">'
-        f"<title>{_e(investigation.title)} - Open Antiquity</title>"
+        f"<title>{_e(export.title)} - Open Antiquity</title>"
         f"<style>{_STYLE}</style></head><body>"
         '<header><p class="kicker">Open Antiquity investigation</p>'
-        f"<h1>{_e(investigation.title)}</h1>{summary}"
+        f"<h1>{_e(export.title)}</h1>{summary}"
         f'<p class="meta">By {_e(people)}. {_e(visibility)}. '
         f"Exported {_e(export.exported_at.strftime('%d %B %Y'))} from {_link(export.url)}.</p></header>"
         f"{notes}{items_html}{_licences_html(export)}"

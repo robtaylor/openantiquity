@@ -36,6 +36,7 @@ from collections.abc import Generator
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -164,6 +165,7 @@ class RestJson:
                 raise UpstreamFormatError(f"{self.where} pointed back to a page it had already given.")
             seen_next.add(following)
             if next_url:
+                _check_same_service(url, following, self.where)
                 request_url, params = following, {}
             else:
                 assert cursor_param is not None
@@ -202,3 +204,16 @@ class RestJson:
         if not isinstance(value, str):
             raise UpstreamFormatError(f"The next page at {path!r} is not text: {value!r}.")
         return value
+
+
+def _check_same_service(first: str, following: str, where: str) -> None:
+    """Refuse a next-page address on another scheme, host or port than the first page's.
+
+    The address comes from the publisher's answer, and the shared client goes
+    wherever it is sent, so a hostile or broken answer must not steer a run at
+    another server, such as one inside the network the job runs in.
+    """
+    a, b = urlsplit(first), urlsplit(following)
+    same = (a.scheme.lower(), a.hostname, a.port) == (b.scheme.lower(), b.hostname, b.port)
+    if not same or b.scheme.lower() not in ("http", "https") or b.username or b.password:
+        raise UpstreamFormatError(f"{where} gave a next page on another server: {following[:200]!r}.")

@@ -145,10 +145,10 @@ def test_public_user_shows_only_public_fields(make_user: Callable[..., User]) ->
         "handle": "QuietBarrow42",
         "display_name": "QuietBarrow42",
         "role": "trusted",
-        "avatar_url": None,
     }
+    # Nobody has a picture: a provider's would be fetched from the provider by every visitor.
     pictured = make_user(avatar_url="https://example.org/a.png")
-    assert PublicUser.model_validate(pictured).avatar_url == "https://example.org/a.png"
+    assert "avatar_url" not in PublicUser.model_validate(pictured).model_dump()
     assert "is_guest" not in PublicUser.model_fields
 
 
@@ -164,7 +164,7 @@ def test_a_16_or_17_year_old_is_shown_by_handle_only(
         avatar_url="https://provider.example/alex.png",
         age_band=band,
     )
-    expected = {"handle": "YoungDigger", "display_name": "YoungDigger", "role": "member", "avatar_url": None}
+    expected = {"handle": "YoungDigger", "display_name": "YoungDigger", "role": "member"}
     assert PublicUser.model_validate(user).model_dump() == expected
     assert PublicUser.from_user(user).model_dump() == expected
     assert user.shows_handle_only is True
@@ -176,7 +176,6 @@ def test_public_user_refuses_input_that_is_not_a_user(make_user: Callable[..., U
         "handle": "YoungDigger",
         "display_name": "Alex Provider",
         "role": "member",
-        "avatar_url": "https://x.example/a.png",
     }
     with pytest.raises(ValidationError, match=r"PublicUser\.from_user"):
         PublicUser.model_validate(raw)
@@ -187,7 +186,7 @@ def test_public_user_refuses_input_that_is_not_a_user(make_user: Callable[..., U
     assert PublicUser.model_validate(built).display_name == "YoungDigger"
 
 
-def test_an_adult_is_shown_with_their_name_and_picture(make_user: Callable[..., User]) -> None:
+def test_an_adult_is_shown_with_their_name_and_no_picture(make_user: Callable[..., User]) -> None:
     user = make_user(
         handle="RidgewayRob", display_name="Rob", avatar_url="https://example.org/rob.png", age_band="18_plus"
     )
@@ -195,7 +194,6 @@ def test_an_adult_is_shown_with_their_name_and_picture(make_user: Callable[..., 
         "handle": "RidgewayRob",
         "display_name": "Rob",
         "role": "member",
-        "avatar_url": "https://example.org/rob.png",
     }
     assert user.shows_handle_only is False
 

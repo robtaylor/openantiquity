@@ -54,13 +54,12 @@ def test_a_new_account_takes_what_the_provider_said(db: Session) -> None:
         display_name="  Rob   Taylor ",
         email="Rob@Example.org",
         email_verified_at=NOW,
-        avatar_url="https://example.org/rob.png",
     )
     db.commit()
     db.refresh(user)
     assert user.display_name == "Rob Taylor"
     assert (user.email, user.email_verified_at) == ("Rob@Example.org", NOW)
-    assert user.avatar_url == "https://example.org/rob.png"
+    assert user.avatar_url is None
     assert user.role == "member"
     assert user.handle != user.display_name
 

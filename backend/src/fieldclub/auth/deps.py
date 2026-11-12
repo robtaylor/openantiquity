@@ -30,7 +30,7 @@ from fastapi import Depends, Request, Response
 from sqlalchemy.orm import Session
 
 from fieldclub.auth import cookies, onboarding, sessions
-from fieldclub.config import SESSION_COOKIE, get_settings
+from fieldclub.config import get_settings
 from fieldclub.db import get_db
 from fieldclub.errors import BannedError, ForbiddenError, UnauthorisedError
 from fieldclub.models import User
@@ -82,12 +82,14 @@ def _is_address(value: str) -> bool:
 
 def current_user_optional(request: Request, response: Response, db: Db) -> User | None:
     """The signed-in user, or `None`. Never raises for a missing or stale cookie."""
-    resolved = sessions.resolve_session(db, request.cookies.get(SESSION_COOKIE))
+    token = cookies.session_token(request)
+    resolved = sessions.resolve_session(db, token)
     if resolved is None:
         return None
     if resolved.refreshed:
+        assert token is not None, "a session resolved from a token"
         db.commit()
-        cookies.set_session_cookie(response, request.cookies[SESSION_COOKIE])
+        cookies.set_session_cookie(response, token)
     if resolved.user.is_banned:
         request.state.fieldclub_banned = True
         return None

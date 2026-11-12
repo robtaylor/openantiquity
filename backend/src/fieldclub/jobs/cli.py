@@ -3,6 +3,7 @@
     fieldclub-jobs scan-channels [--max-channels N] [--delay SECONDS]
     fieldclub-jobs refresh-sources
     fieldclub-jobs due
+    fieldclub-jobs purge-sign-ins
     fieldclub-jobs add-channel <UC... channel id> [--title TEXT] [--disable]
 
 Each job logs a one-line summary and exits 0 when everything it tried
@@ -20,6 +21,7 @@ import logging
 import sys
 from collections.abc import Sequence
 
+from fieldclub.auth import sessions
 from fieldclub.config import get_settings
 from fieldclub.db import SessionLocal
 from fieldclub.jobs import channels, due, sources
@@ -60,6 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
     commands.add_parser(
         "due", help="run whichever of scan-channels and refresh-sources is due, for an hourly start"
     )
+    commands.add_parser("purge-sign-ins", help="delete expired sessions and old sign-in links")
 
     add = commands.add_parser("add-channel", help="watch a YouTube channel, or change one already watched")
     add.add_argument("channel_id", help="the channel's id, which starts with UC")
@@ -93,6 +96,14 @@ def run_due() -> int:
     return 1 if failed else 0
 
 
+def purge_sign_ins() -> int:
+    with SessionLocal() as db:
+        purged = sessions.purge(db)
+        db.commit()
+    logger.info("purge-sign-ins: %d sessions and %d sign-in links deleted", purged.sessions, purged.links)
+    return 0
+
+
 def add_channel(channel_id: str, title: str | None, disable: bool) -> int:
     with SessionLocal() as db:
         try:
@@ -119,6 +130,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return refresh_sources()
         if args.command == "due":
             return run_due()
+        if args.command == "purge-sign-ins":
+            return purge_sign_ins()
         assert args.command == "add-channel", f"unhandled command {args.command!r}"
         return add_channel(args.channel_id, args.title, args.disable)
     except Exception:

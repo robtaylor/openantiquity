@@ -109,6 +109,7 @@ ROUTES: dict[tuple[str, str], Expect] = {
     ("DELETE", "/api/v1/auth/me"): Expect(writer=OWN_ACCOUNT),
     ("POST", "/api/v1/auth/welcome"): Expect(writer="is the welcome step"),
     ("POST", "/api/v1/auth/logout"): Expect(writer=OWN_ACCOUNT),
+    ("POST", "/api/v1/auth/logout-everywhere"): Expect(writer=OWN_ACCOUNT),
     ("GET", "/api/v1/auth/handle-suggestion"): Expect(
         sample="/api/v1/auth/handle-suggestion", nothing_hidden="a free handle, made up on the spot"
     ),

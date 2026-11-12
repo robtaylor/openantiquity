@@ -73,7 +73,7 @@ from fieldclub.models import (
     User,
 )
 from fieldclub.models.common import point_lon_lat, to_db_geometry
-from fieldclub.schemas.common import cursor_int, decode_cursor, int_from_cursor, is_bbox, paginate
+from fieldclub.schemas.common import cursor_int, decode_cursor, int_from_cursor, is_bbox, paginate, web_url
 from fieldclub.services import activity, geo, ids, reputation, sensitivity, text_positions
 from fieldclub.services.confidence import (
     SECOND_LOOK_CODES,
@@ -122,8 +122,9 @@ class OutsideBritishIslesError(ValidationFailedError):
 class PositionInTextError(ValidationFailedError):
     code = "position_in_text"
     message = (
-        "A protected or restricted finding's title and description can't say where it is more closely "
-        "than its 1 km square: take out the grid reference, coordinates or three-word address."
+        "A protected or restricted finding's title, description and links can't say where it is more "
+        "closely than its 1 km square: take out the grid reference, coordinates, map link or three-word "
+        "address."
     )
 
 
@@ -274,9 +275,9 @@ def may_see_hidden_comment(comment: Comment, viewer: User | None) -> bool:
 def standing_evidence_clause() -> ColumnElement[bool]:
     """Evidence that is shown and counted: not deleted, not hidden, and not by a banned account.
 
-    A banned person's answers, evidence and votes stop counting while the ban
-    lasts, and their evidence leaves finding pages and exports. Lifting the
-    ban restores them. See `services.moderation`.
+    A banned person's evidence stops counting while the ban lasts, and leaves
+    finding pages and exports. Lifting the ban restores it. Their answers and
+    votes keep counting (Decision 0019). See `services.moderation`.
     """
     banned = select(User.id).where(User.banned_at.is_not(None))
     return Evidence.deleted_at.is_(None) & Evidence.hidden_at.is_(None) & Evidence.user_id.not_in(banned)
@@ -391,21 +392,33 @@ def answers_to_next(assessment: Assessment) -> int | None:
 
 
 def _votes(db: Session, evidence_ids: Sequence[int]) -> dict[int, list[VoteInput]]:
-    """The votes on each item by people who aren't banned, as the engine takes them."""
+    """The votes on each item, each at the weight of the role it was given with, as the engine takes them.
+
+    A vote keeps counting through its voter's ban, as an answer does, because
+    an item gives its votes only as counts: a count that moved when a named
+    person was banned would say how they voted (Decision 0019).
+    """
     votes: dict[int, list[VoteInput]] = {}
     if not evidence_ids:
         return votes
     for evidence_id, user_id, value, role in db.execute(
-        select(EvidenceVote.evidence_id, EvidenceVote.user_id, EvidenceVote.value, User.role)
-        .join(User, User.id == EvidenceVote.user_id)
-        .where(EvidenceVote.evidence_id.in_(evidence_ids), User.banned_at.is_(None))
+        select(
+            EvidenceVote.evidence_id, EvidenceVote.user_id, EvidenceVote.value, EvidenceVote.role_at_vote
+        ).where(EvidenceVote.evidence_id.in_(evidence_ids))
     ).all():
         votes.setdefault(evidence_id, []).append(VoteInput(user_id=user_id, role=Role(role), value=value))
     return votes
 
 
 def gather_inputs(db: Session, finding: Finding, state: FindingState | None = None) -> FindingInputs:
-    """Everything the engine reads about a finding, with each person's current role.
+    """Everything the engine reads about a finding.
+
+    Answers and votes count at the role they were given with, and keep
+    counting through a ban: nobody who hasn't answered can name who answered
+    what, so a score that moved when a named person's standing changed would
+    say how that person answered (Decision 0019). The finder, evidence and
+    verifications, which are named on the page, count at each person's
+    current role, and a banned person's evidence and verifications stop counting.
 
     `state` is what to tell the engine, which honours only `withdrawn`. It
     defaults to the stored state.
@@ -424,12 +437,8 @@ def gather_inputs(db: Session, finding: Finding, state: FindingState | None = No
             not_artefact=obs.not_artefact,
         )
         for obs, role in db.execute(
-            select(Observation, User.role)
-            .join(User, User.id == Observation.user_id)
-            .where(
-                Observation.finding_id == finding.id,
-                Observation.withdrawn_at.is_(None),
-                User.banned_at.is_(None),
+            select(Observation, Observation.role_at_answer).where(
+                Observation.finding_id == finding.id, Observation.withdrawn_at.is_(None)
             )
         ).all()
     )
@@ -1032,6 +1041,10 @@ def add_evidence(
     """
     check_may_add_evidence(finding, user)
     check_evidence_fields(db, user, fields, today=datetime.now(UTC).date())
+    # A link that says where a protected finding is would say it to everyone who
+    # may see the evidence's title. Readers who see only the square never get
+    # the address in any case (`sensitivity.visible_url`).
+    check_text_for_level(finding.sensitivity, {"url": fields.url})
     data: dict[str, Any] = {}
     if fields.view is not None:
         data["view"] = fields.view
@@ -1040,7 +1053,8 @@ def add_evidence(
         record = db.get(Record, fields.record_id)
         assert record is not None, "check_evidence_fields refuses a record that isn't stored"
         reference, source_key = reference or record.external_id, record.source_key
-        url = url or record.url
+        # A record stored before ingest checked its address is checked again here.
+        url = url or web_url(record.url)
     if source_key is not None:
         data["source_key"] = source_key
     evidence = Evidence(
@@ -1133,8 +1147,10 @@ def vote(db: Session, evidence_id: int, user: User, value: int) -> Reassessment:
     else:
         db.execute(
             insert(EvidenceVote)
-            .values(evidence_id=evidence.id, user_id=user.id, value=value)
-            .on_conflict_do_update(index_elements=["evidence_id", "user_id"], set_={"value": value})
+            .values(evidence_id=evidence.id, user_id=user.id, value=value, role_at_vote=user.role)
+            .on_conflict_do_update(
+                index_elements=["evidence_id", "user_id"], set_={"value": value, "role_at_vote": user.role}
+            )
         )
         follow(db, user, finding)
     # A step names no item here: with the voter as actor it would say who voted on which

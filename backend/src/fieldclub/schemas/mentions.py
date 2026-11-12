@@ -13,7 +13,7 @@ from pydantic import Field
 from fieldclub.models import Finding, Mention, User
 from fieldclub.schemas.common import ApiModel, PublicUser, RequestModel
 from fieldclub.schemas.findings import Location, location_out
-from fieldclub.services import sensitivity
+from fieldclub.services import sensitivity, unfurl
 from fieldclub.services.mentions import NOTE_MAX, Preview
 from fieldclub.services.unfurl import MAX_START_SECONDS, URL_MAX, FetchStatus
 from fieldclub.vocab import FeatureClass, FindingState, MentionKind, Tier
@@ -67,8 +67,12 @@ class MentionPreview(ApiModel):
 class MentionOut(ApiModel):
     id: int
     kind: MentionKind
-    url: str
-    canonical_url: str
+    # The address as added, and its canonical form. For someone who doesn't see
+    # a protected or restricted finding's exact position, a video's or a DOI's
+    # address rebuilt from its identifier, or null for any other address: an
+    # address can say where the finding is (`sensitivity.visible_url`).
+    url: str | None
+    canonical_url: str | None
     provider: str | None
     title: str | None
     # The author, channel or publisher.
@@ -88,20 +92,25 @@ class MentionOut(ApiModel):
     def build(
         cls, mention: Mention, adder: User | None, *, finding: Finding, viewer: User | None
     ) -> MentionOut:
-        """The mention as `viewer` reads it: positions in its title and note hidden unless they see
-        `finding` exactly. The title is the page's, which its author wrote."""
+        """The mention as `viewer` reads it: positions in its title, author and note hidden, and
+        its address given only as `sensitivity.visible_url` allows, unless they see `finding`
+        exactly. The title is the page's, which its author wrote."""
         assert mention.finding_id == finding.id, "the mention is on another finding"
         assert (adder is None) == (mention.user_id is None), "pass the adder exactly when there is one"
         assert adder is None or adder.has_id(mention.user_id), "the adder passed did not add this mention"
+        rebuilt = mention.canonical_url if mention.provider in unfurl.IDENTIFIER_PROVIDERS else None
+        canonical_url = sensitivity.visible_url(finding, viewer, mention.canonical_url, rebuilt=rebuilt)
+        url = sensitivity.visible_url(finding, viewer, mention.url, rebuilt=rebuilt)
         return cls(
             id=mention.id,
             kind=MentionKind(mention.kind),
-            url=mention.url,
-            canonical_url=mention.canonical_url,
+            url=url,
+            canonical_url=canonical_url,
             provider=mention.provider,
             title=sensitivity.visible_text(finding, viewer, mention.title),
-            author_name=mention.author_name,
-            thumbnail_url=mention.thumbnail_url,
+            author_name=sensitivity.visible_text(finding, viewer, mention.author_name),
+            # Only ever from YouTube's or Vimeo's image hosts, and shown only with the video's address.
+            thumbnail_url=mention.thumbnail_url if canonical_url is not None else None,
             published_at=mention.published_at,
             start_seconds=mention.start_seconds,
             note=sensitivity.visible_text(finding, viewer, mention.note),

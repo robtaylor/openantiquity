@@ -7,6 +7,7 @@ import binascii
 import json
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Annotated, Any, Literal
+from urllib.parse import urlsplit
 
 from geoalchemy2 import WKBElement, WKTElement
 from geoalchemy2.shape import to_shape
@@ -32,6 +33,25 @@ MAX_OFFSET = 2000
 # The largest id or offset a cursor may hold, and the largest id a path or body
 # may name: PostgreSQL's BIGINT. Above it PostgreSQL raises rather than finds nothing.
 MAX_ID = 2**63 - 1
+# The longest web address kept anywhere.
+WEB_URL_MAX = 2000
+
+
+def web_url(value: str | None) -> str | None:
+    """`value` if it is an absolute http or https address with a host, or None.
+
+    For an address taken from somewhere other than a person's form, such as a
+    publisher's record, which goes into a link someone may follow. Anything
+    with another scheme (`javascript:`, `data:`), spaces or control
+    characters, credentials or no host is dropped, as is one over `WEB_URL_MAX`.
+    """
+    if not value or len(value) > WEB_URL_MAX or any(char.isspace() or ord(char) < 32 for char in value):
+        return None
+    parts = urlsplit(value)
+    if parts.scheme.lower() not in ("http", "https") or not parts.hostname or "@" in parts.netloc:
+        return None
+    return value
+
 
 # A source's stored record count. A source that has never been ingested has none, which reads as 0.
 RecordCount = Annotated[int, BeforeValidator(lambda value: value or 0)]
@@ -228,8 +248,9 @@ class PublicUser(ApiModel):
     """What anyone may see of a user, wherever a person is credited.
 
     Built from a `User`, an account in the 16 to 17 band, or one that hasn't
-    chosen a band yet, shows its handle as its name and no picture (Decision
-    0009). `User.shows_handle_only` decides. The model refuses a dict, a row
+    chosen a band yet, shows its handle as its name (Decision 0009).
+    `User.shows_handle_only` decides. Nobody has a picture: a sign-in
+    provider's would be fetched from the provider by every visitor's browser. The model refuses a dict, a row
     or any other input, because those carry no age band and the rule couldn't
     be applied.
     """
@@ -237,7 +258,6 @@ class PublicUser(ApiModel):
     handle: str
     display_name: str
     role: str
-    avatar_url: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -253,7 +273,6 @@ class PublicUser(ApiModel):
             "handle": data.handle,
             "display_name": data.handle if handle_only else data.display_name,
             "role": data.role,
-            "avatar_url": None if handle_only else data.avatar_url,
         }
 
     @classmethod
@@ -330,17 +349,64 @@ def _round_coordinates(value: Any, decimals: int) -> Any:
     return value
 
 
+# The most positions and parts a shape sent by a client may have, counting every
+# ring, line and member. A finding's outline and an investigation's area are
+# drawn by hand, and every list of findings carries the outline, so a shape
+# with hundreds of thousands of points would be paid for by every visitor.
+GEOMETRY_MAX_POINTS = 2000
+GEOMETRY_MAX_PARTS = 200
+
+
+class GeometryTooComplexError(ValidationFailedError):
+    code = "geometry_too_complex"
+    message = f"A shape can have at most {GEOMETRY_MAX_POINTS} points and {GEOMETRY_MAX_PARTS} parts."
+
+
+def _check_size(data: dict[str, Any], max_points: int) -> None:
+    """Count positions and parts without recursion, and stop as soon as either is too many.
+
+    Runs before shapely sees the geometry, so a huge one costs no more than
+    the counting up to the limit. A malformed one is left for `shape` to refuse.
+    """
+    points = parts = 0
+    stack: list[Any] = [data.get("coordinates")]
+    stack.extend(
+        member.get("coordinates") for member in data.get("geometries") or () if isinstance(member, dict)
+    )
+    while stack:
+        value = stack.pop()
+        if not isinstance(value, list | tuple) or not value:
+            continue
+        if isinstance(value[0], int | float):
+            points += 1
+            if points > max_points:
+                raise GeometryTooComplexError()
+            continue
+        if isinstance(value[0], list | tuple) and value[0] and isinstance(value[0][0], int | float):
+            parts += 1
+            if parts > GEOMETRY_MAX_PARTS:
+                raise GeometryTooComplexError()
+        stack.extend(value)
+
+
 def from_geojson(
-    geometry: GeoJSONGeometry | dict[str, Any], *, allowed: Sequence[str] | None = None
+    geometry: GeoJSONGeometry | dict[str, Any],
+    *,
+    allowed: Sequence[str] | None = None,
+    max_points: int = GEOMETRY_MAX_POINTS,
 ) -> BaseGeometry:
     """A valid shapely geometry from GeoJSON sent by a client.
 
     Raises `ValidationFailedError` if it is malformed, empty, self-intersecting,
-    outside the range of longitude and latitude, or not one of `allowed` types.
+    outside the range of longitude and latitude, or not one of `allowed` types,
+    and `GeometryTooComplexError` if it has more than `max_points` positions
+    or `GEOMETRY_MAX_PARTS` parts.
     """
     data = geometry.model_dump() if isinstance(geometry, GeoJSONGeometry) else geometry
     if allowed is not None and data.get("type") not in allowed:
         raise ValidationFailedError(f"Expected a geometry of type {' or '.join(allowed)}.")
+    assert max_points <= GEOMETRY_MAX_POINTS, "no shape from a client may be larger than the general limit"
+    _check_size(data, max_points)
     try:
         geom = shape(data)
     except (ShapelyError, ValueError, TypeError, KeyError, AttributeError, IndexError):

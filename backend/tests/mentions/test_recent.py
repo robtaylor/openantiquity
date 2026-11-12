@@ -17,9 +17,9 @@ from fastapi.testclient import TestClient
 from shapely.geometry import box
 from sqlalchemy.orm import Session
 
-from fieldclub.models import Finding, User
+from fieldclub.models import Finding, Mention, User
 from fieldclub.services import mentions
-from fieldclub.vocab import FeatureClass, Sensitivity
+from fieldclub.vocab import FeatureClass, MentionKind, Sensitivity
 from tests.findings.support import create
 from tests.findings.test_leaks import LEVELS, POINTS, SEES, VIEWERS, check
 from tests.helpers import MakeUser
@@ -59,6 +59,15 @@ def world(db: Session, make_user: MakeUser, app: FastAPI, client_for: Callable[.
         )
         assert finding.sensitivity == level.value
         mentions.add(db, finding, adder, STORY.format(level.value))
+        # A map link to the exact spot, as stored had it been added while the finding was open:
+        # adding one to a finding that isn't open is refused.
+        link = f"https://www.google.com/maps/@{lat:.6f},{lon:.6f},18z"
+        db.add(
+            Mention(
+                finding_id=finding.id, user_id=adder.id, kind=MentionKind.ARTICLE.value, url=link,
+                canonical_url=link, match_key=link, provider="google.com", title="On the map",
+            )
+        )  # fmt: skip
         db.commit()
         made[level] = finding
 
@@ -75,6 +84,14 @@ def test_the_feed_shows_each_position_as_the_viewer_may_see_it(world: World, vie
     assert response.headers["cache-control"] == "private, no-cache"
     check(response.text, SEES[viewer], SEES[viewer], where="GET /mentions/recent")
     by_finding = {item["finding"]["public_id"]: item for item in response.json()["items"]}
+    for item in response.json()["items"]:
+        level = next(
+            level
+            for level, finding in world.findings.items()
+            if finding.public_id == item["finding"]["public_id"]
+        )
+        if item["title"] == "On the map":
+            assert (item["url"] is None) is (level not in SEES[viewer])
     assert set(by_finding) == {f.public_id for f in world.findings.values()}
     for level, finding in world.findings.items():
         location = by_finding[finding.public_id]["finding"]["location"]
@@ -95,15 +112,18 @@ def test_every_page_of_the_feed_is_checked(world: World, viewer: str) -> None:
         cursor = page.json()["next_cursor"]
         if cursor is None:
             break
-    assert seen == len(LEVELS)
+    assert seen == 2 * len(LEVELS)
 
 
 @pytest.mark.parametrize("viewer", VIEWERS)
 def test_a_findings_own_list_carries_no_position(world: World, viewer: str) -> None:
-    for finding in world.findings.values():
+    """No position of its own, and a mention's address only to those who see the finding exactly."""
+    for level, finding in world.findings.items():
         listed = world.client(viewer).get(f"{API}/findings/{finding.public_id}/mentions")
         assert listed.status_code == 200
-        check(listed.text, set(), where="GET /findings/{id}/mentions")
+        check(listed.text, SEES[viewer] & {level}, where="GET /findings/{id}/mentions")
+        (link,) = [item for item in listed.json()["items"] if item["title"] == "On the map"]
+        assert (link["url"] is None) is (level not in SEES[viewer])
 
 
 def test_the_feed_is_newest_first(world: World) -> None:
@@ -130,7 +150,9 @@ def test_hidden_and_withdrawn_findings_leave_the_feed(world: World, db: Session,
 
 def test_a_removed_mention_leaves_the_feed(world: World, db: Session) -> None:
     finding = world.findings[Sensitivity.OPEN]
-    (mention,) = mentions.for_finding(db, finding, None, limit=5).mentions
+    mention = next(
+        m for m in mentions.for_finding(db, finding, None, limit=5).mentions if m.title != "On the map"
+    )
     mention.deleted_at = datetime(2026, 11, 5, tzinfo=UTC)
     db.commit()
     for viewer in VIEWERS:

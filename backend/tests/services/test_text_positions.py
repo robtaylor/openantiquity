@@ -236,3 +236,58 @@ def test_every_position_in_a_text_is_replaced_and_the_rest_kept() -> None:
     assert not holds_position(None)
     assert not holds_position("")
     assert redact("") == ""
+
+
+# Avebury in the share links people paste from map sites.
+MAP_LINKS = [
+    "https://www.openstreetmap.org/?mlat=51.42863&mlon=-1.85417",
+    "https://www.openstreetmap.org/?mlat=51.42863&mlon=-1.85417#map=18/51.42863/-1.85417",
+    "https://www.openstreetmap.org/#map=18/51.42863/-1.85417",
+    "https://www.bing.com/maps?cp=51.42863~-1.85417&lvl=18",
+    "https://www.google.com/maps/@51.42863,-1.85417,18z",
+    "https://www.google.com/maps/place/51%C2%B025%2743.1%22N+1%C2%B051%2715.0%22W",
+    "https://www.google.com/maps/place/Avebury/data=!3m1!4b1!4m5!3m4!1s0x0:0x0!8m2!3d51.42863!4d-1.85417",
+    "https://www.google.com/maps/search/?api=1&query=51.42863%2C-1.85417",
+    "https://www.google.com/maps/search/?api=1&query=51.42863%252C-1.85417",
+    "http://maps.apple.com/?ll=51.42863,-1.85417&z=18",
+    "https://maps.example/viewer?lat=51.42863&zoom=17&layer=os&lng=-1.85417",
+    "https://maps.example/viewer?x=410250&y=169960",
+    "geo:51.42863,-1.85417",
+    "https://gridreferencefinder.com/?gr=SU1025069960",
+    "https://what3words.com/filled.count.soap",
+]
+
+
+@pytest.mark.parametrize("link", MAP_LINKS)
+def test_map_links_are_positions_however_the_site_writes_them(link: str) -> None:
+    assert holds_position(link), link
+    hidden = redact(f"See {link} for it")
+    for figures in ("51.4286", "1.8541", "410250"):
+        assert figures not in hidden, hidden
+    assert hidden.startswith("See ")
+    assert hidden.endswith(" for it")
+    assert PLACEHOLDER in hidden
+
+
+@pytest.mark.parametrize(
+    "link",
+    [
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "https://doi.org/10.5284/1040209",
+        "https://historicengland.org.uk/listing/the-list/list-entry/1008391",
+        "https://example.org/a%20page%20about%20barrows",
+        "Visit 100%25 of the site",
+    ],
+)
+def test_ordinary_links_and_escapes_are_left_alone(link: str) -> None:
+    assert not holds_position(link)
+    assert redact(link) == link
+
+
+def test_reading_escaped_and_paired_values_is_quick_on_long_hostile_text() -> None:
+    import time
+
+    for text in ("a" * 50_000, "%41" * 16_000, "lat=51.42863&" + "z=3&" * 12_000, "51.42863~" * 5_000):
+        started = time.monotonic()
+        redact(text)
+        assert time.monotonic() - started < 0.5, text[:20]

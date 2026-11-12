@@ -104,7 +104,7 @@ class Address:
         For a page that is `http` or `https`, a leading `www.` and a trailing
         slash. The provider forms are exact already.
         """
-        if self.provider in _EXACT_PROVIDERS:
+        if self.provider in IDENTIFIER_PROVIDERS:
             return self.canonical_url
         split = urlsplit(self.canonical_url)
         path = split.path.rstrip("/") or "/"
@@ -126,7 +126,9 @@ YOUTUBE_HOSTS = frozenset(
 )
 VIMEO_HOSTS = frozenset({"vimeo.com", "www.vimeo.com", "player.vimeo.com"})
 DOI_HOSTS = frozenset({"doi.org", "dx.doi.org", "www.doi.org"})
-_EXACT_PROVIDERS = frozenset({"youtube", "vimeo", "doi"})
+# Providers whose canonical address is rebuilt from the item's identifier alone,
+# so it can't say anything the identifier doesn't: no place, no query of the member's.
+IDENTIFIER_PROVIDERS = frozenset({"youtube", "vimeo", "doi"})
 
 _YOUTUBE_ID = re.compile(r"[A-Za-z0-9_-]{11}")
 # The path forms that carry an id: /shorts/<id>, /live/<id>, /embed/<id>, /v/<id>, /e/<id>.
@@ -717,6 +719,11 @@ def unfurl(address: Address, *, resolver: safe_fetch.Resolver | None = None) -> 
         result = Unfurled(FetchStatus.REFUSED, NOTHING)
     except safe_fetch.FetchFailedError as exc:
         logger.info("Fetching %s failed: %s", address.canonical_url, exc.message)
+        result = Unfurled(FetchStatus.FAILED, NOTHING)
+    except Exception:
+        # Whatever a stranger's server sends, the mention can still be saved:
+        # a page that breaks the reader is a failed fetch, never a 500.
+        logger.exception("Reading %s failed unexpectedly", address.canonical_url)
         result = Unfurled(FetchStatus.FAILED, NOTHING)
     with _cache_lock:
         _cache[address.canonical_url] = (now + _TTL_S[result.status], result)

@@ -74,16 +74,16 @@ ANN: dict[str, dict[str, Any]] = {
     },
 }
 APPLE_USER = json.dumps({"name": {"firstName": "Ann", "lastName": "Barrow"}, "email": "spoofed@evil.example"})
-# (display name, avatar, email on the account) after a first sign-in.
+# (display name, email on the account) after a first sign-in.
 EXPECTED = {
-    "google": ("Ann Barrow", "https://lh3.example/ann.png", "ann@example.org"),
+    "google": ("Ann Barrow", "ann@example.org"),
     # Microsoft's address isn't verified without the domain-owner flag.
-    "microsoft": ("Ann Barrow", None, None),
+    "microsoft": ("Ann Barrow", None),
     # Apple's name comes from the posted form; its address from the identity token, never the form.
-    "apple": ("Ann Barrow", None, "ann@example.org"),
-    "osm": ("annmaps", None, None),
+    "apple": ("Ann Barrow", "ann@example.org"),
+    "osm": ("annmaps", None),
     # Facebook never verifies an address.
-    "facebook": ("Ann Barrow", "https://fb.example/ann.jpg", None),
+    "facebook": ("Ann Barrow", None),
 }
 SUBJECTS = {"google": "g-ann", "microsoft": "m-ann", "apple": "a-ann", "osm": "12345", "facebook": "10101"}
 PROVIDERS = list(SUBJECTS)
@@ -127,9 +127,10 @@ def test_first_sign_in_creates_an_account_that_still_needs_the_welcome_step(
     assert response.headers["location"] == f"{PUBLIC_URL}/f/7K3QXM"
 
     me = browser.get("/api/v1/auth/me").json()
-    name, avatar, email = EXPECTED[provider]
+    name, email = EXPECTED[provider]
     assert me["display_name"] == name
-    assert me["avatar_url"] == avatar
+    # A provider's picture is never kept: every visitor's browser would fetch it from the provider.
+    assert "avatar_url" not in me
     assert me["email"] == email
     assert me["email_verified"] is (email is not None)
     assert me["needs_welcome"] is True
@@ -952,14 +953,12 @@ def test_facebook_is_called_with_an_appsecret_proof(browser: TestClient, idps: I
     assert "access_token" not in query_of(str(request.url))
 
 
-def test_facebook_without_a_picture_gives_no_avatar(browser: TestClient, idps: Idps) -> None:
-    profile = {
-        "id": "2",
-        "name": "No Face",
-        "picture": {"data": {"url": "https://fb/s.jpg", "is_silhouette": True}},
-    }
-    complete(browser, idps, "facebook", profile)
-    assert me(browser)["avatar_url"] is None
+def test_facebook_is_not_asked_for_a_picture(browser: TestClient, idps: Idps) -> None:
+    complete(browser, idps, "facebook")
+    facebook = idps["facebook"]
+    assert isinstance(facebook, FakeFacebook)
+    (request,) = facebook.profile_requests
+    assert query_of(str(request.url))["fields"] == "id,name,email"
 
 
 # --------------------------------------------------------------------------

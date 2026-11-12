@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -86,20 +87,71 @@ def test_banned_deleted_and_unknown_people(client_as: ClientAs, make_user: MakeU
     assert no_reason.status_code == 422
 
 
-def test_a_new_role_reweights_what_the_person_has_done(
+def test_a_new_role_weighs_answers_given_from_then_on_and_not_those_given_before(
     db: Session, client_as: ClientAs, make_user: MakeUser
 ) -> None:
-    # One member's yes and an expert's would reach Seen; two members' yes would too, but one won't.
-    finding = create(db, make_user())
+    """Decision 0019: an answer keeps the weight of the role it was given with."""
+    before, after = create(db, make_user()), create(db, make_user())
     archaeologist = make_user(handle="Arch")
-    answer(db, finding, archaeologist)
-    answer(db, finding, make_user(), visible="no")
-    db.refresh(finding)
-    assert finding.tier == Tier.SPOTTED.value
+    answer(db, before, archaeologist)
     assert set_role(client_as(make_user(Role.MODERATOR)), "Arch", "expert").status_code == 200
+    db.refresh(archaeologist)
+    answer(db, after, archaeologist)
     db.expire_all()
-    finding = findings.get_finding(db, finding.public_id, None)
-    assert finding.assessment["seen"] == 3.0
+    assert findings.get_finding(db, before.public_id, None).assessment["seen"] == 1.0
+    assert findings.get_finding(db, after.public_id, None).assessment["seen"] == 3.0
+
+
+def _public_score(client, public_id: str) -> tuple[int, str, str]:
+    page = client.get(f"{API}/findings/{public_id}").json()
+    return page["confidence"], page["tier"], page["state"]
+
+
+def test_flipping_a_role_and_back_shows_nobody_how_that_person_answered(
+    db: Session, client: TestClient, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    """A moderator who hasn't answered flips a member to expert and back, watching the score.
+
+    Before Decision 0019 the score went 10, 23, 10 for someone who said yes and
+    10, 0, 10 for someone who said no, so the flip said how each had answered.
+    """
+    finding = create(db, make_user())
+    yes, no = make_user(handle="YesSayer"), make_user(handle="NoSayer")
+    answer(db, finding, yes, visible="yes")
+    answer(db, finding, no, visible="no")
+    moderator = client_as(make_user(Role.MODERATOR))
+    assert moderator.get(f"{API}/findings/{finding.public_id}/observations").status_code == 403
+    start = _public_score(client, finding.public_id)
+    events = count(db, Activity)
+    for handle in ("YesSayer", "NoSayer"):
+        for role in ("expert", "member", "expert", "member"):
+            assert set_role(moderator, handle, role).status_code == 200
+            assert _public_score(client, finding.public_id) == start, (handle, role)
+            assert _public_score(moderator, finding.public_id) == start, (handle, role)
+    # Nothing in the feed or the event stream marks the moment either.
+    assert count(db, Activity) == events
+
+
+def test_a_ban_and_its_lifting_show_nobody_how_that_person_answered(
+    db: Session, client: TestClient, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    """A ban is public (the profile goes), so a score that moved with it would say how they answered."""
+    finding = create(db, make_user())
+    yes, no = make_user(handle="YesSayer"), make_user(handle="NoSayer")
+    answer(db, finding, yes, visible="yes")
+    answer(db, finding, no, visible="no")
+    moderator = client_as(make_user(Role.MODERATOR))
+    start = _public_score(client, finding.public_id)
+    events = count(db, Activity)
+    for handle in ("NoSayer", "YesSayer"):
+        banned = moderator.post(f"{API}/mod/users/{handle}/ban", json=REASON)
+        assert banned.status_code == 200
+        # The answer says nothing of how many findings they answered either.
+        assert set(banned.json()) == {"user", "sessions_ended"}
+        assert _public_score(client, finding.public_id) == start, handle
+        assert moderator.post(f"{API}/mod/users/{handle}/unban", json=REASON).status_code == 200
+        assert _public_score(client, finding.public_id) == start, handle
+    assert count(db, Activity) == events
 
 
 # --------------------------------------------------------------------------
@@ -268,7 +320,7 @@ def test_who_may_ban_whom(client_as: ClientAs, make_user: MakeUser) -> None:
     assert (not_banned.status_code, error_code(not_banned)) == (409, "not_banned")
 
 
-def test_a_banned_persons_answers_evidence_and_votes_stop_counting_until_the_ban_is_lifted(
+def test_a_banned_persons_evidence_stops_counting_until_the_ban_is_lifted_and_answers_and_votes_keep_counting(
     db: Session, client_as: ClientAs, make_user: MakeUser
 ) -> None:
     finder = make_user(handle="Finder")
@@ -288,26 +340,21 @@ def test_a_banned_persons_answers_evidence_and_votes_stop_counting_until_the_ban
 
     moderator = client_as(make_user(Role.MODERATOR))
     response = moderator.post(f"{API}/mod/users/Ringleader/ban", json=REASON)
-    assert response.json()["findings_reassessed"] == 1
+    assert response.status_code == 200
 
     db.expire_all()
     finding = findings.get_finding(db, finding.public_id, None)
-    assert finding.tier == Tier.SPOTTED.value
-    assert finding.assessment["seen"] == 1.0
+    # Their answer and their vote still count (Decision 0019); their evidence doesn't.
+    assert finding.tier == Tier.SEEN.value
+    assert finding.assessment["seen"] == 2.0
     assert finding.evidence_count == 1
-    # The tier change names nobody.
-    changes = db.scalars(select(Activity).where(Activity.id > activity_before)).all()
-    assert [(a.kind, a.actor_id) for a in changes] == [("tier_changed", None)]
+    # The reassessment their evidence caused changed no tier or state, so nothing marks the moment.
+    assert count(db, Activity) == activity_before
     viewer = client_as(make_user())
     page = viewer.get(f"{API}/findings/{finding.public_id}").json()
     assert "Doctored aerial" not in str(page)
-    assert all(c["user"]["handle"] != "Ringleader" for c in page["credits"])
-    # The finder is told who answered (Decision 0010), and still not about the banned account.
-    credited = client_as(finder).get(f"{API}/findings/{finding.public_id}").json()["credits"]
-    assert any(c["kind"] == "saw_it" for c in credited)
-    assert all(c["user"]["handle"] != "Ringleader" for c in credited)
-    observations = client_as(finder).get(f"{API}/findings/{finding.public_id}/observations").json()["items"]
-    assert [o["user"]["handle"] for o in observations if o["user"]["handle"] == "Ringleader"] == []
+    (endorsed,) = [item for item in page["evidence"] if item["id"] == other.id]
+    assert endorsed["endorsements"] == 1
     export = viewer.get(f"{API}/findings/{finding.public_id}/export?format=csv").text
     assert "Aerial" not in export
     gone = viewer.put(f"{API}/evidence/{evidence.id}/vote", json={"value": 1})
@@ -318,6 +365,7 @@ def test_a_banned_persons_answers_evidence_and_votes_stop_counting_until_the_ban
     restored = db.scalar(select(Finding).where(Finding.id == finding.id))
     assert restored is not None
     assert restored.tier == Tier.SEEN.value
+    assert restored.assessment == before
     assert restored.assessment["seen"] == before["seen"]
     assert restored.evidence_count == 2
     actions = [e.action for e in log_entries(db)]

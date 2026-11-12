@@ -19,7 +19,7 @@ import ipaddress
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from fastapi import Depends, Request
@@ -201,5 +201,21 @@ def rate_limit(
 
     def dependency(request: Request, user: User | None = Depends(caller)) -> None:
         enforce(limiter, request, user)
+
+    return dependency
+
+
+def rate_limit_by_address(name: str, capacity: float, per_seconds: float) -> Callable[..., Awaitable[None]]:
+    """A dependency like `rate_limit`, keyed on the caller's address alone, for answers that are public.
+
+    It never resolves a session, so it costs no database query, and a
+    publicly cacheable answer never carries a refreshed session cookie. It is
+    `async` because it does no blocking work, so an `async` route such as a
+    terrain tile doesn't wait for a thread from the pool to run it.
+    """
+    limiter = get_limiter(name, capacity, per_seconds)
+
+    async def dependency(request: Request) -> None:
+        enforce(limiter, request, None)
 
     return dependency

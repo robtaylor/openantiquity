@@ -26,13 +26,12 @@ class ProfileOut(ApiModel):
     """A person's public page.
 
     Someone in the 16 to 17 band, or who hasn't chosen a band, shows only
-    their handle: `display_name` is the handle, and there is no picture or bio
+    their handle: `display_name` is the handle, and there is no bio
     (Decision 0009).
     """
 
     handle: str
     display_name: str
-    avatar_url: str | None
     role: str
     bio: str | None
     joined_at: datetime
@@ -50,7 +49,6 @@ class ProfileOut(ApiModel):
         return cls(
             handle=public.handle,
             display_name=public.display_name,
-            avatar_url=public.avatar_url,
             role=public.role,
             bio=None if person.shows_handle_only else person.bio,
             joined_at=person.created_at,

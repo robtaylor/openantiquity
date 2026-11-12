@@ -177,12 +177,11 @@ class Hidden(ApiModel):
 
 
 class ModUser(ApiModel):
-    """A person as moderators see them. The name and picture follow `PublicUser`'s rules."""
+    """A person as moderators see them. The name follows `PublicUser`'s rules."""
 
     handle: str
     display_name: str
     role: Role
-    avatar_url: str | None
     reputation: float
     age_band: str | None
     created_at: datetime
@@ -257,8 +256,6 @@ class ModPerson(ModUser):
 class Ban(ApiModel):
     user: ModUser
     sessions_ended: int
-    # Findings reassessed because the person's work stopped, or started again, counting.
-    findings_reassessed: int
 
 
 class PointSourceOut(ApiModel):

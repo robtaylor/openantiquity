@@ -23,6 +23,8 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(Text)
     email: Mapped[str | None] = mapped_column(CITEXT, unique=True)
     email_verified_at: Mapped[datetime | None] = mapped_column(TimestampTz)
+    # No longer written: provider pictures aren't shown (Decision 0020). Emptied
+    # at each sign-in, and to be dropped with the first migration.
     avatar_url: Mapped[str | None] = mapped_column(Text)
     # Both are empty until the person completes the welcome sheet, and every
     # write route refuses them until then (Decision 0009). See
@@ -134,4 +136,22 @@ class ReputationEvent(Base):
     finding_id: Mapped[int | None] = fk("findings.id", ondelete="SET NULL", index=True)
 
 
-__all__ = ["AuthIdentity", "MagicLink", "ReputationEvent", "User", "UserSession"]
+class ReleasedHandle(Base):
+    """A handle someone gave up, held back from everyone else for a while (`auth.handles`).
+
+    Without it, the next person to take the name would inherit every old
+    `@mention` of it and every link to `/u/<handle>`. `user_id` is who gave it
+    up, so they may take it back. It is empty for a deleted account's handle,
+    which nobody may take back, and nothing ties it to the account.
+    """
+
+    __tablename__ = "released_handles"
+
+    handle: Mapped[str] = mapped_column(CITEXT, primary_key=True)
+    created_at: Mapped[CreatedAt]
+    # When it was last given up, which the hold counts from.
+    released_at: Mapped[datetime] = mapped_column(TimestampTz)
+    user_id: Mapped[int | None] = fk("users.id", ondelete="SET NULL")
+
+
+__all__ = ["AuthIdentity", "MagicLink", "ReleasedHandle", "ReputationEvent", "User", "UserSession"]

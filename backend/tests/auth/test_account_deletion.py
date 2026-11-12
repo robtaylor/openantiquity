@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from fieldclub.auth import accounts, sessions
 from fieldclub.auth.accounts import HandleGenerationError, delete_account
+from fieldclub.auth.handles import release_handle
 from fieldclub.db import Base
 from fieldclub.models import (
     AuthIdentity,
@@ -61,6 +62,8 @@ WHAT_DELETION_DOES: dict[tuple[str, str], str] = {
     ("auth_identities", "user_id"): GOES,
     ("sessions", "user_id"): GOES,
     ("magic_links", "user_id"): GOES,
+    # A handle they gave up stays held back, tied to nobody.
+    ("released_handles", "user_id"): GOES,
     ("follows", "user_id"): GOES,
     ("notifications", "user_id"): GOES,
     # A notification someone else received about them stays, naming no one.
@@ -161,6 +164,7 @@ def test_deleting_takes_personal_data_and_leaves_the_public_record(
     db.add(AuthIdentity(user_id=gone.id, provider="google", subject="leaving"))
     db.add(MagicLink(email="leaving@example.org", token_hash="leaving", user_id=gone.id, expires_at=NOW))
     sessions.create_session(db, gone)
+    release_handle(db, "LeavingEarlier", gone)
     db.commit()
     blockers = {refused.id, hidden.id}
     stored = [shown.storage_key, waiting.storage_key, hidden.storage_key]

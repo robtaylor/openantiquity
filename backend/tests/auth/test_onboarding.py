@@ -76,7 +76,6 @@ def test_an_adult_completes_the_welcome_step(db: Session, newcomer: User) -> Non
     db.refresh(newcomer)
     assert (newcomer.handle, newcomer.display_name) == ("RidgewayRob", "Rob")
     assert (newcomer.age_band, newcomer.terms_accepted_at) == ("18_plus", NOW)
-    assert newcomer.avatar_url == "https://provider.example/rob.png"
     check_contributor(newcomer, settings())
 
 
