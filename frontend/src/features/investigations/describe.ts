@@ -53,8 +53,7 @@ export const UNAVAILABLE: Record<Unavailable, string> = {
   hidden: "A moderator has hidden this finding.",
   withdrawn: "Its finder has withdrawn this finding.",
   gone: "This record has left the index since it was added.",
-  near_protected:
-    "It is near a protected finding in this notebook, so only people who see that finding's exact place can open it.",
+  near_protected: "It is near a protected finding, so only people who see that finding's exact place can open it.",
 };
 
 /**
@@ -62,7 +61,7 @@ export const UNAVAILABLE: Record<Unavailable, string> = {
  * the server has hidden or blurred what was written and drawn near it.
  */
 export const GENERALISED_NOTICE =
-  "This notebook holds a finding you see only as its 1 km square. To keep its place private, map views and height profiles near it are held back, its area is shown only roughly, and grid references written in it are hidden.";
+  "This notebook holds a finding you see only as its 1 km square. To keep its place private, map views and height profiles near it are held back, its area is shown as the whole 1 km squares it covers, and grid references written in it are hidden. What is hidden from you is kept when you edit: leave each [position hidden] where it is.";
 
 /** What the viewer may do with one investigation. */
 export interface Powers {

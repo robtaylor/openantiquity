@@ -294,7 +294,7 @@ describe("photos, members and the log", () => {
     const routes = serve(MODERATOR);
     routes.on("GET /users/KeenLynchet7", () => json(profileFixture({ reputation: 12 })));
     routes.on("POST /mod/users/KeenLynchet7/ban", () =>
-      json({ user: { ...eligibleFixture().user, banned: true }, sessions_ended: 1, findings_reassessed: 0 }),
+      json({ user: { ...eligibleFixture().user, banned: true }, sessions_ended: 1 }),
     );
     const members = await openMod("/mod/members?handle=KeenLynchet7");
     const panel = within(
@@ -303,6 +303,9 @@ describe("photos, members and the log", () => {
     await panel.findByText("Mary Anning");
     await user.click(panel.getByRole("button", { name: "Ban KeenLynchet7" }));
     const dialog = within(await screen.findByRole("dialog", { name: "Ban KeenLynchet7?" }));
+    // Decision 0019: a ban stops their evidence and verifications, not their answers and votes.
+    expect(dialog.getByText(/evidence and verifications stop counting/)).toBeInTheDocument();
+    expect(dialog.getByText(/second looks and votes keep counting as they were given/)).toBeInTheDocument();
     await user.type(dialog.getByLabelText("Why"), "Spam.");
     await user.click(dialog.getByRole("button", { name: "Ban them" }));
     expect(await panel.findByRole("button", { name: "Lift the ban on KeenLynchet7" })).toBeInTheDocument();

@@ -1,7 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import { DRAFTS_STORAGE_KEY } from "../src/features/drafts/store.js";
 import { fakeSession, meWith } from "./support/account.js";
-import { boxOf, openMap, overlaps } from "./support/app.js";
+import { boxOf, openMap, overlaps, sendDraftsFromBeforeSignIn } from "./support/app.js";
 import { fakeFindings } from "./support/findings.js";
 import { expect, test } from "./support/fixtures.js";
 import { apiRoute } from "./support/network.js";
@@ -216,7 +216,9 @@ test("keeps a signed-out mark as a draft through a reload and a sign-in, then sa
   await markPanel(page).getByRole("button", { name: "Save finding" }).click();
   await page.getByRole("dialog", { name: "Sign in" }).getByRole("link", { name: "Continue with Google" }).click();
 
-  // Back at the draft, it is saved without anything typed again, and its page opens.
+  // Back at the draft, it is saved, once the person says to send it, without anything typed again, and its
+  // page opens.
+  await sendDraftsFromBeforeSignIn(page);
   await expect(page).toHaveURL(/\/f\/new-1#/);
   expect(next.startsWith(draftUrl.pathname)).toBe(true);
   await expect(page.getByText("Your draft is saved.")).toBeVisible();

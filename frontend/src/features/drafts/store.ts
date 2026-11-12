@@ -39,9 +39,10 @@
  * in this tab, from the sign-in sheet (`noteSignInStarted`), and finished in
  * this tab within `SIGN_IN_MAX_MS` (`adoptDraftsAfterSignIn`). An emailed
  * link opened in another tab, or in a browser that didn't ask for it,
- * adopts nothing. Adopted findings and squares are saved without asking. An
- * adopted second look is `held` until the person says to send it, because
- * an answer is final (Decision 0008). Only a person's own drafts are saved.
+ * adopts nothing. Every adopted draft is `held` until the person says to
+ * send it (Decision 0024): someone else may have left the tab open, and a
+ * second look's answer is final (Decision 0008). Only a person's own
+ * drafts are saved.
  *
  * The store is `{version: 3, drafts: [...]}` under `fieldclub.drafts`.
  * Reading survives damage: an unreadable store is copied aside under
@@ -110,7 +111,7 @@ export interface Draft {
   failure?: DraftFailure;
   /** Which tab is saving it, and since when, while `state` is "saving". */
   claim?: { tab: string; at: number };
-  /** Adopted at sign-in, and waits for the person to say to send it. Only second looks are held. */
+  /** Adopted at sign-in, and waits for the person to say to send it. */
   held?: true;
 }
 
@@ -683,8 +684,8 @@ function takeSignInStarted(ways: readonly SignInWay[], now: number): string | nu
 /**
  * `account` has just finished signing in, in this tab, in one of `ways`. If
  * the sign-in also started in this tab that way, recently, the drafts this
- * visit made signed out become `account`'s, and a second look among them is
- * held until the person says to send it. Returns how many were taken over.
+ * visit made signed out become `account`'s, each held until the person says
+ * to send it. Returns how many were taken over.
  * Nothing is taken after a sign-in that started elsewhere, or none, and
  * nothing is written when there is nothing to take over, as when another tab
  * got there first.
@@ -703,9 +704,7 @@ export function adoptDraftsAfterSignIn(account: string, ways: readonly SignInWay
     drafts.map((draft): Draft => {
       if (!isVisits(draft)) return draft;
       adopted += 1;
-      const taken: Draft = { ...draft, owner: { account } };
-      if (draft.kind === DRAFT_KINDS.observation) taken.held = true;
-      return taken;
+      return { ...draft, owner: { account }, held: true };
     }),
   );
   return adopted;

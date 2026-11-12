@@ -1,7 +1,7 @@
 import type { Page, Route } from "@playwright/test";
 import { DRAFTS_STORAGE_KEY, DRAFTS_VERSION } from "../src/features/drafts/store.js";
 import { fakeSession, meWith } from "./support/account.js";
-import { openMap } from "./support/app.js";
+import { openMap, sendDraftsFromBeforeSignIn } from "./support/app.js";
 import { expect, test } from "./support/fixtures.js";
 import { apiRoute, stubNetwork } from "./support/network.js";
 
@@ -87,6 +87,7 @@ test("keeps drafts through a reload and a provider's round trip, then saves each
   const sheet = page.getByRole("dialog", { name: "Sign in" });
   await sheet.getByRole("link", { name: "Continue with Google" }).click();
 
+  await sendDraftsFromBeforeSignIn(page);
   await expect(page.getByText("Your draft is saved.")).toBeVisible();
   await expect(bar(page)).toHaveCount(0);
   const after = new URL(page.url());

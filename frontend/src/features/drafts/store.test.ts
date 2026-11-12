@@ -370,13 +370,32 @@ describe("whose drafts are whose (Decision 0022)", () => {
     setDraftsViewer("person:A");
     const drafts = listDrafts();
     expect(drafts.map((draft) => draft.owner)).toEqual([{ account: "person:A" }, { account: "person:A" }]);
-    // The finding is saved without asking. The second look waits until the person says to send it.
-    expect(drafts.find((draft) => draft.id === finding.id)?.held).toBeUndefined();
+    // Nothing is sent without asking: the tab may have been left open by someone else (Decision 0024).
+    expect(drafts.find((draft) => draft.id === finding.id)?.held).toBe(true);
     expect(drafts.find((draft) => draft.id === answer.id)?.held).toBe(true);
     sendHeldDraft(answer.id, "person:B");
     expect(listAllDrafts().find((draft) => draft.id === answer.id)?.held).toBe(true);
     sendHeldDraft(answer.id, "person:A");
     expect(listAllDrafts().find((draft) => draft.id === answer.id)?.held).toBeUndefined();
+  });
+
+  it("holds what a person left in an open tab, so the next person to sign in there sends none of it", () => {
+    vi.useFakeTimers({ now: new Date("2026-11-12T09:00:00Z") });
+    try {
+      // A marks a finding signed out and walks away, leaving the tab open.
+      const left = putDraft("finding", { n: 1 });
+      // Six hours later B sits down and signs in from the same tab.
+      vi.setSystemTime(Date.now() + 6 * 60 * 60 * 1000);
+      noteSignInStarted("provider");
+      resetDraftsForTests();
+      expect(adoptDraftsAfterSignIn("person:B", ["provider"])).toBe(1);
+      setDraftsViewer("person:B");
+      const [taken] = listDrafts();
+      expect(taken?.id).toBe(left.id);
+      expect(taken?.held).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("never takes drafts left from before for someone who arrives already signed in", () => {

@@ -17,6 +17,7 @@ import {
   DRAFTS_STORAGE_KEY,
   DraftBusyError,
   listAllDrafts,
+  listDrafts,
   noteSignInStarted,
   putDraft,
   resetDraftsForTests,
@@ -293,6 +294,12 @@ describe("whose drafts are saved", () => {
     putDraft(PROBE, { note: "just now" });
     noteSignInStarted("provider");
     expect(adoptDraftsAfterSignIn(ME, ["provider"])).toBe(1);
+    // Taken over, but held: whoever left the tab open may not be who signed in (Decision 0024).
+    expect(await saveWaitingDrafts(ME)).toEqual({ saved: 0, failed: 0, stopped: null });
+    setDraftsViewer(ME);
+    const [taken] = listDrafts();
+    expect(taken?.held).toBe(true);
+    sendHeldDraft(taken?.id ?? "", ME);
     await saveWaitingDrafts(ME);
     expect(save.mock.calls.map(([data]) => data.note)).toEqual(["just now"]);
     expect(listAllDrafts()).toHaveLength(1);

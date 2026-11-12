@@ -58,8 +58,8 @@ export function BanButton({ handle, targetRole, banned, onChange }: BanButtonPro
         >
           <p>
             {banned
-              ? "Their second looks, votes and evidence count again at once. They sign in again themselves."
-              : "They are signed out everywhere at once. While the ban lasts their second looks, votes and evidence stop counting and their page can't be found. Their findings and comments stay."}
+              ? "Their evidence and verifications count again at once. They sign in again themselves."
+              : "They are signed out everywhere at once. While the ban lasts their evidence and verifications stop counting and their page can't be found. Their second looks and votes keep counting as they were given, so that a ban says nothing of how they answered: to undo those on a finding, hide it or ask for fresh second looks. Their findings and comments stay."}
           </p>
         </ReasonDialog>
       ) : null}

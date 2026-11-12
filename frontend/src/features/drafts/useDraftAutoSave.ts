@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { toast } from "../../ui/toastStore.js";
+import { toast, useToastStore } from "../../ui/toastStore.js";
 import { accountIdentity, onSignedInHere } from "../account/session.js";
 import { isDue, onDraftsSaved, saveWaitingDrafts, useSaversVersion, withDraftsLock } from "./savers.js";
 import {
@@ -16,19 +16,25 @@ function plural(count: number, one: string, many: string): string {
   return count === 1 ? one : many.replace("{n}", String(count));
 }
 
-/** After an adoption: say if a second look of theirs is waiting for them to send it. */
+/** After an adoption: say that the drafts from before signing in wait for them to send them (Decision 0024). */
 function tellHeld(adopted: number, account: string): void {
   if (adopted === 0) return;
   const held = listAllDrafts().filter((draft) => draft.held && isOwnDraft(draft, account)).length;
   if (held === 0) return;
-  toast(
+  const id = toast(
     plural(
       held,
-      "Your second look from before you signed in is waiting. An answer is final, so send it only if it's yours.",
-      "Your {n} second looks from before you signed in are waiting. Answers are final, so send them only if they're yours.",
+      "A draft from before you signed in is waiting. Send it only if you made it.",
+      "{n} drafts from before you signed in are waiting. Send them only if you made them.",
     ),
     { duration: 0, action: { label: "Show", onClick: () => useDraftsUi.getState().setOpen(true) } },
   );
+  // Once the drafts bar is open it says the same, and on a phone the toast would cover it.
+  const stop = useDraftsUi.subscribe((state) => {
+    if (!state.open) return;
+    useToastStore.getState().dismiss(id);
+    stop();
+  });
 }
 
 /**
@@ -43,9 +49,10 @@ function tellHeld(adopted: number, account: string): void {
  * signed out become theirs only after a sign-in that started and finished
  * in this tab (Decision 0022): a provider's, which comes back as the page
  * loading signed in, or one finished here without leaving the page
- * (`onSignedInHere`). While `ready`, every waiting draft of theirs that has
- * a saver is saved, and they are told what happened; a second look they
- * made before signing in waits for them to say to send it. Anyone else's
+ * (`onSignedInHere`), and then wait for them to say to send them, because
+ * someone else may have used the tab before them (Decision 0024). While
+ * `ready`, every waiting draft of theirs that has a saver and isn't held is
+ * saved, and they are told what happened. Anyone else's
  * drafts wait to be asked about in the drafts bar. It runs again when a
  * draft or a saver arrives, and each run reports once however many times
  * React runs the effect.

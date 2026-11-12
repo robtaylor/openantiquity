@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import { DRAFTS_STORAGE_KEY } from "../src/features/drafts/store.js";
 import { SQUARE_SPOT, squareAt, squareEastOf } from "../src/test/fixtures/squares.js";
 import { fakeSession, meWith } from "./support/account.js";
-import { openMap } from "./support/app.js";
+import { openMap, sendDraftsFromBeforeSignIn } from "./support/app.js";
 import { fakeFindings } from "./support/findings.js";
 import { expect, test } from "./support/fixtures.js";
 import { apiRoute } from "./support/network.js";
@@ -130,6 +130,7 @@ test("a signed-out scan, with a finding marked in the square, is kept as drafts 
   await page.getByRole("region", { name: "Drafts" }).getByRole("button", { name: "Save" }).click();
   await sheet.getByRole("link", { name: "Continue with Google" }).click();
   await expect(place(page, SECOND)).toBeVisible();
+  await sendDraftsFromBeforeSignIn(page, 2);
   await expect.poll(() => squares.results[FIRST.square]?.length ?? 0).toBe(1);
   expect(squares.results[FIRST.square]?.[0]).toMatchObject({ result: "marked", findings_count: 1 });
   await expect.poll(async () => (await storedDrafts(page)).length).toBe(0);

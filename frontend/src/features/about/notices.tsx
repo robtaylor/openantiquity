@@ -247,9 +247,9 @@ function Privacy({ meta }: { meta: Meta }) {
             <li>
               From the sign-in provider ({orList(providers)}): a number that identifies your account with them, your
               name, and, where they give it, your email address. Most providers tell us an email address. We use it to
-              recognise you if you sign in another way, and never show it to anyone. We don't ask for, keep or show the
-              picture a provider has of you, so nobody's browser contacts a provider to show you: people are shown by
-              their name and initials.
+              recognise you if you sign in another way, and never show it to anyone. We don't keep or show the picture a
+              provider has of you, though Google sends it with your name, so nobody's browser contacts a provider to
+              show you: people are shown by their name and initials.
             </li>
           ) : null}
           {email ? (
@@ -281,7 +281,10 @@ function Privacy({ meta }: { meta: Meta }) {
           of yours, on every device, from your account page. We note when you were last seen. Two short-lived cookies
           are used only during sign-in, to check that it finishes in the browser that started it:{" "}
           <code>openantiquity_oauth</code> for ten minutes when you sign in with a provider, and{" "}
-          <code>openantiquity_email_link</code> for fifteen minutes when you ask for an emailed link.
+          <code>openantiquity_email_link</code> for fifteen minutes when you ask for an emailed link. After you sign in
+          with an emailed link, <code>openantiquity_email_known</code> remembers for a year that this browser has signed
+          in to that address, as a scrambled code made with our secret key, so that it can still ask for a link when
+          strangers have asked for too many.
         </p>
       </More>
 

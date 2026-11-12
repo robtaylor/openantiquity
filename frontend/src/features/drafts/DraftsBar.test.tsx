@@ -9,6 +9,7 @@ import { routeApi } from "../../test/apiRoutes.js";
 import { meFixture, newcomerFixture } from "../../test/fixtures/me.js";
 import { json, setUpShellTests } from "../../test/shellHarness.js";
 import { useAccountUi } from "../account/requireAccount.js";
+import { accountIdentity } from "../account/session.js";
 import { Shell } from "../shell/Shell.js";
 import { DraftBadge } from "./DraftBadge.js";
 import { registerDraftSaver, resetSaversForTests } from "./savers.js";
@@ -114,6 +115,17 @@ describe("the drafts bar", () => {
     noteSignInStarted("provider");
     resetDraftsForTests();
     renderApp();
+    // Someone else may have left the tab open, so nothing is sent until the person says (Decision 0024).
+    const b = await bar();
+    await waitFor(() => expect(b.getByRole("status")).toHaveTextContent("2 drafts to send"));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(saved).toEqual([]);
+    expect(screen.getByText(/2 drafts from before you signed in are waiting/)).toBeInTheDocument();
+    await userEvent.click(b.getByRole("button", { name: "Check" }));
+    expect(b.getByText(/Made in this tab before you signed in/)).toBeInTheDocument();
+    // The open bar says the same, so the toast, which would cover it on a phone, goes.
+    expect(screen.queryByText(/2 drafts from before you signed in are waiting/)).toBeNull();
+    await userEvent.click(b.getByRole("button", { name: "Send all" }));
     expect(await screen.findByText("Your 2 drafts are saved.")).toBeInTheDocument();
     expect(saved).toEqual(["a", "b"]);
     expect(listAllDrafts()).toEqual([]);
@@ -242,6 +254,9 @@ describe("the drafts bar", () => {
     await userEvent.click(welcome.getByRole("radio", { name: "18 or over" }));
     await userEvent.click(welcome.getByRole("checkbox", { name: "I accept the contributor terms" }));
     await userEvent.click(welcome.getByRole("button", { name: "Join Open Antiquity" }));
+    const b = await bar();
+    await userEvent.click(await b.findByRole("button", { name: "Check" }));
+    await userEvent.click(b.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(saved).toEqual(["a"]));
     expect(routes.callsTo("POST /auth/welcome")).toHaveLength(1);
   });
@@ -249,8 +264,10 @@ describe("the drafts bar", () => {
   it("keeps a draft that fails, shows the reason, and tries again when asked", async () => {
     routeApi(harness.fetchMock(), { "GET /auth/me": () => json(meFixture()) });
     failWith = new ApiError(422, "validation_error", "That square isn't in Britain.");
+    // A draft made while signed in, so it is saved without asking.
+    setDraftsViewer(accountIdentity(meFixture()));
     putDraft(PROBE, { note: "a" });
-    noteSignInStarted("provider");
+    setDraftsViewer(null);
     renderApp();
     expect(
       await screen.findByText("One draft couldn't be saved. It's still here, with the reason."),

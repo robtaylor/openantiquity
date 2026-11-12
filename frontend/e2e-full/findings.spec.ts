@@ -1,4 +1,4 @@
-import { openMap } from "../e2e/support/app.js";
+import { openMap, sendDraftsFromBeforeSignIn } from "../e2e/support/app.js";
 import { DRAFTS_STORAGE_KEY } from "../src/features/drafts/store.js";
 import { expect, test } from "./support/fixtures.js";
 
@@ -35,6 +35,7 @@ test("saves a finding marked signed out as a real finding at the same place, onc
   await welcome.getByRole("radio", { name: "18 or over" }).click();
   await welcome.getByRole("checkbox", { name: "I accept the contributor terms" }).check();
   await welcome.getByRole("button", { name: "Join Open Antiquity" }).click();
+  await sendDraftsFromBeforeSignIn(page);
 
   // Saved without anything typed again, and its page opens.
   await expect(page).toHaveURL(/\/f\/[^/#]+#/);

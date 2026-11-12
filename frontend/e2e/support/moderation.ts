@@ -96,7 +96,7 @@ export async function fakeModeration(browserPage: Page, state: ModerationState =
       match = /^\/mod\/users\/([^/]+)\/(ban|unban)$/.exec(path);
       if (match && method === "POST") {
         record(route, name);
-        return json(route, { user: {}, sessions_ended: 1, findings_reassessed: 0 });
+        return json(route, { user: {}, sessions_ended: 1 });
       }
       if (name === "GET /mod/actions") {
         const kind = url.searchParams.get("target_kind");

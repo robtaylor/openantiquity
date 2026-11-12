@@ -8,6 +8,7 @@ import { accountIdentity, useSession } from "../account/session.js";
 import { draftLabel } from "./savers.js";
 import {
   claimDraftsAsOwn,
+  DRAFT_KINDS,
   type Draft,
   discardDraft,
   draftsArePersisted,
@@ -24,10 +25,14 @@ function count(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
+function isSecondLook(draft: Draft): boolean {
+  return draft.kind === DRAFT_KINDS.observation;
+}
+
 function summary(drafts: readonly Draft[], others: number): string {
   if (others === drafts.length) return `${count(others, "draft")} left here`;
-  const held = drafts.filter((draft) => draft.held).length;
-  if (held > 0) return `${count(held, "second look")} to send`;
+  const held = drafts.filter((draft) => draft.held);
+  if (held.length > 0) return `${count(held.length, held.every(isSecondLook) ? "second look" : "draft")} to send`;
   const saving = drafts.filter((draft) => draft.state === "saving").length;
   const failed = drafts.filter((draft) => draft.state === "failed").length;
   if (saving > 0) return `Saving ${count(saving, "draft")}…`;
@@ -59,7 +64,9 @@ function DraftRow({ draft, account, theirs }: { draft: Draft; account: string | 
         {draft.state === "saving" ? <span className="fc-drafts__description">Saving…</span> : null}
         {draft.held && !theirs ? (
           <span className="fc-drafts__description">
-            Given before you signed in. An answer is final, so send it only if you gave it.
+            {isSecondLook(draft)
+              ? "Given before you signed in. An answer is final, so send it only if you gave it."
+              : "Made before you signed in. Send it only if you made it."}
           </span>
         ) : null}
       </div>
@@ -145,10 +152,38 @@ function OthersDrafts({ drafts, account }: { drafts: readonly Draft[]; account: 
 }
 
 /**
+ * Drafts this tab made before the person signed in, held until they say to
+ * send them (Decision 0024): whoever used the tab before may not be them.
+ */
+function HeldDrafts({ drafts, account }: { drafts: readonly Draft[]; account: string }) {
+  const one = drafts.length === 1;
+  return (
+    <div className="fc-drafts__others">
+      <p className="fc-drafts__hint">
+        Made in this tab before you signed in. Someone else may have used it before you, so{" "}
+        {one ? "send it only if you made it." : "send them only if you made them."}
+      </p>
+      <div className="fc-drafts__buttons">
+        <Button
+          size="sm"
+          variant="primary"
+          icon={<Send size={14} aria-hidden />}
+          onClick={() => {
+            for (const draft of drafts) sendHeldDraft(draft.id, account);
+          }}
+        >
+          {one ? "Send it" : "Send all"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
  * The quiet bar that says how many drafts are waiting and offers to save
  * them. Saving while signed out opens the sign-in sheet. Drafts that aren't
  * the viewer's own (Decision 0022) are asked about before anything is
- * saved, and a second look adopted at sign-in waits to be sent. It shows
+ * saved, and a draft adopted at sign-in waits to be sent. It shows
  * nothing when there are no drafts.
  */
 export function DraftsBar() {
@@ -171,6 +206,7 @@ export function DraftsBar() {
 
   const account = session.ready && session.me ? accountIdentity(session.me) : null;
   const others = drafts.filter((draft) => !mine.includes(draft));
+  const held = mine.filter((draft) => draft.held);
   const failed = mine.filter((draft) => draft.state === "failed");
   const allFailed = failed.length > 0 && failed.length === drafts.length;
 
@@ -189,7 +225,7 @@ export function DraftsBar() {
         Save
       </Button>
     );
-  } else if ((others.length > 0 || mine.some((draft) => draft.held)) && !open) {
+  } else if ((others.length > 0 || held.length > 0) && !open) {
     action = (
       <Button size="sm" variant="primary" onClick={() => setOpen(true)}>
         Check
@@ -238,6 +274,7 @@ export function DraftsBar() {
             {draftsArePersisted() ? "" : " This browser isn't keeping them, so they'll go when you close the page."}
           </p>
           {others.length > 0 ? <OthersDrafts drafts={others} account={account} /> : null}
+          {held.length > 0 && account !== null ? <HeldDrafts drafts={held} account={account} /> : null}
           {mine.length > 0 ? (
             <ul>
               {mine.map((draft) => (

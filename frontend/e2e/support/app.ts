@@ -54,3 +54,15 @@ export async function tabTo(page: Page, target: Locator, limit = 60): Promise<nu
   }
   throw new Error(`Tab never reached ${target}. Focus ended on ${await describeFocus(page)}.`);
 }
+
+/**
+ * After a sign-in from this tab, the drafts made before it wait to be sent (Decision 0024): open the
+ * drafts bar and send them, as the person would. `count` is how many are waiting.
+ */
+export async function sendDraftsFromBeforeSignIn(page: Page, count = 1): Promise<void> {
+  const bar = page.getByRole("region", { name: "Drafts" });
+  const noun = count === 1 ? "draft" : "drafts";
+  await expect(bar.getByRole("status")).toHaveText(`${count} ${noun} to send`);
+  await bar.getByRole("button", { name: "Check" }).click();
+  await bar.getByRole("button", { name: count === 1 ? "Send it" : "Send all", exact: true }).click();
+}
