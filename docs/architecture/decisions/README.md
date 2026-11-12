@@ -65,6 +65,7 @@ Write all three in the same present tense and a reader can't tell *why we did it
 | [0025](0025-spend-on-fly-is-watched-by-hand-each-week-and-bounded-by-limits.md) | Spend on Fly is watched by hand each week and bounded by limits | Proposed |
 | [0026](0026-the-code-is-published-under-the-agpl-version-3.md) | The code is published under the AGPL version 3 | Proposed |
 | [0027](0027-the-web-app-never-fetches-elevation-and-a-deploy-checks-the-mirror-first.md) | The web app never fetches elevation, and a deploy checks the mirror first | Proposed |
+| [0032](0032-findings-are-open-or-protected-and-the-restricted-level-is-dropped.md) | Findings are open or protected, and the restricted level is dropped | Proposed |
 
 (`new decision` appends rows for you. `uv run docs/scripts/doctool.py lint` checks this table against the files.)
 

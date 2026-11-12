@@ -1,6 +1,6 @@
 # Decision 0005 — Sensitive findings are generalised by viewer
 
-**Status:** Proposed.
+**Status:** Proposed. Its first, third and sixth points are replaced by Decision 0032.
 
 **TL;DR.** In the context of a public map of possible unrecorded sites, facing the risk that it becomes a shopping list for illegal metal detecting, we chose three sensitivity levels that coarsen a finding's location to a 1 km square depending on who is looking, to protect vulnerable sites while still letting members check each other's findings, accepting that a signed-in member can see the exact position of most findings.
 
