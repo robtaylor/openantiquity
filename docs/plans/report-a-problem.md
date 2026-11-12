@@ -1,0 +1,104 @@
+# Plan — Report a problem: a button that captures what a fix needs
+
+**Status:** Proposed.
+
+## Goal
+
+Someone who hits a fault can report it in under a minute, and the report carries enough for the fault to be found and reproduced: which build, what kind of page, what failed. The report opens as a prefilled issue on the project's public GitHub repository, with a second route for people who have no GitHub account. The owner asked for this on 2026-11-12 as a nice to have, and it waits behind lines and curves.
+
+## Prerequisites
+
+- The repository is public and takes issues (Decision 0026).
+- Nothing else. The first workstream stands alone and is worth doing without the button.
+
+## Where things stand (2026-11-12)
+
+Nothing is built. Three gaps were found by reading the code that day, and each would make any report less useful:
+
+- `/api/v1/meta` gives the version as `0.1.0` and no commit, so a report can't say which build it came from.
+- No request carries an identifier. A search of `backend/src` for a request, correlation or trace id found none, so a failure in the browser can't be matched to a line in the server's log.
+- The interface links to neither the source nor the issue tracker. A search of `frontend/src` and `frontend/index.html` for `github` found nothing outside tests.
+
+Fly keeps only a short log. On 2026-11-12, when the owner reported that "Save finding" did nothing, the buffer held about 90 seconds and the failed presses were gone, so the cause was found from the code alone.
+
+## Workstreams
+
+### WS1 — What a report needs from the app
+
+**Status:** Not started.
+
+The groundwork, useful to anyone debugging whether or not the button exists.
+
+**Deliverables:**
+
+- `/api/v1/meta` gives the commit the build was made from. The deploy already labels the image with it.
+- Every response carries a request id, the server logs it on each line for that request, and an error response repeats it in its body.
+- The browser keeps the last few failures in memory: failed requests with their status and request id, and uncaught errors with their message. Nothing is stored or sent until the person reports.
+- The About page links to the source and to the issue tracker.
+
+**Exit criteria:**
+
+- A failed request seen in the browser can be found in the server's log by its id.
+- A test shows the kept failures hold no request or response bodies.
+
+### WS2 — The button and the prefilled issue
+
+**Status:** Not started. Needs WS1.
+
+"Report a problem" sits in the About page and in every error state. It opens a short form that shows exactly what will be sent, and two ways to send it.
+
+**What is captured by default:** the commit, the kind of page as a route pattern with ids removed, phone or desktop layout, browser and window size, the layers shown and 2D or 3D, whether the person is signed in, and the kept failures from WS1.
+
+**What is left out by default:** the map position, finding and investigation ids, the account, and the contents of drafts. The repository is public, and an address or a map position can say where a protected finding is.
+
+**Position by choice.** A tick box adds where the person was looking, since position is often what reproduces a terrain fault. It is unavailable while the page shows a finding whose place is kept back from that person, and on any page of an investigation that holds one.
+
+**Routes:**
+
+- "Open a GitHub issue" opens the repository's new-issue page with the title and body prefilled. GitHub shows it all before anything is submitted. No key or backend is involved.
+- "Copy the details" and an email link carry the same text, for people with no GitHub account.
+
+**Exit criteria:**
+
+- A report made on a page showing a protected finding, as someone who sees only its square, holds nothing that places the finding more closely than the square. A test proves it for each route.
+- The prefilled address stays under GitHub's length limit with the most failures the browser keeps.
+- Every control works by keyboard and has a visible focus ring, as `docs/UI.md` requires.
+
+### WS3 — Finding duplicates
+
+**Status:** Not started. Independent of WS1 and WS2.
+
+A workflow on the repository reads each new issue, compares it with the open ones, comments with the likely matches and adds a label. It runs in GitHub, after the issue is filed. That keeps any key out of the web app, costs nothing while nobody reports, and covers issues filed by any route.
+
+Issue text comes from strangers and would be read by a model, on a public repository. The workflow's token may comment on and label issues and nothing else, and the model is given no other tool.
+
+**Exit criteria:**
+
+- A new issue that restates an open one gets a comment naming it within a few minutes.
+- The workflow file grants `issues: write` and no other permission, and `actionlint` passes.
+
+## Open questions
+
+These need the owner or a check before the workstream that depends on them starts.
+
+- **Where logs are kept, and for how long.** A request id is only as useful as the log it points into. Fly's buffer is short, and a longer store has a cost and holds people's addresses and actions. WS1 can ship the id first, but its first exit criterion needs an answer.
+- **The address for email reports.** It would be public in the interface. The owner hasn't chosen one for this.
+- **Whether reports should ever be stored in the app.** A table of reports would serve people with no GitHub account better than email, and would keep reports about protected places off a public tracker. It also adds moderation and personal data to look after. Left out until email reports show the need.
+- **What GitHub already does about duplicates.** Not checked on 2026-11-12. If its own suggestions are good enough, WS3 isn't needed.
+- **GitHub's limit on a prefilled address.** Believed to be about 8,000 characters and not checked. It sets how many failures a report can carry.
+- **How the build learns its commit.** Fly is believed to give each machine its image's reference in `FLY_IMAGE_REF`, which the deploy labels with the commit. Not checked. A build argument would do the same.
+
+## Phase exit criteria
+
+When all of these are true, this plan closes:
+
+- [ ] WS1 and WS2 shipped.
+- [ ] WS3 shipped, or dropped because GitHub's own duplicate suggestions serve.
+- [ ] Every open question above is answered here or in a decision record.
+
+## References
+
+- `architecture/decisions/0026-the-code-is-published-under-the-agpl-version-3.md` — the code is public, so the tracker is too.
+- `architecture/decisions/0005-sensitive-findings-are-generalised-by-viewer.md` — who may see a protected finding's place, which binds what a report may carry.
+- `UI.md` — the interface rules the form follows.
+- `../infra/README.md` — the deploy that labels each image with its commit.
