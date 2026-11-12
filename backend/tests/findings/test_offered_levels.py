@@ -16,6 +16,7 @@ from fastapi import FastAPI
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from fieldclub.main import create_app
 from fieldclub.models import Finding, User
 from fieldclub.services import sensitivity
 from fieldclub.vocab import OFFERED_SENSITIVITIES, Role, Sensitivity
@@ -45,7 +46,8 @@ def _admits_dropped(spec: dict[str, Any], node: Any, seen: set[str], where: str)
         return _admits_dropped(spec, _resolve(spec, node), seen, f"{where} -> {node['$ref']}")
     found: list[str] = []
     if isinstance(node, dict):
-        if DROPPED in node.get("enum", ()) or node.get("const") == DROPPED:
+        # A default counts: nothing validates one, so it would be stored as sent.
+        if DROPPED in node.get("enum", ()) or DROPPED in (node.get("const"), node.get("default")):
             found.append(where)
         for key, value in node.items():
             if key not in ("enum", "const", "examples", "example", "default", "description"):
@@ -56,9 +58,12 @@ def _admits_dropped(spec: dict[str, Any], node: Any, seen: set[str], where: str)
     return found
 
 
-def test_no_request_admits_the_dropped_level(app: FastAPI) -> None:
-    """Every request body and parameter of every route. A new route can't bring the level back."""
-    spec = app.openapi()
+def test_no_request_admits_the_dropped_level() -> None:
+    """Every request body and parameter of every route. A new route can't bring the level back.
+
+    The development routes are walked too, as `tests/test_routes.py` does, whatever the settings say.
+    """
+    spec = create_app(include_dev_routes=True).openapi()
     found: list[str] = []
     operations = 0
     for path, item in spec["paths"].items():
@@ -96,6 +101,10 @@ def test_every_offered_level_shows_its_exact_place_to_every_signed_in_member(
     them nothing they can't already see. If a level is ever added that keeps a
     place from someone who can draw, the guard's answer becomes a way to find
     the place, and this test is where that is caught.
+
+    A finding a moderator has hidden is the one a member can't see at all. It
+    takes no part in the guard for what is drawn near it, which
+    `tests/investigations/test_a_hidden_finding_holds_nothing_back.py` checks.
     """
     assert OFFERED_SENSITIVITIES == (Sensitivity.OPEN, Sensitivity.PROTECTED)
     finder = make_user(Role.MEMBER, handle="Finder")
