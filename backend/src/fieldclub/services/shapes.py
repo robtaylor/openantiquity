@@ -56,7 +56,7 @@ from pyproj import Geod
 from shapely.geometry import LineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import nearest_points
-from sqlalchemy import or_, select, update
+from sqlalchemy import CursorResult, or_, select, update
 from sqlalchemy.orm import Session
 
 from fieldclub.errors import ValidationFailedError
@@ -624,7 +624,10 @@ def backfill(db: Session, *, batch: int = BACKFILL_BATCH) -> int:
     Only outlines saved before paths lack them. The path is left alone: it is
     derived when the finding is read (`stored_path`) and stored when it is
     next saved. `updated_at` is kept, since nobody changed the finding.
-    Commits each batch, and says how many findings it filled.
+    Each update repeats the test it was read by, with the revision read, so
+    an edit committed between the read and the write is left as it is. An
+    empty outline is logged and passed over. Commits each batch, and says how
+    many findings it filled.
     """
     assert batch > 0, "a batch holds a finding at least"
     unfilled = or_(
@@ -635,18 +638,26 @@ def backfill(db: Session, *, batch: int = BACKFILL_BATCH) -> int:
     )
     filled, after = 0, 0
     while rows := db.execute(
-        select(Finding.id, Finding.outline)
+        select(Finding.id, Finding.outline, Finding.shape_revision)
         .where(Finding.id > after, Finding.outline.is_not(None), unfilled)
         .order_by(Finding.id)
         .limit(batch)
     ).all():
-        for finding_id, outline in rows:
+        for finding_id, outline, revision in rows:
             assert outline is not None, "only findings with an outline are read"
             geometry = to_shape(outline)
-            assert not geometry.is_empty, f"finding {finding_id} has an empty outline"
-            db.execute(
+            if geometry.is_empty:
+                logger.warning("Finding %d has an empty outline, so the backfill passes over it", finding_id)
+                continue
+            written = db.execute(
                 update(Finding)
-                .where(Finding.id == finding_id)
+                # The shape as it was read: an edit committed meanwhile filled the columns itself.
+                .where(
+                    Finding.id == finding_id,
+                    Finding.shape_revision == revision,
+                    Finding.outline.is_not(None),
+                    unfilled,
+                )
                 .values(
                     outline_mid=to_db_geometry(simplified(geometry, SIMPLIFY_MID_DEG)),
                     outline_low=to_db_geometry(simplified(geometry, SIMPLIFY_LOW_DEG)),
@@ -654,9 +665,11 @@ def backfill(db: Session, *, batch: int = BACKFILL_BATCH) -> int:
                     shape_length_m=length_m(geometry),
                     updated_at=Finding.updated_at,
                 )
+                .execution_options(synchronize_session=False)
             )
+            assert isinstance(written, CursorResult), "an UPDATE reports the rows it wrote"
+            filled += written.rowcount
         db.commit()
-        filled += len(rows)
         after = rows[-1].id
     return filled
 

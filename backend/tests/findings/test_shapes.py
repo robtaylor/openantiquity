@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import pytest
+from geoalchemy2.shape import to_shape
 from shapely import wkt
 from shapely.geometry import LineString, Point, Polygon
-from sqlalchemy import func, select
+from shapely.geometry.base import BaseGeometry
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
+from fieldclub.db import SessionLocal
 from fieldclub.errors import BadRequestError, ConflictError, ValidationFailedError
-from fieldclub.models import Activity, Finding
+from fieldclub.models import Activity, Finding, User
 from fieldclub.models.common import to_db_geometry
 from fieldclub.services import findings, sensitivity, shapes
 from fieldclub.services.findings import NotFinderError
@@ -364,3 +368,71 @@ def test_the_backfill_fills_old_outlines_once_and_leaves_everything_else(
     db.expire_all()
     assert {row[0]: row for row in _shape_columns(db)} == after
     assert "filled 0" in caplog.text
+
+
+def _old_outline(db: Session, finder: Any, outline: BaseGeometry) -> Finding:
+    """A finding with an outline saved before paths: no path, no simplified copies, no kind or length."""
+    finding = findings.create_finding(db, finder, location=Point(LON, LAT), feature_class="enclosure")
+    finding.outline = to_db_geometry(outline)
+    db.commit()
+    return finding
+
+
+def test_the_backfill_leaves_alone_a_shape_edited_while_it_ran(
+    db: Session, make_user: MakeUser, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    finder = make_user()
+    old = _old_outline(db, finder, LineString([(LON, LAT), (LON, LAT + 0.01)]))
+    new_path = meridian(0, 0.01, 0.03)
+    simplify = shapes.simplified
+    edited: list[bool] = []
+
+    def edit_meanwhile(geometry: BaseGeometry, tolerance: float) -> BaseGeometry:
+        """The finder saves a new shape after the backfill read the old one, and before it writes."""
+        if not edited:
+            edited.append(True)
+            with SessionLocal() as other:
+                finding = findings.lock(other, other.get_one(Finding, old.id))
+                findings.update_finding(
+                    other,
+                    finding,
+                    other.get_one(User, finder.id),
+                    {
+                        "path": new_path,
+                        "path_revision": 0,
+                    },
+                )
+                other.commit()
+        return simplify(geometry, tolerance)
+
+    monkeypatch.setattr(shapes, "simplified", edit_meanwhile)
+    assert shapes.backfill(db) == 0
+    assert edited == [True]
+    db.expire_all()
+    fresh = shapes.shape_of(new_path)
+    assert old.shape_revision == 1
+    assert old.shape_length_m == pytest.approx(fresh.length_m)
+    assert old.outline_mid is not None
+    assert to_shape(old.outline_mid).equals_exact(fresh.mid, 1e-7)
+
+
+def test_the_backfill_logs_an_empty_outline_and_goes_on(
+    db: Session, make_user: MakeUser, caplog: pytest.LogCaptureFixture
+) -> None:
+    finder = make_user()
+    empty = _old_outline(db, finder, LineString([(LON, LAT), (LON, LAT + 0.01)]))
+    db.execute(
+        update(Finding)
+        .where(Finding.id == empty.id)
+        .values(outline=func.ST_GeomFromText("LINESTRING EMPTY", 4326))
+    )
+    db.commit()
+    good = _old_outline(db, finder, LineString([(LON, LAT), (LON, LAT + 0.01)]))
+    caplog.set_level(logging.WARNING, logger="fieldclub.services.shapes")
+    assert shapes.backfill(db) == 1
+    db.expire_all()
+    assert good.shape_kind == "line"
+    assert empty.shape_kind is None
+    assert f"Finding {empty.id} has an empty outline" in caplog.text
+    # Nothing is left to fill but the empty one, which is passed over again.
+    assert shapes.backfill(db) == 0
