@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
-from fieldclub.errors import ConflictError, ValidationFailedError
+from fieldclub.errors import BadRequestError, ConflictError, ValidationFailedError
 from fieldclub.models import Activity, Finding, FindingShapeChange
 from fieldclub.models.common import to_db_geometry
 from fieldclub.services import findings, sensitivity, shapes
@@ -145,7 +145,7 @@ def test_an_outline_is_still_taken_as_an_all_corner_path(db: Session, make_user:
 
 
 def test_a_finding_needs_a_point_or_a_shape(db: Session, make_user: MakeUser) -> None:
-    with pytest.raises(ValidationFailedError) as refused:
+    with pytest.raises(BadRequestError) as refused:
         findings.create_finding(db, make_user(), feature_class="linear")
     assert refused.value.code == "location_required"
 

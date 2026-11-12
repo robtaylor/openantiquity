@@ -55,6 +55,7 @@ from sqlalchemy.orm import Session, aliased
 
 from fieldclub import gridref
 from fieldclub.errors import (
+    BadRequestError,
     ConflictError,
     ForbiddenError,
     InvalidCursorError,
@@ -240,7 +241,12 @@ def _corners(geometry: BaseGeometry) -> list[tuple[float, float]]:
     return [(min_lon, min_lat), (min_lon, max_lat), (max_lon, min_lat), (max_lon, max_lat)]
 
 
-class LocationRequiredError(ValidationFailedError):
+class LocationRequiredError(BadRequestError):
+    """A finding always has a point: one sent, or one the server places on its shape.
+
+    `POST` and `PATCH` raise this one error, so the code has one status.
+    """
+
     code = "location_required"
     message = "Mark the point, or draw a line or shape for the server to place it on."
 

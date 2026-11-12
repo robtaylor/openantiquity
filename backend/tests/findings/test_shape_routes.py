@@ -79,7 +79,6 @@ _BOW_TIE = [(LON, LAT), (LON + 0.001, LAT + 0.001), (LON + 0.001, LAT), (LON, LA
             },
             "outline_and_path",
         ),
-        ({}, "location_required"),
         ({"path": path_body((2.30, 48.85), (2.31, 48.86))}, "outside_british_isles"),
         ({"path": path_body((LON, LAT), (LON + 0.01, LAT), closed=True)}, "validation_error"),
         (
@@ -93,6 +92,18 @@ def test_creating_refuses_with_the_contracts_code(
 ) -> None:
     response = client_as(make_user()).post(f"{API}/findings", json=body(**fields))
     assert (response.status_code, error_code(response)) == (422, code), response.text
+
+
+def test_a_finding_without_a_point_or_a_path_is_one_error_with_one_status_on_both_routes(
+    client_as: ClientAs, make_user: MakeUser
+) -> None:
+    client = client_as(make_user())
+    created = client.post(f"{API}/findings", json=body())
+    assert (created.status_code, error_code(created)) == (400, "location_required"), created.text
+    made = client.post(f"{API}/findings", json=body(location=point())).json()
+    edited = client.patch(f"{API}/findings/{made['public_id']}", json={"location": None})
+    assert (edited.status_code, error_code(edited)) == (400, "location_required"), edited.text
+    assert created.json()["error"]["message"] == edited.json()["error"]["message"]
 
 
 def test_editing_refuses_a_stale_or_missing_revision_and_anyone_but_the_finder(

@@ -12,10 +12,10 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query, Response, status
 
 from fieldclub.api.deps import BBoxQuery, Contributor, CursorQuery, Db, OptionalUser, private, rate_limit
-from fieldclub.errors import BadRequestError, ValidationFailedError
 
 # Its home was here once. Kept importable for code written against that.
 from fieldclub.errors import InvalidBboxError as InvalidBboxError
+from fieldclub.errors import ValidationFailedError
 from fieldclub.models import Finding, User
 from fieldclub.schemas.common import MAX_LIMIT, Page, from_geojson, parse_bbox
 from fieldclub.schemas.findings import (
@@ -214,7 +214,7 @@ def update_finding(
     if "location" in changes:
         changes["location"] = from_geojson(body.location, allowed=["Point"]) if body.location else None
         if changes["location"] is None:
-            raise BadRequestError("A finding always has a location.", code="location_required")
+            raise findings.LocationRequiredError()
     if "path" in changes:
         changes["path"] = _read_path(body.path)
     if "outline" in changes:
