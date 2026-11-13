@@ -8,6 +8,7 @@ import {
   MessageSquare,
   NotebookText,
   Paperclip,
+  PenLine,
   TrendingUp,
   UserPlus,
 } from "lucide-react";
@@ -32,6 +33,7 @@ const KIND_ICONS: Record<ActivityKind, LucideIcon> = {
   mention_added: Megaphone,
   investigation_published: NotebookText,
   investigation_invitation: UserPlus,
+  shape_extended: PenLine,
 };
 
 /** The path of an investigation's page. */

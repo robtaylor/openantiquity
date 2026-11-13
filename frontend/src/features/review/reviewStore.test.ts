@@ -7,6 +7,7 @@ import type { ReviewCard } from "./types.js";
 const CARD: ReviewCard = {
   public_id: "f-ring",
   place: { lon: -1.8542, lat: 51.4286, grid_ref: "SU 1025 6996" },
+  shape_revision: 0,
   view_state: { layer: "slope", zoom: 16.5, bearing: 0, pitch: 0, sun_azimuth: 200, sun_altitude: 30 },
 };
 

@@ -3,7 +3,12 @@ import { nearFrom, pickNext } from "./queue.js";
 import type { ReviewCard } from "./types.js";
 
 function card(publicId: string): ReviewCard {
-  return { public_id: publicId, place: { lon: -1.85, lat: 51.42, grid_ref: "SU 1 2" }, view_state: {} };
+  return {
+    public_id: publicId,
+    place: { lon: -1.85, lat: 51.42, grid_ref: "SU 1 2" },
+    view_state: {},
+    shape_revision: 0,
+  };
 }
 
 describe("pickNext", () => {

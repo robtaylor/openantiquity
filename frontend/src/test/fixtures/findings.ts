@@ -142,10 +142,21 @@ export const MEMBER_ACTIONS: FindingDetail["actions"] = {
   verify: { allowed: false, reason: "verify_not_allowed" },
 };
 
+/** The shape facts of a finding with no line or shape, as its page carries them. */
+export const NO_SHAPE: FindingDetail["location"]["shape"] = {
+  kind: null,
+  length_m: null,
+  revision: null,
+  extent: null,
+  changes: [],
+  added_since_looked_m: null,
+};
+
 /** A finding's page, as `GET /findings/{id}` and `POST /findings` send it, built on a summary. */
 export function findingDetail(summary: FindingSummary, overrides: Partial<FindingDetail> = {}): FindingDetail {
   return {
     ...summary,
+    location: { ...summary.location, path: null, shape: NO_SHAPE },
     description: null,
     nation: "england",
     view_state: {},
@@ -174,7 +185,9 @@ export function findingDetail(summary: FindingSummary, overrides: Partial<Findin
  * class when no title was sent.
  */
 export function createdFinding(body: FindingCreate, publicId: string): FindingDetail {
-  const [lon, lat] = (body.location.coordinates ?? []) as [number, number];
+  // A line or shape sent without a point is anchored by the server. Its first point stands in for that here.
+  const first = body.path?.points[0];
+  const [lon, lat] = (body.location?.coordinates ?? (first ? [first.lon, first.lat] : [])) as [number, number];
   const summary = findingSummary(
     {
       type: "Feature",
@@ -191,7 +204,18 @@ export function createdFinding(body: FindingCreate, publicId: string): FindingDe
   return findingDetail(summary, {
     description: body.description ?? null,
     view_state: body.view_state ?? {},
-    location: { ...summary.location, outline: body.outline ?? null },
+    location: {
+      ...summary.location,
+      outline: body.outline ?? null,
+      path: body.path
+        ? {
+            closed: body.path.closed,
+            curve: body.path.curve ?? "catmull-rom-centripetal-1",
+            points: body.path.points.map(({ lon, lat, kind }) => ({ lon, lat, kind })),
+          }
+        : null,
+      shape: body.path ? { ...NO_SHAPE, kind: body.path.closed ? "area" : "line", revision: 1 } : NO_SHAPE,
+    },
   });
 }
 

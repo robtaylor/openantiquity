@@ -119,6 +119,8 @@ function sentenceFor(meta: Meta, event: EventFacts): Part[] {
         : "an investigation";
       return actor ? [person(actor), " published ", investigation] : [investigation, " was published"];
     }
+    case "shape_extended":
+      return [finding, " was extended"];
     case "investigation_invitation":
       return actor
         ? [person(actor), " invited you to join an investigation"]

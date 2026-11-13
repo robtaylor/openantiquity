@@ -154,6 +154,8 @@ export function squareFixture(overrides: Partial<FindingDetail> = {}): FindingDe
       grid_ref: "SU 10 69",
       square: square.properties.square ?? null,
       outline: null,
+      path: null,
+      shape: { kind: null, length_m: null, revision: null, extent: null, changes: [], added_since_looked_m: null },
     },
     ...overrides,
   };

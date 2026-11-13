@@ -469,14 +469,16 @@ export interface paths {
          * @description Findings as this viewer may see them, as a page or as GeoJSON for the map.
          *
          *     `bbox` matches the position the viewer may see, so an obscured finding
-         *     matches by the centre of its square. A page holds up to 200; GeoJSON up to
-         *     1000, with the next page's cursor as `next_cursor`.
+         *     matches by the centre of its square, and a line or shape the viewer sees
+         *     exactly matches wherever it crosses the box. A page holds up to 200;
+         *     GeoJSON up to 1000, with the next page's cursor as `next_cursor`, and each
+         *     exact shape simplified for `zoom` and cut to the box.
          */
         get: operations["findings_list_findings"];
         put?: never;
         /**
          * Create Finding
-         * @description Mark a finding. A point and a feature class are all it needs.
+         * @description Mark a finding. A point or a path, and a feature class, are all it needs.
          *
          *     With a `client_ref` the same person has sent before, this answers 200
          *     with the finding that request made, and stores nothing.
@@ -2158,7 +2160,7 @@ export interface components {
          * ActivityKind
          * @enum {string}
          */
-        ActivityKind: "finding_created" | "tier_changed" | "state_changed" | "observation_added" | "evidence_added" | "comment_added" | "mention_added" | "followup_logged" | "investigation_published" | "investigation_invitation";
+        ActivityKind: "finding_created" | "tier_changed" | "state_changed" | "observation_added" | "evidence_added" | "comment_added" | "mention_added" | "followup_logged" | "investigation_published" | "investigation_invitation" | "shape_extended";
         /**
          * ActivityOut
          * @description One event in the feed.
@@ -2176,6 +2178,18 @@ export interface components {
             id: number;
             investigation: components["schemas"]["ActivityInvestigation"] | null;
             kind: components["schemas"]["ActivityKind"];
+        };
+        /**
+         * AddedView
+         * @description A centre and a zoom that frame what an extension added.
+         */
+        AddedView: {
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            /** Zoom */
+            zoom: number;
         };
         /**
          * AgeBand
@@ -2874,7 +2888,11 @@ export interface components {
         };
         /**
          * FindingCreate
-         * @description A new finding. Only the point and the feature class are required.
+         * @description A new finding: a point or a path, or both, and the feature class.
+         *
+         *     Without a point the server places one on the shape. `outline`, a
+         *     LineString or a one-ring Polygon read as a path of corners, is accepted
+         *     for a release, and never with a `path`.
          */
         FindingCreate: {
             /** Client Ref */
@@ -2882,8 +2900,9 @@ export interface components {
             /** Description */
             description?: string | null;
             feature_class: components["schemas"]["FeatureClass"];
-            location: components["schemas"]["GeoJSONGeometry"];
+            location?: components["schemas"]["GeoJSONGeometry"] | null;
             outline?: components["schemas"]["GeoJSONGeometry"] | null;
+            path?: components["schemas"]["Path"] | null;
             /** @default unknown */
             period: components["schemas"]["Period"];
             /** Sensitivity */
@@ -2922,7 +2941,7 @@ export interface components {
             feature_class: components["schemas"]["FeatureClass"];
             /** Following */
             following: boolean;
-            location: components["schemas"]["Location"];
+            location: components["schemas"]["LocationDetail"];
             /** Mention Count */
             mention_count: number;
             my_observation: components["schemas"]["ObservationOut"] | null;
@@ -2948,6 +2967,8 @@ export interface components {
         /**
          * FindingFeature
          * @description A finding on the map: always a point, at the position this viewer may see.
+         *
+         *     A finding drawn as a line or shape carries it in `properties.shape`.
          */
         FindingFeature: {
             geometry: components["schemas"]["GeoJSONGeometry"];
@@ -2990,6 +3011,7 @@ export interface components {
             /** Public Id */
             public_id: string;
             sensitivity: components["schemas"]["Sensitivity"];
+            shape?: components["schemas"]["GeoJSONGeometry"] | null;
             /** Square */
             square: string | null;
             state: components["schemas"]["FindingState"];
@@ -3063,7 +3085,11 @@ export interface components {
         };
         /**
          * FindingUpdate
-         * @description Changes the finder makes. Fields left out are left alone. `outline: null` removes it.
+         * @description Changes the finder makes. Fields left out are left alone.
+         *
+         *     `path` replaces the whole path and `path: null` removes the shape. Either
+         *     needs `path_revision`, the shape's `revision` it started from: another
+         *     is 409 `shape_changed`. `outline` is read as `path` is, for a release.
          */
         FindingUpdate: {
             /** Description */
@@ -3071,6 +3097,9 @@ export interface components {
             feature_class?: components["schemas"]["FeatureClass"] | null;
             location?: components["schemas"]["GeoJSONGeometry"] | null;
             outline?: components["schemas"]["GeoJSONGeometry"] | null;
+            path?: components["schemas"]["Path"] | null;
+            /** Path Revision */
+            path_revision?: number | null;
             period?: components["schemas"]["Period"] | null;
             /** Title */
             title?: string | null;
@@ -3564,6 +3593,9 @@ export interface components {
         /**
          * Location
          * @description A finding's position as this viewer may see it (Decision 0005).
+         *
+         *     For a finding drawn as a line or shape this is its anchor, the one point
+         *     everything that places a finding by a point uses.
          */
         Location: {
             /** Grid Ref */
@@ -3575,6 +3607,30 @@ export interface components {
             /** Obscured */
             obscured: boolean;
             outline: components["schemas"]["GeoJSONGeometry"] | null;
+            shape_kind?: components["schemas"]["ShapeKind"] | null;
+            /** Square */
+            square: string | null;
+        };
+        /**
+         * LocationDetail
+         * @description A finding's position on its page, with its path and what has changed in its shape.
+         *
+         *     `outline` is the shape simplified to a few metres (`outline_mid`). The
+         *     full shape is in downloads, and the editor derives it from `path`.
+         */
+        LocationDetail: {
+            /** Grid Ref */
+            grid_ref: string | null;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            /** Obscured */
+            obscured: boolean;
+            outline: components["schemas"]["GeoJSONGeometry"] | null;
+            path: components["schemas"]["PathOut"] | null;
+            shape: components["schemas"]["ShapeOut"];
+            shape_kind?: components["schemas"]["ShapeKind"] | null;
             /** Square */
             square: string | null;
         };
@@ -3822,6 +3878,7 @@ export interface components {
             ladder: components["schemas"]["Ladder"];
             layers: components["schemas"]["Layers"];
             notices: components["schemas"]["Notices"];
+            shapes: components["schemas"]["ShapeLimits"];
             /** Sources */
             sources: components["schemas"]["SourceOut"][];
             terrain: components["schemas"]["TerrainState"];
@@ -3914,7 +3971,7 @@ export interface components {
          * NextStepCode
          * @enum {string}
          */
-        NextStepCode: "need_observers" | "need_strand" | "need_class_agreement" | "need_check" | "need_trusted_review" | "need_ground" | "need_official";
+        NextStepCode: "need_observers" | "need_strand" | "need_class_agreement" | "need_check" | "need_trusted_review" | "need_ground" | "need_official" | "look_at_new_part";
         /** NextStepOut */
         NextStepOut: {
             /** Check */
@@ -4051,6 +4108,8 @@ export interface components {
             /** Note */
             note?: string | null;
             period?: components["schemas"]["Period"] | null;
+            /** Shape Revision */
+            shape_revision?: number | null;
             visible: components["schemas"]["Visible"];
         };
         /** ObservationOut */
@@ -4261,6 +4320,54 @@ export interface components {
             next_cursor?: string | null;
         };
         /**
+         * Path
+         * @description The points a finding's line or shape goes through, in order (`services.shapes`).
+         *
+         *     An open path has two points or more and a closed one three or more,
+         *     without repeating the first. `curve` may be left out, and the server
+         *     writes it. The server derives the shape and checks the limits in
+         *     `GET /meta`'s `shapes`.
+         */
+        Path: {
+            /**
+             * Closed
+             * @default false
+             */
+            closed: boolean;
+            /** Curve */
+            curve?: string | null;
+            /** Points */
+            points: components["schemas"]["PathPoint"][];
+        };
+        /** PathOut */
+        PathOut: {
+            /** Closed */
+            closed: boolean;
+            /** Curve */
+            curve: string;
+            /** Points */
+            points: components["schemas"]["PathPointOut"][];
+        };
+        /**
+         * PathPoint
+         * @description A point the finder tapped. A segment between two corners is straight.
+         */
+        PathPoint: {
+            kind: components["schemas"]["PointKind"];
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+        };
+        /** PathPointOut */
+        PathPointOut: {
+            kind: components["schemas"]["PointKind"];
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+        };
+        /**
          * Period
          * @enum {string}
          */
@@ -4286,6 +4393,12 @@ export interface components {
             roles: components["schemas"]["RoleActionsOut"];
             unban: components["schemas"]["ActionOut"];
         };
+        /**
+         * PointKind
+         * @description A tapped point of a finding's path. A segment between two corners is straight.
+         * @enum {string}
+         */
+        PointKind: "corner" | "smooth";
         /**
          * PointOut
          * @description One award of points, for the person themselves.
@@ -4920,6 +5033,8 @@ export interface components {
             place: components["schemas"]["ReviewPlace"];
             /** Public Id */
             public_id: string;
+            /** Shape Revision */
+            shape_revision: number;
             view_state: components["schemas"]["ViewState"];
         };
         /** ReviewPlace */
@@ -5047,6 +5162,81 @@ export interface components {
          * @enum {string}
          */
         SensitivityViewer: "signed_out" | "member" | "finder" | "trusted" | "expert" | "moderator";
+        /**
+         * ShapeChangeKind
+         * @description How a change to a finding's path changed it (`services.shapes.classify_change`).
+         * @enum {string}
+         */
+        ShapeChangeKind: "drawn" | "extended" | "reshaped" | "closed" | "opened" | "removed";
+        /** ShapeChangeOut */
+        ShapeChangeOut: {
+            /** Added Length M */
+            added_length_m?: number | null;
+            added_view?: components["schemas"]["AddedView"] | null;
+            /** Kind */
+            kind: components["schemas"]["ShapeChangeKind"] | "changed";
+            /**
+             * On
+             * Format: date
+             */
+            on: string;
+        };
+        /**
+         * ShapeKind
+         * @description What a finding's shape is: an open line or a closed area.
+         * @enum {string}
+         */
+        ShapeKind: "line" | "area";
+        /**
+         * ShapeLimits
+         * @description The limits on a finding's line or shape and the curve's name, from `services.shapes`.
+         *
+         *     The last two are how much of what second looks were given on an edit must
+         *     keep, from `services.looked_at`: `looked_at_min_kept` of it within
+         *     `looked_at_max_move_m`.
+         *
+         *     The frontend reads them here rather than keeping copies, so the two can't drift.
+         */
+        ShapeLimits: {
+            /** Curve */
+            curve: string;
+            /** Line Max Length M */
+            line_max_length_m: number;
+            /** Looked At Max Move M */
+            looked_at_max_move_m: number;
+            /** Looked At Min Kept */
+            looked_at_min_kept: number;
+            /** Path Max Points */
+            path_max_points: number;
+            /** Shape Max Across M */
+            shape_max_across_m: number;
+            /** Shape Max Gap M */
+            shape_max_gap_m: number;
+            /** Shape Max Vertices */
+            shape_max_vertices: number;
+        };
+        /**
+         * ShapeOut
+         * @description A finding's shape as this viewer may know it.
+         *
+         *     For a viewer who sees only the square, every field is null but
+         *     `changes`, which says that the shape changed and when.
+         */
+        ShapeOut: {
+            /** Added Since Looked M */
+            added_since_looked_m: number | null;
+            added_view?: components["schemas"]["AddedView"] | null;
+            /** Changes */
+            changes: components["schemas"]["ShapeChangeOut"][];
+            /** Extent */
+            extent: number[] | null;
+            kind: components["schemas"]["ShapeKind"] | null;
+            /** Length M */
+            length_m: number | null;
+            looked_at?: components["schemas"]["GeoJSONGeometry"] | null;
+            /** Revision */
+            revision: number | null;
+        };
         /** SourceOut */
         SourceOut: {
             /** Access */
@@ -5369,6 +5559,8 @@ export interface components {
             place: components["schemas"]["Location"];
             /** Public Id */
             public_id: string;
+            /** Shape Revision */
+            shape_revision?: number | null;
             step: components["schemas"]["NextStepOut"] | null;
             view_state: components["schemas"]["ViewState"];
         };
@@ -6220,6 +6412,8 @@ export interface operations {
                 format?: "json" | "geojson";
                 limit?: number | null;
                 cursor?: string | null;
+                /** @description The map's zoom, which sets how simplified GeoJSON shapes are */
+                zoom?: number;
                 /** @description west,south,east,north in degrees */
                 bbox?: string | null;
                 tier?: components["schemas"]["Tier"][] | null;

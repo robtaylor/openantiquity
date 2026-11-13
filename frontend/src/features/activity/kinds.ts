@@ -28,6 +28,7 @@ const GROUP_OF = {
   comment_added: "comments",
   mention_added: "mentions",
   investigation_published: "investigations",
+  shape_extended: "findings",
 } as const satisfies Record<FeedKind, KindGroupId>;
 
 const GROUP_LABELS: Record<KindGroupId, string> = {

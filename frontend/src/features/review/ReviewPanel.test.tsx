@@ -43,6 +43,7 @@ function card(publicId: string, lon = CLAIMED.location.lon): ReviewCard {
   return {
     public_id: publicId,
     place: { lon, lat: CLAIMED.location.lat, grid_ref: "SU 1025 6996" },
+    shape_revision: 0,
     view_state: { layer: "slope", zoom: 16.5, bearing: 12, pitch: 0, sun_azimuth: 200, sun_altitude: 30 },
   };
 }
