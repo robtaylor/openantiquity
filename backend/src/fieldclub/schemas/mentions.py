@@ -11,12 +11,12 @@ from datetime import datetime
 from pydantic import Field
 
 from fieldclub.models import Finding, Mention, User
-from fieldclub.schemas.common import ApiModel, PublicUser, RequestModel
+from fieldclub.schemas.common import ApiModel, PublicUser, RequestModel, ShownClass
 from fieldclub.schemas.findings import Location, location_out
 from fieldclub.services import sensitivity, unfurl
 from fieldclub.services.mentions import NOTE_MAX, Preview
 from fieldclub.services.unfurl import MAX_START_SECONDS, URL_MAX, FetchStatus
-from fieldclub.vocab import FeatureClass, FindingState, MentionKind, Tier, stored_class
+from fieldclub.vocab import FindingState, MentionKind, Tier, stored_class
 
 
 class MentionPreviewIn(RequestModel):
@@ -126,7 +126,7 @@ class MentionedFinding(ApiModel):
 
     public_id: str
     title: str
-    feature_class: FeatureClass
+    feature_class: ShownClass
     tier: Tier
     state: FindingState
     location: Location

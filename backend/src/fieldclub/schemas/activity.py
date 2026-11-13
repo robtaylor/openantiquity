@@ -14,13 +14,12 @@ from typing import Any
 from pydantic import Field, model_validator
 
 from fieldclub.models import Activity, Finding, Investigation, Notification, User
-from fieldclub.schemas.common import ApiModel, Page, PublicUser, RequestModel
+from fieldclub.schemas.common import ApiModel, Page, PublicUser, RequestModel, ShownClass
 from fieldclub.schemas.findings import Location, location_out
 from fieldclub.services import sensitivity
 from fieldclub.vocab import (
     ActivityKind,
     EvidenceKind,
-    FeatureClass,
     FindingState,
     StateReason,
     Tier,
@@ -37,7 +36,7 @@ class ActivityFinding(ApiModel):
 
     public_id: str
     title: str
-    feature_class: FeatureClass
+    feature_class: ShownClass
     tier: Tier
     state: FindingState
     location: Location

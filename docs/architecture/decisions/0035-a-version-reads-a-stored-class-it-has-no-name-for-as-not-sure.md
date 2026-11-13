@@ -18,7 +18,7 @@ On 2026-11-13 the owner asked for a class for buildings and ruins. Had it been d
 
 ## Decision
 
-1. One function, `vocab.stored_class`, says what a stored class is to this version: itself, or `unknown` for one it has no name for. Every reader of a stored class goes through it, and none calls `FeatureClass(...)` on a stored value.
+1. One function, `vocab.stored_class`, says what a stored class is to this version: itself, or `unknown` for one it has no name for. Every reader of a stored class goes through it, and none calls `FeatureClass(...)` on a stored value. Every response field that carries a class has the type `ShownClass`, which reads through the same function, so a row handed to a response model as it is stored can't be read strictly either. Two tests hold the code to this: one fails on any `FeatureClass(...)` call outside the reader and the two places that take a class a person sent, and one gives every response model's class field a class from a later version.
 2. A stored assessment reads a class it has no name for as `unknown`, and leaves out the support given to it, because "Not sure" is never given support.
 3. An edit or a note on a second look is compared with the class this version showed, not the one stored. "Not sure" sent back for a class this version can't name changes nothing, and any other class is saved.
 4. A class this version can't name has the default level of `unknown` when one is needed, and never changes a level a finding already has.

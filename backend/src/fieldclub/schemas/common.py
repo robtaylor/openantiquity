@@ -24,6 +24,7 @@ from fieldclub.schemas.shapes import GEOMETRY_MAX_PARTS as GEOMETRY_MAX_PARTS
 from fieldclub.schemas.shapes import GEOMETRY_MAX_POINTS as GEOMETRY_MAX_POINTS
 from fieldclub.schemas.shapes import MALFORMED, check_shape
 from fieldclub.schemas.shapes import GeometryTooComplexError as GeometryTooComplexError
+from fieldclub.vocab import FeatureClass, stored_class
 
 if TYPE_CHECKING:
     from fieldclub.models import User
@@ -59,6 +60,14 @@ def web_url(value: str | None) -> str | None:
 
 # A source's stored record count. A source that has never been ingested has none, which reads as 0.
 RecordCount = Annotated[int, BeforeValidator(lambda value: value or 0)]
+
+
+# A stored feature class in a response, read as this version can: itself, or
+# `unknown` for one a later version added (Decision 0035). Every response
+# field that carries a class has this type, so a row handed to a model as it
+# is stored can't be read strictly. `tests/test_stored_class_is_never_read_strictly.py`
+# holds every response model to it.
+ShownClass = Annotated[FeatureClass, BeforeValidator(stored_class)]
 
 
 class ApiModel(BaseModel):

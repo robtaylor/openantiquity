@@ -9,6 +9,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from enum import StrEnum
+from typing import cast
 
 import pytest
 from sqlalchemy import CheckConstraint, create_engine, inspect, select, text
@@ -318,20 +319,32 @@ def _kind_check(engine: Engine) -> tuple[str, bool]:
     return row[0], row[1]
 
 
-def test_the_activity_kind_check_follows_the_vocabulary(
-    scratch_database: Engine, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    create_schema(scratch_database)
+def _kind_check_constraint() -> CheckConstraint:
     (check,) = [
         constraint
         for constraint in Base.metadata.tables["activity"].constraints
         if isinstance(constraint, CheckConstraint) and constraint.name == "ck_activity_kind_valid"
     ]
     assert check.info["enum"] is ActivityKind
-    grown = StrEnum(
-        "GrownActivityKind", {kind.value: kind.value for kind in [*ActivityKind]} | {"made_up": "made_up"}
+    return check
+
+
+def _kinds_and(*later: str) -> type[StrEnum]:
+    """The activity kinds with `later` added, as a version that added them would have them."""
+    assert not set(later) & {kind.value for kind in ActivityKind}, (
+        "a later kind has to be new to this version"
     )
-    monkeypatch.setitem(check.info, "enum", grown)
+    values = [*(kind.value for kind in ActivityKind), *later]
+    # The functional form makes a class, which the type stubs call an instance.
+    return cast("type[StrEnum]", StrEnum("LaterActivityKind", {value: value for value in values}))
+
+
+def test_the_activity_kind_check_follows_the_vocabulary(
+    scratch_database: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    create_schema(scratch_database)
+    check = _kind_check_constraint()
+    monkeypatch.setitem(check.info, "enum", _kinds_and("made_up"))
 
     create_schema(scratch_database)
     definition, validated = _kind_check(scratch_database)
@@ -353,15 +366,8 @@ def test_a_version_gone_back_to_leaves_a_check_a_later_one_widened(
     been committed.
     """
     create_schema(scratch_database)
-    (check,) = [
-        constraint
-        for constraint in Base.metadata.tables["activity"].constraints
-        if isinstance(constraint, CheckConstraint) and constraint.name == "ck_activity_kind_valid"
-    ]
-    grown = StrEnum(
-        "GrownActivityKind", {kind.value: kind.value for kind in [*ActivityKind]} | {"made_up": "made_up"}
-    )
-    monkeypatch.setitem(check.info, "enum", grown)
+    check = _kind_check_constraint()
+    monkeypatch.setitem(check.info, "enum", _kinds_and("made_up"))
     create_schema(scratch_database)
     with scratch_database.begin() as conn:
         conn.execute(text("INSERT INTO activity (kind) VALUES ('made_up')"))
@@ -384,19 +390,14 @@ def test_a_check_made_again_for_a_new_value_keeps_what_a_later_version_added(
     scratch_database: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     create_schema(scratch_database)
-    (check,) = [
-        constraint
-        for constraint in Base.metadata.tables["activity"].constraints
-        if isinstance(constraint, CheckConstraint) and constraint.name == "ck_activity_kind_valid"
-    ]
-    kinds = {kind.value: kind.value for kind in [*ActivityKind]}
-    monkeypatch.setitem(check.info, "enum", StrEnum("OneBranch", kinds | {"made_up": "made_up"}))
+    check = _kind_check_constraint()
+    monkeypatch.setitem(check.info, "enum", _kinds_and("made_up"))
     create_schema(scratch_database)
     with scratch_database.begin() as conn:
         conn.execute(text("INSERT INTO activity (kind) VALUES ('made_up')"))
 
     # A version cut before that one, with a value of its own to add.
-    monkeypatch.setitem(check.info, "enum", StrEnum("AnotherBranch", kinds | {"its_own": "its_own"}))
+    monkeypatch.setitem(check.info, "enum", _kinds_and("its_own"))
     create_schema(scratch_database)
 
     definition, validated = _kind_check(scratch_database)

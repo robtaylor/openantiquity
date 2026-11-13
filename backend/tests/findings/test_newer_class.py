@@ -14,17 +14,13 @@ from __future__ import annotations
 import csv
 import io
 from collections.abc import Iterator
-from contextlib import contextmanager
-from typing import Any
+from contextlib import AbstractContextManager
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, select, update
-from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
-from sqlalchemy.schema import AddConstraint, CreateTable, DropConstraint
 
-from fieldclub.db import Base
 from fieldclub.models import Finding, Observation, User
 from fieldclub.schemas.activity import ActivityFinding
 from fieldclub.schemas.mentions import MentionedFinding
@@ -40,7 +36,14 @@ from fieldclub.vocab import (
     Visible,
 )
 from tests.findings.support import API, answer, create
-from tests.helpers import ClientAs, MakeUser, add_record, add_source
+from tests.helpers import (
+    ClientAs,
+    MakeUser,
+    add_record,
+    add_source,
+    assert_checks_are_made_with_their_tables,
+    checks_lifted,
+)
 from tests.investigations.support import add, make, url
 
 LATER_CLASS = "added_by_a_later_version"
@@ -53,46 +56,16 @@ _CLASS_CHECKS = {
 }
 
 
-def _checks() -> list[Any]:
-    found = []
-    for table_name, names in _CLASS_CHECKS.items():
-        table = Base.metadata.tables[table_name]
-        for name in names:
-            (check,) = (c for c in table.constraints if c.name == name)
-            found.append(check)
-    return found
-
-
-@contextmanager
-def class_check_lifted(db: Session, database: Engine) -> Iterator[None]:
-    """Lift the checks on stored classes in this database, and put them back on the way out.
-
-    On the way out the later class is taken off every row, so the checks can
-    be made again. Adding a check back is told not to set it apart from its
-    table, or every schema built later in the run would be made without it.
-    """
-    checks = _checks()
-    with database.begin() as conn:
-        for check in checks:
-            conn.execute(DropConstraint(check))
-    try:
-        yield
-    finally:
-        db.rollback()
-        with database.begin() as conn:
-            conn.execute(
-                update(Finding)
-                .where(Finding.feature_class == LATER_CLASS)
-                .values(feature_class=FeatureClass.UNKNOWN.value)
-            )
-            conn.execute(
-                update(Finding).where(Finding.community_class == LATER_CLASS).values(community_class=None)
-            )
-            conn.execute(
-                update(Observation).where(Observation.feature_class == LATER_CLASS).values(feature_class=None)
-            )
-            for check in checks:
-                conn.execute(AddConstraint(check, isolate_from_table=False))
+def class_check_lifted(db: Session, database: Engine) -> AbstractContextManager[None]:
+    """The checks on stored classes lifted in this database, and put back on the way out."""
+    tidy = [
+        update(Finding)
+        .where(Finding.feature_class == LATER_CLASS)
+        .values(feature_class=FeatureClass.UNKNOWN.value),
+        update(Finding).where(Finding.community_class == LATER_CLASS).values(community_class=None),
+        update(Observation).where(Observation.feature_class == LATER_CLASS).values(feature_class=None),
+    ]
+    return checks_lifted(db, database, _CLASS_CHECKS, tidy)
 
 
 @pytest.fixture
@@ -108,10 +81,7 @@ def test_lifting_the_checks_leaves_them_in_every_schema_built_afterwards(
     with class_check_lifted(db, database):
         pass
 
-    for table_name, names in _CLASS_CHECKS.items():
-        made = str(CreateTable(Base.metadata.tables[table_name]).compile(dialect=postgresql.dialect()))
-        for name in names:
-            assert name in made, f"{name} is no longer made with {table_name}"
+    assert_checks_are_made_with_their_tables(_CLASS_CHECKS)
 
 
 def store_later_class(db: Session, finding: Finding) -> None:
@@ -148,6 +118,17 @@ def later(db: Session, finder: User, later_schema: None) -> Finding:
     assert finding.sensitivity == Sensitivity.OPEN.value
     store_later_class(db, finding)
     return finding
+
+
+@pytest.fixture
+def second_look(db: Session, finder: User, make_user: MakeUser, later_schema: None) -> tuple[Finding, User]:
+    """A finding and the helper whose second look on it names the later class, already revealed."""
+    finding = create(db, finder)
+    helper = make_user()
+    answer(db, finding, helper, Visible.YES, feature_class=FeatureClass.MOAT)
+    db.execute(update(Observation).where(Observation.user_id == helper.id).values(feature_class=LATER_CLASS))
+    db.commit()
+    return finding, helper
 
 
 def test_its_page_says_not_sure(
@@ -277,13 +258,9 @@ def test_a_stored_assessment_naming_the_later_class_reads_as_not_sure(later: Fin
 
 
 def test_a_second_look_naming_the_later_class_reads_as_not_sure(
-    db: Session, finder: User, make_user: MakeUser, client_as: ClientAs, later_schema: None
+    db: Session, finder: User, client_as: ClientAs, second_look: tuple[Finding, User]
 ) -> None:
-    finding = create(db, finder)
-    helper = make_user()
-    answer(db, finding, helper, Visible.YES, feature_class=FeatureClass.MOAT)
-    db.execute(update(Observation).where(Observation.user_id == helper.id).values(feature_class=LATER_CLASS))
-    db.commit()
+    finding, _ = second_look
 
     listed = client_as(finder).get(f"{API}/findings/{finding.public_id}/observations")
     findings.reassess(db, findings.lock(db, finding), None)
@@ -329,13 +306,9 @@ def test_an_edit_choosing_another_class_saves_it(
 
 
 def test_a_note_saved_on_a_second_look_naming_the_later_class_keeps_the_class(
-    db: Session, finder: User, make_user: MakeUser, client_as: ClientAs, later_schema: None
+    db: Session, finder: User, client_as: ClientAs, second_look: tuple[Finding, User]
 ) -> None:
-    finding = create(db, finder)
-    helper = make_user()
-    answer(db, finding, helper, Visible.YES, feature_class=FeatureClass.MOAT)
-    db.execute(update(Observation).where(Observation.user_id == helper.id).values(feature_class=LATER_CLASS))
-    db.commit()
+    finding, helper = second_look
     shown = client_as(helper).get(f"{API}/findings/{finding.public_id}").json()["my_observation"]
 
     saved = client_as(helper).put(
@@ -355,13 +328,9 @@ def test_a_note_saved_on_a_second_look_naming_the_later_class_keeps_the_class(
 
 
 def test_a_reveal_asked_again_with_the_not_sure_it_showed_answers_the_same(
-    db: Session, finder: User, make_user: MakeUser, client_as: ClientAs, later_schema: None
+    db: Session, finder: User, client_as: ClientAs, second_look: tuple[Finding, User]
 ) -> None:
-    finding = create(db, finder)
-    helper = make_user()
-    answer(db, finding, helper, Visible.YES, feature_class=FeatureClass.MOAT)
-    db.execute(update(Observation).where(Observation.user_id == helper.id).values(feature_class=LATER_CLASS))
-    db.commit()
+    finding, helper = second_look
     shown = client_as(helper).get(f"{API}/findings/{finding.public_id}").json()["my_observation"]
 
     again = client_as(helper).post(

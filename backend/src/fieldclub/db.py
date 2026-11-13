@@ -290,11 +290,13 @@ def _sync_enum_checks(conn: Connection) -> None:
             for value in _DROPPED_VALUES
             if (value.table, value.column) == (check.table, check.column)
         }
-        if set(check.values) <= set(admitted) and dropped.isdisjoint(admitted):
-            continue
+        # What the check should admit: this version's values, and any a later version added.
         later = [value for value in admitted if value not in check.values and value not in dropped]
+        wanted = [*check.values, *later]
+        if set(wanted) == set(admitted):
+            continue
         logger.info("Making %s on %s again with the values it has now", check.name, check.table)
-        condition = values_check_text(check.column, [*check.values, *later])
+        condition = values_check_text(check.column, wanted)
         conn.exec_driver_sql(
             f'ALTER TABLE "{check.table}" DROP CONSTRAINT "{check.name}", '
             f'ADD CONSTRAINT "{check.name}" CHECK ({condition}) NOT VALID'

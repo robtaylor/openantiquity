@@ -30,6 +30,7 @@ from fieldclub.schemas.common import (
     GeoJSONGeometry,
     PublicUser,
     RequestModel,
+    ShownClass,
     geojson_geometry,
     geojson_point,
 )
@@ -362,7 +363,7 @@ class FindingSummary(ApiModel):
 
     public_id: str
     title: str
-    feature_class: FeatureClass
+    feature_class: ShownClass
     period: Period
     tier: Tier
     state: FindingState
@@ -421,7 +422,7 @@ class Tallies(ApiModel):
     seen_ratio: float | None
     class_support: dict[str, float]
     class_agreement: float
-    community_class: FeatureClass | None
+    community_class: ShownClass | None
     explanations: dict[str, float]
     checks: list[CheckOut]
 
@@ -540,7 +541,7 @@ class EvidenceOut(ApiModel):
 class ObservationOut(ApiModel):
     user: PublicUser
     visible: Visible
-    feature_class: FeatureClass | None
+    feature_class: ShownClass | None
     period: Period | None
     explanation: Explanation | None
     not_modern: bool | None
@@ -564,9 +565,7 @@ class ObservationOut(ApiModel):
         return cls(
             user=PublicUser.from_user(user),
             visible=Visible(observation.visible),
-            feature_class=stored_class(observation.feature_class)
-            if observation.feature_class is not None
-            else None,
+            feature_class=stored_class(observation.feature_class),
             period=_maybe(Period, observation.period),
             explanation=_maybe(Explanation, observation.explanation),
             not_modern=observation.not_modern,
@@ -727,7 +726,7 @@ def _evidence_out(
 class FindingFeatureProperties(ApiModel):
     public_id: str
     title: str
-    feature_class: FeatureClass
+    feature_class: ShownClass
     period: Period
     tier: Tier
     state: FindingState
@@ -849,8 +848,8 @@ class AnswerCounts(ApiModel):
 class ComparisonOut(ApiModel):
     """How your answer compares, shown once you have given it."""
 
-    finder_class: FeatureClass
-    community_class: FeatureClass | None
+    finder_class: ShownClass
+    community_class: ShownClass | None
     # Null when you didn't say what you think it is.
     matches_finder: bool | None
     # Everyone else's answers, not counting yours or the finder's.
@@ -920,7 +919,7 @@ def review_view(
 
 class TaskFinding(ApiModel):
     title: str
-    feature_class: FeatureClass
+    feature_class: ShownClass
     tier: Tier
     state: FindingState
 

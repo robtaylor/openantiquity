@@ -24,14 +24,12 @@ export function shownClass(meta: Meta, id: string): string {
   return meta.vocab.feature_classes.some((entry) => entry.id === id) ? id : UNKNOWN_CLASS;
 }
 
-/** A feature class's label, or "Not sure" for one this page's `/meta` doesn't list. */
+/** A feature class's label, or the label `/meta` gives "Not sure" for one this page's `/meta` doesn't list. */
 export function classLabel(meta: Meta, id: string): string {
-  const shown = shownClass(meta, id);
-  return meta.vocab.feature_classes.find((entry) => entry.id === shown)?.label ?? NOT_SURE;
+  return labelOf(meta.vocab.feature_classes, shownClass(meta, id));
 }
 
 const UNKNOWN_CLASS = "unknown";
-const NOT_SURE = "Not sure";
 
 /** "Old map" becomes "old map", but "LIDAR view" keeps its capitals. */
 export function lowerFirst(text: string): string {

@@ -196,9 +196,7 @@ def _stored(observation: Observation) -> dict[str, Any]:
     (Decision 0035).
     """
     stored = {name: getattr(observation, name) for name in _FINAL_COLUMNS}
-    if stored["feature_class"] is not None:
-        stored["feature_class"] = stored_class(stored["feature_class"]).value
-    return stored
+    return stored | {"feature_class": _column(stored_class(stored["feature_class"]))}
 
 
 @dataclass(frozen=True)
@@ -391,7 +389,7 @@ def compare(result: Reassessment, user: User, observation: Observation) -> Compa
     finder_class = stored_class(finding.feature_class)
     return Comparison(
         finder_class=finder_class,
-        community_class=stored_class(finding.community_class) if finding.community_class else None,
+        community_class=stored_class(finding.community_class),
         matches_finder=None if named is None else stored_class(named) is finder_class,
         others=others,
     )

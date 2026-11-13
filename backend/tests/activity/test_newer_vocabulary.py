@@ -10,24 +10,21 @@ stream, a finding's page or the help-wanted list here.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, delete, select
-from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
-from sqlalchemy.schema import AddConstraint, CreateTable, DropConstraint
 
-from fieldclub.db import Base
 from fieldclub.models import Activity, Finding, Notification
 from fieldclub.services import feed
 from fieldclub.services.confidence import load_assessment, load_next_steps
 from fieldclub.vocab import ActivityKind, NextStepCode
 from tests.activity.support import API, comment, follow, items
 from tests.findings.support import create
-from tests.helpers import ClientAs, MakeUser
+from tests.helpers import ClientAs, MakeUser, assert_checks_are_made_with_their_tables, checks_lifted
 
 LATER_KIND = "made_by_a_later_version"
 LATER_STEP: dict[str, Any] = {
@@ -44,25 +41,12 @@ assert LATER_KIND not in set(ActivityKind), "the kind has to be one this version
 assert LATER_STEP["code"] not in set(NextStepCode), "the step has to be one this version has no name for"
 
 
-@contextmanager
-def kind_check_lifted(db: Session, database: Engine) -> Iterator[None]:
-    """Lift the check on `activity.kind` in this database, and put it back on the way out.
+_KIND_CHECK = {Activity.__tablename__: ("ck_activity_kind_valid",)}
 
-    Adding it back is told not to set the check apart from its table. Left
-    to its default, that statement marks the check as made on its own, and
-    every schema built later in the run would be made without it.
-    """
-    table = Base.metadata.tables[Activity.__tablename__]
-    (check,) = (c for c in table.constraints if c.name == "ck_activity_kind_valid")
-    with database.begin() as conn:
-        conn.execute(DropConstraint(check))
-    try:
-        yield
-    finally:
-        db.rollback()
-        with database.begin() as conn:
-            conn.execute(delete(Activity).where(Activity.kind == LATER_KIND))
-            conn.execute(AddConstraint(check, isolate_from_table=False))
+
+def kind_check_lifted(db: Session, database: Engine) -> AbstractContextManager[None]:
+    """The check on `activity.kind` lifted in this database, and put back on the way out."""
+    return checks_lifted(db, database, _KIND_CHECK, [delete(Activity).where(Activity.kind == LATER_KIND)])
 
 
 @pytest.fixture
@@ -73,12 +57,10 @@ def later_schema(db: Session, database: Engine) -> Iterator[None]:
 
 
 def test_lifting_the_check_leaves_it_in_every_schema_built_afterwards(db: Session, database: Engine) -> None:
-    table = Base.metadata.tables[Activity.__tablename__]
-
     with kind_check_lifted(db, database):
         pass
 
-    assert "ck_activity_kind_valid" in str(CreateTable(table).compile(dialect=postgresql.dialect()))
+    assert_checks_are_made_with_their_tables(_KIND_CHECK)
 
 
 def later_activity(db: Session, finding: Finding) -> int:
