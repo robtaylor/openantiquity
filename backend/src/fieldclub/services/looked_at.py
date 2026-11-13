@@ -216,6 +216,12 @@ def seed(db: Session, finding: Finding, shape: BaseGeometry | None) -> Looked | 
         return Looked(to_shape(finding.looked_at))
     if not has_standing_look(db, finding):
         return None
+    return _seeded(finding, shape)
+
+
+def _seeded(finding: Finding, shape: BaseGeometry | None) -> Looked:
+    """`seed` for a finding known to have a second look standing and no `looked_at`."""
+    assert finding.looked_at is None, "only a finding with nothing looked at is seeded"
     now = ground(finding, shape)
     assert not now.is_empty, f"finding {finding.public_id} has an empty shape"
     whole = grown(None, now)
@@ -230,8 +236,11 @@ BACKFILL_BATCH = 200
 def backfill(db: Session, *, batch: int = BACKFILL_BATCH) -> int:
     """`seed` every finding answered before `looked_at` existed. Commits each batch, and says how many.
 
-    Each finding is locked before it is seeded, so an edit or an answer
-    committed meanwhile is seen, and a second run changes nothing.
+    Each batch is locked, in order of id, before it is seeded, so an edit
+    or an answer committed meanwhile is seen, and a second run changes
+    nothing. Which second looks stand is asked after the lock, which giving
+    an answer and taking it back both take, so it can't change before the
+    batch commits.
     """
     assert batch > 0, "a batch holds a finding at least"
     seeded, after = 0, 0
@@ -241,19 +250,25 @@ def backfill(db: Session, *, batch: int = BACKFILL_BATCH) -> int:
         .order_by(Finding.id)
         .limit(batch)
     ).all():
-        for finding_id in ids:
-            finding = db.scalars(
-                select(Finding)
-                .where(Finding.id == finding_id)
-                .with_for_update()
-                .execution_options(populate_existing=True)
-            ).one()
-            if finding.looked_at is None:
+        locked = db.scalars(
+            select(Finding)
+            .where(Finding.id.in_(ids))
+            .order_by(Finding.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).all()
+        standing = set(
+            db.scalars(
+                select(Observation.finding_id).where(
+                    Observation.finding_id.in_(ids), Observation.withdrawn_at.is_(None)
+                )
+            )
+        )
+        for finding in locked:
+            if finding.looked_at is None and finding.id in standing:
                 shape = _shape(finding)
-                looked = seed(db, finding, shape)
-                if looked is not None:
-                    refresh_added(finding, shape, looked)
-                    seeded += 1
+                refresh_added(finding, shape, _seeded(finding, shape))
+                seeded += 1
         db.commit()
         after = ids[-1]
     return seeded
