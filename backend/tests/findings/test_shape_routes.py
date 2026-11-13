@@ -9,8 +9,10 @@ import pytest
 from pyproj import Geod
 from sqlalchemy.orm import Session
 
+from fieldclub.schemas.findings import ShapeOut
 from fieldclub.services import shapes
-from tests.findings.support import API, LAT, LON, point
+from fieldclub.services.findings import SHAPE_CHANGES_SHOWN
+from tests.findings.support import API, LAT, LON, changes_of, drawn, edit, meridian, point
 from tests.helpers import ClientAs, MakeUser, error_code
 
 GEOD = Geod(ellps="WGS84")
@@ -162,6 +164,37 @@ def test_a_line_drawn_first_and_extended_over_http(client_as: ClientAs, make_use
     assert change["added_length_m"] == pytest.approx(GEOD.inv(LON, LAT + 0.012, LON, LAT + 0.03)[2], rel=0.01)
     assert set(change["added_view"]) == {"lon", "lat", "zoom"}
     assert extended.json()["location"]["lat"] == pytest.approx(LAT + 0.006, abs=1e-6)
+
+
+def test_the_page_serves_the_newest_50_changes_oldest_first(
+    db: Session, client_as: ClientAs, make_user: MakeUser
+) -> None:
+    """A finder may change a shape 120 times an hour, so the page holds the newest 50 alone."""
+    finder = make_user()
+    finding = drawn(db, finder, meridian(0, 0.001))
+    # Five reshapes, then 50 extensions, each adding a little more than the last.
+    for revision in range(5):
+        edit(
+            db,
+            finding,
+            finder,
+            path=meridian(0, 0.001, lon=east(10 * (revision + 1))),
+            path_revision=revision,
+        )
+    offsets = [0.0, 0.001]
+    for step in range(SHAPE_CHANGES_SHOWN):
+        offsets.append(offsets[-1] + 0.0005 + step * 0.00002)
+        edit(db, finding, finder, path=meridian(*offsets, lon=east(50)), path_revision=5 + step)
+    assert len(changes_of(db, finding)) == 5 + SHAPE_CHANGES_SHOWN
+
+    served = client_as(finder).get(f"{API}/findings/{finding.public_id}").json()["location"]["shape"]
+    assert served["revision"] == 5 + SHAPE_CHANGES_SHOWN
+    assert [change["kind"] for change in served["changes"]] == ["extended"] * SHAPE_CHANGES_SHOWN
+    added = [change["added_length_m"] for change in served["changes"]]
+    assert added == sorted(added)
+    assert len(set(added)) == SHAPE_CHANGES_SHOWN
+    assert SHAPE_CHANGES_SHOWN == 50
+    assert f"newest {SHAPE_CHANGES_SHOWN} changes" in (ShapeOut.__doc__ or ""), "the schema says how many"
 
 
 def test_someone_who_sees_only_the_square_learns_only_that_the_shape_changed_and_when(

@@ -216,6 +216,8 @@ class ShapeOut(ApiModel):
 
     For a viewer who sees only the square, every field is null but
     `changes`, which says that the shape changed and when.
+
+    `changes` holds the newest 50 changes to the shape, oldest first.
     """
 
     kind: ShapeKind | None

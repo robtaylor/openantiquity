@@ -1398,8 +1398,12 @@ class FindingView:
     following: bool
     # The nation as this viewer may know it (`sensitivity.visible_nation`).
     nation: str | None
-    # Every change to the shape, oldest first, for `sensitivity.visible_shape`.
+    # The newest `SHAPE_CHANGES_SHOWN` changes to the shape, oldest first, for `sensitivity.visible_shape`.
     shape_changes: list[FindingShapeChange]
+
+
+# How many changes of shape a finding's page holds: the newest, served oldest first.
+SHAPE_CHANGES_SHOWN = 50
 
 
 def finding_view(db: Session, finding: Finding, viewer: User | None) -> FindingView:
@@ -1416,11 +1420,16 @@ def finding_view(db: Session, finding: Finding, viewer: User | None) -> FindingV
         my_observation=mine,
         following=is_following(db, viewer, finding),
         nation=sensitivity.visible_nation(db, finding, viewer),
-        shape_changes=list(
-            db.scalars(
-                select(FindingShapeChange)
-                .where(FindingShapeChange.finding_id == finding.id)
-                .order_by(FindingShapeChange.revision)
-            )
-        ),
+        shape_changes=newest_shape_changes(db, finding),
     )
+
+
+def newest_shape_changes(db: Session, finding: Finding) -> list[FindingShapeChange]:
+    """The newest `SHAPE_CHANGES_SHOWN` changes to the finding's shape, oldest first."""
+    newest = db.scalars(
+        select(FindingShapeChange)
+        .where(FindingShapeChange.finding_id == finding.id)
+        .order_by(FindingShapeChange.revision.desc())
+        .limit(SHAPE_CHANGES_SHOWN)
+    ).all()
+    return list(reversed(newest))
