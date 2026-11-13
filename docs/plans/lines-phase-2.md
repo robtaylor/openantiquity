@@ -8,7 +8,7 @@ Someone other than a marking's keeper can propose a change to its shape, which t
 
 ## Prerequisites
 
-- The owner's answers to "Open questions for the owner".
+- The owner's answer to the one question still open.
 - Lines and curves is live (`3958ced`, deployed 2026-11-13), and Decisions 0028 to 0031 are checked against it.
 - A local PostGIS from `infra/docker-compose.yml` for the backend suite.
 
@@ -37,6 +37,9 @@ Each claim was checked by reading the code on `main` on 2026-11-13, after lines 
 - **Found by** is the credit and never changes. **Kept by** is who may edit, and is what transfers.
 - The second phase mustn't change how the first was built.
 - Joining different people's lines into one finding waits "until we actually hit the need". It isn't planned here.
+- When a keeper's account is deleted, the marking is orphaned and the admins are told. Asked on 2026-11-13 whether keeping should go back to the finder instead, the owner said: "lets just orphan, and alert the admin".
+- An admin can offer an orphaned marking's keeping to a volunteer: "yes".
+- Removing is for admins alone: "admin - they can always pass it over to a moderator. we can adjust once we have real behaviour and issues to address".
 
 ## Design
 
@@ -53,9 +56,9 @@ Everything else tied to `author_id` stays with the finder: seeing the finding wh
 
 **Handing on** is an offer and an acceptance, because keeping is a duty and nobody should be given it unasked. `findings.keeping_offered_to` (nullable user id) and `keeping_offered_at` hold one offer at a time, and a new offer replaces it. When the offer is taken up, `keeper_id` becomes that person, or null when it is the finder, the offer clears, and the new keeper follows the finding.
 
-**When the keeper's account goes.** `delete_account` calls `findings.forget_keeping`. Keeping returns to the finder when the finder's account is active. Otherwise it stays with the deleted account. Offers made by or to that person are cleared, and their pending suggestions are withdrawn. A ban changes nothing stored: the banned keeper can't act while it lasts, and lifting it gives everything back.
+**When the keeper's account goes.** `delete_account` calls `findings.forget_keeping`. Keeping stays with the deleted account, so every marking it kept is orphaned, whether or not its finder is still a member. Offers made by or to that person are cleared, and their pending suggestions are withdrawn. Each admin gets one notification for the deletion, saying how many markings it left without a keeper. A ban changes nothing stored: the banned keeper can't act while it lasts, and lifting it gives everything back. Nobody is told of a ban's orphans, since a moderator or an admin made it.
 
-**Orphaned** means the keeper's account is deleted or banned. Removal is for orphaned markings only, as the owner put it. A marking whose keeper is active and causing trouble is hidden by a moderator, and if the keeper is the trouble, banning them makes it orphaned.
+**Orphaned** means the keeper's account is deleted or banned. An admin can offer an orphaned marking's keeping to any member, its finder included, with the same offer and acceptance a keeper uses, and finds orphaned markings in a list of their own. Removal is for orphaned markings only, as the owner put it, and for admins only. A marking whose keeper is active and causing trouble is hidden by a moderator, and if the keeper is the trouble, banning them makes it orphaned.
 
 ### Suggestions
 
@@ -100,9 +103,10 @@ All under `/api/v1`, with `X-OpenAntiquity-Client: web` on every mutating reques
 | `DELETE /findings/{id}/suggestions/{sid}` | | 204 | 403 `not_suggester`, 409 `suggestion_decided` |
 | `POST /findings/{id}/suggestions/{sid}/accept` | `{shape_revision}` | 200 `FindingDetail` | 403 `not_keeper`, 409 `suggestion_decided`, 409 `suggester_banned`, 409 `shape_changed`, 422 `looked_at_moved`, 422 `outline_too_far`, the path limits |
 | `POST /findings/{id}/suggestions/{sid}/decline` | | 200 `Suggestion` | 403 `not_keeper`, 409 `suggestion_decided` |
-| `PUT /findings/{id}/keeping/offer` | `{handle}` | 200 `FindingDetail` | 403 `not_keeper`, 404 `user_not_found`, 409 `user_banned`, 422 `already_keeper`, 409 `finding_hidden` |
+| `PUT /findings/{id}/keeping/offer` | `{handle}` | 200 `FindingDetail` | 403 `not_keeper` (an admin may offer an orphaned marking), 404 `user_not_found`, 409 `user_banned`, 422 `already_keeper`, 409 `finding_hidden` |
 | `DELETE /findings/{id}/keeping/offer` | | 204 | 403 `not_offered` (only the keeper or the person offered) |
 | `POST /findings/{id}/keeping/accept` | | 200 `FindingDetail` | 403 `not_offered`, 409 `finding_hidden` |
+| `GET /mod/markings/orphaned` | | 200 a page of findings whose keeper is deleted or banned, newest first | 403 `admins_only` |
 | `GET /mod/findings/{id}/shapes` | | 200 each revision with `path_before`, newest first, 50 a page | 403 `admins_only` |
 | `PUT /mod/findings/{id}/marking` | `{to_revision: int \| null, shape_revision, reason}` | 200 `FindingDetail` | 403 `admins_only`, 409 `not_orphaned`, 409 `shape_changed`, 422 `no_such_revision` |
 
@@ -126,7 +130,7 @@ All under `/api/v1`, with `X-OpenAntiquity-Client: web` on every mutating reques
 | An accepted suggestion | A timeline change with `suggested_by` | `{"kind": "changed", "on": …}`, as for any change | As exact readers |
 | `keeper` | Sent | Sent: a name says nothing of a place | The finder and moderators only |
 | A hand-over offer | The keeper, the person offered and moderators | Nothing | Refused while hidden |
-| `GET /mod/findings/{id}/shapes` | Admins only | | |
+| `GET /mod/markings/orphaned`, `GET /mod/findings/{id}/shapes` | Admins only | | |
 
 The feed and the event stream list `keeper_changed` to anyone who may list the finding, since it names a person and no shape. Notification-only kinds go to one person, who is a member and sees the finding exactly. Each new route names a leak test in `tests/test_routes.py`, built on a protected line read signed out.
 
@@ -136,6 +140,7 @@ The feed and the event stream list `keeper_changed` to anyone who may list the f
 - `suggestion_decided`, notification only, to the suggester, with `data: {"accepted": bool}`.
 - `keeping_offered`, notification only, to the person offered.
 - `keeper_changed`, an activity row, to the finding's followers.
+- `keeper_gone`, notification only, to each admin when an account that kept markings is deleted, with `data: {"markings": n}` and no free text. It opens the list of orphaned markings.
 - An accepted extension records `shape_extended` as today, with the suggester as actor.
 
 Each new activity kind is passed over by the version before it (Decision 0033, already live). `moderation_actions.action` gains `remove_marking`, which `schemas/moderation.py` reads strictly, so the passing-over for moderation action kinds ships in a deploy of its own first (Decision 0033, point 3). `SuggestionState` belongs to a new table that no earlier version reads.
@@ -156,10 +161,10 @@ Build in this order. Each step is test first, against real PostGIS.
 
 1. **Moderation action kinds passed over.** The log list leaves out a kind it doesn't know. Deployed alone, before step 6. Test: a row with an unknown action doesn't break `GET /mod/actions`.
 2. **Moving the tail of an edit.** `findings.apply_shape_change` takes today's shape code out of `update_finding` unchanged. Exit: the whole existing suite passes with no test edited.
-3. **Keeping.** `keeper_id`, `keeping_offered_to`, `keeping_offered_at` in `create_all` and `extras.sql`. `check_keeper`, `keeper_of`, `actions.edit`, the offer routes, `forget_keeping` in `delete_account`, `keeper_changed` and `keeping_offered`. Tests: the finder edits until they hand on and not after; the keeper edits and can't withdraw; an offer to a banned or deleted account is refused; deleting a keeper returns keeping to an active finder and leaves it orphaned otherwise; a keeper can't act while the finding is hidden.
+3. **Keeping.** `keeper_id`, `keeping_offered_to`, `keeping_offered_at` in `create_all` and `extras.sql`. `check_keeper`, `keeper_of`, `actions.edit`, the offer routes, `forget_keeping` in `delete_account`, `keeper_changed`, `keeping_offered` and `keeper_gone`. Tests: the finder edits until they hand on and not after; the keeper edits and can't withdraw; an offer to a banned or deleted account is refused; deleting a keeper leaves each marking it kept orphaned, whether or not the finder is active, and tells each admin once; an admin can offer an orphaned marking and nobody else's; a keeper can't act while the finding is hidden.
 4. **Suggestions.** `services/suggestions.py`, the table, `shape_suggested` and `suggestion_decided`. Tests for every code in the contract; an accepted extension credits the suggester and tells followers; a suggestion behind the shape is accepted when the keeper names the current revision; one that `looked_at` has since outgrown is refused and stays pending; 20 pending is the cap.
 5. **What readers are sent.** `visible_shape` with suggestions, `FindingDetail` fields, the new actions. Leak tests for every new route with a protected line read signed out.
-6. **Removing an orphaned marking.** `held_to_looked_at`, the two `/mod` routes, `remove_marking` in the log. Tests: refused while the keeper is active; puts back an earlier revision outside `looked_at`; the finding's answers, tier and evidence are unchanged.
+6. **Removing an orphaned marking.** `held_to_looked_at`, the three `/mod` routes, `remove_marking` in the log. Tests: refused while the keeper is active; puts back an earlier revision outside `looked_at`; the finding's answers, tier and evidence are unchanged.
 
 **Exit criteria:** `uv run pytest`, `uv run ruff check . && uv run ruff format --check .` and `uv run pyright` pass, and `tests/test_routes.py` names a leak test for each new route.
 
@@ -172,7 +177,7 @@ Build in this order. Each step is test first, against real PostGIS.
 3. **Suggesting.** The drawing tool opens at `/mark/suggest/:publicId` for `actions.suggest`, with its own editing key so a suggestion and an edit never share a path. A panel beside `ChangeShapePanel` sends `POST …/suggestions`. The tool itself is untouched.
 4. **Deciding.** A "Suggested changes" section for the keeper: each with who, when, what it does, "behind the current shape" when it is, "Show on the map" drawing it dashed over the shape, Accept and Decline. A refusal is said beside the suggestion.
 5. **Handing on.** "Hand it on" in `Tools.tsx`, a handle field, the offer shown to the person offered with "Take it on" and "No thanks", and notification copy for the four new kinds.
-6. **Admin.** On an orphaned finding, "Remove the marking", listing earlier revisions drawn on the map, with a reason.
+6. **Admin.** A list of markings without a keeper, opened from the `keeper_gone` notification. On an orphaned finding, "Offer it to someone" and "Remove the marking", the second listing earlier revisions drawn on the map, with a reason.
 
 **Exit criteria:** `pnpm test && pnpm typecheck && pnpm lint` and `pnpm build` pass. Every new control is reachable by keyboard with a visible focus ring.
 
@@ -195,7 +200,7 @@ Build in this order. Each step is test first, against real PostGIS.
 
 ## Decisions to write
 
-- **Found by is the credit, kept by is who may change a finding, and keeping passes by offer and acceptance.** `keeper_id`, `check_keeper` against `check_finder`, what stays with the finder, return to the finder when a keeper's account is deleted. Replaces point 1 of Decision 0029.
+- **Found by is the credit, kept by is who may change a finding, and keeping passes by offer and acceptance.** `keeper_id`, `check_keeper` against `check_finder`, what stays with the finder, and that a deleted keeper's markings are orphaned and the admins told. Replaces point 1 of Decision 0029.
 - **Other people's changes are suggestions the keeper accepts or declines, held to the looked-at rule when accepted.** The separate table, the base revision, accepting behind the shape, credit to the suggester, the limits, and what each reader is sent.
 - **An admin takes back an orphaned marking's shape and never deletes the finding.** What orphaned means, why not hide, withdraw or delete, and why the looked-at rule is set aside for it.
 
@@ -221,10 +226,14 @@ Build in this order. Each step is test first, against real PostGIS.
 
 ## Open questions for the owner
 
-1. **Does keeping cover the whole edit, or only the shape?** (a) The keeper edits everything `PATCH` takes, title and class included, and the finder keeps only withdrawing: one check, as now. (b) The keeper edits the shape and the finder keeps the words and class: `update_finding` checks two people by field, and a finder who has left stops the words being corrected. Recommended: (a).
-2. **When a keeper's account is deleted, does keeping go back to the finder?** (a) Yes, when the finder is active: few markings become orphaned. (b) No, the marking is orphaned: simpler, but more for admins. Recommended: (a).
-3. **Can an admin offer an orphaned marking's keeping to a volunteer?** (a) Yes, using the same offer: suggestions on it can be decided again. (b) No: it can only be hidden or have its shape taken back. Recommended: (a), one more check in the offer route.
-4. **Admins only, or moderators too?** The owner said admins. Moderators can already hide. Recommended: admins only, since taking back a shape rewrites what someone published, with moderators as the walk-back.
+One is left. The other three were answered on 2026-11-13 and are under "Decided by the owner".
+
+**When a marking is handed on, does the new keeper take over its words as well as its shape?** Today the person who marked a finding can change two things: its shape on the map, and its details, which are the title, the description, the kind of feature and the period. Say Alice marks a road and hands it on to Bob.
+
+- (a) Bob changes the shape and the details. Alice changes neither, is still shown as "Found by", and is still the only one who can withdraw it. One rule says who may edit, as now.
+- (b) Bob changes the shape. Alice still changes the details. Two people are then checked for one finding, and if Alice has left, nobody can correct the title or the kind of feature.
+
+Recommended: (a). It is what "kept by is who may edit" says, and a finder who has gone doesn't leave a marking's words frozen.
 
 ## References
 
