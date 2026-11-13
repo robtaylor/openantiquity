@@ -1,15 +1,17 @@
-"""Where a point is (which nation and county, and the nearest place), and boxes as SQL."""
+"""Where a point is (in the British Isles, which nation and county, the nearest place), and boxes as SQL."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
 
+from shapely.geometry import Polygon
 from shapely.geometry.base import BaseGeometry
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.orm import Session
 
-from fieldclub.errors import DataIntegrityError
+from fieldclub import gridref
+from fieldclub.errors import DataIntegrityError, ValidationFailedError
 from fieldclub.models import AdminArea, Place, Source
 from fieldclub.models.common import SRID
 from fieldclub.vocab import AdminAreaKind, Nation
@@ -33,6 +35,57 @@ SETTLEMENT_RANK = 400
 # sphere. Degrees of longitude are shorter than degrees of latitude, so the
 # index's order is close to the true one, not the same.
 _NEAREST_CANDIDATES = 16
+
+
+class OutsideBritishIslesError(ValidationFailedError):
+    code = "outside_british_isles"
+    message = "OpenAntiquity covers Great Britain, Ireland and their islands. That position is outside them."
+
+
+# A coarse outline of Great Britain, Ireland, the Isle of Man, Orkney,
+# Shetland, the Hebrides and Scilly, in longitude and latitude. It runs down
+# the middle of the Channel and the Strait of Dover, so Calais and the Cotentin
+# are outside, and well east of the North Sea coast. The Channel Islands are
+# outside because they are on neither grid, and a protected finding there
+# could not be generalised to a grid square.
+BRITISH_ISLES = Polygon(
+    [
+        (-7.0, 49.8),
+        (-5.2, 49.9),
+        (-3.6, 50.15),
+        (-2.45, 50.45),
+        (-1.3, 50.5),
+        (0.3, 50.65),
+        (1.0, 50.85),
+        (1.45, 51.05),
+        (2.0, 51.5),
+        (2.0, 53.0),
+        (0.5, 54.5),
+        (-1.0, 57.6),
+        (0.0, 61.0),
+        (-9.0, 61.0),
+        (-14.0, 58.0),
+        (-11.0, 54.5),
+        (-11.0, 51.2),
+    ]
+)
+assert BRITISH_ISLES.is_valid, "the British Isles outline crosses itself"
+
+
+def check_in_british_isles(geometry: BaseGeometry) -> None:
+    """Refuse a geometry that isn't wholly inside the British Isles and on one of their grids."""
+    if not BRITISH_ISLES.contains(geometry):
+        raise OutsideBritishIslesError()
+    for lon, lat in _corners(geometry):
+        try:
+            gridref.to_grid(lon, lat)
+        except gridref.GridRefError:
+            raise OutsideBritishIslesError() from None
+
+
+def _corners(geometry: BaseGeometry) -> list[tuple[float, float]]:
+    min_lon, min_lat, max_lon, max_lat = geometry.bounds
+    return [(min_lon, min_lat), (min_lon, max_lat), (max_lon, min_lat), (max_lon, max_lat)]
 
 
 @dataclass(frozen=True)

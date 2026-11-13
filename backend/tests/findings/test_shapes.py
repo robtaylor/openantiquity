@@ -18,7 +18,7 @@ from fieldclub.db import SessionLocal
 from fieldclub.errors import BadRequestError, ConflictError, ValidationFailedError
 from fieldclub.models import Activity, Finding, User
 from fieldclub.models.common import to_db_geometry
-from fieldclub.services import findings, sensitivity, shapes
+from fieldclub.services import findings, geo, sensitivity, shape_edits, shapes
 from fieldclub.services.findings import NotFinderError
 from fieldclub.vocab import ShapeChangeKind
 from tests.findings.support import (
@@ -118,10 +118,10 @@ def test_a_finding_needs_a_point_or_a_shape(db: Session, make_user: MakeUser) ->
 
 def test_a_shape_is_held_to_the_limits_before_the_british_isles(db: Session, make_user: MakeUser) -> None:
     author = make_user()
-    with pytest.raises(findings.OutsideBritishIslesError):
+    with pytest.raises(geo.OutsideBritishIslesError):
         drawn(db, author, path((2.30, 48.85), (2.31, 48.86)))
     # Half in, half out.
-    with pytest.raises(findings.OutsideBritishIslesError):
+    with pytest.raises(geo.OutsideBritishIslesError):
         drawn(db, author, path((1.40, 51.10), (1.70, 51.10)))
     huge = [(2.0, 48.5), (2.5, 48.5), (2.5, 48.9)]
     with pytest.raises(ValidationFailedError) as big:
@@ -296,7 +296,7 @@ def test_a_shape_change_records_whoever_made_it_and_leaves_permission_to_the_cal
     """`change_shape` is what accepting someone else's suggestion will call, with them as its maker."""
     finder, suggester = make_user(), make_user()
     finding = drawn(db, finder, meridian(0, 0.006, 0.012))
-    kind = findings.change_shape(
+    kind = shape_edits.change_shape(
         db, findings.lock(db, finding), suggester, path=meridian(0, 0.006, 0.012, 0.02), revision=0
     )
     db.commit()

@@ -39,7 +39,7 @@ from fieldclub.schemas.investigations import (
     MemberIn,
     item_data,
 )
-from fieldclub.services import findings, investigation_exports, investigations
+from fieldclub.services import geo, investigation_exports, investigations
 from fieldclub.services.investigations import Access, Need, NewItem, Scope
 from fieldclub.vocab import InvestigationRole
 
@@ -58,7 +58,7 @@ def _area(geometry: GeoJSONGeometry | None) -> BaseGeometry | None:
     if geometry is None:
         return None
     area = from_geojson(geometry, allowed=AREA_TYPES, max_points=AREA_MAX_POINTS)
-    findings.check_in_british_isles(area)
+    geo.check_in_british_isles(area)
     return area
 
 

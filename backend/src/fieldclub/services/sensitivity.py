@@ -28,7 +28,7 @@ Things callers must not do:
   `finding.nation`, which comes from the exact position: use `visible_nation`.
   A finding's line or shape (`path`, `outline_mid`, `outline_low`, its kind,
   length and changes) is shape too: serve it through `visible_shape`, or for
-  the map `services.findings.map_shapes`, and match a box against it only
+  the map `services.shape_edits.map_shapes`, and match a box against it only
   through `visible_match_clause`.
 - Don't filter or sort by `findings.location` for someone who can't see it.
   A bounding-box search over exact positions lets anyone find a protected

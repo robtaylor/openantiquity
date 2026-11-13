@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from fieldclub.errors import ValidationFailedError
 from fieldclub.models import Activity, Finding, Notification, Observation, User
-from fieldclub.services import findings, looked_at, review, shapes
+from fieldclub.services import findings, looked_at, review, shape_edits, shapes
 from fieldclub.vocab import Visible
 from tests.findings.support import (
     API,
@@ -106,7 +106,7 @@ def test_an_answer_naming_a_shape_that_has_since_changed_is_refused_and_stores_n
     finder, helper = make_user(), make_user()
     finding = drawn(db, finder, meridian(0, 0.01))
     edit(db, finding, finder, path=meridian(0, 0.01, 0.3), path_revision=0)
-    with pytest.raises(findings.ShapeChangedError):
+    with pytest.raises(shape_edits.ShapeChangedError):
         answer(db, finding, helper, Visible.YES, shape_revision=0)
     db.rollback()
     assert db.scalars(select(Observation)).all() == []
@@ -452,7 +452,7 @@ def test_the_check_is_made_where_a_suggestion_would_be_applied(db: Session, make
     finding = drawn(db, finder, meridian(0, 0.02))
     answered(db, make_user, finding)
     with pytest.raises(ValidationFailedError) as caught:
-        findings.change_shape(
+        shape_edits.change_shape(
             db, findings.lock(db, finding), suggester, path=meridian(0, 0.02, lon=east(3000)), revision=0
         )
     assert caught.value.code == "looked_at_moved"

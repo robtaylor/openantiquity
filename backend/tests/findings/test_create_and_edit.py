@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from fieldclub import gridref
 from fieldclub.models import Activity, Finding, Follow
 from fieldclub.services import findings, ids
-from fieldclub.services.findings import NotFinderError, OutsideBritishIslesError
+from fieldclub.services.findings import NotFinderError
+from fieldclub.services.geo import OutsideBritishIslesError
 from fieldclub.vocab import FeatureClass, Sensitivity
 from tests.findings.support import API, LAT, LON, create, point, square_around
 from tests.helpers import ClientAs, MakeUser, count, error_code, lon_lat

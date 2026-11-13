@@ -28,7 +28,7 @@ from fieldclub.schemas.findings import (
     finding_feature,
 )
 from fieldclub.schemas.findings import Path as PathIn
-from fieldclub.services import exports, findings, moderation, shapes
+from fieldclub.services import exports, findings, moderation, shape_edits, shapes
 from fieldclub.services.findings import FindingFilters, FindingSort
 from fieldclub.vocab import FeatureClass, FindingState, Sensitivity, Tier
 
@@ -124,11 +124,11 @@ def list_findings(
     zoom: Annotated[
         int,
         Query(
-            ge=findings.MAP_ZOOM_MIN,
-            le=findings.MAP_ZOOM_MAX,
+            ge=shape_edits.MAP_ZOOM_MIN,
+            le=shape_edits.MAP_ZOOM_MAX,
             description="The map's zoom, which sets how simplified GeoJSON shapes are",
         ),
-    ] = findings.MAP_ZOOM_DEFAULT,
+    ] = shape_edits.MAP_ZOOM_DEFAULT,
 ) -> Page[FindingSummary] | FindingFeatureCollection:
     """Findings as this viewer may see them, as a page or as GeoJSON for the map.
 
@@ -143,7 +143,7 @@ def list_findings(
         page = findings.list_findings(
             db, viewer, filters, limit=limit or GEOJSON_DEFAULT_LIMIT, cursor=cursor
         )
-        drawn = findings.map_shapes(db, page.findings, viewer, zoom=zoom, bbox=filters.bbox)
+        drawn = shape_edits.map_shapes(db, page.findings, viewer, zoom=zoom, bbox=filters.bbox)
         return FindingFeatureCollection(
             features=[finding_feature(finding, viewer, drawn.get(finding.id)) for finding in page.findings],
             next_cursor=page.next_cursor,

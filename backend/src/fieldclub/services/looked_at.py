@@ -11,7 +11,7 @@ finding's life, not per edit.
 - `check` refuses an edit that leaves a looked-at point, or more than a
   quarter of the length of the looked-at lines, further than
   `LOOKED_AT_MAX_MOVE_M` from the finding's new shape, or from its new point
-  when it would have no shape. `findings.change_shape` calls it, and so does
+  when it would have no shape. `shape_edits.change_shape` calls it, and so does
   a move of a finding with no shape.
 - `seed` fills `looked_at` for a finding answered before it existed, from
   the shape as stored, and `backfill` does so for every such finding.

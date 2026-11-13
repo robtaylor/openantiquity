@@ -27,7 +27,7 @@ suites both read.
 
 Nothing here touches the database but `backfill`, so the tests use it
 directly. Checking that a shape lies in the British Isles is
-`services.findings.check_in_british_isles`, which runs after these limits.
+`services.geo.check_in_british_isles`, which runs after these limits.
 
     python -m fieldclub.services.shapes backfill
 

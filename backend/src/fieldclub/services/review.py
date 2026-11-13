@@ -69,7 +69,7 @@ from fieldclub.errors import BadRequestError, ConflictError, ForbiddenError, Not
 from fieldclub.models import Finding, Observation, User
 from fieldclub.models.common import SRID
 from fieldclub.schemas.common import int_from_cursor, offset_from_cursor, offset_page, paginate
-from fieldclub.services import activity, findings, looked_at, sensitivity
+from fieldclub.services import activity, findings, looked_at, sensitivity, shape_edits
 from fieldclub.services.confidence import CHECK_PHRASES, NEW_PART_PROMPT, NextStep, load_next_steps
 from fieldclub.services.findings import ANSWER_CODES, Reassessment
 from fieldclub.vocab import (
@@ -230,7 +230,7 @@ def check_shape_seen(finding: Finding, revision: int | None) -> None:
     one, is taken as given on the shape as it is now.
     """
     if revision is not None and revision != finding.shape_revision:
-        raise findings.ShapeChangedError(
+        raise shape_edits.ShapeChangedError(
             "The finder changed the shape since you opened it. Look at it again and give your answer."
         )
 

@@ -384,7 +384,7 @@ def test_from_geojson_refuses_shapes_with_empty_or_short_parts(geometry: dict) -
     ],
 )
 def test_every_shape_from_geojson_can_be_tested_against_the_british_isles(geometry: dict) -> None:
-    from fieldclub.services.findings import check_in_british_isles
+    from fieldclub.services.geo import check_in_british_isles
 
     check_in_british_isles(from_geojson(geometry))
 

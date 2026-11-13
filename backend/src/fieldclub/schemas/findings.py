@@ -761,7 +761,7 @@ class FindingFeatureCollection(GeoJSONFeatureCollection):
 def finding_feature(
     finding: Finding, viewer: User | None, shape: BaseGeometry | None = None
 ) -> FindingFeature:
-    """`shape` comes from `services.findings.map_shapes`, which gives one only to an exact viewer."""
+    """`shape` comes from `services.shape_edits.map_shapes`, which gives one only to an exact viewer."""
     where = location_out(finding, viewer)
     assert shape is None or not where.obscured, "an obscured finding has no shape on the map"
     return FindingFeature(
