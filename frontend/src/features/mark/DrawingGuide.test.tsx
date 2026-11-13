@@ -147,6 +147,32 @@ describe("the drawing guide on the map", () => {
     expect(rows()).toContain("Press and hold the point: Switches it between straight and curved");
   });
 
+  it("shows only its header on a phone once drawing stops, and its rows again when it carries on", async () => {
+    usePhoneLayout();
+    const map = await openAt("/mark");
+    act(() => map.click(300, 300));
+    act(() => map.click(340, 320));
+    expect(within(guide()).getByRole("list")).toBeVisible();
+
+    // The sheet rises for the form, and the map is at its smallest: the rows would fill it.
+    act(() => useMarkStore.getState().finish());
+    expect(within(guide()).queryByRole("list")).toBeNull();
+    expect(within(guide()).queryByRole("button", { name: "Gestures" })).toBeNull();
+    expect(within(guide()).getByRole("button", { name: "Search for a place" })).toBeInTheDocument();
+
+    act(() => useMarkStore.getState().continueFrom("end"));
+    expect(within(guide()).getByRole("list")).toBeVisible();
+    expect(within(guide()).getByRole("button", { name: "Gestures" })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("keeps its rows on a computer once drawing stops", async () => {
+    const map = await openAt("/mark");
+    act(() => map.click(300, 300));
+    act(() => map.click(340, 320));
+    act(() => useMarkStore.getState().finish());
+    expect(within(guide()).getByRole("list")).toBeVisible();
+  });
+
   it("is also there to change a saved shape", async () => {
     await openAt("/mark");
     act(() =>

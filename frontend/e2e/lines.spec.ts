@@ -6,6 +6,7 @@ import { fakeSession, meWith } from "./support/account.js";
 import { type Box, openMap, overlaps } from "./support/app.js";
 import { fakeFindingPage } from "./support/findingPage.js";
 import { stubNetwork } from "./support/network.js";
+import { isPhone } from "./support/shapes.js";
 
 /**
  * Lines and shapes in fixture mode: where "Change the shape" puts a saved
@@ -142,7 +143,8 @@ for (const [name, shape] of Object.entries(SHAPES)) {
       await page.getByRole("complementary", { name: "Change the shape" }).waitFor();
 
       const card = page.getByRole("region", { name: "How to draw" });
-      await expect(card.getByRole("list")).toBeVisible({ visible: guide === "unfolded" });
+      // On a phone the card keeps to its header while the form is up, whatever was last chosen.
+      await expect(card.getByRole("list")).toBeVisible({ visible: guide === "unfolded" && !isPhone(page) });
       await expectHandlesClear(page, shape.points.length);
     });
   }

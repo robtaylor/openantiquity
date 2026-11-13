@@ -71,7 +71,9 @@ test("the guide, state by state", async ({ page }) => {
   // "[" selected the point before. Done, by pointer, brings the drawing bar and the pointer's rows back.
   await page.getByRole("button", { name: "Done" }).first().click();
   await page.getByRole("button", { name: "Finish" }).first().click();
-  await guide.getByText("Lets you draw on from there").waitFor();
+  // On a phone the card keeps to its header once drawing stops and the sheet rises for the form.
+  if (isPhone(page)) await guide.getByRole("list").waitFor({ state: "hidden" });
+  else await guide.getByText("Lets you draw on from there").waitFor();
   await shoot(page, "05-finished");
 
   await page.getByRole("button", { name: "Close the shape" }).first().click();

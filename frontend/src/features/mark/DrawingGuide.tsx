@@ -39,7 +39,7 @@ import { useIsPhone } from "../shell/useIsPhone.js";
 import { useDevice } from "./DrawingTool.js";
 import { GUIDE_FOLDED_KEY, type GuideIcon, type GuideRow, guideRows, stageOf } from "./guideRows.js";
 import { useDotsDrawn } from "./MidpointDots.js";
-import { useMarkPath, useMarkStore } from "./markStore.js";
+import { isAdding, useMarkPath, useMarkStore } from "./markStore.js";
 import { canClose } from "./path.js";
 import "./mark.css";
 
@@ -125,6 +125,12 @@ function Row({ row }: { row: GuideRow }) {
 export function DrawingGuide({ onSearch, focusSearch = false }: { onSearch: () => void; focusSearch?: boolean }) {
   const rows = useGuideRows();
   const [folded, setFolded] = useState(readFolded);
+  // On a phone the sheet rises for the form once points stop being added, and what is left of
+  // the map is too small to give most of it to the rows. They come back when drawing carries on.
+  const isPhone = useIsPhone();
+  const adding = useMarkStore(isAdding);
+  const resting = isPhone && !adding;
+  const shut = folded || resting;
   const headingId = useId();
   const listId = useId();
   const searchButton = useRef<HTMLButtonElement>(null);
@@ -141,7 +147,7 @@ export function DrawingGuide({ onSearch, focusSearch = false }: { onSearch: () =
   }
 
   return (
-    <section className="fc-draw-guide" aria-labelledby={headingId} data-folded={folded}>
+    <section className="fc-draw-guide" aria-labelledby={headingId} data-folded={shut}>
       <div className="fc-draw-guide__header">
         <h2 className="fc-draw-guide__title" id={headingId}>
           How to draw
@@ -149,18 +155,20 @@ export function DrawingGuide({ onSearch, focusSearch = false }: { onSearch: () =
         <IconButton size="sm" label="Search for a place" onClick={onSearch} ref={searchButton}>
           <Search size={16} aria-hidden />
         </IconButton>
-        <IconButton
-          size="sm"
-          label="Gestures"
-          title={folded ? "Show the gestures" : "Hide the gestures"}
-          aria-expanded={!folded}
-          aria-controls={listId}
-          onClick={toggle}
-        >
-          {folded ? <ChevronDown size={16} aria-hidden /> : <ChevronUp size={16} aria-hidden />}
-        </IconButton>
+        {resting ? null : (
+          <IconButton
+            size="sm"
+            label="Gestures"
+            title={folded ? "Show the gestures" : "Hide the gestures"}
+            aria-expanded={!folded}
+            aria-controls={listId}
+            onClick={toggle}
+          >
+            {folded ? <ChevronDown size={16} aria-hidden /> : <ChevronUp size={16} aria-hidden />}
+          </IconButton>
+        )}
       </div>
-      <ul className="fc-draw-guide__list" id={listId} hidden={folded}>
+      <ul className="fc-draw-guide__list" id={listId} hidden={shut}>
         {rows.map((row) => (
           <Row key={row.id} row={row} />
         ))}
