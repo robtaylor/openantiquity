@@ -28,7 +28,7 @@ cd backend && uv run pytest -q tests/infra tests/test_config.py tests/test_stora
 fly apps list --org openantiquity
 # Expect: openantiquity and openantiquity-jobs alone
 fly machine list --app openantiquity
-# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit d746298 or later
+# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit da60c5a or later
 fly ips list --app openantiquity
 # Expect: the private address, the shared IPv4 address 66.241.124.216 and the IPv6 address 2a09:8280:1::1fe:8e38:0
 fly machine list --app openantiquity-jobs
@@ -37,7 +37,7 @@ fly mpg list --org openantiquity
 # Expect: the cluster openantiquity, d2gznoqz2n8opkm8, ready, attached to both apps
 fly storage list --org openantiquity
 # Expect: openantiquity-elevation, openantiquity-cache and openantiquity-photos
-uv run infra/fly_jobs.py --commit d74629802b114cc251891a22cdb91619cfde8b7c run fieldclub-terrain info
+uv run infra/fly_jobs.py --commit da60c5a98fe3635850fc805abde1e298c338c634 run fieldclub-terrain info
 fly logs --app openantiquity-jobs --no-tail | grep -e mirrored -e overview
 # Expect: mirrored 5877 tiles (100.00%), and overview c2a8a0e49f2f, 5877 tiles
 ```
@@ -61,7 +61,7 @@ The last pair names the jobs image that exists. `fly_jobs.py` looks for the imag
 
 ### 1. Read the first nightly refresh (minutes, on 2026-11-13)
 
-The hourly machine `due` was made on 2026-11-12 with its 10 GB volume, and was moved in place to the jobs image of commit `d746298` later that day. Its first run found nothing due. Its 03:00 UTC run on 2026-11-13 is the first refresh of every bulk source from Fly, 34 connectors, under a six-hour limit. Read it with `fly logs --app openantiquity-jobs`, or ask the database for the runs, and run by hand any source that failed: `uv run infra/fly_jobs.py --commit d74629802b114cc251891a22cdb91619cfde8b7c ingest <key>`. Then look at `fly volumes list --app openantiquity-jobs` for how much of the volume the downloads took.
+The hourly machine `due` was made on 2026-11-12 with its 10 GB volume, and was moved in place to the jobs image of commit `d746298` later that day, and of `da60c5a` on 2026-11-13. After the first move it wasn't started by its schedule at 22:41 or 23:41. It was started by hand at 00:14 on 2026-11-13 and ran on the hour again at 00:41. That was seen once and the reason isn't known, so `schedule` now starts it once after updating it. Every run so far found nothing due. Its 03:00 UTC run on 2026-11-13 is the first refresh of every bulk source from Fly, 34 connectors, under a six-hour limit. Read it with `fly logs --app openantiquity-jobs`, or ask the database for the runs, and run by hand any source that failed: `uv run infra/fly_jobs.py --commit da60c5a98fe3635850fc805abde1e298c338c634 ingest <key>`. Then look at `fly volumes list --app openantiquity-jobs` for how much of the volume the downloads took.
 
 ### 2. Sign-in: OpenStreetMap works, Google is on and untried the whole way (the owner, minutes)
 
@@ -86,6 +86,7 @@ The GitHub environment `production` and a deploy token for the web app alone. Th
 The domains were pointed at Fly on 2026-11-12 at the owner's word ("noone will be looking yet"). The site answers on `openantiquity.org` and anyone can look at the map.
 
 - OpenStreetMap and Google sign-in are on since 2026-11-12 (follow-up 2). So anyone with an account at either can now join and post.
+- Since 2026-11-13 a finding is open or protected, and no request can set the restricted level (Decision 0032, `docs/plans/two-sensitivity-levels.md`). The level's code comes out after lines and curves lands.
 - The app has no gate. The owner was told on 2026-11-12, and that [`owner-actions.md`](../plans/owner-actions.md) holds a public launch until an operator is named and the terms, the privacy notice and the Online Safety Act assessment exist (WS14 to WS17). A setting that limits sign-up to named accounts was offered and not yet asked for.
 - The other providers and the mail relay are in `owner-actions.md`, WS3.
 

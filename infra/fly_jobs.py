@@ -238,8 +238,8 @@ def scheduled_env(settings: Settings) -> dict[str, str]:
     return settings.env | {"FIELDCLUB_VAR_DIR": f"{settings.mount}/var"}
 
 
-def schedule_commands(settings: Settings, image: str, existing: str | None) -> list[str]:
-    """Make the hourly machine, or move the one there is to `image` with today's settings."""
+def schedule_commands(settings: Settings, image: str, existing: str | None) -> list[list[str]]:
+    """Make the hourly machine, or move the one there is to `image` and start it once."""
     machine = scheduled()
     env = env_flags(scheduled_env(settings))
     if existing is None:
@@ -253,12 +253,18 @@ def schedule_commands(settings: Settings, image: str, existing: str | None) -> l
             "--volume",
             f"{settings.volume}:{settings.mount}",
         ]
-        return ["fly", "machine", "run", *flags, *env, image, "--", *machine.wrapped()]
+        return [["fly", "machine", "run", *flags, *env, image, "--", *machine.wrapped()]]
     flags = ["--app", settings.app, "--image", image, "--schedule", "hourly", "--restart", "no"]
-    # Not started now: the next hour starts it. The command, with its time
-    # limit, stays as the machine was made.
+    # The command, with its time limit, stays as the machine was made.
     flags += [*env, "--skip-start", "--yes"]
-    return ["fly", "machine", "update", existing, *flags]
+    # On 2026-11-12 `due` was updated this way and then wasn't started by its
+    # schedule for two hours. It ran on the hour again once it had been started
+    # by hand. Seen once, and why isn't known, so it is started once here.
+    # That runs whatever is due and stops, as any hour's start does.
+    return [
+        ["fly", "machine", "update", existing, *flags],
+        ["fly", "machine", "start", existing, "--app", settings.app],
+    ]
 
 
 def _field(entry: dict[str, Any], name: str) -> Any:
@@ -328,10 +334,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise SystemExit("build makes the image of a commit: give --commit, or nothing for HEAD.")
         if not args.dry_run:
             check_clean(REPO_ROOT, commit)
-        command = build_command(settings, commit)
+        commands = [build_command(settings, commit)]
     elif args.job == "schedule":
         existing = None if args.dry_run else find_scheduled(settings)
-        command = schedule_commands(settings, image, existing)
+        commands = schedule_commands(settings, image, existing)
     else:
         machine = {
             "sources": sources,
@@ -340,11 +346,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             "national": national,
             "run": lambda: anything(args.command),
         }[args.job]()
-        command = run_command(settings, image, machine)
+        commands = [run_command(settings, image, machine)]
     if args.dry_run:
-        print(shlex.join(command))
+        for command in commands:
+            print(shlex.join(command))
         return 0
-    return subprocess.run(command, check=False).returncode
+    for command in commands:
+        status = subprocess.run(command, check=False).returncode
+        if status != 0:
+            # What follows depends on this one: a machine whose update failed isn't started.
+            return status
+    return 0
 
 
 if __name__ == "__main__":

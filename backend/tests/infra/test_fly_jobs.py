@@ -29,6 +29,8 @@ with open(os.environ["FAKE_FLY_LOG"], "a") as out:
     out.write(json.dumps(args) + "\\n")
 if args[:2] == ["machine", "list"]:
     print(os.environ.get("FAKE_FLY_MACHINES", "[]"))
+if args[1:2] == [os.environ.get("FAKE_FLY_FAIL")]:
+    sys.exit(1)
 sys.exit(int(os.environ.get("FAKE_FLY_STATUS", "0")))
 """
 
@@ -61,7 +63,7 @@ def calls(fly: dict[str, Path]) -> list[list[str]]:
 
 
 def started(fly: dict[str, Path]) -> list[str]:
-    """The one `fly machine run` or `update` the script made."""
+    """The one `fly machine run` or `update` the script made. A `machine start` after it isn't counted."""
     made = [call for call in calls(fly) if call[:2] in (["machine", "run"], ["machine", "update"])]
     assert len(made) == 1, made
     return made[0]
@@ -208,6 +210,20 @@ def test_schedule_moves_the_machine_there_is_to_the_new_image(fly: dict[str, Pat
     assert flag(call, "--schedule") == ["hourly"]
     assert "--skip-start" in call
     assert "--yes" in call
+    # On 2026-11-12 the machine wasn't started by its schedule after such an update,
+    # for two hours, until it was started by hand. So it is started once, after the update.
+    after = calls(fly)[calls(fly).index(call) + 1 :]
+    assert [step[:3] for step in after] == [["machine", "start", "e784079b449483"]]
+    assert flag(after[0], "--app") == [SETTINGS["app"]]
+
+
+def test_schedule_doesnt_start_the_machine_when_its_update_failed(fly: dict[str, Path]) -> None:
+    listing = machines({"id": "e784079b449483", "name": "due", "state": "stopped"})
+
+    result = run(fly, "--image", IMAGE, "schedule", FAKE_FLY_MACHINES=listing, FAKE_FLY_FAIL="update")
+
+    assert result.returncode != 0
+    assert [call[:2] for call in calls(fly)] == [["machine", "list"], ["machine", "update"]]
 
 
 @pytest.mark.parametrize("state", ["started", "starting", "replacing", None])
