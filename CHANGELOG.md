@@ -15,6 +15,8 @@ OpenAntiquity has been live at openantiquity.org since 12 November 2026. This is
 - You can look at England's LIDAR as slope, sky-view, relief and other views made for spotting earthworks, and light it from any direction you like. You don't need an account to look at anything.
 - Designated sites and other heritage records sit on the same map, each with who published it and under what licence. Where a record office doesn't let us keep its records, the map asks it directly or links to its own site.
 - You can mark something you think is there. Other people then take a second look without seeing what you said, and the finding climbs from "Spotted" to "Seen by others" and on as people agree and add evidence.
+- The map opens on Multi-direction shade, lit from three sides so that nothing hides by running along the light. Composite and the other views are a press away in the Layers panel.
+- Zoomed out, the map names its cities and towns again, with smaller places appearing as you go in. The record counts used to crowd them out.
 - Opening the Layers panel and closing it no longer takes the map back to the record, finding or investigation whose page is open. The map stays where you had moved it.
 - Clicking the map inside a very large record, such as the extent of a county-wide survey, no longer opens that record and carries the map off to its middle. A record that fills the whole view isn't opened by a click inside it, and a record you open by clicking the map leaves the map where you clicked.
 - Opening a road you're zoomed in on, or pressing "Change the shape" on it, no longer takes the map off to the middle of the road or out to the whole of it. The map stays on the stretch you were looking at.

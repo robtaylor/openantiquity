@@ -130,7 +130,7 @@ def test_composite_matches_the_documented_shape_exactly() -> None:
         "licence_url": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
         "reuse": "open",
         "bounds": None,
-        "default": True,
+        "default": False,
     }
     assert composite["description"]
     assert "Open Government Licence" in composite["attribution"]
@@ -145,11 +145,12 @@ def test_lidar_raster_views_are_served_by_the_lidar_tile_endpoint() -> None:
         version = tile_version(style, default_editions())
         assert view["tiles"] == [f"/tiles/lidar/{style}/{{z}}/{{x}}/{{y}}.png?v={version}"]
         assert view["tile_size"] == 512
-        assert view["default"] is (style == "composite")
+        assert view["default"] is (style == layers.DEFAULT_VIEW)
 
 
 def test_exactly_one_view_is_the_default() -> None:
-    assert [view["id"] for view in dump()["views"] if view.get("default")] == ["composite"]
+    # Multi-direction shade: three lights, so nothing hides by running along the light.
+    assert [view["id"] for view in dump()["views"] if view.get("default")] == ["multi_shade"]
 
 
 def test_raking_view_has_only_the_documented_keys() -> None:
@@ -270,7 +271,8 @@ def test_duplicate_ids_are_refused(restore_catalogue: None) -> None:
 
 
 def test_a_second_default_view_is_caught(restore_catalogue: None) -> None:
-    layers.VIEWS.append(layers.lidar_view("composite", "Clone", "x").model_copy(update={"id": "clone"}))
+    clone = layers.lidar_view(layers.DEFAULT_VIEW, "Clone", "x").model_copy(update={"id": "clone"})
+    layers.VIEWS.append(clone)
     with pytest.raises(AssertionError, match="exactly one view must be the default"):
         layers.build_layers()
 

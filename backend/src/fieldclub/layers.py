@@ -260,7 +260,8 @@ PUBLISHED_LIDAR: list[View] = [
         "nls-rvt-hillshade-england",
         "nls_hillshade",
         "Three-light hillshade (NLS)",
-        "The National Library of Scotland's hillshade of the same survey, lit in red, green and blue.",
+        "The National Library of Scotland's own picture of the same survey, lit from three sides as "
+        "Multi-direction shade is. For comparing the two.",
         "lidar",
         f"{NLS_HOST}/lidar/england/{{z}}/{{x}}/{{y}}.png",
         attribution=(

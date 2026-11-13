@@ -24,6 +24,7 @@ from fieldclub.terrain.catalogue import SourceTile
 from fieldclub.terrain.errors import FetchFailedError, SupplyRefusedError
 from fieldclub.terrain.mirror import Fetched, LocalSourceFetcher, SftpFetcher
 from fieldclub.terrain.service import Terrain
+from fieldclub.terrain.styles import DEFAULT_STYLE
 from tests.terrain.fakes import TO_LONLAT, local_mirror, local_terrain, write_source_tile
 
 NAMES = ("SU16nw", "SU16ne", "SU17sw", "SU17se")
@@ -161,11 +162,13 @@ def test_warm_renders_the_default_layer_unless_told_otherwise(terrain: Terrain, 
     assert cli.main(["warm", f"--bbox={bbox}", "--zooms", "14"], terrain=terrain) == 0
     tiles = tmp_path / "tiles"
     styles = {path.relative_to(tiles).parts[1] for path in (tiles / "lidar").rglob("*.png")}
-    assert styles == {"composite"}
+    # The layer the map opens on, so a warmed area is ready for whoever arrives.
+    assert styles == {DEFAULT_STYLE}
     assert list((tiles / "dem").rglob("*.png"))
+    assert DEFAULT_STYLE != "slope", "the second run must ask for a layer the first didn't render"
     assert cli.main(["warm", f"--bbox={bbox}", "--zooms", "14", "--styles", "slope"], terrain=terrain) == 0
     styles = {path.relative_to(tiles).parts[1] for path in (tiles / "lidar").rglob("*.png")}
-    assert styles == {"composite", "slope"}
+    assert styles == {DEFAULT_STYLE, "slope"}
     assert cli.main(["warm", f"--bbox={bbox}", "--styles", "nope"], terrain=terrain) == 2
 
 

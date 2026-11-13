@@ -33,7 +33,9 @@ MAXZOOM = 16
 # national overview. See `service.py` for the measurements behind it.
 FINE_MINZOOM = 13
 # The layer the map opens on, and the one `fieldclub-terrain warm` renders unless told otherwise.
-DEFAULT_STYLE = "composite"
+# Multi-direction shade, which the owner asked for on 2026-11-13 as "by far the most useful":
+# lit from three sides, it hides nothing that happens to run along the light.
+DEFAULT_STYLE = "multi_shade"
 
 
 @dataclass(frozen=True)

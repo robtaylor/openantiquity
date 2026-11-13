@@ -26,10 +26,10 @@ LIDAR is the base layer, drawn in visualisations made for archaeology, not the s
 
 | Layer | What it's good for |
 |-------|--------------------|
-| Composite | The default. A blend of sky-view factor, openness, slope and hillshade that shows most earthworks without choosing a light direction |
+| Composite | A blend of sky-view factor, openness, slope and hillshade that shows most earthworks without choosing a light direction |
 | Local relief | Removes the hills and keeps the small stuff. Best for ploughed-down features on flat ground |
 | Sky-view | Ditches and hollows go dark, banks go bright. Good for enclosures and hollow ways |
-| Multi-direction shade | Three lights in red, green and blue from different directions. Nothing hides parallel to the sun |
+| Multi-direction shade | The default. Three lights in red, green and blue from different directions. Nothing hides parallel to the sun |
 | Slope | Sharp edges of platforms, lynchets and quarries |
 | Raking light | Drawn in the browser from elevation tiles. You drag the sun round and watch faint ridges appear |
 
