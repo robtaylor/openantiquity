@@ -1,3 +1,4 @@
+import { groundDistanceM, lineLengthM } from "../../../map/ground.js";
 import { framePoints, type MapCover, NO_COVER } from "../../../map/visibleArea.js";
 /**
  * The line a height profile is drawn along: how it is written in the
@@ -23,8 +24,6 @@ export const MAX_LINE_POINTS = 200;
  * apart, so a line asks for one a metre up to this.
  */
 export const MAX_SAMPLES = 1000;
-
-const EARTH_RADIUS_M = 6371008.8;
 
 /** Five decimal places, about a metre. */
 function fixed(value: number): string {
@@ -57,19 +56,7 @@ export function parseLine(value: string | null): LngLat[] {
 }
 
 /** Great-circle distance in metres. Near enough to the backend's grid distance for choosing a sample count. */
-export function distanceM([lng1, lat1]: LngLat, [lng2, lat2]: LngLat): number {
-  const rad = Math.PI / 180;
-  const dLat = (lat2 - lat1) * rad;
-  const dLng = (lng2 - lng1) * rad;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(a)));
-}
-
-export function lineLengthM(points: readonly LngLat[]): number {
-  let total = 0;
-  for (let i = 1; i < points.length; i++) total += distanceM(points[i - 1] as LngLat, points[i] as LngLat);
-  return total;
-}
+export { groundDistanceM as distanceM, lineLengthM };
 
 /** How many samples to ask for: about one a metre, so short lines are read from the 1 m grid. */
 export function sampleCount(lengthM: number): number {

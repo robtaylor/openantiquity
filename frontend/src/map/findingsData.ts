@@ -1,5 +1,6 @@
 import type { FindingCollection, FindingFeature, FindingShape } from "../features/findings/types.js";
 import { kmSquareAt } from "./gridref.js";
+import { groundDistanceM, lineLengthM } from "./ground.js";
 
 /**
  * What the findings source on the map holds, built from a findings response.
@@ -91,26 +92,6 @@ function squaresFrom(features: readonly FindingFeature[]): FindingsMapFeature[] 
     });
   }
   return [...squares.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, feature]) => feature);
-}
-
-const EARTH_RADIUS_M = 6_371_000;
-
-function groundDistanceM([lon1, lat1]: [number, number], [lon2, lat2]: [number, number]): number {
-  const rad = Math.PI / 180;
-  const dLat = (lat2 - lat1) * rad;
-  const dLon = (lon2 - lon1) * rad;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
-}
-
-function lineLengthM(line: readonly [number, number][]): number {
-  let total = 0;
-  for (let i = 1; i < line.length; i++) {
-    const a = line[i - 1];
-    const b = line[i];
-    if (a && b) total += groundDistanceM(a, b);
-  }
-  return total;
 }
 
 /** The area of the box round every point, in square metres. */

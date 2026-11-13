@@ -13,6 +13,7 @@
  */
 
 import type { ShapeLimits } from "../../api/meta.js";
+import { groundDistanceM, lineLengthM } from "../../map/ground.js";
 import {
   type CurveGeometry,
   type CurvePath,
@@ -306,18 +307,8 @@ export function redo<T>(states: History<T>): History<T> {
 // Measuring, and the limits
 // --------------------------------------------------------------------------
 
-const EARTH_RADIUS_M = 6_371_008.8;
-
 function radians(degrees: number): number {
   return (degrees * Math.PI) / 180;
-}
-
-/** The distance between two places along the ground, in metres, near enough for the readout and the limits. */
-export function groundDistanceM([lon1, lat1]: LngLat, [lon2, lat2]: LngLat): number {
-  const dLat = radians(lat2 - lat1);
-  const dLon = radians(lon2 - lon1);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(radians(lat1)) * Math.cos(radians(lat2)) * Math.sin(dLon / 2) ** 2;
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
 /** The geometry's vertices in order: a line's, or a shape's ring with its first point repeated at the end. */
@@ -349,19 +340,9 @@ function drawnGeometry(path: Path): CurveGeometry {
   return geometry;
 }
 
-function measure(vertices: readonly LngLat[]): number {
-  let total = 0;
-  for (let i = 1; i < vertices.length; i++) {
-    const a = vertices[i - 1];
-    const b = vertices[i];
-    if (a && b) total += groundDistanceM(a, b);
-  }
-  return total;
-}
-
 /** A line's length, or a shape's perimeter, in metres, along the curve as drawn. Nothing for a spot. */
 export function lengthM(path: Path): number {
-  return measure(geometryVertices(pathGeometry(path)));
+  return lineLengthM(geometryVertices(pathGeometry(path)));
 }
 
 /** The larger of a shape's east–west width at its middle latitude and its north–south height, in metres. */
@@ -410,7 +391,7 @@ export function pathProblem(path: Path, limits: ShapeLimits): string | null {
     if (acrossM(vertices) > limits.shape_max_across_m) {
       return `A closed shape can be at most ${km(limits.shape_max_across_m)} km across.`;
     }
-  } else if (measure(vertices) > limits.line_max_length_m) {
+  } else if (lineLengthM(vertices) > limits.line_max_length_m) {
     return `A line can be at most ${km(limits.line_max_length_m)} km long.`;
   }
   return null;
@@ -470,7 +451,7 @@ export function apiPath(path: Path): { closed: boolean; points: PathPoint[] } {
 // --------------------------------------------------------------------------
 
 function halfWayAlong(vertices: readonly LngLat[]): LngLat | null {
-  const total = measure(vertices);
+  const total = lineLengthM(vertices);
   let along = 0;
   for (let i = 1; i < vertices.length; i++) {
     const a = vertices[i - 1];
