@@ -28,6 +28,12 @@ function isPhone(page: Page): boolean {
   return (page.viewportSize()?.width ?? 0) < 720;
 }
 
+/** A finding of one point, at the cross, and the form brought up. */
+async function placeOnePoint(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Add a point at the cross" }).click();
+  await page.getByRole("button", { name: "Finish" }).click();
+}
+
 test.beforeEach(async ({ page }) => {
   await stubNetwork(page);
 });
@@ -112,7 +118,7 @@ test("marking signed out, and failing", async ({ page }) => {
   await fakeSession(page);
   await openMap(page, `/mark${VIEW}`);
   const panel = page.getByRole("complementary", { name: "Mark a finding" });
-  await page.getByRole("button", { name: "Place it here" }).click();
+  await placeOnePoint(page);
   await panel.getByRole("radio", { name: "Enclosure" }).click();
   await panel.getByRole("button", { name: "Save finding" }).click();
   await page.getByRole("dialog", { name: "Sign in" }).waitFor();
@@ -128,7 +134,7 @@ test("marking signed out, and failing", async ({ page }) => {
   await fakeSession(page, meWith());
   findings.failNextCreate(422, "outside_british_isles", "That position is outside them.");
   await page.goto(`/mark${VIEW}`);
-  await page.getByRole("button", { name: "Place it here" }).click();
+  await placeOnePoint(page);
   await panel.getByRole("radio", { name: "Enclosure" }).click();
   await panel.getByRole("button", { name: "Save finding" }).click();
   await page.getByText("Your finding couldn't be saved.").waitFor();
@@ -152,7 +158,7 @@ test("marking signed out, and failing", async ({ page }) => {
   );
   // The same address again changes only the hash, so the page is loaded afresh to start a new mark.
   await page.reload();
-  await page.getByRole("button", { name: "Place it here" }).click();
+  await placeOnePoint(page);
   await panel.getByRole("radio", { name: "Round barrow or mound" }).click();
   await panel.getByLabel("Title").fill("Barrow at SU 1025 6996");
   await panel.getByRole("button", { name: "Save finding" }).click();

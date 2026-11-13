@@ -167,6 +167,55 @@ test("keeps the mark in sight above the form on a phone", async ({ page }) => {
   await expect(sheet.getByRole("radio", { name: "Enclosure" })).toBeVisible();
 });
 
+test("keeps the phone's drawing bar to one row and one line, clear of the cross and the points", async ({ page }) => {
+  test.skip(!isPhone(page), "phone layout only");
+  await fakeFindings(page);
+  await openMap(page, `/mark${VIEW}`);
+  const bar = page.locator(".fc-mark-float");
+  await expect(bar.getByRole("status")).toHaveText("Tap the map where the feature is.");
+  const reticle = await boxOf(page.getByTestId("reticle"));
+  let box = await boxOf(bar);
+  expect(box.height, "the bar's height before anything is placed").toBeLessThanOrEqual(100);
+  expect(overlaps(box, reticle), "the bar covers the cross").toBe(false);
+
+  // Three taps in the open map, the last just above the bar.
+  await page.touchscreen.tap(120, box.y - 200);
+  await page.touchscreen.tap(250, box.y - 160);
+  await page.touchscreen.tap(200, box.y - 40);
+  await expect(bar.getByRole("status")).toHaveText(
+    /^3 points, \d+ m\. Tap to carry on, or tap the first point to close it\.$/,
+  );
+  box = await boxOf(bar);
+  expect(box.height, "the bar's height with three points").toBeLessThanOrEqual(100);
+  const last = await boxOf(page.getByRole("button", { name: /^Point 3 of 3/ }));
+  const dot = { x: last.x + last.width / 2 - 6, y: last.y + last.height / 2 - 6, width: 12, height: 12 };
+  expect(overlaps(box, dot), "the bar covers the point just tapped").toBe(false);
+
+  // Every button is a 44 px target with a name, reached by Tab.
+  const buttons = bar.getByRole("button");
+  await expect(buttons).toHaveCount(6);
+  for (const button of await buttons.all()) {
+    const target = await boxOf(button);
+    expect(target.height).toBeGreaterThanOrEqual(44);
+    expect(target.width).toBeGreaterThanOrEqual(44);
+    expect(await button.getAttribute("aria-label")).toBeTruthy();
+  }
+  // Redo has nothing to redo, so Tab passes it by. Every other one is reached in turn.
+  const enabled = bar.locator("button:enabled");
+  await expect(enabled).toHaveCount(5);
+  await enabled.first().focus();
+  for (let i = 1; i < 5; i++) {
+    await page.keyboard.press("Tab");
+    await expect(enabled.nth(i)).toBeFocused();
+  }
+
+  // The selected point's bar is the same shape.
+  await page.getByRole("button", { name: /^Point 2 of 3/ }).tap();
+  const selected = page.getByRole("region", { name: "Selected point" });
+  await expect(selected.getByText(/^Point 2 of 3, straight/)).toBeVisible();
+  expect((await boxOf(bar)).height).toBeLessThanOrEqual(100);
+});
+
 test.describe("a refused save", () => {
   // The browser logs the refused request as an error, which here is the point.
   test.use({ pageProblems: "page-errors" });

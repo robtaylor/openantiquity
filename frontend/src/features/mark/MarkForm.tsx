@@ -165,7 +165,8 @@ function ClassChooser({ meta }: { meta: Meta }) {
 function DrawingSection({ map, isPhone }: { map: MapLibreMap | null; isPhone: boolean }) {
   const problem = useMarkStore((state) => (state.problem?.field === "path" ? state.problem.message : null));
   // On a phone the bars float above the sheet while points are being added (`MarkButton`).
-  const floating = useMarkStore((state) => isPhone && isAdding(state));
+  const adding = useMarkStore(isAdding);
+  const floating = isPhone && adding;
   return (
     <div className="fc-mark__step">
       <Guidance map={map} isPhone={isPhone} />
@@ -175,6 +176,7 @@ function DrawingSection({ map, isPhone }: { map: MapLibreMap | null; isPhone: bo
           <SelectedPointBar map={map} />
         </>
       )}
+      {adding ? <p className="fc-mark__hint">Findings already on the map don't take taps while you draw.</p> : null}
       {problem ? (
         <p className="fc-mark__problem" role="alert">
           {problem}

@@ -389,7 +389,7 @@ describe("the guidance", () => {
     const floating = screen.getByRole("region", { name: "Drawing" });
     expect(panel().queryByRole("region", { name: "Drawing" })).toBeNull();
     act(() => map.click(400, 300));
-    expect(within(floating).getByRole("status")).toHaveTextContent("1 point. Tap the map to add the next one.");
+    expect(within(floating).getByRole("status")).toHaveTextContent("1 point. Tap again to draw a line from it.");
     expect(guidance()).toHaveTextContent(/This is a spot\. Tap again/);
     // Once drawing stops the bars move into the sheet, which rises for the form, and the map is clear again.
     fireEvent.click(within(floating).getByRole("button", { name: "Finish" }));

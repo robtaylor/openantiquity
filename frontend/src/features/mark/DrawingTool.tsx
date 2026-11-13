@@ -224,62 +224,78 @@ export function DrawingBar({ map, isPhone }: { map: MapLibreMap | null; isPhone:
         </Button>
       </div>
       <StatusLine map={map} isPhone={isPhone} />
-      {adding ? <p className="fc-mark__hint">Findings already on the map don't take taps while you draw.</p> : null}
     </section>
   );
+}
+
+/** What the selected point's bar can do, shared by the panel's bar and the phone's. Null with nothing selected. */
+export function useSelectedPointActions(map: MapLibreMap | null) {
+  const path = useMarkPath();
+  const selected = useMarkStore((state) => state.selected);
+  if (selected === null) return null;
+  const point = path.points[selected];
+  if (!point) return null;
+  const store = useMarkStore.getState();
+  const count = path.points.length;
+  const isStart = selected === 0;
+  const isEnd = selected === count - 1;
+  const lastSegment = path.closed ? count - 1 : count - 2;
+  const end: PathEnd | null = path.closed ? null : isEnd ? "end" : isStart ? "start" : null;
+  return {
+    index: selected,
+    point,
+    canInsert: selected <= lastSegment,
+    /** The end of an open path this point is, which "Continue from this end" carries on from. */
+    end,
+    isFirst: !path.closed && isStart,
+    isLast: !path.closed && isEnd,
+    switchKind: () => store.setPointKind(selected, point.kind === "corner" ? "smooth" : "corner"),
+    remove: () => store.remove(selected),
+    insertAfter: () => store.insertAfterPoint(selected),
+    continueFrom: (from: PathEnd) => {
+      store.continueFrom(from);
+      const at = path.points[endIndex(path, from)];
+      if (at && map && isMapLive(map)) map.easeTo({ center: [at.lon, at.lat] });
+    },
+    step: (by: 1 | -1) => {
+      const next = path.closed ? selected + by : Math.min(count - 1, Math.max(0, selected + by));
+      store.select((next + count) % count);
+    },
+    done: () => store.select(null),
+  };
 }
 
 /** The bar for the selected point: its kind, deleting it, inserting after it, continuing from it and stepping on. */
 export function SelectedPointBar({ map }: { map: MapLibreMap | null }) {
   const path = useMarkPath();
-  const selected = useMarkStore((state) => state.selected);
-  if (selected === null || !path.points[selected]) return null;
-  const store = useMarkStore.getState();
-  const point = path.points[selected];
-  const count = path.points.length;
-  const isStart = selected === 0;
-  const isEnd = selected === count - 1;
-  const lastSegment = path.closed ? count - 1 : count - 2;
-
-  function continueFrom(end: PathEnd): void {
-    store.continueFrom(end);
-    const at = path.points[endIndex(path, end)];
-    if (at && map && isMapLive(map)) map.easeTo({ center: [at.lon, at.lat] });
-  }
-
-  function step(by: 1 | -1): void {
-    const next = path.closed ? (selected ?? 0) + by : Math.min(count - 1, Math.max(0, (selected ?? 0) + by));
-    store.select((next + count) % count);
-  }
-
+  const actions = useSelectedPointActions(map);
+  if (!actions) return null;
+  const { index, point, end } = actions;
+  const straight = point.kind === "corner";
   return (
     <section className="fc-mark__selected" aria-label="Selected point">
-      <p className="fc-mark__selected-name">{pointName(path, selected)}</p>
+      <p className="fc-mark__selected-name">{pointName(path, index)}</p>
       <div className="fc-mark__row">
         <Button
           size="sm"
-          icon={point?.kind === "corner" ? <Spline size={14} aria-hidden /> : <Diamond size={14} aria-hidden />}
-          onClick={() => store.setPointKind(selected, point?.kind === "corner" ? "smooth" : "corner")}
+          icon={straight ? <Spline size={14} aria-hidden /> : <Diamond size={14} aria-hidden />}
+          onClick={actions.switchKind}
         >
-          {point?.kind === "corner" ? "Make it curved" : "Make it straight"}
+          {straight ? "Make it curved" : "Make it straight"}
         </Button>
-        <Button size="sm" icon={<Trash2 size={14} aria-hidden />} onClick={() => store.remove(selected)}>
+        <Button size="sm" icon={<Trash2 size={14} aria-hidden />} onClick={actions.remove}>
           Delete point
         </Button>
         <Button
           size="sm"
           icon={<Plus size={14} aria-hidden />}
-          disabled={selected > lastSegment}
-          onClick={() => store.insertAfterPoint(selected)}
+          disabled={!actions.canInsert}
+          onClick={actions.insertAfter}
         >
           Insert a point after
         </Button>
-        {!path.closed && (isStart || isEnd) ? (
-          <Button
-            size="sm"
-            icon={<Waypoints size={14} aria-hidden />}
-            onClick={() => continueFrom(isEnd ? "end" : "start")}
-          >
+        {end ? (
+          <Button size="sm" icon={<Waypoints size={14} aria-hidden />} onClick={() => actions.continueFrom(end)}>
             Continue from this end
           </Button>
         ) : null}
@@ -289,8 +305,8 @@ export function SelectedPointBar({ map }: { map: MapLibreMap | null }) {
           size="sm"
           variant="ghost"
           icon={<ArrowLeft size={14} aria-hidden />}
-          disabled={!path.closed && isStart}
-          onClick={() => step(-1)}
+          disabled={actions.isFirst}
+          onClick={() => actions.step(-1)}
         >
           Previous point
         </Button>
@@ -298,12 +314,12 @@ export function SelectedPointBar({ map }: { map: MapLibreMap | null }) {
           size="sm"
           variant="ghost"
           icon={<ArrowRight size={14} aria-hidden />}
-          disabled={!path.closed && isEnd}
-          onClick={() => step(1)}
+          disabled={actions.isLast}
+          onClick={() => actions.step(1)}
         >
           Next point
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => store.select(null)}>
+        <Button size="sm" variant="ghost" onClick={actions.done}>
           Done
         </Button>
       </div>
