@@ -128,6 +128,7 @@ class FeatureClass(StrEnum):
     LONG_BARROW = "long_barrow"
     HUT_CIRCLE = "hut_circle"
     SETTLEMENT = "settlement"
+    BUILDING = "building"
     FIELD_SYSTEM = "field_system"
     RIDGE_AND_FURROW = "ridge_and_furrow"
     LINEAR = "linear"
@@ -189,6 +190,12 @@ FEATURE_CLASSES: tuple[FeatureClassInfo, ...] = (
         "Settlement earthworks",
         "The bumps and hollows left by the houses, yards and lanes of an abandoned village or farm.",
         "SETTLEMENT",
+    ),
+    FeatureClassInfo(
+        FeatureClass.BUILDING,
+        "Building or ruin",
+        "The footprint, walls or foundations of a house, barn, chapel or other building, standing or fallen.",
+        "BUILDING",
     ),
     FeatureClassInfo(
         FeatureClass.FIELD_SYSTEM,

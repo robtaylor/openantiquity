@@ -138,6 +138,13 @@ const vocab: Vocab = {
       sensitivity: "protected",
     },
     {
+      id: "building",
+      label: "Building or ruin",
+      hint: "The footprint, walls or foundations of a house, barn, chapel or other building, standing or fallen.",
+      fish_term: "BUILDING",
+      sensitivity: "open",
+    },
+    {
       id: "field_system",
       label: "Field system",
       hint: "A pattern of old field edges, seen as low banks, ditches or steps in a slope.",

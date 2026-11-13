@@ -6,10 +6,12 @@ import itertools
 import math
 import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from fieldclub import vocab
+from fieldclub.models import Record
 
 
 def test_feature_classes_match_the_design_list() -> None:
@@ -20,6 +22,7 @@ def test_feature_classes_match_the_design_list() -> None:
         "long_barrow",
         "hut_circle",
         "settlement",
+        "building",
         "field_system",
         "ridge_and_furrow",
         "linear",
@@ -48,6 +51,36 @@ def test_feature_classes_have_one_sentence_hints_and_fish_terms() -> None:
         assert re.fullmatch(r"[A-Z ]+", info.fish_term), info.fish_term
     terms = [info.fish_term for info in vocab.FEATURE_CLASSES]
     assert len(set(terms)) == len(terms), "each class maps to its own thesaurus term"
+
+
+def test_every_class_has_its_entry_in_every_table_keyed_by_class() -> None:
+    from fieldclub.services import exports, findings, investigation_exports, records, sensitivity
+
+    tables: dict[str, Any] = {
+        "the suggested title's label": findings._CLASS_LABELS,
+        "the download's monument type": exports._FISH,
+        "the investigation page's label": investigation_exports._CLASS_LABELS,
+        "the record patterns": records.CLASS_TERMS,
+    }
+    for feature_class in vocab.FeatureClass:
+        for name, table in tables.items():
+            assert feature_class in table, f"{feature_class} is missing from {name}"
+        assert sensitivity.default_sensitivity(feature_class) in vocab.Sensitivity
+        if feature_class is not vocab.FeatureClass.UNKNOWN:
+            assert records.CLASS_TERMS[feature_class], f"{feature_class} needs terms to match records by"
+
+
+def test_a_building_is_open_and_matched_to_records_of_buildings() -> None:
+    from fieldclub.services import records, sensitivity
+
+    building = vocab.FeatureClass.BUILDING
+    assert sensitivity.default_sensitivity(building) is vocab.Sensitivity.OPEN
+    assert building not in vocab.PROTECTED_CLASSES
+    for name in ("Ruined chapel", "Farmhouse", "Tithe barn", "Site of a cottage", "Parish church"):
+        assert records.type_fits(["building"], Record(name=name, record_type=None, monument_types=None)), name
+    assert not records.type_fits(
+        ["building"], Record(name="Bowl barrow", record_type=None, monument_types=None)
+    )
 
 
 def test_the_not_sure_class_is_called_unknown() -> None:

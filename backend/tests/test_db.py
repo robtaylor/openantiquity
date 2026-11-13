@@ -21,7 +21,8 @@ from sqlalchemy.pool import NullPool
 from fieldclub import db as fieldclub_db
 from fieldclub.db import Base, _split_sql, create_schema, extras_statements, get_db
 from fieldclub.models import User
-from fieldclub.vocab import ActivityKind, ShapeKind
+from fieldclub.models.common import values_check_text
+from fieldclub.vocab import ActivityKind, FeatureClass, ShapeKind
 
 EXPECTED_TABLES = {
     "users",
@@ -407,6 +408,50 @@ def test_a_check_made_again_for_a_new_value_keeps_what_a_later_version_added(
     with scratch_database.begin() as conn:
         conn.execute(text("INSERT INTO activity (kind) VALUES ('its_own')"))
         conn.execute(text("DELETE FROM activity WHERE kind IN ('made_up', 'its_own')"))
+
+
+def _class_checks() -> list[CheckConstraint]:
+    return [
+        constraint
+        for table in ("findings", "observations")
+        for constraint in Base.metadata.tables[table].constraints
+        if isinstance(constraint, CheckConstraint) and constraint.info.get("enum") is FeatureClass
+    ]
+
+
+def _class_check_definitions(engine: Engine, checks: list[CheckConstraint]) -> dict[str, tuple[str, bool]]:
+    names = {str(check.name) for check in checks}
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("SELECT conname, pg_get_constraintdef(oid), convalidated FROM pg_constraint")
+        ).all()
+    return {row[0]: (row[1], row[2]) for row in rows if row[0] in names}
+
+
+def test_the_schema_step_adds_building_to_the_class_checks_of_a_database_that_lacks_it(
+    scratch_database: Engine,
+) -> None:
+    checks = _class_checks()
+    assert len(checks) == 3, "the finder's class, the community's class and a second look's class"
+    create_schema(scratch_database)
+    # A database made before the class existed. The schema step never narrows a check
+    # itself, so the older check is written here as that version made it.
+    older = [c.value for c in FeatureClass if c is not FeatureClass.BUILDING]
+    with scratch_database.begin() as conn:
+        for check in checks:
+            table, column = check.table.name, check.info["column"]
+            conn.exec_driver_sql(
+                f'ALTER TABLE "{table}" DROP CONSTRAINT "{check.name}", '
+                f'ADD CONSTRAINT "{check.name}" CHECK ({values_check_text(column, older)})'
+            )
+    before = _class_check_definitions(scratch_database, checks)
+    assert len(before) == 3
+    assert all("'building'" not in definition for definition, _ in before.values())
+
+    create_schema(scratch_database)
+
+    after = _class_check_definitions(scratch_database, checks)
+    assert all("'building'" in definition and validated for definition, validated in after.values()), after
 
 
 def test_the_hand_written_shape_kind_check_holds_the_vocabulary() -> None:

@@ -748,6 +748,21 @@ describe("saving, signed in", () => {
     expect(panel().getByLabelText("Title")).not.toHaveAttribute("aria-invalid");
   });
 
+  it("offers Building or ruin beside the settlement earthworks, and sends it", async () => {
+    const user = userEvent.setup();
+    const { map, routes } = await openMarking();
+    routes.on("POST /findings", (call) => json(createdFinding(call.body as FindingCreate, "house1"), 201));
+    act(() => map.click(400, 300));
+    const names = panel()
+      .getAllByRole("radio")
+      .map((chip) => chip.textContent);
+    expect(names.indexOf("Building or ruin")).toBe(names.indexOf("Settlement earthworks") + 1);
+    await user.click(panel().getByRole("radio", { name: "Building or ruin" }));
+    await user.click(panel().getByRole("button", { name: "Save finding" }));
+    await waitFor(() => expect(routes.callsTo("POST /findings")).toHaveLength(1));
+    expect(routes.callsTo("POST /findings")[0]?.body).toMatchObject({ feature_class: "building" });
+  });
+
   it("offers to try again after a failure that may pass, and sends the same finding", async () => {
     const user = userEvent.setup();
     const { map, routes } = await openMarking();

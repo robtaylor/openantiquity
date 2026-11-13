@@ -73,6 +73,15 @@ const GLYPHS: Record<string, ReactNode> = {
     </>
   ),
 
+  // A building's walls in plan: two rooms, one still roofed, and a corner fallen.
+  building: (
+    <>
+      <path d="M13.2 5.5H5.5v13h13v-7.7" />
+      <rect x="5.5" y="5.5" width="5.9" height="13" {...SOFT} />
+      <path d="M16.3 6.6h.01M18.4 8.1h.01M17.2 4.6h.01" />
+    </>
+  ),
+
   // A block of small fields laid out together.
   field_system: <path d="M3.5 5.5h17v13h-17zM9.5 5.5v13M15 5.5V13M3.5 11h6M9.5 13h11" />,
 

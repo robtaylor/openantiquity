@@ -2824,7 +2824,7 @@ export interface components {
          * FeatureClass
          * @enum {string}
          */
-        FeatureClass: "enclosure" | "hillfort" | "round_barrow" | "long_barrow" | "hut_circle" | "settlement" | "field_system" | "ridge_and_furrow" | "linear" | "trackway" | "road" | "moat" | "motte" | "platform" | "pond" | "pit" | "industrial" | "military" | "ritual" | "garden" | "unknown";
+        FeatureClass: "enclosure" | "hillfort" | "round_barrow" | "long_barrow" | "hut_circle" | "settlement" | "building" | "field_system" | "ridge_and_furrow" | "linear" | "trackway" | "road" | "moat" | "motte" | "platform" | "pond" | "pit" | "industrial" | "military" | "ritual" | "garden" | "unknown";
         /** FeatureClassOut */
         FeatureClassOut: {
             /** Fish Term */

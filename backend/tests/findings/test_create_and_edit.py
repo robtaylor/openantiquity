@@ -217,6 +217,20 @@ def test_create_refuses_bad_input(client_as: ClientAs, make_user: MakeUser, body
     assert error_code(response) == code
 
 
+def test_a_finding_can_be_marked_as_a_building_and_comes_back_as_one(
+    client_as: ClientAs, make_user: MakeUser, db: Session
+) -> None:
+    finder = make_user()
+    made = client_as(finder).post(f"{API}/findings", json={"location": point(), "feature_class": "building"})
+
+    assert made.status_code == 201, made.text
+    body = client_as(finder).get(f"{API}/findings/{made.json()['public_id']}").json()
+    assert (body["feature_class"], body["sensitivity"]) == ("building", "open")
+    assert body["title"].startswith("Building or ruin in ")
+    stored = db.scalars(select(Finding).where(Finding.public_id == body["public_id"])).one()
+    assert stored.feature_class == FeatureClass.BUILDING.value
+
+
 def test_writes_need_a_contributor(client, client_as: ClientAs, make_user: MakeUser, newcomer) -> None:
     body = {"location": point(), "feature_class": "enclosure"}
     assert error_code(client.post(f"{API}/findings", json=body)) == "unauthorised"
