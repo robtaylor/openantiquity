@@ -35,6 +35,7 @@ export function cardFor(finding: FindingDetail): ReviewCard {
     public_id: finding.public_id,
     place: { lon: finding.location.lon, lat: finding.location.lat, grid_ref: finding.location.grid_ref },
     view_state: finding.view_state,
+    shape_revision: finding.location.shape.revision ?? 0,
   };
 }
 
