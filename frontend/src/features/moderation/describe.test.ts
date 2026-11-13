@@ -59,10 +59,20 @@ describe("moderation in words", () => {
         actionFixture({
           action: "change_sensitivity",
           target: targetFixture({ kind: "finding", title: "Barrow", finding: null }),
-          data: { from: "restricted", to: "open" },
+          data: { from: "protected", to: "open" },
         }),
       ),
-    ).toBe("Morag Kerr changed the level of the finding “Barrow” from restricted to open.");
+    ).toBe("Morag Kerr changed the level of the finding “Barrow” from Protected to Open.");
+    // A level this version has no name for, stored in the log by an earlier one, is shown as stored.
+    expect(
+      actionSentence(
+        actionFixture({
+          action: "change_sensitivity",
+          target: targetFixture({ kind: "finding", title: "Barrow", finding: null }),
+          data: { from: "open", to: "restricted" },
+        }),
+      ),
+    ).toBe("Morag Kerr changed the level of the finding “Barrow” from Open to Restricted.");
     expect(actionSentence(actionFixture({ action: "resolve_report", data: { outcome: "dismissed" } }))).toMatch(
       /^Morag Kerr dismissed a report on a comment/,
     );

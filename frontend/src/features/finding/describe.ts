@@ -134,27 +134,27 @@ export function stateReason(meta: Meta, finding: FindingDetail): string | null {
   return meta.vocab.states.find((entry) => entry.id === state)?.description ?? null;
 }
 
-/** Who sees the exact place at each level (Decision 0005). */
+/**
+ * Who sees the exact place at each level (Decision 0005), in the words of
+ * `vocab.SENSITIVITY_LEVELS`. The download sentence is what a trusted member
+ * or an archaeologist gets of a protected finding that a member doesn't.
+ */
 export function whoSees(level: Sensitivity): string {
   switch (level) {
     case "open":
       return "Everyone sees its exact place.";
     case "protected":
-      return "Only people who have signed in see its exact place. Everyone else sees its one-kilometre square.";
-    case "restricted":
-      return "Only its finder, trusted members, archaeologists and moderators see its exact place. Everyone else sees its one-kilometre square.";
+      return "Only people who have signed in see its exact place. Everyone else sees its one-kilometre square. Downloads give its exact place only to its finder, trusted members, archaeologists and moderators.";
   }
 }
 
 /**
  * The one sentence for someone shown the square instead of the place: why,
- * and what would change it. Signing in shows a protected finding exactly.
+ * and what would change it. Only a signed-out visitor is shown the square,
+ * and signing in shows the place.
  */
-export function squareSentence(finding: FindingDetail, signedIn: boolean): string {
-  const why = "Sites like this can attract illegal metal detecting, so its exact place is kept back.";
-  if (finding.sensitivity === "protected" && !signedIn) return `${why} Sign in to see it.`;
-  return `${why} Only its finder, trusted members, archaeologists and moderators see it.`;
-}
+export const SQUARE_SENTENCE =
+  "Sites like this can attract illegal metal detecting, so its exact place is kept back. Sign in to see it.";
 
 // --------------------------------------------------------------------------
 // Next steps

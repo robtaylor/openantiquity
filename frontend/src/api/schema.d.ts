@@ -890,8 +890,8 @@ export interface paths {
          * Export Investigation
          * @description The investigation as GeoJSON, as a spreadsheet with HER field names, or as a printable report.
          *
-         *     Protected and restricted findings carry their 1 km square unless you
-         *     are their finder or trusted. Every record carries its source's licence.
+         *     Protected findings carry their 1 km square unless you are their
+         *     finder or trusted. Every record carries its source's licence.
          */
         get: operations["investigations_export_investigation"];
         put?: never;
@@ -2905,8 +2905,7 @@ export interface components {
             path?: components["schemas"]["Path"] | null;
             /** @default unknown */
             period: components["schemas"]["Period"];
-            /** Sensitivity */
-            sensitivity?: ("open" | "protected") | null;
+            sensitivity?: components["schemas"]["Sensitivity"] | null;
             /** Title */
             title?: string | null;
             view_state?: components["schemas"]["ViewState"] | null;
@@ -3916,11 +3915,7 @@ export interface components {
         };
         /** ModSensitivityIn */
         ModSensitivityIn: {
-            /**
-             * Level
-             * @enum {string}
-             */
-            level: "open" | "protected";
+            level: components["schemas"]["Sensitivity"];
             /** Reason */
             reason: string;
         };
@@ -5126,20 +5121,16 @@ export interface components {
         };
         /**
          * Sensitivity
-         * @description How much of a finding's position each viewer sees (Decision 0005).
+         * @description How much of a finding's position each viewer sees (Decision 0005, Decision 0032).
          *
          *     In order from least to most protected. `services.sensitivity` decides who
          *     sees what.
          * @enum {string}
          */
-        Sensitivity: "open" | "protected" | "restricted";
+        Sensitivity: "open" | "protected";
         /** SensitivityChange */
         SensitivityChange: {
-            /**
-             * Level
-             * @enum {string}
-             */
-            level: "open" | "protected";
+            level: components["schemas"]["Sensitivity"];
         };
         /**
          * SensitivityLevelOut
@@ -5158,7 +5149,10 @@ export interface components {
         };
         /**
          * SensitivityViewer
-         * @description The kinds of viewer the sensitivity table tells apart. Admins count as moderators.
+         * @description The kinds of viewer the sensitivity rules tell apart. Admins count as moderators.
+         *
+         *     A finding's page tells apart only the signed-out visitor. A download also
+         *     tells the finder and the trusted roles from a member.
          * @enum {string}
          */
         SensitivityViewer: "signed_out" | "member" | "finder" | "trusted" | "expert" | "moderator";

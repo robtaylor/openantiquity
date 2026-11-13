@@ -10,7 +10,6 @@ import {
   observationFixture,
   pageFixture,
   SIGNED_OUT_ACTIONS,
-  SQUARE_ACTIONS,
   seenFixture,
   squareFixture,
 } from "../../test/fixtures/findingPage.js";
@@ -25,7 +24,7 @@ import {
   needsVerifying,
   offered,
   positionOf,
-  squareSentence,
+  SQUARE_SENTENCE,
   stateReason,
   stepActions,
   type Viewer,
@@ -59,12 +58,8 @@ describe("positionOf", () => {
     expect(positionOf(pageFixture({ actions: MODERATOR_ACTIONS }), MEMBER)).toMatchObject({ mayLower: true });
   });
 
-  it("offers no second look once answered, nor where the server says the place is hidden, nor once withdrawn", () => {
+  it("offers no second look once answered, nor once withdrawn", () => {
     expect(positionOf(pageFixture({ my_observation: observationFixture() }), MEMBER).mayAnswer).toBe(false);
-    expect(positionOf(squareFixture({ actions: SQUARE_ACTIONS }), MEMBER)).toMatchObject({
-      mayAnswer: false,
-      mayAddEvidence: false,
-    });
     const withdrawn = pageFixture({
       assessment: { ...pageFixture().assessment, state: "withdrawn" },
       actions: { ...MEMBER_ACTIONS, answer: { allowed: false, reason: "finding_withdrawn" } },
@@ -106,16 +101,14 @@ describe("words", () => {
     expect(formatDate("2026-11-01T10:00:00Z")).toBe("1 November 2026");
   });
 
-  it("says who sees the place at each level", () => {
+  it("says who sees the place at each level, and who downloads a protected one exactly", () => {
     expect(whoSees("open")).toMatch(/Everyone/);
     expect(whoSees("protected")).toMatch(/signed in/);
-    expect(whoSees("restricted")).toMatch(/trusted members/);
+    expect(whoSees("protected")).toMatch(/Downloads give its exact place only to its finder, trusted members/);
   });
 
-  it("tells a signed-out visitor that signing in shows a protected place, and nobody that for a restricted one", () => {
-    expect(squareSentence(squareFixture(), false)).toMatch(/Sign in to see it\.$/);
-    expect(squareSentence(squareFixture(), true)).not.toMatch(/Sign in/);
-    expect(squareSentence(squareFixture({ sensitivity: "restricted" }), false)).not.toMatch(/Sign in/);
+  it("tells a signed-out visitor that signing in shows a protected place", () => {
+    expect(SQUARE_SENTENCE).toMatch(/Sign in to see it\.$/);
   });
 });
 
@@ -159,7 +152,7 @@ describe("stepActions", () => {
     expect(stepActions(answerStep, meta, positionOf(finderView(), THE_FINDER))).toEqual([
       { kind: "share", label: "Copy a link to ask others" },
     ]);
-    expect(stepActions(answerStep, meta, positionOf(squareFixture({ actions: SQUARE_ACTIONS }), MEMBER))).toEqual([]);
+    expect(stepActions(answerStep, meta, positionOf(squareFixture(), SIGNED_OUT))).toEqual([]);
   });
 
   it("offers a form for each kind in the missing strands, and only those", () => {
@@ -211,8 +204,7 @@ describe("stepActions", () => {
   });
 
   it("offers the forms only to someone who may add evidence", () => {
-    const square = squareFixture({ actions: SQUARE_ACTIONS });
-    expect(stepActions(strandStep, meta, positionOf(square, MEMBER))).toEqual([]);
+    expect(stepActions(strandStep, meta, positionOf(squareFixture(), SIGNED_OUT))).toEqual([]);
   });
 
   it("offers nothing on a withdrawn finding", () => {

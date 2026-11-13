@@ -125,7 +125,7 @@ export interface FeatureClass {
   hint: string;
   fish_term: string;
   /** The level a new finding of this class starts at (docs/ARCHITECTURE.md, "Location sensitivity"). */
-  sensitivity: "open" | "protected" | "restricted";
+  sensitivity: "open" | "protected";
 }
 
 export interface Period {

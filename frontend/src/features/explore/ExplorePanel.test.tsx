@@ -124,8 +124,8 @@ describe("the Explore panel", () => {
     renderShell("/", <Address />);
     await mapReady();
     const list = await screen.findByRole("list", { name: "Findings in view" });
-    await user.click(within(list).getByRole("link", { name: /Finding restricted/ }));
-    expect(screen.getByTestId("address")).toHaveTextContent("/f/restricted");
+    await user.click(within(list).getByRole("link", { name: /Finding barrow-east/ }));
+    expect(screen.getByTestId("address")).toHaveTextContent("/f/barrow-east");
     expect(document.querySelector(".fc-highlight-ring")).toBeNull();
     expect(document.querySelector(".fc-highlight-square")).not.toBeNull();
   });

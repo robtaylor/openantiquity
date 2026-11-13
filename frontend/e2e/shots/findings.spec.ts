@@ -149,7 +149,7 @@ test("marking signed out, and failing", async ({ page }) => {
           body: JSON.stringify({
             error: {
               code: "position_in_text",
-              message: "A protected or restricted finding's title and description can't say where it is.",
+              message: "A protected finding's title and description can't say where it is.",
               details: [{ field: "body.title", message: "The title gives a position." }],
             },
           }),

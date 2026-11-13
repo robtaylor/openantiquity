@@ -796,7 +796,7 @@ export const metaFixture: Meta = {
     },
     field_visit_16_17: "You're 16 or 17, so go with an adult you know, and tell someone at home where you're going.",
     sensitivity:
-      "Some findings have their position hidden to protect the site, and are shown as a one-kilometre square. Protected findings are exact once you sign in. Restricted findings are exact only to their finder, trusted members, archaeologists and moderators.",
+      "Some findings have their position hidden to protect the site, and are shown as a one-kilometre square to anyone who hasn't signed in. Signed-in members see protected findings exactly.",
   },
   terrain: { fine_minzoom: 13, catalogue_tiles: 5877, overview: { built: false, built_at: null, tiles: 0 } },
   shapes: {

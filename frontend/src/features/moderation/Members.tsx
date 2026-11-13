@@ -59,8 +59,9 @@ function RoleDialog({
       {role ? <p className="fc-mod__hint">{roleWords(role).hint}</p> : null}
       {role === "trusted" ? (
         <p className="fc-mod__hint">
-          A trusted member's second looks count for more, and their downloads give the exact place of protected
-          findings. Check that their points come from findings other people checked, not from the same few accounts.
+          A trusted member's second looks count for more, they can protect a finding someone else found, they approve
+          photos, and their downloads give the exact place of protected findings. Check that their points come from
+          findings other people checked, not from the same few accounts.
         </p>
       ) : null}
     </ReasonDialog>

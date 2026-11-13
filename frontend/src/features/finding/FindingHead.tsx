@@ -10,7 +10,7 @@ import { TierBadge } from "../../ui/TierBadge.js";
 import { tierVar } from "../../ui/tokens.js";
 import { useAccountUi } from "../account/requireAccount.js";
 import { whereRef } from "../findings/square.js";
-import { distanceWords, formatDate, labelOf, squareSentence, stateReason } from "./describe.js";
+import { distanceWords, formatDate, labelOf, SQUARE_SENTENCE, stateReason } from "./describe.js";
 import { seeAsFinderDid } from "./mapView.js";
 import { ReportSlot } from "./Slots.js";
 import type { FindingDetail } from "./types.js";
@@ -146,9 +146,7 @@ export function FindingHead({ meta, finding, signedIn, change }: FindingHeadProp
 
       {location.obscured ? (
         <div className="fc-finding__square">
-          <p>
-            You're seeing the one-kilometre square it is in, not the place itself. {squareSentence(finding, signedIn)}
-          </p>
+          <p>You're seeing the one-kilometre square it is in, not the place itself. {SQUARE_SENTENCE}</p>
           {finding.sensitivity === "protected" && !signedIn ? (
             <Button size="sm" icon={<LogIn size={16} aria-hidden />} onClick={() => openSignIn()}>
               Sign in

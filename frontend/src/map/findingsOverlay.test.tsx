@@ -49,7 +49,7 @@ describe("the findings overlay", () => {
     const squares = data.features.filter((f) => f.geometry.type === "Polygon");
     const exact = findingsData.features.filter((f) => !f.properties.obscured);
     expect(points).toHaveLength(exact.length);
-    // The protected and restricted findings, each in its own square.
+    // The two protected findings, each in its own square.
     expect(squares.map((f) => f.properties.tier).sort()).toEqual(["corroborated", "seen"]);
   });
 

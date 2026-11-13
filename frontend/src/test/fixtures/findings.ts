@@ -12,8 +12,8 @@ import { kmSquareAt } from "../../map/gridref.js";
 /**
  * A stand-in for `GET /api/v1/findings?bbox=&format=geojson` around the
  * opening view at Avebury, as a signed-out visitor would receive it: open
- * findings exact, and protected and restricted ones generalised to the
- * centre of their one-kilometre square with `obscured` set, as Decision 0005
+ * findings exact, and protected ones generalised to the centre of their
+ * one-kilometre square with `obscured` set, as Decision 0005
  * and the table in docs/ARCHITECTURE.md lay out. Used by unit tests, the
  * end-to-end stubs and the design screenshots.
  */
@@ -73,7 +73,7 @@ export function findingCollection(specs: readonly FindingSpec[]): FindingCollect
 
 const TIERS = ["spotted", "seen", "corroborated", "probable", "ground_checked", "confirmed"];
 
-/** One finding per tier in a row, then known, ruled-out and disputed ones, then one protected and one restricted. */
+/** One finding per tier in a row, then known, ruled-out and disputed ones, then two protected ones. */
 export const FINDING_SPECS: readonly FindingSpec[] = [
   ...TIERS.map((tier, i) => ({ at: offset(-500 + i * 200, 300), public_id: `tier-${tier}`, tier })),
   { at: offset(-500, 100), public_id: "known-seen", tier: "seen", state: "known" },
@@ -81,9 +81,15 @@ export const FINDING_SPECS: readonly FindingSpec[] = [
   { at: offset(-100, 100), public_id: "known-confirmed", tier: "confirmed", state: "known" },
   { at: offset(100, 100), public_id: "ruled-out", tier: "spotted", state: "ruled_out" },
   { at: offset(300, 100), public_id: "disputed", tier: "seen", state: "disputed" },
-  // A round barrow defaults to protected. Signed out, it arrives as its square.
+  // A round barrow defaults to protected. Signed out, each arrives as its square.
   { at: offset(-1400, -650), public_id: "protected", tier: "seen", sensitivity: "protected", obscured: true },
-  { at: offset(1350, -480), public_id: "restricted", tier: "corroborated", sensitivity: "restricted", obscured: true },
+  {
+    at: offset(1350, -480),
+    public_id: "barrow-east",
+    tier: "corroborated",
+    sensitivity: "protected",
+    obscured: true,
+  },
 ];
 
 export const findingsData: FindingCollection = findingCollection(FINDING_SPECS);

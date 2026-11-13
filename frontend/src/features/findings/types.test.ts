@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { findingsData } from "../../test/fixtures/findings.js";
-import { FindingsResponseError, OFFERED_SENSITIVITIES, parseFindingCollection, SENSITIVITIES } from "./types.js";
+import { FindingsResponseError, levelsBeside, parseFindingCollection, SENSITIVITIES } from "./types.js";
 
 function feature(properties: Record<string, unknown>, coordinates: unknown = [-1.85, 51.43]) {
   return { type: "Feature", geometry: { type: "Point", coordinates }, properties };
@@ -10,12 +10,14 @@ function feature(properties: Record<string, unknown>, coordinates: unknown = [-1
 const BASE = { public_id: "f1", tier: "seen", state: "open" };
 
 describe("parseFindingCollection", () => {
-  it("knows three levels of sensitivity", () => {
-    expect(SENSITIVITIES).toEqual(["open", "protected", "restricted"]);
+  it("knows two levels of sensitivity", () => {
+    expect(SENSITIVITIES).toEqual(["open", "protected"]);
   });
 
-  it("offers only open and protected to choose from", () => {
-    expect(OFFERED_SENSITIVITIES).toEqual(["open", "protected"]);
+  it("finds the level above and below", () => {
+    expect(levelsBeside("open", 1)).toEqual(["protected"]);
+    expect(levelsBeside("protected", 1)).toEqual([]);
+    expect(levelsBeside("protected", -1)).toEqual(["open"]);
   });
 
   it("keeps each level as the server sent it", () => {
@@ -23,7 +25,7 @@ describe("parseFindingCollection", () => {
       type: "FeatureCollection",
       features: SENSITIVITIES.map((sensitivity, i) => feature({ ...BASE, public_id: `f${i}`, sensitivity })),
     });
-    expect(parsed.features.map((f) => f.properties.sensitivity)).toEqual(["open", "protected", "restricted"]);
+    expect(parsed.features.map((f) => f.properties.sensitivity)).toEqual(["open", "protected"]);
   });
 
   it("leaves out a level it does not know, and still draws the finding", () => {
@@ -110,8 +112,8 @@ describe("parseFindingCollection", () => {
     const parsed = parseFindingCollection(JSON.parse(JSON.stringify(findingsData)));
     expect(parsed.features).toHaveLength(findingsData.features.length);
     const levels = new Set(parsed.features.map((f) => f.properties.sensitivity));
-    expect([...levels].sort()).toEqual(["open", "protected", "restricted"]);
-    // Signed out, protected and restricted findings both arrive generalised.
+    expect([...levels].sort()).toEqual(["open", "protected"]);
+    // Signed out, protected findings arrive generalised.
     for (const f of parsed.features) {
       expect(f.properties.obscured, f.properties.public_id).toBe(f.properties.sensitivity !== "open");
     }

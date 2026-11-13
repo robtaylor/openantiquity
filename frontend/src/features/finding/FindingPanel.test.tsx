@@ -18,7 +18,6 @@ import {
   observationFixture,
   pageFixture,
   revealFixture,
-  SQUARE_ACTIONS,
   seenFixture,
   squareFixture,
   suggestionFixture,
@@ -157,10 +156,8 @@ describe("a finding's head", () => {
     expect(useAccountUi.getState().sheet).toBe("signin");
   });
 
-  it("tells a member shown a restricted finding's square who can see it, without offering sign-in", async () => {
-    const { panel } = await open(squareFixture({ sensitivity: "restricted", actions: SQUARE_ACTIONS }));
-    expect(panel.getByText(/not the place itself/)).toHaveTextContent(/trusted members, archaeologists and moderators/);
-    expect(panel.queryByRole("button", { name: "Sign in" })).toBeNull();
+  it("tells a signed-out visitor shown a protected finding's square that only those who see the place can help", async () => {
+    const { panel } = await open(squareFixture(), null);
     expect(panel.getByText("Only people who can see the exact place can help with these.")).toBeInTheDocument();
   });
 
@@ -846,10 +843,10 @@ describe("states of the page", () => {
 
   it("lets a moderator lower the level through the moderation route, with a reason for the log", async () => {
     const user = userEvent.setup();
-    const finding = pageFixture({ sensitivity: "restricted", actions: MODERATOR_ACTIONS });
+    const finding = pageFixture({ sensitivity: "protected", actions: MODERATOR_ACTIONS });
     const moderator = meFixture({ handle: "Keeper", role: "moderator" });
     const routes = serve(finding, moderator);
-    routes.on("PUT /mod/findings/f-ring/sensitivity", () => json({ ...finding, sensitivity: "protected" }));
+    routes.on("PUT /mod/findings/f-ring/sensitivity", () => json({ ...finding, sensitivity: "open" }));
     const { panel } = await open(finding, moderator, routes);
     expect(panel.getByRole("heading", { name: "Protecting it" })).toBeInTheDocument();
     await user.click(panel.getByRole("button", { name: "Lower its protection" }));
@@ -860,7 +857,7 @@ describe("states of the page", () => {
     await user.click(dialog.getByRole("button", { name: "Lower it" }));
     await waitFor(() => expect(routes.callsTo("PUT /mod/findings/f-ring/sensitivity")).toHaveLength(1));
     expect(routes.callsTo("PUT /mod/findings/f-ring/sensitivity")[0]?.body).toEqual({
-      level: "protected",
+      level: "open",
       reason: "Ordinary field bank, no risk",
     });
   });
@@ -874,7 +871,7 @@ describe("states of the page", () => {
         {
           error: {
             code: "position_in_text",
-            message: "A protected or restricted finding's title and description can't say where it is.",
+            message: "A protected finding's title and description can't say where it is.",
             details: [
               { field: "body.description", message: "The description gives a position finer than the 1 km square." },
             ],

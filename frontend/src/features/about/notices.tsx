@@ -421,8 +421,8 @@ function Takedown({ meta }: { meta: Meta }) {
           and give them five days to reply. If we can't reach them, we take it down.
         </li>
         <li>
-          If a finding's exact place puts a site at risk, we can hide the place from everyone except its finder, trusted
-          members, archaeologists and moderators.
+          If a finding's exact place puts a site at risk, we can hide the finding from everyone except its finder and
+          moderators.
         </li>
         <li>Anything else that breaks the contributor terms is hidden, and we tell you what we did.</li>
       </ul>

@@ -1,5 +1,4 @@
 import type { Page } from "@playwright/test";
-import type { Sensitivity } from "../src/features/findings/types.js";
 import { kmSquareAt } from "../src/map/gridref.js";
 import { findingCollection } from "../src/test/fixtures/findings.js";
 import { metaFixture } from "../src/test/fixtures/meta.js";
@@ -73,12 +72,12 @@ const OBSCURED = offset(380, 260);
 const RECORD_DESIGNATION = offset(0, -120);
 const RECORD_FIND = offset(120, -120);
 
-function findings(obscuredLevel: Sensitivity = "restricted") {
+function findings() {
   return findingCollection([
     { at: PROBABLE, public_id: "a", tier: "probable" },
     { at: KNOWN, public_id: "b", tier: "seen", state: "known" },
     { at: RULED, public_id: "c", tier: "probable", state: "ruled_out" },
-    { at: OBSCURED, public_id: "d", tier: "corroborated", sensitivity: obscuredLevel, obscured: true },
+    { at: OBSCURED, public_id: "d", tier: "corroborated", sensitivity: "protected", obscured: true },
   ]);
 }
 const RECORDS: MarkerPoint[] = [
@@ -86,8 +85,8 @@ const RECORDS: MarkerPoint[] = [
   { ...RECORD_FIND, properties: { id: 2, category: "find" } },
 ];
 
-async function openWithMarkers(page: Page, extraHash = "", obscuredLevel: Sensitivity = "restricted"): Promise<void> {
-  await serveFindings(page, findings(obscuredLevel));
+async function openWithMarkers(page: Page, extraHash = ""): Promise<void> {
+  await serveFindings(page, findings());
   await serveRecordTiles(page, RECORDS);
   // The street-map overlay is hidden so the backdrop is one flat colour.
   await openMap(
@@ -144,73 +143,71 @@ test("draws findings by tier and state, and records as squares by category", asy
   });
 });
 
-for (const level of ["protected", "restricted"] as const) {
-  test(`draws a ${level} finding sent obscured as a dashed one-kilometre square, never a point`, async ({ page }) => {
-    await openWithMarkers(page, "", level);
-    const point = project(OBSCURED.lon, OBSCURED.lat);
-    const square = kmSquareAt(OBSCURED.lon, OBSCURED.lat);
-    if (!square) throw new Error("The obscured test point is off the grid");
-    const corners = square.ring.slice(0, 4).map(([lon, lat]) => project(lon, lat));
-    // The ring runs south-west, south-east, north-east, north-west.
-    const [southWest, southEast, , northWest] = corners as [
-      { x: number; y: number },
-      { x: number; y: number },
-      { x: number; y: number },
-      { x: number; y: number },
-    ];
-    // A kilometre is about 670 px at this zoom and latitude, so the square overflows the window a little.
-    expect(southEast.x - southWest.x).toBeGreaterThan(600);
-    expect(southEast.x - southWest.x).toBeLessThan(740);
+test("draws a protected finding sent obscured as a dashed one-kilometre square, never a point", async ({ page }) => {
+  await openWithMarkers(page);
+  const point = project(OBSCURED.lon, OBSCURED.lat);
+  const square = kmSquareAt(OBSCURED.lon, OBSCURED.lat);
+  if (!square) throw new Error("The obscured test point is off the grid");
+  const corners = square.ring.slice(0, 4).map(([lon, lat]) => project(lon, lat));
+  // The ring runs south-west, south-east, north-east, north-west.
+  const [southWest, southEast, , northWest] = corners as [
+    { x: number; y: number },
+    { x: number; y: number },
+    { x: number; y: number },
+    { x: number; y: number },
+  ];
+  // A kilometre is about 670 px at this zoom and latitude, so the square overflows the window a little.
+  expect(southEast.x - southWest.x).toBeGreaterThan(600);
+  expect(southEast.x - southWest.x).toBeLessThan(740);
 
-    // The server sends the centre of the square. No marker is drawn there either.
-    const sent = findings(level).features.find((f) => f.properties.public_id === "d");
-    if (!sent?.properties.obscured) throw new Error("The fixture did not obscure the finding");
-    const centre = project(...sent.geometry.coordinates);
+  // The server sends the centre of the square. No marker is drawn there either.
+  const sent = findings().features.find((f) => f.properties.public_id === "d");
+  if (!sent?.properties.obscured) throw new Error("The fixture did not obscure the finding");
+  const centre = project(...sent.geometry.coordinates);
 
-    await expectDrawn(page, (image) => {
-      // No marker at the finding's own position, nor at the centre of its square.
-      expect(countColour(image, around(point, 8), BACKDROP, 6), "no point at the finding").toBe(17 * 17);
-      if (centre.x > 20 && centre.x < VIEW.width - 20 && centre.y > 20 && centre.y < VIEW.height - 20) {
-        expect(countColour(image, around(centre, 8), BACKDROP, 6), "no point at the square's centre").toBe(17 * 17);
+  await expectDrawn(page, (image) => {
+    // No marker at the finding's own position, nor at the centre of its square.
+    expect(countColour(image, around(point, 8), BACKDROP, 6), "no point at the finding").toBe(17 * 17);
+    if (centre.x > 20 && centre.x < VIEW.width - 20 && centre.y > 20 && centre.y < VIEW.height - 20) {
+      expect(countColour(image, around(centre, 8), BACKDROP, 6), "no point at the square's centre").toBe(17 * 17);
+    }
+
+    // The west edge crosses the screen as a line in the tier colour, broken by gaps.
+    const visibleTop = Math.max(northWest.y, 80);
+    const visibleBottom = Math.min(southWest.y, VIEW.height - 80);
+    expect(visibleBottom - visibleTop, "length of west edge on screen").toBeGreaterThan(200);
+    const edgeX = (y: number): number =>
+      northWest.x + ((southWest.x - northWest.x) * (y - northWest.y)) / (southWest.y - northWest.y);
+    let coloured = 0;
+    let gaps = 0;
+    let rows = 0;
+    for (let y = Math.ceil(visibleTop) + 10; y < visibleBottom - 10; y++) {
+      const hit = countColour(image, { x: Math.round(edgeX(y)) - 3, y, width: 7, height: 1 }, TIER.corroborated, 30);
+      rows += 1;
+      if (hit > 0) coloured += 1;
+      else gaps += 1;
+    }
+    expect(coloured / rows, "share of the edge that is dash").toBeGreaterThan(0.35);
+    expect(gaps / rows, "share of the edge that is gap").toBeGreaterThan(0.2);
+
+    // And it is a square: the south edge is there too, running east from the same corner.
+    const southY = (x: number): number =>
+      southWest.y + ((southEast.y - southWest.y) * (x - southWest.x)) / (southEast.x - southWest.x);
+    let southHits = 0;
+    const from = Math.max(Math.ceil(southWest.x) + 20, 80);
+    const to = Math.min(Math.floor(southEast.x) - 20, VIEW.width - 80);
+    expect(to - from, "length of south edge on screen").toBeGreaterThan(200);
+    for (let x = from; x < to; x++) {
+      if (countColour(image, { x, y: Math.round(southY(x)) - 3, width: 1, height: 7 }, TIER.corroborated, 30) > 0) {
+        southHits += 1;
       }
-
-      // The west edge crosses the screen as a line in the tier colour, broken by gaps.
-      const visibleTop = Math.max(northWest.y, 80);
-      const visibleBottom = Math.min(southWest.y, VIEW.height - 80);
-      expect(visibleBottom - visibleTop, "length of west edge on screen").toBeGreaterThan(200);
-      const edgeX = (y: number): number =>
-        northWest.x + ((southWest.x - northWest.x) * (y - northWest.y)) / (southWest.y - northWest.y);
-      let coloured = 0;
-      let gaps = 0;
-      let rows = 0;
-      for (let y = Math.ceil(visibleTop) + 10; y < visibleBottom - 10; y++) {
-        const hit = countColour(image, { x: Math.round(edgeX(y)) - 3, y, width: 7, height: 1 }, TIER.corroborated, 30);
-        rows += 1;
-        if (hit > 0) coloured += 1;
-        else gaps += 1;
-      }
-      expect(coloured / rows, "share of the edge that is dash").toBeGreaterThan(0.35);
-      expect(gaps / rows, "share of the edge that is gap").toBeGreaterThan(0.2);
-
-      // And it is a square: the south edge is there too, running east from the same corner.
-      const southY = (x: number): number =>
-        southWest.y + ((southEast.y - southWest.y) * (x - southWest.x)) / (southEast.x - southWest.x);
-      let southHits = 0;
-      const from = Math.max(Math.ceil(southWest.x) + 20, 80);
-      const to = Math.min(Math.floor(southEast.x) - 20, VIEW.width - 80);
-      expect(to - from, "length of south edge on screen").toBeGreaterThan(200);
-      for (let x = from; x < to; x++) {
-        if (countColour(image, { x, y: Math.round(southY(x)) - 3, width: 1, height: 7 }, TIER.corroborated, 30) > 0) {
-          southHits += 1;
-        }
-      }
-      expect(southHits / (to - from), "share of the south edge that is dash").toBeGreaterThan(0.35);
-    });
+    }
+    expect(southHits / (to - from), "share of the south edge that is dash").toBeGreaterThan(0.35);
   });
-}
+});
 
 test("draws an obscured square whose centre is off screen when its body covers the view", async ({ page }) => {
-  const collection = findings("protected");
+  const collection = findings();
   const sent = collection.features.find((f) => f.properties.public_id === "d");
   if (!sent?.properties.obscured) throw new Error("The fixture did not obscure the finding");
   const [centreLon, centreLat] = sent.geometry.coordinates;

@@ -76,13 +76,6 @@ export const SIGNED_OUT_ACTIONS: Actions = Object.fromEntries(
   Object.keys(MEMBER_ACTIONS).map((name) => [name, { allowed: false, reason: "unauthorised" }]),
 ) as Actions;
 
-/** What a member may do on a finding they see only as its square. */
-export const SQUARE_ACTIONS: Actions = {
-  ...MEMBER_ACTIONS,
-  answer: { allowed: false, reason: "location_hidden" },
-  add_evidence: { allowed: false, reason: "location_hidden" },
-};
-
 /** What a moderator who isn't the finder may do on an open finding. */
 export const MODERATOR_ACTIONS: Actions = {
   ...MEMBER_ACTIONS,

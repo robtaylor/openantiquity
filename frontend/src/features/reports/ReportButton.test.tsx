@@ -208,7 +208,7 @@ describe("moderating on a finding's page", () => {
 
   it("lets a moderator hide someone else's finding and lower its level, each with a reason", async () => {
     const user = userEvent.setup();
-    const finding = seenFixture({ sensitivity: "restricted", evidence: [evidenceFixture({ contributor: EXPERT })] });
+    const finding = seenFixture({ sensitivity: "protected", evidence: [evidenceFixture({ contributor: EXPERT })] });
     const { panel, routes } = await open(finding, MODERATOR);
     routes.on("PUT /mod/findings/f-ring/sensitivity", () => json({ ...finding, sensitivity: "open" }));
     routes.on("POST /mod/findings/f-ring/hide", () =>

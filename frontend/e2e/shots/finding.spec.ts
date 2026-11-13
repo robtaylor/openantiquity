@@ -202,13 +202,7 @@ test("viewers", async ({ page }) => {
   await open(page, square);
   await shoot(page, "20-signed-out-square");
 
-  const session = await fakeSession(page, MEMBER);
-  const restricted = squareFixture({ public_id: "f-restricted", sensitivity: "restricted" });
-  await fakeFindingPage(page, restricted);
-  await open(page, restricted);
-  await shoot(page, "21-member-restricted-square");
-
-  session.set(meWith({ handle: FINDER.handle, display_name: FINDER.display_name }));
+  const session = await fakeSession(page, meWith({ handle: FINDER.handle, display_name: FINDER.display_name }));
   const mine = finderView({ public_id: "f-mine" });
   await fakeFindingPage(page, mine);
   const panel = await open(page, mine);
@@ -230,7 +224,7 @@ test("viewers", async ({ page }) => {
           body: JSON.stringify({
             error: {
               code: "position_in_text",
-              message: "A protected or restricted finding's title and description can't say where it is.",
+              message: "A protected finding's title and description can't say where it is.",
               details: [{ field: "body.description", message: "The description gives a position." }],
             },
           }),
@@ -247,7 +241,7 @@ test("viewers", async ({ page }) => {
   session.set(meWith({ handle: "Keeper", display_name: "Kit Keeper", role: "moderator" }));
   const guarded = pageFixture({
     public_id: "f-guarded",
-    sensitivity: "restricted",
+    sensitivity: "protected",
     actions: { ...MODERATOR_ACTIONS, raise_level: { allowed: false, reason: "highest_level" } },
   });
   await fakeFindingPage(page, guarded);

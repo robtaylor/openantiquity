@@ -125,16 +125,6 @@ test("a signed-out visitor sees a protected finding's square, why, and how to se
   await expect(page.getByRole("dialog", { name: "Sign in" })).toBeVisible();
 });
 
-test("a member who may only see a restricted finding's square is told who can", async ({ page }) => {
-  await fakeSession(page, MEMBER);
-  const finding = squareFixture({ sensitivity: "restricted" });
-  await fakeFindingPage(page, finding);
-  const panel = await openFinding(page, finding);
-  await expect(panel.getByText(/not the place itself/)).toContainText("trusted members, archaeologists and moderators");
-  await expect(panel.getByRole("button", { name: "Sign in" })).toHaveCount(0);
-  await expect(panel.getByRole("button", { name: "Add evidence" })).toHaveCount(0);
-});
-
 test("the finder gets their own controls and a link to ask others", async ({ page }) => {
   await fakeSession(page, meWith({ handle: FINDER.handle, display_name: FINDER.display_name }));
   const finding = finderView();

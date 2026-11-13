@@ -32,26 +32,12 @@ export type TierId = Schemas["Tier"];
 export type StateId = Schemas["FindingState"];
 
 /** Every level, lowest first. The schema's union, checked against this list by the compiler. */
-export const SENSITIVITIES = ["open", "protected", "restricted"] as const satisfies readonly Sensitivity[];
+export const SENSITIVITIES = ["open", "protected"] as const satisfies readonly Sensitivity[];
 
-/**
- * A level a finding can be set to, as the server's request types take it.
- * Restricted is dropped (Decision 0032): a stored finding can still show it,
- * but nobody can choose it.
- */
-export type OfferedSensitivity = Schemas["SensitivityChange"]["level"];
-
-/** The levels the choosers offer, lowest first. */
-export const OFFERED_SENSITIVITIES = ["open", "protected"] as const satisfies readonly OfferedSensitivity[];
-
-function isOffered(level: Sensitivity): level is OfferedSensitivity {
-  return (OFFERED_SENSITIVITIES as readonly Sensitivity[]).includes(level);
-}
-
-/** The offered levels above (`step` 1) or below (-1) `level`, nearest first. */
-export function offeredBeside(level: Sensitivity, step: 1 | -1): OfferedSensitivity[] {
+/** The levels above (`step` 1) or below (-1) `level`, nearest first. */
+export function levelsBeside(level: Sensitivity, step: 1 | -1): Sensitivity[] {
   const rank = SENSITIVITIES.indexOf(level);
-  const beside = SENSITIVITIES.filter((_, index) => (index - rank) * step > 0).filter(isOffered);
+  const beside = SENSITIVITIES.filter((_, index) => (index - rank) * step > 0);
   return step > 0 ? beside : beside.reverse();
 }
 

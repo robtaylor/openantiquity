@@ -68,14 +68,23 @@ function text(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
-/** What changed, from the action's data: "from Member to Trusted member", "from Open to Restricted". */
+/**
+ * A level's name. The log keeps what was stored when the moderator acted, so
+ * a level this version has no name for is shown as stored, with a capital.
+ */
+function levelWord(level: string): string {
+  if (isSensitivity(level)) return LEVEL_NAMES[level];
+  const words = level.replaceAll("_", " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** What changed, from the action's data: "from Member to Trusted member", "from Protected to Open". */
 function change(action: Action): string | null {
   const from = text(action.data?.from);
   const to = text(action.data?.to);
   if (from === null || to === null) return null;
   if (action.action === "change_role") return `from ${roleWords(from).label} to ${roleWords(to).label}`;
-  if (action.action === "change_sensitivity" && isSensitivity(from) && isSensitivity(to))
-    return `from ${LEVEL_NAMES[from].toLowerCase()} to ${LEVEL_NAMES[to].toLowerCase()}`;
+  if (action.action === "change_sensitivity") return `from ${levelWord(from)} to ${levelWord(to)}`;
   return null;
 }
 
