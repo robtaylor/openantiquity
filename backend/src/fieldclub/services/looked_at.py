@@ -43,7 +43,7 @@ from geoalchemy2.shape import to_shape
 from pyproj import Transformer
 from shapely.geometry import LineString, MultiLineString, Point
 from shapely.geometry.base import BaseGeometry
-from sqlalchemy import Exists, func, select
+from sqlalchemy import Exists, select
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from fieldclub import gridref
@@ -168,17 +168,18 @@ def grow(db: Session, finding: Finding, observation: Observation) -> None:
     new revision, so it is always added.
     """
     assert observation.shape_revision == finding.shape_revision, "the answer records the revision it saw"
-    seen_before = db.scalar(
-        select(func.count())
-        .select_from(Observation)
-        .where(
-            Observation.finding_id == finding.id,
-            Observation.id != observation.id,
-            Observation.shape_revision == finding.shape_revision,
+    if finding.outline is not None and finding.looked_at is not None:
+        seen_before = (
+            select(Observation.id)
+            .where(
+                Observation.finding_id == finding.id,
+                Observation.id != observation.id,
+                Observation.shape_revision == finding.shape_revision,
+            )
+            .exists()
         )
-    )
-    if finding.outline is not None and finding.looked_at is not None and seen_before:
-        return
+        if db.scalar(select(seen_before)):
+            return
     shape = _shape(finding)
     now = ground(finding, shape)
     assert not now.is_empty, f"finding {finding.public_id} has an empty shape"
