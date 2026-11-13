@@ -17,7 +17,12 @@ import {
   isReveal,
   newAnswer,
 } from "../finding/secondLook/answer.js";
-import { answerDrafts, discardAnswerDrafts, keepAnswerDraft } from "../finding/secondLook/answerDrafts.js";
+import {
+  answerDrafts,
+  discardAnswerDrafts,
+  givenOnAnotherShape,
+  keepAnswerDraft,
+} from "../finding/secondLook/answerDrafts.js";
 import type { Reveal, Visible } from "../finding/types.js";
 import { useApplyFinding } from "../finding/useFinding.js";
 import { fetchReviewCards } from "./api.js";
@@ -75,10 +80,15 @@ export function useReviewQueue(): QueueStatus {
     retry: (failureCount, error) => failureCount < 1 && isTransient(error),
   });
 
-  const passed = useMemo(
-    () => new Set([...answered, ...skipped, ...drafts.map((draft) => draft.data.public_id)]),
-    [answered, skipped, drafts],
-  );
+  // A card with an answer kept for it is passed over, unless the answer was given on an earlier shape than the card
+  // shows: then the card is shown as it now is, and the draft is removed (`CardView`).
+  const passed = useMemo(() => {
+    const shown = new Map(query.data?.items.map((card) => [card.public_id, card.shape_revision]));
+    const kept = drafts.filter(
+      (draft) => !shown.has(draft.data.public_id) || !givenOnAnotherShape(draft.data, shown.get(draft.data.public_id)),
+    );
+    return new Set([...answered, ...skipped, ...kept.map((draft) => draft.data.public_id)]);
+  }, [answered, skipped, drafts, query.data]);
   const settled = current === null && query.data !== undefined && !query.isFetching;
   const next = settled && query.data ? pickNext(query.data, passed, restarted) : null;
 
@@ -129,7 +139,11 @@ export function useCardAnswers(meta: Meta): CardAnswers {
   const identity = me ? accountIdentity(me) : null;
 
   return useMemo(() => {
-    const draftFor = (card: ReviewCard) => drafts.find((draft) => draft.data.public_id === card.public_id);
+    // A draft given on an earlier shape than the card shows is never used: `CardView` removes it.
+    const draftFor = (card: ReviewCard) =>
+      drafts.find(
+        (draft) => draft.data.public_id === card.public_id && !givenOnAnotherShape(draft.data, card.shape_revision),
+      );
 
     function revealed(reveal: Reveal): void {
       apply(reveal.finding);

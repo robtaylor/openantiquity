@@ -2,7 +2,6 @@ import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
 import type { Meta } from "../../../api/meta.js";
 import { toast } from "../../../ui/toastStore.js";
 import { accountIdentity, useSession } from "../../account/session.js";
-import { useKindDrafts } from "../../drafts/savers.js";
 import { discardDraft, sendHeldDraft } from "../../drafts/store.js";
 import { giveAnswer, isShapeChanged, revealAsAsked, SHAPE_CHANGED_WORDS } from "../api.js";
 import type { ViewerPosition } from "../describe.js";
@@ -19,10 +18,10 @@ import {
   newAnswer,
 } from "./answer.js";
 import {
-  answerDrafts,
   discardAnswerDrafts,
   keepAnswerDraft,
   savedAnswerCount,
+  useAnswerDraftOn,
   useSavedAnswers,
 } from "./answerDrafts.js";
 import { DetailStep, FailedDraftNotice } from "./DetailStep.js";
@@ -61,11 +60,11 @@ export function SecondLook({ meta, finding, position, ready, onRevealed, onHeld,
   const [sending, setSending] = useState<Visible | null>(null);
   const [detail, setDetail] = useState<AnswerDraft | null>(null);
   const [revealing, setRevealing] = useState(false);
-  /** True after an answer was refused because the shape changed while the person looked. */
+  /** True after an answer was refused, or a kept one removed, because the shape changed since it was given. */
   const [shapeChanged, setShapeChanged] = useState(false);
   const revision = finding.location.shape.revision;
-  const drafts = useKindDrafts(answerDrafts);
-  const draft = drafts.find((entry) => entry.data.public_id === publicId) ?? null;
+  // A draft given on an earlier shape is removed, and the page says the shape changed.
+  const draft = useAnswerDraftOn(publicId, revision, () => setShapeChanged(true));
   const signedIn = useSignedInFirst();
   const { me } = useSession();
   const account = me ? accountIdentity(me) : null;
@@ -153,7 +152,7 @@ export function SecondLook({ meta, finding, position, ready, onRevealed, onHeld,
       public_id: publicId,
       answer: answerBody(meta, { ...given, visible }),
       reveal: true,
-      shape_revision: draft?.data.shape_revision ?? revision,
+      shape_revision: revision,
     };
     if (ready && draft?.held && account !== null) {
       // Given here before signing in: the person now says it is theirs, with the detail as it stands.

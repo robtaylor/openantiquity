@@ -5,13 +5,15 @@ import type { Meta } from "../../api/meta.js";
 import { Button } from "../../ui/Button.js";
 import { EmptyState } from "../../ui/EmptyState.js";
 import { Skeleton } from "../../ui/Skeleton.js";
+import { toast } from "../../ui/toastStore.js";
 import { useSession } from "../account/session.js";
-import { type KindDraft, useKindDrafts } from "../drafts/savers.js";
+import type { KindDraft } from "../drafts/savers.js";
 import { discardDraft } from "../drafts/store.js";
+import { SHAPE_CHANGED_WORDS } from "../finding/api.js";
 import { reasonOf } from "../finding/feedback.js";
 import { AnswerButtons } from "../finding/secondLook/AnswerButtons.js";
 import { answerFromBody, newAnswer } from "../finding/secondLook/answer.js";
-import { type AnswerDraftData, answerDrafts } from "../finding/secondLook/answerDrafts.js";
+import { type AnswerDraftData, useAnswerDraftOn } from "../finding/secondLook/answerDrafts.js";
 import { DetailStep, FailedDraftNotice } from "../finding/secondLook/DetailStep.js";
 import { useAnswerInSight } from "../finding/secondLook/useAnswerInSight.js";
 import type { Visible } from "../finding/types.js";
@@ -179,7 +181,8 @@ function CardView({ meta, card }: { meta: Meta; card: ReviewCard }) {
   const held = useReviewStore((state) => state.held?.visible ?? null);
   const { ready } = useSession();
   const sheetDownThen = useSheetDownThen();
-  const draft = useKindDrafts(answerDrafts).find((entry) => entry.data.public_id === card.public_id) ?? null;
+  // A draft given on an earlier shape than the card shows is removed, and a toast says the shape changed.
+  const draft = useAnswerDraftOn(card.public_id, card.shape_revision, () => toast(SHAPE_CHANGED_WORDS));
   /** Set as an answer is given here: null until then, so a card coming back to its detail takes no focus. */
   const byKey = useRef<boolean | null>(null);
   // A draft is shown until it is saved: signed out, or ready and on its way. One that failed is answered afresh.

@@ -14,11 +14,12 @@
  * The blind queue gives its answers through the same kind.
  */
 
+import { useEffect, useRef } from "react";
 import { create } from "zustand";
 import { isRecord } from "../../../api/guards.js";
 import { toast } from "../../../ui/toastStore.js";
 import { onPersonChanged } from "../../account/session.js";
-import { defineDraftKind } from "../../drafts/savers.js";
+import { defineDraftKind, type KindDraft, useKindDrafts } from "../../drafts/savers.js";
 import {
   DRAFT_KINDS,
   type Draft,
@@ -151,4 +152,38 @@ export function answerDraftsFor(publicId: string): readonly Draft[] {
  */
 export function discardAnswerDrafts(publicId: string): void {
   for (const draft of answerDraftsFor(publicId)) discardDraft(draft.id);
+}
+
+/**
+ * True when a kept answer was given on another shape than the one shown at
+ * revision `shown`. An answer names the shape it was given on, and one kept
+ * before answers named a revision was given on revision 0.
+ */
+export function givenOnAnotherShape(data: AnswerDraftData, shown: number | null | undefined): boolean {
+  return (data.shape_revision ?? 0) !== (shown ?? 0);
+}
+
+/**
+ * The answer kept in this browser for the finding, if it was given on the
+ * shape shown at `revision`. Nothing of an answer to a shape that has since
+ * changed is kept: such a draft is never offered, it is removed, and
+ * `onStale` is called once so the page can say the shape changed.
+ */
+export function useAnswerDraftOn(
+  publicId: string,
+  revision: number | null | undefined,
+  onStale: () => void,
+): KindDraft<AnswerDraftData> | null {
+  const draft = useKindDrafts(answerDrafts).find((entry) => entry.data.public_id === publicId) ?? null;
+  const staleId = draft !== null && givenOnAnotherShape(draft.data, revision) ? draft.id : null;
+  const latest = useRef(onStale);
+  latest.current = onStale;
+  const removed = useRef<string | null>(null);
+  useEffect(() => {
+    if (staleId === null || removed.current === staleId) return;
+    removed.current = staleId;
+    discardDraft(staleId);
+    latest.current();
+  }, [staleId]);
+  return staleId === null ? draft : null;
 }
