@@ -2,7 +2,7 @@
 
 *Reference: the current design as it stands in the code. The why lives in the decision records linked from each section; the not-yet-built work is under [Implementation status](#implementation-status). Present tense means "true today". If a claim here is stale, the code moved and this doc didn't.*
 
-A finding is something a member has marked on the map as a possible earthwork: a place, a feature class, a level of protection and a step on the confidence ladder. This doc covers where a finding is and what shape it has. The rest of findings, from the ladder to evidence and discussion, is still described in [the build contract](../ARCHITECTURE.md) ("Findings", "Location sensitivity", "Second looks"). A finding is `open` or `protected`: a request may set no other level ([Decision 0032](decisions/0032-findings-are-open-or-protected-and-the-restricted-level-is-dropped.md)).
+A finding is something a member has marked on the map as a possible earthwork: a place, a feature class, a level of protection and a step on the confidence ladder. This doc covers where a finding is and what shape it has. The rest of findings, from the ladder to evidence and discussion, is still described in [the build contract](../ARCHITECTURE.md) ("Findings", "Location sensitivity", "Second looks"). A finding is `open` or `protected` ([Decision 0032](decisions/0032-findings-are-open-or-protected-and-the-restricted-level-is-dropped.md)).
 
 ## Shapes
 
@@ -188,7 +188,6 @@ The overlay asks for nothing below zoom 9, sends the map's zoom with the box, an
 |---|---|---|
 | Other people's changes as suggestions, a marking handed on, and removing an orphaned marking | Planned, not built | [Plan: lines and shapes, phase 2](../plans/lines-phase-2.md) |
 | Undoing a saved change | `path_before` is kept but nothing offers it | Not planned. [Plan: lines and shapes, phase 2](../plans/lines-phase-2.md) leaves it out |
-| Taking the `restricted` level out of the code | The enum and the services still handle it | Decision 0032 |
 
 ## Decisions behind this
 

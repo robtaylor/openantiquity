@@ -1,6 +1,6 @@
 # Decision 0023 — What is drawn near a protected finding is judged by distance and shown as whole squares
 
-**Status:** Proposed. Its first point is replaced by Decision 0030.
+**Status:** Proposed. Its first point is replaced by Decision 0030. Its sixth and seventh points no longer apply, because with the restricted level dropped (Decision 0032) everyone who adds or edits sees every finding exactly, so nothing is held back from a member's own items or an editor's view.
 
 **Current architecture:** [Location sensitivity in the build contract](../../ARCHITECTURE.md#location-sensitivity).
 
