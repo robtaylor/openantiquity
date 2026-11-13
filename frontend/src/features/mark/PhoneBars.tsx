@@ -1,9 +1,9 @@
 /**
  * The drawing bars as they float on a phone while points are being added:
  * one row of icon buttons and one status line, so the bar stays under about
- * 100 px and the map above it is free to tap. The panel's guidance block,
- * and the full bars, are in the sheet for whoever opens it. On a computer
- * the bars are in the panel (`DrawingTool`).
+ * 100 px and the map above it is free to tap. The full bars are in the
+ * sheet for whoever opens it, and the guide is on the map at the top. On a
+ * computer the bars are in the panel (`DrawingTool`).
  */
 
 import {
@@ -34,7 +34,7 @@ import { canClose, canRedo, canUndo, endWord, lengthM, otherEnd, type Path, type
 /**
  * What a tap does now, in one line, and once there are points how many and
  * how long: "3 points, 254 m. Tap to carry on, or tap the first point to
- * close it." The same words as the panel's guidance where they fit.
+ * close it." The same words as the guide on the map where they fit.
  */
 export function phoneStatusWords(path: Path, end: PathEnd, length = lengthM(path)): string {
   const count = path.points.length;

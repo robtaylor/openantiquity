@@ -83,8 +83,9 @@ function handle(index: number): HTMLElement {
   return screen.getByRole("button", { name: new RegExp(`^Point ${index + 1} of \\d+`) });
 }
 
+/** The guide on the map, in the search box's place. */
 function guidance() {
-  return panel().getByRole("region", { name: "How to mark it" });
+  return screen.getByRole("region", { name: "How to draw" });
 }
 
 async function openMarking(signedIn = true) {
@@ -101,7 +102,7 @@ describe("marking by tapping", () => {
     const { map } = await openMarking();
     expect(map.getCanvas()).toHaveClass("fc-canvas--placing");
     expect(screen.getByTestId("reticle")).toBeInTheDocument();
-    expect(guidance()).toHaveTextContent("Click the map where the feature is. One click marks a spot.");
+    expect(guidance()).toHaveTextContent("Click the map: Marks a spot where the feature is");
     expect(panel().getByRole("status")).toHaveTextContent("Nothing placed yet.");
 
     act(() => map.click(300, 200));
@@ -109,15 +110,16 @@ describe("marking by tapping", () => {
     expect(first[0]).toBeCloseTo(map.unproject([300, 200]).lng, 9);
     expect(handle(0)).toHaveAccessibleName(/^Point 1 of 1, straight, SU \d{4} \d{4}\./);
     expect(panel().getByText(/^SU \d{4} \d{4}$/)).toBeInTheDocument();
-    expect(guidance()).toHaveTextContent(/This is a spot\. Click again to draw a line from it, or drag the point/);
+    expect(guidance()).toHaveTextContent("Click again: Draws a line from the spot");
+    expect(guidance()).toHaveTextContent("Drag the point: Moves it");
 
     act(() => map.click(320, 260));
     expect(points()).toHaveLength(2);
     expect(point()).toEqual(first);
     expect(handles()).toHaveLength(2);
-    expect(guidance()).toHaveTextContent(
-      /Click to carry the line on, or click the first point to close it into a shape/,
-    );
+    expect(guidance()).toHaveTextContent("Click the map: Adds the next point");
+    // Two points can't close yet.
+    expect(guidance()).not.toHaveTextContent("Closes it into a shape");
     expect(panel().getByRole("status")).toHaveTextContent(
       /^2 points, \d+ m\. Click the map to add the next one at the south end\./,
     );
@@ -231,7 +233,8 @@ describe("marking by tapping", () => {
     expect(useMarkStore.getState().shape.present.closed).toBe(true);
     expect(points()).toHaveLength(3);
     expect(panel().getByRole("status")).toHaveTextContent(/^A closed shape of 3 points, \d+ m round\.$/);
-    expect(guidance()).toHaveTextContent("Drag a point to move it, and select one to change or delete it.");
+    expect(guidance()).toHaveTextContent("Click a point: Selects it, to delete it");
+    expect(guidance()).not.toHaveTextContent("Click the map");
     expect(screen.getByTestId("mark-path")).toHaveAttribute("data-shape", "polygon");
     // Closed, a tap adds nothing.
     act(() => map.click(500, 500));
@@ -303,7 +306,7 @@ describe("marking by tapping", () => {
     expect(useMarkStore.getState().drawing).toBe(false);
     act(() => map.click(500, 300));
     expect(points()).toHaveLength(2);
-    expect(guidance()).toHaveTextContent(/Select an end point and press “Continue from this end”/);
+    expect(guidance()).toHaveTextContent("Click an end point: Lets you draw on from there");
 
     await user.click(handle(0));
     expect(panel().getByText(/^Point 1 of 2, straight, SU \d{4} \d{4}$/)).toBeInTheDocument();
@@ -470,23 +473,24 @@ describe("the guidance", () => {
     const user = userEvent.setup();
     const { map } = await openMarking();
     act(() => map.click(400, 300));
-    expect(guidance()).toHaveTextContent(/Shift-click adds the other kind of point/);
+    expect(guidance()).toHaveTextContent("Shift-click: Adds a curved point");
     handle(0).focus();
     await user.keyboard("{ArrowRight}");
-    expect(guidance()).toHaveTextContent(/On a point, the arrow keys move it, Shift moves it further, \[ and \] step/);
+    expect(guidance()).toHaveTextContent("Arrow keys on a point: Move it");
+    expect(guidance()).toHaveTextContent("[ and ]: Step between points");
   });
 
   it("says tap on a phone, and names the long press", async () => {
     usePhoneLayout();
     const { map } = await openMarking();
-    expect(guidance()).toHaveTextContent("Tap the map where the feature is. One tap marks a spot.");
-    expect(guidance()).toHaveTextContent("Press and hold a point to switch it between straight and curved.");
+    expect(guidance()).toHaveTextContent("Tap the map: Marks a spot where the feature is");
     // The drawing bar floats above the sheet's peek stop, outside the sheet.
     const floating = screen.getByRole("region", { name: "Drawing" });
     expect(panel().queryByRole("region", { name: "Drawing" })).toBeNull();
     act(() => map.click(400, 300));
     expect(within(floating).getByRole("status")).toHaveTextContent("1 point. Tap again to draw a line from it.");
-    expect(guidance()).toHaveTextContent(/This is a spot\. Tap again/);
+    expect(guidance()).toHaveTextContent("Tap again: Draws a line from the spot");
+    expect(guidance()).toHaveTextContent("Press and hold the point: Switches it between straight and curved");
     // Once drawing stops the bars move into the sheet, which rises for the form, and the map is clear again.
     fireEvent.click(within(floating).getByRole("button", { name: "Finish" }));
     expect(screen.queryByRole("region", { name: "Drawing" })).toBe(panel().getByRole("region", { name: "Drawing" }));

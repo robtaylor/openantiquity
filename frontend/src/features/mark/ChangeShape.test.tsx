@@ -112,8 +112,8 @@ describe("opening the tool on a saved finding", () => {
     await user.click(page.getByRole("button", { name: "Change the shape" }));
     expect(address()).toBe(`/mark/finding/${finding.public_id}`);
     await waitFor(() => expect(handles()).toHaveLength(3));
-    expect(changePanel().getByRole("region", { name: "How to mark it" })).toHaveTextContent(
-      /Select an end point and press “Continue from this end”/,
+    expect(screen.getByRole("region", { name: "How to draw" })).toHaveTextContent(
+      "Click an end point: Lets you draw on from there",
     );
     expect(useMarkStore.getState().drawing).toBe(false);
   });

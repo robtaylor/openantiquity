@@ -1,5 +1,5 @@
 /**
- * The marking form: the guidance and the drawing tool, what it looks like,
+ * The marking form: the drawing tool's bars, what it looks like,
  * the optional details, the two notices, and saving. `MarkPanel` shows it.
  */
 
@@ -28,7 +28,7 @@ import { discardDraft, restoreDraft, retryDraft } from "../drafts/store.js";
 import { namedFields, POSITION_IN_TEXT, positionWords } from "../finding/positionInText.js";
 import { BARE_MAP_PATH } from "../shell/navigation.js";
 import { type PanelEnvironment, usePanelEnvironment } from "../shell/panelContext.js";
-import { DrawingBar, Guidance, SelectedPointBar } from "./DrawingTool.js";
+import { DrawingBar, SelectedPointBar } from "./DrawingTool.js";
 import { exactGridRefOf, suggestTitle } from "./describe.js";
 import type { FindingDraft } from "./findingDrafts.js";
 import { isAdding, useMarkPath, useMarkStore } from "./markStore.js";
@@ -161,7 +161,10 @@ function ClassChooser({ meta }: { meta: Meta }) {
   );
 }
 
-/** The guidance and the drawing bars, with what the server or the limits said of the shape. */
+/**
+ * The drawing bars, with what the server or the limits said of the shape.
+ * The guidance is on the map, in the search box's place (`DrawingGuide`).
+ */
 export function DrawingSection({ map, isPhone }: { map: MapLibreMap | null; isPhone: boolean }) {
   const problem = useMarkStore((state) => (state.problem?.field === "path" ? state.problem.message : null));
   // On a phone the bars float above the sheet while points are being added (`MarkButton`).
@@ -169,7 +172,6 @@ export function DrawingSection({ map, isPhone }: { map: MapLibreMap | null; isPh
   const floating = isPhone && adding;
   return (
     <div className="fc-mark__step">
-      <Guidance map={map} isPhone={isPhone} />
       {floating ? null : (
         <>
           <DrawingBar map={map} isPhone={isPhone} />

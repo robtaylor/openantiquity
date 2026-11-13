@@ -6,12 +6,13 @@
  * the middle of the part of the map nothing covers instead (`.fc-stage`).
  */
 
+import type { Map as MapLibreMap } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { findView, type Meta } from "../../api/meta.js";
 import { useMainMapStore } from "../../map/mainMap.js";
 import { LIMITS } from "../../map/permalink.js";
 import { useMapStore } from "../../map/store.js";
-import { framePoints, type MapCover } from "../../map/visibleArea.js";
+import { centreForVisible, framePoints, type MapCover } from "../../map/visibleArea.js";
 import { clamp } from "../../ui/math.js";
 import { useSelectedFinding } from "../findings/selection.js";
 import type { FindingDetail, ViewState } from "../findings/types.js";
@@ -207,6 +208,26 @@ export function frameExtent(points: ReadonlyArray<readonly [number, number]>, ma
   const size = { width: canvas.width, height: canvas.height };
   const framing = framePoints(points, size, cover, { margin: FRAME_MARGIN, maxZoom, bearing: camera.bearing });
   if (framing) requestCamera(framing);
+}
+
+/**
+ * Move the map so the point is in the middle of the part of it clear of the
+ * controls floating on it, keeping the zoom and bearing: the search box or
+ * the drawing guide, the map's buttons and the phone's drawing bar. It waits
+ * for the stage to settle, since a sheet changing stop moves what is
+ * uncovered. Before the page is laid out it simply centres the map there.
+ */
+export function centreClearOfFloating(map: MapLibreMap, point: [number, number]): void {
+  if (!stageBox()) {
+    map.easeTo({ center: point });
+    return;
+  }
+  whenStageSettled(() => {
+    const cover = floatingCover(map.getCanvas().getBoundingClientRect());
+    if (!cover) return;
+    const { camera, requestCamera } = useMapStore.getState();
+    requestCamera(centreForVisible(point[0], point[1], camera.zoom, cover, camera.bearing));
+  });
 }
 
 /**

@@ -456,7 +456,7 @@ test.describe("drawing", () => {
     expect(await ringOf(page), `focus ring on ${await describeFocus(page)}`).toEqual(HAS_RING);
     await page.keyboard.press("Enter");
     await expect(status).toHaveText(/^2 points, \d+ m\.$/);
-    await expect(panel.getByRole("region", { name: "How to mark it" })).toContainText("Continue from this end");
+    await expect(page.getByRole("region", { name: "How to draw" })).toContainText("Lets you draw on from there");
 
     // The path is one tab stop, and [ and ] step along it.
     const handles = page.getByRole("group", { name: "The points of your marking" });
@@ -507,7 +507,10 @@ test.describe("phone drawing", () => {
       expect(await hidden(), `points under the bar ${when}, once the map has stopped`).toEqual([]);
     };
 
-    await page.touchscreen.tap(195, 160);
+    // The first point goes down half way between the drawing guide, in the search box's place, and the foot of
+    // the map. The guide grows as the line does, and the room under it is all there is for the points.
+    const guide = await boxOf(page.getByRole("region", { name: "How to draw" }));
+    await page.touchscreen.tap(195, guide.y + guide.height + 200);
     await expect(bar).toBeVisible();
     await expectClear("once it appears");
     // Each next point goes down just above the bar as it is, while its status line grows with the path.

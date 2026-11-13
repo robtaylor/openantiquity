@@ -77,3 +77,92 @@ test.describe("midpoint dots", () => {
     await expect(page.getByRole("region", { name: "Selected point" }).first()).toBeVisible();
   });
 });
+
+function guide(page: Page): Locator {
+  return page.getByRole("region", { name: "How to draw" });
+}
+
+function searchBox(page: Page): Locator {
+  return page.getByRole("combobox", { name: /Search for a place/ });
+}
+
+test.describe("the drawing guide", () => {
+  test("takes the search box's place while the tool is open, and the search box is back when it closes", async ({
+    page,
+  }) => {
+    await openMap(page, `/${VIEW}`);
+    await expect(searchBox(page)).toBeVisible();
+    await expect(guide(page)).toHaveCount(0);
+    await page.locator(".fc-stage__primary").getByRole("button", { name: "Mark a finding" }).click();
+    await expect(guide(page)).toBeVisible();
+    await expect(page.locator(".fc-stage__search").getByRole("region", { name: "How to draw" })).toBeVisible();
+    await expect(searchBox(page)).toHaveCount(0);
+    await expect(guide(page).getByRole("listitem").first()).toContainText(/^(Click|Tap) the map/);
+
+    await page
+      .getByRole("complementary", { name: "Mark a finding" })
+      .getByRole("button", { name: "Close panel" })
+      .click();
+    await expect(searchBox(page)).toBeVisible();
+    await expect(guide(page)).toHaveCount(0);
+  });
+
+  test("swaps to the search box with focus in it, and back on Escape, still drawing", async ({ page }) => {
+    await openMap(page, `/mark${VIEW}`);
+    await guide(page).getByRole("button", { name: "Search for a place" }).click();
+    await expect(searchBox(page)).toBeFocused();
+    await expect(guide(page)).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(guide(page)).toBeVisible();
+    await expect(guide(page).getByRole("button", { name: "Search for a place" })).toBeFocused();
+    await expect(page).toHaveURL(/\/mark#/);
+    await expect(page.getByRole("complementary", { name: "Mark a finding" })).toBeVisible();
+  });
+
+  test("folds to its header, and stays folded next time", async ({ page }) => {
+    await openMap(page, `/mark${VIEW}`);
+    const open = await boxOf(guide(page));
+    await guide(page).getByRole("button", { name: "Hide the gestures" }).click();
+    await expect(guide(page).getByRole("list")).toBeHidden();
+    const folded = await boxOf(guide(page));
+    expect(folded.height).toBeLessThan(60);
+    expect(folded.height).toBeLessThan(open.height);
+
+    await page.reload();
+    await expect(guide(page)).toBeVisible();
+    await expect(guide(page).getByRole("list")).toBeHidden();
+    await guide(page).getByRole("button", { name: "Show the gestures" }).click();
+    await expect(guide(page).getByRole("list")).toBeVisible();
+  });
+
+  test("keeps every row to two lines at most, clear of the map's buttons", async ({ page }) => {
+    await drawLine(page);
+    await tapAt(page, await middleOf(page.locator(".fc-stage")).then(({ x, y }) => ({ x, y: y + 120 })));
+    await expect(guide(page).getByRole("listitem")).toHaveCount(6);
+    expect(await tallestRow(page)).toBeLessThanOrEqual(2.05);
+    const card = await boxOf(guide(page));
+    const buttons = await boxOf(page.locator(".fc-stage__controls"));
+    const apart = card.x + card.width <= buttons.x || card.y + card.height <= buttons.y;
+    expect(apart, "the guide is clear of the map's buttons").toBe(true);
+
+    await page.getByRole("button", { name: "Finish" }).first().click();
+    await expect(guide(page)).toContainText("Lets you draw on from there");
+    expect(await tallestRow(page)).toBeLessThanOrEqual(2.05);
+  });
+});
+
+/** The most lines any part of any row of the guide runs to. */
+async function tallestRow(page: Page): Promise<number> {
+  return guide(page)
+    .getByRole("listitem")
+    .evaluateAll((items) =>
+      Math.max(
+        ...items.flatMap((item) =>
+          Array.from(item.children).map((part) => {
+            const lines = part.getBoundingClientRect().height / Number.parseFloat(getComputedStyle(part).lineHeight);
+            return Number.isFinite(lines) ? lines : 0;
+          }),
+        ),
+      ),
+    );
+}

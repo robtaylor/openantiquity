@@ -338,15 +338,23 @@ function useChangeShapeAllowed(pathname: string): boolean | null {
 }
 
 /**
+ * True while the drawing tool is open: on any page of the marking panel,
+ * except "Change the shape" for a finding the reader may not change.
+ */
+export function useMarkingOpen(): boolean {
+  const { pathname } = useLocation();
+  const changing = useChangeShapeAllowed(pathname);
+  return isMarkPath(pathname) && changing !== false;
+}
+
+/**
  * Everything marking draws over the map: the path, its midpoint dots and its handles while a
  * finding is being marked, drafts, and findings being saved. Mounted once,
  * by the shell, over the main map.
  */
 export function MarkLayer() {
   const map = useMainMap();
-  const { pathname } = useLocation();
-  const changing = useChangeShapeAllowed(pathname);
-  const marking = isMarkPath(pathname) && changing !== false;
+  const marking = useMarkingOpen();
   const drawn = useKindDrafts(findingDrafts).length + usePendingFindings((state) => state.pending.length);
   // Follow the map only while there is something on it to keep in place.
   useMapFrame(marking || drawn > 0 ? map : null);

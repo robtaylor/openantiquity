@@ -52,6 +52,7 @@ import { ChangeShapePanel } from "../mark/ChangeShapePanel.js";
 import { MarkButton } from "../mark/MarkButton.js";
 import { isMarkPath, MarkLayer } from "../mark/MarkLayer.js";
 import { MARK_PATH, MarkPanel } from "../mark/MarkPanel.js";
+import { SearchOrGuide } from "../mark/SearchOrGuide.js";
 import { RECENT_MENTIONS_PATH } from "../mentions/paths.js";
 import { RecentMentionsPanel } from "../mentions/RecentMentionsPanel.js";
 import { MOD_ROUTE, ModerationPanel } from "../moderation/ModerationPanel.js";
@@ -67,7 +68,6 @@ import { ReviewPanel } from "../review/ReviewPanel.js";
 import { SCAN_PATH } from "../scan/api.js";
 import { ScanLayer } from "../scan/ScanLayer.js";
 import { ScanPanel } from "../scan/ScanPanel.js";
-import { SearchBox } from "../search/SearchBox.js";
 import { BrandMark, ModeRail } from "./ModeRail.js";
 import { BARE_MAP_PARAM, searchWithPanel } from "./navigation.js";
 import { PanelFrame } from "./PanelFrame.js";
@@ -290,7 +290,7 @@ function ReadyShell({ meta }: { meta: Meta }) {
 
         <div className="fc-stage">
           <div className="fc-stage__search">
-            <SearchBox />
+            <SearchOrGuide />
           </div>
           <div className="fc-stage__controls" inert={sheetFull}>
             <IconButton floating label="Layers" pressed={layersOpen} onClick={toggleLayers} ref={layersButton}>

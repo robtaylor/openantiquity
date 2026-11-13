@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import type { FindingDetail } from "../src/features/finding/types.js";
+import { GUIDE_FOLDED_KEY } from "../src/features/mark/guideRows.js";
 import { finderView } from "../src/test/fixtures/findingPage.js";
 import { fakeSession, meWith } from "./support/account.js";
 import { type Box, openMap, overlaps } from "./support/app.js";
@@ -9,8 +10,9 @@ import { stubNetwork } from "./support/network.js";
 /**
  * Lines and shapes in fixture mode: where "Change the shape" puts a saved
  * path. Every handle has to land where a finger or a mouse can take it,
- * clear of the search box, the map's buttons, the drawing bar, the panel
- * or the sheet, and the status and tab bars.
+ * clear of the drawing guide in the search box's place, folded or not, the
+ * map's buttons, the drawing bar, the panel or the sheet, and the status
+ * and tab bars.
  */
 
 const CENTRE = { lon: -1.8542, lat: 51.4286 };
@@ -100,7 +102,7 @@ async function settledHandles(page: Page, count: number): Promise<Box[]> {
 async function coveringBoxes(page: Page): Promise<Record<string, Box>> {
   return page.evaluate(() => {
     const named: Record<string, string> = {
-      "the search box": ".fc-stage__search",
+      "the search box or the drawing guide": ".fc-stage__search",
       "the map's buttons": ".fc-stage__controls",
       "the drawing bar": ".fc-mark-float",
       "the panel": ".fc-panel",
@@ -120,18 +122,27 @@ async function coveringBoxes(page: Page): Promise<Record<string, Box>> {
 }
 
 for (const [name, shape] of Object.entries(SHAPES)) {
-  test(`"Change the shape" frames ${name} with every handle clear of the controls`, async ({ page }) => {
-    await stubNetwork(page);
-    const finding = shapeFinding(shape.points, shape.closed);
-    await fakeSession(page, FINDER);
-    await fakeFindingPage(page, finding, { me: FINDER });
-    await openMap(page, `/f/${finding.public_id}${VIEW}`);
-    const findingPanel = page.getByRole("complementary", { name: finding.title });
-    await findingPanel.getByRole("button", { name: "Change the shape" }).click();
-    await page.getByRole("complementary", { name: "Change the shape" }).waitFor();
+  for (const guide of ["unfolded", "folded"] as const) {
+    test(`"Change the shape" frames ${name} with every handle clear of the controls, the guide ${guide}`, async ({
+      page,
+    }) => {
+      await stubNetwork(page);
+      if (guide === "folded") {
+        await page.addInitScript((key) => window.localStorage.setItem(key, "folded"), GUIDE_FOLDED_KEY);
+      }
+      const finding = shapeFinding(shape.points, shape.closed);
+      await fakeSession(page, FINDER);
+      await fakeFindingPage(page, finding, { me: FINDER });
+      await openMap(page, `/f/${finding.public_id}${VIEW}`);
+      const findingPanel = page.getByRole("complementary", { name: finding.title });
+      await findingPanel.getByRole("button", { name: "Change the shape" }).click();
+      await page.getByRole("complementary", { name: "Change the shape" }).waitFor();
 
-    await expectHandlesClear(page, shape.points.length);
-  });
+      const card = page.getByRole("region", { name: "How to draw" });
+      await expect(card.getByRole("list")).toBeVisible({ visible: guide === "unfolded" });
+      await expectHandlesClear(page, shape.points.length);
+    });
+  }
 }
 
 /**

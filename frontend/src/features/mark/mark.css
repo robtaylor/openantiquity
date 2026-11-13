@@ -362,18 +362,6 @@ textarea.fc-input {
   margin-top: 16px;
 }
 
-/* The guidance block at the top of the panel, which changes as the marking grows. */
-.fc-mark__guidance {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  border-left: 3px solid var(--accent);
-  border-radius: var(--radius-sm);
-  background: var(--raised);
-  font-size: 14px;
-}
-
 .fc-mark__drawing,
 .fc-mark__selected {
   display: flex;
@@ -464,4 +452,86 @@ textarea.fc-input {
   font-size: 13px;
   box-shadow: var(--shadow);
   pointer-events: none;
+}
+
+/* The drawing guide: a card on the map in the search box's place while the tool is open. It has its own
+   background, as the search box has, so its text reads over any terrain. */
+.fc-guide {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-floating);
+  box-shadow: var(--shadow);
+  color: var(--text);
+}
+
+.fc-guide__header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 4px 6px 4px 14px;
+}
+
+.fc-guide__title {
+  flex: 1;
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.fc-guide__list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--border);
+  list-style: none;
+}
+
+.fc-guide__list[hidden] {
+  display: none;
+}
+
+/* Icon, gesture, what it does: the gestures line up in one column, so the eye runs down them. */
+.fc-guide__row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 8em) minmax(0, 1fr);
+  align-items: start;
+  gap: 0 8px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.fc-guide__icon {
+  margin-top: 1px;
+  color: var(--accent-strong);
+}
+
+.fc-guide__gesture {
+  font-weight: 600;
+}
+
+.fc-guide__effect {
+  color: var(--text-muted);
+}
+
+.fc-guide kbd {
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--raised);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+/* On a phone the search box runs the full width above the map's buttons. The guide is taller, so it
+   leaves their column free. */
+.fc-shell[data-layout="phone"] .fc-stage__search:has(.fc-guide) {
+  right: calc(var(--gap) * 2 + var(--control-height));
 }

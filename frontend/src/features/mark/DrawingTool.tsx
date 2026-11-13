@@ -1,6 +1,7 @@
 /**
- * The drawing tool's controls in the mark panel: the guidance block, the
- * drawing bar and the selected-point bar (Decision 0031). Every gesture on
+ * The drawing tool's controls in the mark panel: the drawing bar and the
+ * selected-point bar (Decision 0031). The guidance is a card on the map, in
+ * the search box's place (`DrawingGuide`). Every gesture on
  * the map has a control here that does the same. On a phone the bars float
  * above the sheet's peek stop (`MarkButton`), so they are in reach while the
  * map is free to tap.
@@ -28,7 +29,9 @@ import { isMapLive } from "../../map/MapPane.js";
 import { useMapFrame } from "../../map/useMapFrame.js";
 import { Button } from "../../ui/Button.js";
 import { ChipGroup } from "../../ui/Chip.js";
+import { centreClearOfFloating } from "../finding/mapView.js";
 import { ADD_AT_CROSS, firstControlOf, focusAfter } from "./focus.js";
+import type { Device } from "./guideRows.js";
 import { addAtReticle } from "./MarkLayer.js";
 import { useMarkPath, useMarkStore } from "./markStore.js";
 import { pointName, visibleHandles } from "./PathHandles.js";
@@ -40,7 +43,6 @@ import {
   endIndex,
   endWord,
   lengthM,
-  otherEnd,
   type Path,
   type PathEnd,
   stepIndex,
@@ -55,18 +57,6 @@ export function lengthWords(metres: number): string {
 function pointsWord(count: number): string {
   return `${count} ${count === 1 ? "point" : "points"}`;
 }
-
-/** The state of a marking, as the guidance names it. */
-export type MarkingStage = "empty" | "spot" | "line" | "shape";
-
-export function stageOf(path: Path): MarkingStage {
-  if (path.points.length === 0) return "empty";
-  if (path.closed) return "shape";
-  return path.points.length === 1 ? "spot" : "line";
-}
-
-/** The device in hand, for the line of guidance that names its gestures. */
-export type Device = "computer" | "phone" | "keys";
 
 /**
  * Whether the map has keyboard focus: the last input was a key, and focus
@@ -109,46 +99,6 @@ export function useDevice(map: MapLibreMap | null, isPhone: boolean): Device {
   const keys = useKeysInMap(map);
   if (keys) return "keys";
   return isPhone ? "phone" : "computer";
-}
-
-/** What a tap does now, and what else can be done, as the marking stands. */
-export function guidanceFor(stage: MarkingStage, drawing: boolean, end: PathEnd, isPhone: boolean): string {
-  const tap = isPhone ? "Tap" : "Click";
-  const far = endWord(otherEnd(end));
-  if (stage === "empty") return `${tap} the map where the feature is. One ${tap.toLowerCase()} marks a spot.`;
-  if (stage === "shape") return "Drag a point to move it, and select one to change or delete it.";
-  if (!drawing) {
-    return "Select an end point and press “Continue from this end” to add more. Drag a point to move it, and select one to change or delete it.";
-  }
-  if (stage === "spot") {
-    return `This is a spot. ${tap} again to draw a line from it, or drag the point to move it.`;
-  }
-  return `${tap} to carry the line on, or ${tap.toLowerCase()} the ${far} point to close it into a shape. Drag a point to move it, and select one to change or delete it.`;
-}
-
-/** The one line for the device in hand. */
-export function deviceLine(device: Device, stage: MarkingStage): string {
-  if (device === "keys") {
-    return "On the map, Enter finishes and Escape stops drawing. On a point, the arrow keys move it, Shift moves it further, [ and ] step between points, and Delete removes it.";
-  }
-  if (device === "phone") return "Press and hold a point to switch it between straight and curved.";
-  if (stage === "shape") return "Shift-click a point to switch it between straight and curved.";
-  return "Shift-click adds the other kind of point, and Shift-click on a point switches its kind. Alt-click on the line adds a point there.";
-}
-
-/** The guidance block at the top of the mark panel. Plain text, there every time, read by a screen reader. */
-export function Guidance({ map, isPhone }: { map: MapLibreMap | null; isPhone: boolean }) {
-  const path = useMarkPath();
-  const drawing = useMarkStore((state) => state.drawing);
-  const end = useMarkStore((state) => state.end);
-  const device = useDevice(map, isPhone);
-  const stage = stageOf(path);
-  return (
-    <section className="fc-mark__guidance" aria-label="How to mark it" data-stage={stage} data-device={device}>
-      <p>{guidanceFor(stage, drawing, end, isPhone)}</p>
-      <p className="fc-mark__hint">{deviceLine(device, stage)}</p>
-    </section>
-  );
 }
 
 /**
@@ -300,7 +250,8 @@ export function useSelectedPointActions(map: MapLibreMap | null) {
       // On a phone the sheet's bar goes as the floating one comes up.
       focusAfter(pressed, firstControlOf(".fc-mark-float"));
       const at = path.points[endIndex(path, from)];
-      if (at && map && isMapLive(map)) map.easeTo({ center: [at.lon, at.lat] });
+      // It goes in the middle of the map left clear of the guide, the map's buttons and the phone's bar.
+      if (at && map && isMapLive(map)) centreClearOfFloating(map, [at.lon, at.lat]);
     },
     step: (by: 1 | -1) => store.select(stepIndex(path, selected, by)),
     done: () => store.select(null),

@@ -4,40 +4,12 @@ import { type RefObject, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { isMapLive } from "../../map/MapPane.js";
 import { useMainMap } from "../../map/mainMap.js";
-import { screenPoint } from "../../map/useMapFrame.js";
 import { Button } from "../../ui/Button.js";
+import { clearPointsOfBar } from "./keepClear.js";
 import { isMarkPath } from "./MarkLayer.js";
 import { MARK_PATH } from "./MarkPanel.js";
 import { isAdding, useMarkStore } from "./markStore.js";
 import { PhoneDrawingBar, PhoneSelectedPointBar } from "./PhoneBars.js";
-
-/** Half a handle's dot, in pixels. */
-const DOT_RADIUS_PX = 6;
-/** Room kept between a point's dot and the floating bar's top, in pixels. */
-const BAR_CLEARANCE_PX = 8;
-
-/**
- * The map is moved up by as little as clears every point under the floating
- * bar, or within `BAR_CLEARANCE_PX` of its top. Asked whenever the bar
- * appears or changes size: its status line wraps as the path grows, and the
- * selected-point bar takes the drawing bar's place. Points below the bar, in
- * the sheet's reach, are left alone.
- */
-export function clearPointsOfBar(map: MapLibreMap, bar: DOMRect): void {
-  if (bar.height === 0) return;
-  const frame = map.getContainer().getBoundingClientRect();
-  let lowest: number | null = null;
-  for (const point of useMarkStore.getState().shape.present.points) {
-    const at = screenPoint(map, [point.lon, point.lat]);
-    const x = frame.left + at.x;
-    const y = frame.top + at.y;
-    const beside = x + DOT_RADIUS_PX < bar.left || x - DOT_RADIUS_PX > bar.right;
-    const clear = y + DOT_RADIUS_PX < bar.top - BAR_CLEARANCE_PX || y - DOT_RADIUS_PX > bar.bottom;
-    if (beside || clear) continue;
-    lowest = lowest === null ? y : Math.max(lowest, y);
-  }
-  if (lowest !== null) map.panBy([0, lowest + DOT_RADIUS_PX + BAR_CLEARANCE_PX - bar.top], { duration: 0 });
-}
 
 function useBarKeepsPointsClear(map: MapLibreMap | null, float: RefObject<HTMLDivElement | null>, on: boolean): void {
   useEffect(() => {

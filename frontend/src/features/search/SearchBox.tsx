@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, Search } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useEffect, useId, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { useMapStore } from "../../map/store.js";
 import { useMapCover, visibleCentre } from "../../map/visibleArea.js";
@@ -26,6 +26,9 @@ import "./search.css";
 
 /** How long typing must pause before the server is asked. */
 export const SEARCH_DEBOUNCE_MS = 250;
+
+/** How a search that stood in for something else ended: a result chosen, Escape in the empty field, or the empty field left. */
+export type SearchDone = "chosen" | "escape" | "left";
 /** Typing asks nothing until there are this many letters: one letter matches thousands of names. Enter asks anyway. */
 export const MIN_SEARCH_CHARS = 2;
 
@@ -45,9 +48,22 @@ function resultDetail(result: GeoResult): string | null {
  * Typing is debounced, and a search still on its way when the text changes
  * is cancelled. Choosing a result moves the map there, and opens it if it is
  * a record or a finding.
+ *
+ * Where the search box stands in for something else for a while, such as
+ * the drawing guide, `autoFocus` puts focus in the field as it appears, and
+ * `onDone` says when the search is over: a result was chosen, Escape was
+ * pressed in the empty field, or the empty field lost focus. Without them it
+ * behaves as it always has.
  */
-export function SearchBox() {
+export function SearchBox({
+  autoFocus = false,
+  onDone,
+}: {
+  autoFocus?: boolean;
+  onDone?: (how: SearchDone) => void;
+} = {}) {
   const navigate = useNavigate();
+  const input = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -59,6 +75,11 @@ export function SearchBox() {
   const [picked, setPicked] = useState<string | null>(null);
   const id = useId();
   const listId = `${id}-list`;
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: focus goes in once, as the field appears
+  useEffect(() => {
+    if (autoFocus) input.current?.focus();
+  }, []);
 
   useEffect(() => {
     if (term === settled || (term !== "" && term.length < MIN_SEARCH_CHARS)) return;
@@ -98,6 +119,7 @@ export function SearchBox() {
     const recordId = result.type === "record" ? parseRecordId(result.ref ?? undefined) : null;
     if (recordId !== null) navigate(recordPath(recordId));
     else if (result.type === "finding" && result.ref) navigate(`/f/${encodeURIComponent(result.ref)}`);
+    onDone?.("chosen");
   }
 
   /** Enter with nothing picked: the first result, if it is a sure match. Otherwise the list stays open to choose from. */
@@ -169,6 +191,10 @@ export function SearchBox() {
         event.preventDefault();
         setText("");
         setActive(-1);
+      } else if (onDone) {
+        // Taken here, so it doesn't also leave whatever the search stood in for.
+        event.preventDefault();
+        onDone("escape");
       }
     }
   }
@@ -224,6 +250,7 @@ export function SearchBox() {
         </label>
         <Search className="fc-search__icon" size={18} aria-hidden />
         <input
+          ref={input}
           id={id}
           className="fc-search__input"
           type="search"
@@ -250,7 +277,10 @@ export function SearchBox() {
             setOpen(true);
             setPicked(null);
           }}
-          onBlur={() => setOpen(false)}
+          onBlur={() => {
+            setOpen(false);
+            if (text === "") onDone?.("left");
+          }}
           onKeyDown={onKeyDown}
         />
         <span className="fc-visually-hidden" id={`${id}-hint`}>
