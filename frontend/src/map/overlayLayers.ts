@@ -12,6 +12,8 @@ export interface OverlayLayer {
   opacity: Record<string, number | ExpressionSpecification>;
   /** Drawn only while ruled-out findings are being shown. */
   ruledOutOnly?: boolean;
+  /** Drawn only while the heritage records' zoomed-out counts are asked for. */
+  countsOnly?: boolean;
   /**
    * Drawn above every overlay's other layers, whichever overlay it belongs
    * to: a name is read over the markers that sit on its place.
@@ -323,6 +325,12 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
  */
 export const RECORD_COUNTS_SOURCE_LAYER = "record_counts";
 
+/**
+ * From this zoom a records tile holds the records themselves, unless it is
+ * busy. It is `FEATURES_FROM_ZOOM` in the backend's `record_tiles.py`.
+ */
+export const RECORD_FEATURES_FROM_ZOOM = 12;
+
 /** Ids of the records overlay's style layers, for the code that filters them and listens to clicks. */
 export const RECORD_LAYERS = {
   fills: "records-fills",
@@ -331,7 +339,10 @@ export const RECORD_LAYERS = {
   /** Records a tile places only to a square, drawn as that square from a GeoJSON source the records feature fills. */
   imprecise: "records-imprecise",
   impreciseFills: "records-imprecise-fills",
+  /** Counts below `RECORD_FEATURES_FROM_ZOOM`, drawn only while the person asks for them. */
   counts: "records-counts",
+  /** Counts in a busy tile from `RECORD_FEATURES_FROM_ZOOM` up, which stand in for its records. */
+  busyCounts: "records-counts-busy",
   live: "records-live",
   liveCentres: "records-live-centres",
   selectionLine: "records-selection-line",
@@ -420,35 +431,12 @@ export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
   const selection = recordsSelectionSourceId(source);
   const imprecise = recordsImpreciseSourceId(source);
 
-  const layers: OverlayLayer[] = [
-    {
+  function counts(id: string, zooms: { minzoom?: number; maxzoom?: number }): OverlayLayer {
+    return {
       layer: {
-        id: RECORD_LAYERS.fills,
-        type: "fill",
-        source,
-        minzoom: OUTLINE_MINZOOM,
-        "source-layer": RECORDS_SOURCE_LAYER,
-        filter: RECORD_BASE_FILTERS[RECORD_LAYERS.fills],
-        paint: { "fill-color": colour, "fill-antialias": false },
-      } as LayerSpecification,
-      opacity: { "fill-opacity": 0.02 },
-    },
-    {
-      layer: {
-        id: RECORD_LAYERS.outlines,
-        type: "line",
-        source,
-        minzoom: OUTLINE_MINZOOM,
-        "source-layer": RECORDS_SOURCE_LAYER,
-        filter: RECORD_BASE_FILTERS[RECORD_LAYERS.outlines],
-        paint: { "line-color": colour, "line-width": OUTLINE_WIDTH_BY_ZOOM },
-      } as LayerSpecification,
-      opacity: { "line-opacity": 0.6 },
-    },
-    {
-      layer: {
-        id: RECORD_LAYERS.counts,
+        id,
         type: "symbol",
+        ...zooms,
         source,
         "source-layer": RECORD_COUNTS_SOURCE_LAYER,
         layout: {
@@ -485,7 +473,39 @@ export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
         },
       } as LayerSpecification,
       opacity: hasGlyphs ? { "icon-opacity": 0.7, "text-opacity": 1 } : { "icon-opacity": 0.7 },
+    };
+  }
+
+  const layers: OverlayLayer[] = [
+    {
+      layer: {
+        id: RECORD_LAYERS.fills,
+        type: "fill",
+        source,
+        minzoom: OUTLINE_MINZOOM,
+        "source-layer": RECORDS_SOURCE_LAYER,
+        filter: RECORD_BASE_FILTERS[RECORD_LAYERS.fills],
+        paint: { "fill-color": colour, "fill-antialias": false },
+      } as LayerSpecification,
+      opacity: { "fill-opacity": 0.02 },
     },
+    {
+      layer: {
+        id: RECORD_LAYERS.outlines,
+        type: "line",
+        source,
+        minzoom: OUTLINE_MINZOOM,
+        "source-layer": RECORDS_SOURCE_LAYER,
+        filter: RECORD_BASE_FILTERS[RECORD_LAYERS.outlines],
+        paint: { "line-color": colour, "line-width": OUTLINE_WIDTH_BY_ZOOM },
+      } as LayerSpecification,
+      opacity: { "line-opacity": 0.6 },
+    },
+    // Zoomed out, every tile holds counts, and they are drawn only when asked for: by default the
+    // view is the terrain and the findings. A busy tile from RECORD_FEATURES_FROM_ZOOM up holds counts in
+    // place of its records, and those are drawn whenever the records are.
+    { ...counts(RECORD_LAYERS.counts, { maxzoom: RECORD_FEATURES_FROM_ZOOM }), countsOnly: true },
+    counts(RECORD_LAYERS.busyCounts, { minzoom: RECORD_FEATURES_FROM_ZOOM }),
   ];
   layers.push(
     {

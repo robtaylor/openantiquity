@@ -41,6 +41,7 @@ const CLICKABLE = [
   RECORD_LAYERS.impreciseFills,
   RECORD_LAYERS.outlines,
   RECORD_LAYERS.counts,
+  RECORD_LAYERS.busyCounts,
   RECORD_LAYERS.fills,
 ];
 /** The layers whose features say which stored sources are on screen. */
@@ -50,6 +51,7 @@ const CREDITED = [
   RECORD_LAYERS.outlines,
   RECORD_LAYERS.fills,
   RECORD_LAYERS.counts,
+  RECORD_LAYERS.busyCounts,
 ];
 /** The records in loaded tiles that are placed only to a square. */
 const IMPRECISE_FILTER: FilterSpecification = [">=", ["coalesce", ["get", "precision_m"], 0], SQUARE_PRECISION_M];
@@ -97,7 +99,7 @@ export function recordTarget(
       if (!Number.isSafeInteger(id) || id <= 0) continue;
       if (layer === RECORD_LAYERS.fills && fillsView(id)) continue;
       return { kind: "record", id };
-    } else if (layer === RECORD_LAYERS.counts) {
+    } else if (layer === RECORD_LAYERS.counts || layer === RECORD_LAYERS.busyCounts) {
       return { kind: "count", ...at };
     }
   }

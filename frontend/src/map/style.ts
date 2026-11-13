@@ -44,6 +44,8 @@ export interface StyleState {
   terrain: TerrainState;
   overlays: Record<string, OverlayState>;
   showRuledOut: boolean;
+  /** Whether the heritage records' counts are drawn where the map is zoomed out too far for single records. */
+  showRecordCounts: boolean;
   /** Sources not loading, by trouble key. An overlay is switched off while its key is set. */
   failing: Record<string, boolean>;
   /**
@@ -61,6 +63,7 @@ const STYLE_FIELDS: Record<keyof StyleState, true> = {
   terrain: true,
   overlays: true,
   showRuledOut: true,
+  showRecordCounts: true,
   failing: true,
   held: true,
 };
@@ -404,7 +407,10 @@ export function dynamicProperties(
 
   for (const entry of catalogueFor(meta, resolveOrigin(options)).overlayLayers) {
     const overlay = state.overlays[entry.overlayId];
-    const shown = overlayShown(state, entry.overlayId) && (!entry.ruledOutOnly || state.showRuledOut);
+    const shown =
+      overlayShown(state, entry.overlayId) &&
+      (!entry.ruledOutOnly || state.showRuledOut) &&
+      (!entry.countsOnly || state.showRecordCounts);
     props.push({ layer: entry.layer.id, kind: "layout", name: "visibility", value: visibility(shown) });
     for (const [name, base] of Object.entries(entry.opacity)) {
       props.push({ layer: entry.layer.id, kind: "paint", name, value: scaleOpacity(base, overlay?.opacity ?? 1) });

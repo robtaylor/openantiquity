@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Meta } from "../api/meta.js";
 import { metaFixture } from "../test/fixtures/meta.js";
 import { TIER_COLOURS } from "../ui/tokens.js";
-import { SQUARES_ALL_FROM_ZOOM } from "./overlayLayers.js";
+import { RECORD_FEATURES_FROM_ZOOM, RECORD_LAYERS, SQUARES_ALL_FROM_ZOOM } from "./overlayLayers.js";
 import { LIMITS } from "./permalink.js";
 import { defaultsFromMeta, overlayTroubleKey } from "./store.js";
 import {
@@ -82,6 +82,7 @@ function stateFor(meta: Meta, overrides: Partial<StyleState> = {}): StyleState {
     terrain: defaults.terrain,
     overlays: defaults.overlays,
     showRuledOut: false,
+    showRecordCounts: false,
     failing: {},
     ...overrides,
   };
@@ -393,6 +394,30 @@ describe("buildStyle", () => {
     const shown = buildStyle(metaFixture, stateFor(metaFixture, { showRuledOut: true }), "composite", OPTIONS);
     expect(visible(shown, "findings-ruled-out")).toBe(true);
     expect(visible(shown, "findings-obscured-ruled-out")).toBe(true);
+  });
+
+  it("draws zoomed-out record counts only while asked for, and a busy tile's counts from zoom 12 whatever", () => {
+    const off = buildStyle(metaFixture, stateFor(metaFixture), "composite", OPTIONS);
+    expect(visible(off, RECORD_LAYERS.counts)).toBe(false);
+    expect(visible(off, RECORD_LAYERS.busyCounts)).toBe(true);
+    expect(visible(off, RECORD_LAYERS.squares)).toBe(true);
+    const on = buildStyle(metaFixture, stateFor(metaFixture, { showRecordCounts: true }), "composite", OPTIONS);
+    expect(visible(on, RECORD_LAYERS.counts)).toBe(true);
+    // The switch never draws records whose overlay is off.
+    const defaults = defaultsFromMeta(metaFixture).overlays;
+    const recordsOff = stateFor(metaFixture, {
+      showRecordCounts: true,
+      overlays: { ...defaults, records: { visible: false, opacity: 1 } },
+    });
+    expect(visible(buildStyle(metaFixture, recordsOff, "composite", OPTIONS), RECORD_LAYERS.counts)).toBe(false);
+    // Counts held for a zoomed-out view stop at the zoom where tiles carry records, and a busy tile's start there.
+    const counts = layer(on, RECORD_LAYERS.counts) as LooseLayer & { maxzoom?: number };
+    const busy = layer(on, RECORD_LAYERS.busyCounts) as LooseLayer & { minzoom?: number };
+    expect(RECORD_FEATURES_FROM_ZOOM).toBe(12);
+    expect(counts.maxzoom).toBe(RECORD_FEATURES_FROM_ZOOM);
+    expect(busy.minzoom).toBe(RECORD_FEATURES_FROM_ZOOM);
+    expect(busy["source-layer"]).toBe("record_counts");
+    expect(busy.layout).toEqual(counts.layout);
   });
 
   it("draws records as squares coloured by category from the vocabulary", () => {

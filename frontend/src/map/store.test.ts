@@ -78,6 +78,18 @@ describe("initialise", () => {
     // Overlays the link does not mention keep their defaults.
     expect(state.overlays.findings).toEqual({ visible: true, opacity: 1 });
     expect(state.showRuledOut).toBe(true);
+    // A link without record counts leaves them off.
+    expect(state.showRecordCounts).toBe(false);
+  });
+
+  it("starts with record counts off, and turns them on from a link or a switch", () => {
+    store().initialise(metaFixture);
+    expect(store().showRecordCounts).toBe(false);
+    store().setShowRecordCounts(true);
+    expect(store().showRecordCounts).toBe(true);
+    expect(selectPermalinkState(store()).showRecordCounts).toBe(true);
+    store().initialise(metaFixture, decodePermalink("#m=9/51.4/-1.8/0/0&v=composite&rc=1"));
+    expect(store().showRecordCounts).toBe(true);
   });
 
   it("ignores ids the catalogue does not have", () => {

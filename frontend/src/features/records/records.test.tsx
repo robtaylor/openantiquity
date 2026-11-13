@@ -319,12 +319,32 @@ describe("records on the map", () => {
     act(() => map.fire("click", { point: { x: 10, y: 10 }, lngLat: { lng: -1.85, lat: 51.43 } }));
     expect(await screen.findByRole("complementary", { name: AVENUE_RECORD.name })).toBeInTheDocument();
 
+    // Counts are drawn when zoomed out only once they're asked for.
+    act(() => useMapStore.getState().setShowRecordCounts(true));
     const before = useMapStore.getState().camera.zoom;
     map.rendered = [
       { properties: { count: 12, category: "find", sources: "pas" }, layer: { id: RECORD_LAYERS.counts } },
     ];
     act(() => map.fire("click", { point: { x: 10, y: 10 }, lngLat: { lng: -1.9, lat: 51.4 } }));
     expect(useMapStore.getState().camera).toMatchObject({ lng: -1.9, lat: 51.4, zoom: before + 2 });
+  });
+
+  it("does nothing a count would do where one would be while counts are off, and zooms into a busy tile's count", async () => {
+    renderShell();
+    const map = await mapReady();
+    const before = useMapStore.getState().camera;
+    map.rendered = [
+      { properties: { count: 12, category: "find", sources: "pas" }, layer: { id: RECORD_LAYERS.counts } },
+    ];
+    act(() => map.fire("click", { point: { x: 10, y: 10 }, lngLat: { lng: -1.9, lat: 51.4 } }));
+    expect(useMapStore.getState().camera).toEqual(before);
+    expect(screen.queryByRole("complementary", { name: /record/i })).toBeNull();
+
+    map.rendered = [
+      { properties: { count: 900, category: "find", sources: "pas" }, layer: { id: RECORD_LAYERS.busyCounts } },
+    ];
+    act(() => map.fire("click", { point: { x: 10, y: 10 }, lngLat: { lng: -1.9, lat: 51.4 } }));
+    expect(useMapStore.getState().camera).toMatchObject({ lng: -1.9, lat: 51.4, zoom: before.zoom + 2 });
   });
 
   it("credits only the sources drawn on screen once the map has said which", async () => {
@@ -338,11 +358,52 @@ describe("records on the map", () => {
     map.rendered = [
       {
         properties: { category: "designation", count: 3, sources: "nhle-scheduled" },
-        layer: { id: RECORD_LAYERS.counts },
+        layer: { id: RECORD_LAYERS.busyCounts },
       },
     ];
     act(() => map.fire("idle"));
     expect(await screen.findByRole("button", { name: /Historic England/ })).toBeInTheDocument();
+  });
+
+  it("offers counts when zoomed out as a switch under the records, off until turned on, and kept in the address", async () => {
+    const user = userEvent.setup();
+    renderShell("/?panel=layers");
+    const map = await mapReady();
+    const row = screen.getByRole("switch", { name: "Heritage records" }).closest("[data-overlay]") as HTMLElement;
+    const counts = within(row).getByRole("switch", { name: "Counts when zoomed out" });
+    expect(counts).not.toBeChecked();
+    expect(counts).toHaveAccessibleDescription(
+      "Shows how many records each area holds when the map is zoomed out. Single records appear from closer in.",
+    );
+    expect(map.isVisible(RECORD_LAYERS.counts)).toBe(false);
+    await user.click(counts);
+    expect(counts).toBeChecked();
+    expect(useMapStore.getState().showRecordCounts).toBe(true);
+    await waitFor(() => expect(map.isVisible(RECORD_LAYERS.counts)).toBe(true));
+    await waitFor(() => expect(window.location.hash).toContain("rc=1"));
+
+    // It goes with the records overlay, and comes back as it was.
+    await user.click(screen.getByRole("switch", { name: "Heritage records" }));
+    expect(within(row).queryByRole("switch", { name: "Counts when zoomed out" })).toBeNull();
+    expect(map.isVisible(RECORD_LAYERS.counts)).toBe(false);
+    await user.click(screen.getByRole("switch", { name: "Heritage records" }));
+    expect(within(row).getByRole("switch", { name: "Counts when zoomed out" })).toBeChecked();
+  });
+
+  it("says why no records show when zoomed out with counts off", async () => {
+    const user = userEvent.setup();
+    renderShell("/?panel=layers");
+    await mapReady();
+    const row = screen.getByRole("switch", { name: "Heritage records" }).closest("[data-overlay]") as HTMLElement;
+    const why = "Records are shown from closer in. Zoom in to see them, or turn on counts.";
+    const bounds = useViewAreaStore.getState().bounds;
+    if (!bounds) throw new Error("The map has not said what it shows");
+    act(() => useViewAreaStore.getState().setArea(bounds, 14));
+    expect(within(row).queryByText(why)).toBeNull();
+    act(() => useViewAreaStore.getState().setArea(bounds, 10));
+    expect(within(row).getByText(why)).toBeInTheDocument();
+    await user.click(within(row).getByRole("switch", { name: "Counts when zoomed out" }));
+    expect(within(row).queryByText(why)).toBeNull();
   });
 
   it("turns categories and sources off from the layer panel", async () => {

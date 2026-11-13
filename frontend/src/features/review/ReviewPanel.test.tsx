@@ -134,7 +134,7 @@ describe("a blind card", () => {
     serve([card("f-ring")]);
     renderShell("/?panel=none");
     const map = await mapReady();
-    const recordLayers = [RECORD_LAYERS.squares, RECORD_LAYERS.counts, RECORD_LAYERS.live];
+    const recordLayers = [RECORD_LAYERS.squares, RECORD_LAYERS.busyCounts, RECORD_LAYERS.live];
     const shown = () => recordLayers.map((layer) => map.isVisible(layer));
     expect(shown()).toEqual([true, true, true]);
     const rail = screen.getByRole("navigation", { name: "Modes" });

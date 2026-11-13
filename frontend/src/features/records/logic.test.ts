@@ -267,6 +267,7 @@ describe("the records overlay's style", () => {
         terrain: DEFAULT_TERRAIN,
         overlays: { records: { visible: true, opacity: 1 } },
         showRuledOut: false,
+        showRecordCounts: false,
         failing: {},
       },
       "composite",

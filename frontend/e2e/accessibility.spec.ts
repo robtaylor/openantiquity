@@ -203,6 +203,22 @@ test.describe("desktop", () => {
   });
 });
 
+test("reaches the switch for record counts by keyboard, names it, explains it, and says when it's on", async ({
+  page,
+}) => {
+  await openMap(page, "/?panel=layers#m=10/51.4286/-1.8542/0/0&v=composite");
+  const counts = page.getByRole("switch", { name: "Counts when zoomed out" });
+  await expect(counts).toHaveAccessibleDescription(
+    "Shows how many records each area holds when the map is zoomed out. Single records appear from closer in.",
+  );
+  await expect(counts).toHaveAttribute("aria-checked", "false");
+  await tabTo(page, counts, 120);
+  await expect(counts).toBeFocused();
+  await page.keyboard.press("Space");
+  await expect(counts).toHaveAttribute("aria-checked", "true");
+  await expect(page).toHaveURL(/&rc=1/);
+});
+
 test.describe("forced colours", () => {
   test.skip(({ viewport }) => (viewport?.width ?? 0) < 720, "one layout is enough for this");
   test.use({ forcedColors: "active" });

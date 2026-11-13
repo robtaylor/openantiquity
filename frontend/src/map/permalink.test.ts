@@ -23,6 +23,7 @@ const BASE: PermalinkState = {
     coverage: { visible: false, opacity: 0.6 },
   },
   showRuledOut: false,
+  showRecordCounts: false,
 };
 
 const BUSY: PermalinkState = {
@@ -37,6 +38,7 @@ const BUSY: PermalinkState = {
     findings: { visible: true, opacity: 0.5 },
   },
   showRuledOut: true,
+  showRecordCounts: true,
 };
 
 describe("encodePermalink", () => {
@@ -51,6 +53,11 @@ describe("encodePermalink", () => {
     expect(hash).toContain("&c=os-6inch%201888%2F2&");
     expect(hash).toContain("&t=1/2.25&");
     expect(hash.endsWith("&r=1")).toBe(true);
+  });
+
+  it("writes record counts only when they are on", () => {
+    expect(encodePermalink(BUSY)).toContain("&rc=1");
+    expect(encodePermalink(BASE)).not.toContain("rc=");
   });
 
   it("never writes negative zero", () => {
@@ -98,6 +105,13 @@ describe("decodePermalink", () => {
     expect(expected.terrain.exaggeration).toBe(LIMITS.terrainExaggeration.min);
     expect(expected.overlays.osm?.opacity).toBe(0.33);
     expect(decodePermalink(encodePermalink(messy))).toEqual(expected);
+  });
+
+  it("takes record counts as off unless a link that names a view or a place says they're on", () => {
+    expect(decodePermalink("#m=9/51.4/-1.8/0/0&v=composite&rc=1").showRecordCounts).toBe(true);
+    expect(decodePermalink("#m=9/51.4/-1.8/0/0&v=composite").showRecordCounts).toBe(false);
+    expect(decodePermalink("#m=9/51.4/-1.8/0/0&rc=0").showRecordCounts).toBe(false);
+    expect(decodePermalink("#s=315/20").showRecordCounts).toBeUndefined();
   });
 
   it("returns nothing for an empty hash", () => {

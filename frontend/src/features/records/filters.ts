@@ -30,7 +30,7 @@ const TILE_RECORD_LAYERS = [
   RECORD_LAYERS.impreciseFills,
   RECORD_LAYERS.imprecise,
 ] as const;
-const COUNT_LAYERS = [RECORD_LAYERS.counts] as const;
+const COUNT_LAYERS = [RECORD_LAYERS.counts, RECORD_LAYERS.busyCounts] as const;
 export const FILTERED_RECORD_LAYERS: readonly string[] = [...TILE_RECORD_LAYERS, ...COUNT_LAYERS];
 
 /** True when the comma-separated `sources` of a count names `key`. */

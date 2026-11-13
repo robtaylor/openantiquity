@@ -373,8 +373,18 @@ export class FakeMap {
       const box = boxOf(first);
       return at.x >= box[0] && at.x <= box[2] && at.y >= box[1] && at.y <= box[3];
     };
+    // As MapLibre does, a layer that is switched off has drawn nothing to find.
+    const drawn = (id: string): boolean => {
+      const layer = this.requireStyle().layers.find((candidate) => candidate.id === id) as
+        | { layout?: { visibility?: string } }
+        | undefined;
+      return layer?.layout?.visibility !== "none";
+    };
     return this.rendered.filter(
-      (feature) => (!options?.layers || options.layers.includes(feature.layer.id)) && reaches(feature.at),
+      (feature) =>
+        (!options?.layers || options.layers.includes(feature.layer.id)) &&
+        drawn(feature.layer.id) &&
+        reaches(feature.at),
     );
   });
 

@@ -77,6 +77,8 @@ export interface MapState extends PermalinkState {
   setTerrainEnabled: (enabled: boolean) => void;
   setTerrainExaggeration: (value: number) => void;
   setShowRuledOut: (show: boolean) => void;
+  /** Draw heritage records as counts where the map is zoomed out too far for single records, or not. */
+  setShowRecordCounts: (show: boolean) => void;
   /** Record where the map is. Called by the map itself. */
   setCamera: (camera: CameraState) => void;
   /** Ask the map to move. Called by everything else. */
@@ -113,6 +115,7 @@ export function defaultsFromMeta(meta: Meta): PermalinkState {
     terrain: { ...DEFAULT_TERRAIN },
     overlays,
     showRuledOut: false,
+    showRecordCounts: false,
   };
 }
 
@@ -144,6 +147,7 @@ export function mergePermalink(base: PermalinkState, permalink: Partial<Permalin
     terrain: permalink.terrain ? { ...permalink.terrain } : base.terrain,
     overlays,
     showRuledOut: permalink.showRuledOut ?? base.showRuledOut,
+    showRecordCounts: permalink.showRecordCounts ?? base.showRecordCounts,
   };
 }
 
@@ -192,6 +196,7 @@ export const useMapStore = create<MapState>()((set, get) => {
     terrain: { ...DEFAULT_TERRAIN },
     overlays: {},
     showRuledOut: false,
+    showRecordCounts: false,
 
     initialise: (meta, permalink = {}) => {
       set({
@@ -328,6 +333,8 @@ export const useMapStore = create<MapState>()((set, get) => {
       })),
 
     setShowRuledOut: (show) => set({ showRuledOut: show }),
+
+    setShowRecordCounts: (show) => set({ showRecordCounts: show }),
 
     setCamera: (camera) => {
       const current = get().camera;

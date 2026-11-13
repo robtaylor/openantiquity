@@ -20,8 +20,9 @@ import { Slider } from "../ui/Slider.js";
 import { Switch } from "../ui/Switch.js";
 import { TabPanel, Tabs } from "../ui/Tabs.js";
 import { Attribution, parseAttribution, safeHref, useAttributions } from "./attribution.js";
+import { RECORD_FEATURES_FROM_ZOOM } from "./overlayLayers.js";
 import { LIMITS } from "./permalink.js";
-import { useMapStore } from "./store.js";
+import { useMapStore, useViewAreaStore } from "./store.js";
 import { overlayTroubleKey } from "./trouble.js";
 import { useMapCover } from "./visibleArea.js";
 
@@ -145,6 +146,30 @@ function ViewOption({
   );
 }
 
+/**
+ * The heritage records' own switch for their counts where the map is zoomed
+ * out too far for single records, and, while it is off and the map is out
+ * that far, a line saying why no records show.
+ */
+function RecordCountControls() {
+  const showRecordCounts = useMapStore((s) => s.showRecordCounts);
+  const setShowRecordCounts = useMapStore((s) => s.setShowRecordCounts);
+  const zoomedOut = useViewAreaStore((s) => s.bounds !== null && s.zoom < RECORD_FEATURES_FROM_ZOOM);
+  return (
+    <>
+      {zoomedOut && !showRecordCounts ? (
+        <p className="fc-field__hint">Records are shown from closer in. Zoom in to see them, or turn on counts.</p>
+      ) : null}
+      <Switch
+        label="Counts when zoomed out"
+        hint="Shows how many records each area holds when the map is zoomed out. Single records appear from closer in."
+        checked={showRecordCounts}
+        onChange={setShowRecordCounts}
+      />
+    </>
+  );
+}
+
 function OverlayRow({ meta, overlay }: { meta: Meta; overlay: Overlay }) {
   const state = useMapStore((s) => s.overlays[overlay.id]);
   const key = overlayTroubleKey(overlay.id);
@@ -200,6 +225,7 @@ function OverlayRow({ meta, overlay }: { meta: Meta; overlay: Overlay }) {
           {overlay.type === "coverage" ? <ScanCoverageStatus /> : null}
           {overlay.type === "records" ? (
             <>
+              <RecordCountControls />
               <RecordFilterControls meta={meta} />
               <LiveSourceControls />
             </>

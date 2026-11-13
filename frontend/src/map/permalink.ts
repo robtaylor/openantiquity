@@ -12,6 +12,7 @@
  *   x  raking light relief, as a vertical exaggeration
  *   t  3D on (1) or off (0), then terrain exaggeration
  *   o  overlays as id:opacity-per-cent, with ":h" appended when hidden
+ *   rc present (1) when heritage record counts are drawn zoomed out
  *   r  present (1) when ruled-out findings are shown
  */
 
@@ -52,6 +53,8 @@ export interface PermalinkState {
   terrain: TerrainState;
   overlays: Record<string, OverlayState>;
   showRuledOut: boolean;
+  /** Whether heritage records are drawn as counts where the map is zoomed out too far for single records. */
+  showRecordCounts: boolean;
 }
 
 /** Every field of `PermalinkState`, so code that walks the fields cannot miss one. */
@@ -64,6 +67,7 @@ const PERMALINK_FIELDS: Record<keyof PermalinkState, true> = {
   terrain: true,
   overlays: true,
   showRuledOut: true,
+  showRecordCounts: true,
 };
 
 export const PERMALINK_KEYS = Object.keys(PERMALINK_FIELDS) as ReadonlyArray<keyof PermalinkState>;
@@ -142,6 +146,7 @@ export function normalisePermalinkState(state: PermalinkState): PermalinkState {
     },
     overlays,
     showRuledOut: state.showRuledOut,
+    showRecordCounts: state.showRecordCounts,
   };
 }
 
@@ -160,6 +165,7 @@ export function encodePermalink(state: PermalinkState): string {
     ([id, overlay]) => `${encodeURIComponent(id)}:${Math.round(overlay.opacity * 100)}${overlay.visible ? "" : ":h"}`,
   );
   if (overlays.length > 0) parts.push(`o=${overlays.join(",")}`);
+  if (s.showRecordCounts) parts.push("rc=1");
   if (s.showRuledOut) parts.push("r=1");
   return `#${parts.join("&")}`;
 }
@@ -259,7 +265,11 @@ export function decodePermalink(hash: string): Partial<PermalinkState> {
     if (Object.keys(overlays).length > 0) result.overlays = overlays;
   }
 
-  if (fields.has("m") || fields.has("v")) result.showRuledOut = fields.get("r") === "1";
+  // A link that names a place or a view fixes these switches too, and leaves out the ones that are off.
+  if (fields.has("m") || fields.has("v")) {
+    result.showRuledOut = fields.get("r") === "1";
+    result.showRecordCounts = fields.get("rc") === "1";
+  }
 
   return result;
 }
