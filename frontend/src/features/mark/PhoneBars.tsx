@@ -25,7 +25,7 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import type { ReactNode } from "react";
 import { IconButton } from "../../ui/IconButton.js";
 import { lengthWords, THINNED_WORDS, usePathStatus, useSelectedPointActions } from "./DrawingTool.js";
-import { ADD_AT_CROSS, focusFirstControlAfter } from "./focus.js";
+import { ADD_AT_CROSS, firstControlOf, focusAfter } from "./focus.js";
 import { addAtReticle } from "./MarkLayer.js";
 import { useMarkPath, useMarkStore } from "./markStore.js";
 import { pointName } from "./PathHandles.js";
@@ -90,9 +90,14 @@ export function PhoneDrawingBar({ map }: { map: MapLibreMap | null }) {
         <BarButton label="Redo" disabled={!redoable} onClick={() => store.redo()}>
           <Redo2 size={20} aria-hidden />
         </BarButton>
-        <BarButton label={ADD_AT_CROSS} onClick={() => addAtReticle(map)}>
+        <IconButton
+          className="fc-mark-float__button"
+          label={ADD_AT_CROSS}
+          onClick={() => addAtReticle(map)}
+          data-add-at-cross=""
+        >
           <Crosshair size={20} aria-hidden />
-        </BarButton>
+        </IconButton>
         <IconButton
           className="fc-mark-float__button fc-mark-float__kind"
           label={`Next point: ${straight ? "straight" : "curved"}`}
@@ -112,7 +117,7 @@ export function PhoneDrawingBar({ map }: { map: MapLibreMap | null }) {
             const pressed = document.activeElement;
             store.finish();
             // The floating bar goes as the sheet rises with the full bars.
-            focusFirstControlAfter(pressed, ".fc-mark .fc-mark__drawing");
+            focusAfter(pressed, firstControlOf(".fc-mark .fc-mark__drawing"));
           }}
         >
           <Check size={20} aria-hidden />
