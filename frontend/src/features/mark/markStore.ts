@@ -118,7 +118,8 @@ export interface MarkState extends MarkFields {
    * A midpoint dot: insert a point half way along the segment after point
    * `index`, held to the limits, and select it when `select`. A drag carries
    * on with `move(index + 1, …, true)`, so the insert and the drag are one
-   * step to undo. False when nothing was inserted.
+   * step to undo, and keeps what was selected, its index moved past the new
+   * point. False when nothing was inserted.
    */
   insertMidpoint: (index: number, limits: ShapeLimits, select: boolean) => boolean;
   setNextKind: (kind: PointKind) => void;
@@ -245,7 +246,10 @@ export const useMarkStore = create<MarkState>()((set, get) => {
       if (index < 0 || index >= before.points.length) return false;
       const after = insertMidpoint(before, index, limits);
       if (after === before) return false;
-      change(() => after, select ? { selected: index + 1 } : { selected: null });
+      // A drag keeps what was selected, so a phone's bars don't swap under the finger. Its index moves on past the new point.
+      const { selected } = get();
+      const kept = selected !== null && selected > index ? selected + 1 : selected;
+      change(() => after, { selected: select ? index + 1 : kept });
       return true;
     },
     setNextKind: (nextKind) => {

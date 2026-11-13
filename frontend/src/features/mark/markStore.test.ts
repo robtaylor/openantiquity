@@ -163,11 +163,23 @@ describe("a point inserted at a segment's middle", () => {
     mark.move(2, [-1.835, 51.42], true);
     mark.move(2, [-1.836, 51.43], true);
     const state = useMarkStore.getState();
-    expect(state.selected).toBeNull();
     expect(state.shape.present.points[2]).toEqual({ lon: -1.836, lat: 51.43, kind: "corner" });
     expect(state.shape.past).toHaveLength(1);
     state.undo();
     expect(useMarkStore.getState().shape.present).toBe(LINE);
+  });
+
+  it("carried on as a drag, keeps what was selected, moved on by one when it comes after the new point", () => {
+    const mark = useMarkStore.getState();
+    mark.select(2);
+    mark.insertMidpoint(0, metaFixture.shapes, false);
+    expect(useMarkStore.getState().selected).toBe(3);
+    mark.select(0);
+    useMarkStore.getState().insertMidpoint(1, metaFixture.shapes, false);
+    expect(useMarkStore.getState().selected).toBe(0);
+    mark.select(null);
+    useMarkStore.getState().insertMidpoint(0, metaFixture.shapes, false);
+    expect(useMarkStore.getState().selected).toBeNull();
   });
 
   it("is refused at the point limit, and after an open path's last point", () => {
