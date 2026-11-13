@@ -256,6 +256,24 @@ export interface ContributorTerms {
   url: string;
 }
 
+/**
+ * The limits on a finding's line or shape, and the curve's name, from the
+ * backend's `services.shapes` and `services.looked_at`. The drawing tool
+ * reads them here rather than keeping copies, so the two can't drift.
+ */
+export interface ShapeLimits {
+  path_max_points: number;
+  shape_max_vertices: number;
+  shape_max_across_m: number;
+  line_max_length_m: number;
+  shape_max_gap_m: number;
+  curve: string;
+  /** How far from what second looks were given on a changed shape may lie and still count as kept, in metres. */
+  looked_at_max_move_m: number;
+  /** How much of what second looks were given on must be kept, as a fraction. */
+  looked_at_min_kept: number;
+}
+
 export interface Meta {
   app: {
     name: string;
@@ -303,6 +321,7 @@ export interface Meta {
    * because `parseMeta` doesn't check it, and the map works without it.
    */
   terrain?: TerrainFacts;
+  shapes: ShapeLimits;
 }
 
 export interface TerrainFacts {
@@ -392,6 +411,22 @@ export function parseMeta(value: unknown): Meta {
   check(isRecord(notices), '"notices" is missing');
   check(typeof notices.field_visit_16_17 === "string", '"notices.field_visit_16_17" is missing');
   check(isRecord(notices.find_reporting), '"notices.find_reporting" is missing');
+
+  const { shapes } = value;
+  check(
+    isRecord(shapes) &&
+      [
+        "path_max_points",
+        "shape_max_vertices",
+        "shape_max_across_m",
+        "line_max_length_m",
+        "shape_max_gap_m",
+        "looked_at_max_move_m",
+        "looked_at_min_kept",
+      ].every((key) => isFiniteNumber(shapes[key])) &&
+      typeof shapes.curve === "string",
+    '"shapes" needs every limit on a line or shape',
+  );
 
   check(isRecord(layers), '"layers" is missing');
   const { views, dem, overlays, initial_view: initialView } = layers;

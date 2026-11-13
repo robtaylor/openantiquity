@@ -799,4 +799,14 @@ export const metaFixture: Meta = {
       "Some findings have their position hidden to protect the site, and are shown as a one-kilometre square. Protected findings are exact once you sign in. Restricted findings are exact only to their finder, trusted members, archaeologists and moderators.",
   },
   terrain: { fine_minzoom: 13, catalogue_tiles: 5877, overview: { built: false, built_at: null, tiles: 0 } },
+  shapes: {
+    path_max_points: 5000,
+    shape_max_vertices: 50000,
+    shape_max_across_m: 25000,
+    line_max_length_m: 600000,
+    shape_max_gap_m: 1000,
+    curve: "catmull-rom-centripetal-1",
+    looked_at_max_move_m: 250,
+    looked_at_min_kept: 0.75,
+  },
 };

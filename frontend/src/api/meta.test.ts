@@ -121,6 +121,12 @@ describe("parseMeta", () => {
       (m: Breakable) => delete m.notices.field_visit_16_17,
       '"notices.field_visit_16_17" is missing',
     ],
+    ["no limits on lines and shapes", (m: Breakable) => delete m.shapes, '"shapes" needs every limit'],
+    [
+      "a line length limit given as text",
+      (m: Breakable) => (m.shapes.line_max_length_m = "600000"),
+      '"shapes" needs every limit',
+    ],
   ])("rejects %s", (_name, change, message) => {
     const value = _name === "not an object" ? null : broken(change as (meta: Breakable) => void);
     expect(() => parseMeta(value)).toThrow(MetaError);
