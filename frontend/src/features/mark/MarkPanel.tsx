@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { Button } from "../../ui/Button.js";
@@ -12,7 +12,7 @@ import { PanelFrame } from "../shell/PanelFrame.js";
 import { findingDrafts, useSavedDrafts } from "./findingDrafts.js";
 import { MarkForm } from "./MarkForm.js";
 import { useMarkReturn } from "./markReturn.js";
-import { useMarkStore } from "./markStore.js";
+import { isUnsavedNewMark, useMarkStore } from "./markStore.js";
 import { useLeaveOnEscape } from "./useLeaveOnEscape.js";
 import { openSavedFinding } from "./useSaveMark.js";
 import "./mark.css";
@@ -52,13 +52,17 @@ export function MarkPanel({ meta }: { meta: Meta }) {
   const back = useMarkReturn((state) => state.to);
   useDocumentTitle("Mark a finding");
 
-  // A new mark starts afresh. A draft is taken up once, so changes made to it here are kept.
-  // The store forgets everything when the person changes, and a draft open here is then taken up again.
+  // A new mark starts afresh, unless a marking that was never saved or kept is still in hand:
+  // another panel opened over this one, or the tool was closed, and what was drawn mustn't be
+  // lost for that. A draft is taken up once, so changes made to it here are kept. The store
+  // forgets everything when the person changes, and a draft open here is then taken up again.
   const begun = useRef(false);
+  const [carriedOn, setCarriedOn] = useState(false);
   useEffect(() => {
     const mark = useMarkStore.getState();
     if (draftId === undefined) {
-      if (!begun.current || mark.draftId !== null) mark.start();
+      if (!begun.current && isUnsavedNewMark(mark)) setCarriedOn(true);
+      else if (!begun.current || mark.draftId !== null) mark.start();
     } else if (draft && mark.draftId !== draftId) {
       mark.load(draftId, draft.data);
     }
@@ -95,7 +99,23 @@ export function MarkPanel({ meta }: { meta: Meta }) {
           <p>It may have been saved or discarded in another tab.</p>
         </EmptyState>
       ) : draftId !== undefined && loaded !== draftId ? null : (
-        <MarkForm meta={meta} draft={draft} />
+        <>
+          {carriedOn && placed && draftId === undefined ? (
+            <div className="fc-mark__notice" role="status">
+              <p>Carrying on with the marking you hadn't saved.</p>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setCarriedOn(false);
+                  useMarkStore.getState().start();
+                }}
+              >
+                Discard it
+              </Button>
+            </div>
+          ) : null}
+          <MarkForm meta={meta} draft={draft} />
+        </>
       )}
       {back ? (
         <div className="fc-mark-back">

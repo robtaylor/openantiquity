@@ -97,6 +97,56 @@ async function openMarking(signedIn = true) {
   return { map, routes };
 }
 
+describe("a marking that hasn't been saved", () => {
+  it("is still there after the Layers panel has been opened over it and closed", async () => {
+    const user = userEvent.setup();
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    act(() => map.click(450, 340));
+    act(() => map.click(500, 300));
+    await user.click(panel().getByRole("radio", { name: "Road" }));
+    const drawn = points();
+    expect(drawn).toHaveLength(3);
+
+    await user.click(screen.getByRole("button", { name: "Layers" }));
+    const layers = await screen.findByRole("complementary", { name: "Layers" });
+    await user.click(within(layers).getByRole("button", { name: "Close panel" }));
+
+    await screen.findByRole("complementary", { name: "Mark a finding" });
+    expect(points()).toEqual(drawn);
+    expect(panel().getByRole("radio", { name: "Road" })).toBeChecked();
+    expect(handles()).toHaveLength(3);
+  });
+
+  it("is carried on with when the tool is closed and opened again, and says so", async () => {
+    const user = userEvent.setup();
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    act(() => map.click(450, 340));
+    const drawn = points();
+
+    await user.click(panel().getByRole("button", { name: "Finish" }));
+    await user.click(panel().getByRole("button", { name: "Close panel" }));
+    await user.click(await screen.findByRole("button", { name: "Mark a finding" }));
+
+    expect(points()).toEqual(drawn);
+    expect(panel().getByText("Carrying on with the marking you hadn't saved.")).toBeInTheDocument();
+
+    // And it can be let go of, to start afresh.
+    await user.click(panel().getByRole("button", { name: "Discard it" }));
+    expect(points()).toEqual([]);
+    expect(panel().queryByText("Carrying on with the marking you hadn't saved.")).toBeNull();
+  });
+
+  it("starts afresh once a marking has been saved", async () => {
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    act(() => useMarkStore.getState().start());
+    expect(points()).toEqual([]);
+    expect(panel().queryByText("Carrying on with the marking you hadn't saved.")).toBeNull();
+  });
+});
+
 describe("marking by tapping", () => {
   it("takes taps at once: the first places a point, and a second adds one and leaves the first where it was", async () => {
     const { map } = await openMarking();

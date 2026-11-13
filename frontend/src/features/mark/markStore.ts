@@ -309,6 +309,15 @@ export function isAdding(state: MarkFields): boolean {
   return state.drawing && !state.shape.present.closed;
 }
 
+/**
+ * True while the tool holds a new marking, of one point or more, that is
+ * neither a saved finding's path nor a kept draft. Opening the tool again
+ * carries on with it, where it would otherwise start afresh.
+ */
+export function isUnsavedNewMark(state: MarkFields): boolean {
+  return state.editing === null && state.draftId === null && state.shape.present.points.length > 0;
+}
+
 /** True while a line or a shape is drawn that isn't saved or kept as a draft, which leaving the page would lose. */
 export function hasUnkeptLine(state: MarkFields): boolean {
   const path = state.shape.present;
