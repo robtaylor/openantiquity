@@ -240,9 +240,12 @@ export class FakeMap {
     return this;
   }
 
-  /** Fire a map event, as MapLibre would. */
+  /** Fire a map event, as MapLibre would: one that says where it happened also carries its point on the canvas. */
   fire(type: string, event: Record<string, unknown> = {}): void {
-    for (const listener of [...(this.listeners.get(type) ?? [])]) listener({ type, target: this, ...event });
+    const lngLat = event.lngLat as { lng: number; lat: number } | undefined;
+    const point = event.point ?? (lngLat ? this.project(lngLat) : undefined);
+    const sent = { type, target: this, ...event, ...(point === undefined ? {} : { point }) };
+    for (const listener of [...(this.listeners.get(type) ?? [])]) listener(sent);
   }
 
   /** How many listeners are waiting for an event. */
