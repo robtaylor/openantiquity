@@ -467,6 +467,61 @@ describe("the exact path and signing out", () => {
   });
 });
 
+describe("replacing an old shape of several parts", () => {
+  function oldShapeFinding(): FindingDetail {
+    return lineFinding({
+      location: {
+        ...lineFinding().location,
+        path: null,
+        outline: {
+          type: "MultiLineString",
+          coordinates: [
+            [
+              [-1.855, 51.428],
+              [-1.854, 51.429],
+            ],
+            [
+              [-1.853, 51.43],
+              [-1.852, 51.431],
+            ],
+          ],
+        },
+      },
+    });
+  }
+
+  it("saves nothing, and says why, until a new shape of two points or more is drawn", async () => {
+    const user = userEvent.setup();
+    const finding = oldShapeFinding();
+    const { map, routes } = await openChange(finding);
+    await user.click(changePanel().getByRole("button", { name: "Save the shape" }));
+    expect(await changePanel().findByRole("alert")).toHaveTextContent(
+      "Draw the new shape first, or cancel to leave it as it was.",
+    );
+    expect(routes.callsTo(`PATCH /findings/${finding.public_id}`)).toHaveLength(0);
+    expect(address()).toBe(`/mark/finding/${finding.public_id}`);
+
+    routes.on(`PATCH /findings/${finding.public_id}`, () => json(lineFinding()));
+    await user.click(screen.getByRole("button", { name: /^Point 1 of 1/ }));
+    await user.click(changePanel().getByRole("button", { name: "Continue from this end" }));
+    act(() => map.click(600, 200));
+    await user.click(changePanel().getByRole("button", { name: "Finish" }));
+    await user.click(changePanel().getByRole("button", { name: "Save the shape" }));
+    await waitFor(() => expect(routes.callsTo(`PATCH /findings/${finding.public_id}`)).toHaveLength(1));
+    const body = routes.callsTo(`PATCH /findings/${finding.public_id}`)[0]?.body as { path: { points: unknown[] } };
+    expect(body.path.points).toHaveLength(2);
+  });
+
+  it("never sends the removal of an old shape from what the tool holds of it", () => {
+    const finding = oldShapeFinding();
+    const only = {
+      closed: false,
+      points: [{ lon: finding.location.lon, lat: finding.location.lat, kind: "corner" as const }],
+    };
+    expect(changeBody(finding, only, 3)).toBeNull();
+  });
+});
+
 describe("changing a shape on a phone", () => {
   it("floats the compact bar while points are added, as marking does", async () => {
     const user = userEvent.setup();

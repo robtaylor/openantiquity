@@ -57,6 +57,7 @@ export const LOOKED_AT_SOURCE = "mark-looked-at";
 export const LOOKED_AT_LAYER = "mark-looked-at-line";
 
 export const CHANGED_ELSEWHERE = "The shape was changed somewhere else while you had it open. This is it as it is now.";
+const REPLACE_FIRST = "Draw the new shape first, or cancel to leave it as it was.";
 export const CHANGED_UNDER_YOU =
   "The shape was changed somewhere else while you had it open, so what is here can't be saved over it.";
 
@@ -84,6 +85,8 @@ export function savedPath(finding: FindingDetail): Path | null {
 export function changeBody(finding: FindingDetail, path: Path, revision: number): FindingUpdate | null {
   const hadShape = finding.location.path !== null || finding.location.outline !== null;
   if (path.points.length >= 2) return { path: apiPath(path), path_revision: revision };
+  // An old shape the tool can't read is replaced only by a new one: what the tool holds of it is just its point.
+  if (savedPath(finding) === null) return null;
   const [only] = path.points;
   if (!only) return null;
   const location = { type: "Point", coordinates: [only.lon, only.lat] } as unknown as FindingUpdate["location"];
@@ -202,6 +205,10 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
     const mark = useMarkStore.getState();
     const body = changeBody(finding, mark.shape.present, base);
     if (body === null) {
+      if (saved === null) {
+        mark.setProblem({ field: "path", message: REPLACE_FIRST });
+        return;
+      }
       if (mark.shape.present.points.length === 0) {
         mark.setProblem({ field: "path", message: "Put at least one point down, or cancel to leave it as it was." });
         return;
