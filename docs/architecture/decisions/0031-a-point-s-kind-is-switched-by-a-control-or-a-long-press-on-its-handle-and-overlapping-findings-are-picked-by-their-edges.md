@@ -54,6 +54,6 @@ The owner also asked: "how do users select when there are overlapping shapes?" T
 
 ## Links
 
-- [Plan: lines and curves for marking findings](../../plans/lines-and-curves.md) — "The drawing tool" and "Picking one of overlapping shapes".
+- [Plan: lines and curves for marking findings](../../plans/archive/lines-and-curves.md) — "The drawing tool" and "Picking one of overlapping shapes".
 - `docs/UI.md` — the 100 ms rule, and the rule that a phone sheet never covers the place being looked at.
 - Decision 0028 — the corner and smooth points, and the anchor marker every shape finding keeps.

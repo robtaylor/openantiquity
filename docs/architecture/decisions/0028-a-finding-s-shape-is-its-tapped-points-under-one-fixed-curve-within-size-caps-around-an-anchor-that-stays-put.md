@@ -56,7 +56,7 @@ The caps were sized against Stanwick's ramparts at about 2.5 km, Watling Street 
 
 ## Links
 
-- [Plan: lines and curves for marking findings](../../plans/lines-and-curves.md) — the path, the curve, the limits, the anchor and the API contract.
+- [Plan: lines and curves for marking findings](../../plans/archive/lines-and-curves.md) — the path, the curve, the limits, the anchor and the API contract.
 - Decision 0005 — sensitive findings are generalised by viewer to a 1 km square.
 - Decision 0023 — the 1.5 km privacy guard.
 - Decision 0029 — who may change a shape, and what a change does to second looks.

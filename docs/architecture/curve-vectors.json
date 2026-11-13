@@ -1,6 +1,6 @@
 {
   "curve": "catmull-rom-centripetal-1",
-  "about": "Shared test vectors for the curve defined in docs/plans/lines-and-curves.md. Each path derives to its expected geometry within tolerance_deg in both services.shapes and the frontend's curve. An extension's `unchanged` gives half-open vertex slices of the base's and the extended path's geometry that must be equal: every segment more than one from the new point.",
+  "about": "Shared test vectors for the curve defined in docs/architecture/findings.md. Each path derives to its expected geometry within tolerance_deg in both services.shapes and the frontend's curve. An extension's `unchanged` gives half-open vertex slices of the base's and the extended path's geometry that must be equal: every segment more than one from the new point.",
   "tolerance_deg": 1e-07,
   "vectors": [
     {

@@ -52,7 +52,7 @@ An investigation's area that comes within 1.5 km of a finding the reader doesn't
 
 ## Links
 
-- [Plan: lines and curves for marking findings](../../plans/lines-and-curves.md) — "Sensitivity: every place a shape leaves".
+- [Plan: lines and curves for marking findings](../../plans/archive/lines-and-curves.md) — "Sensitivity: every place a shape leaves".
 - Decision 0023 — what is drawn near a protected finding is judged by distance and shown as whole squares. This record replaces the first point, as to what the distance is measured to.
 - Decision 0005 — sensitive findings are generalised by viewer, each by its own level.
 - Decision 0021 — what is written and drawn beside a protected finding is generalised for each reader.

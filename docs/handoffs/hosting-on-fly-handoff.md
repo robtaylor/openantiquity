@@ -28,7 +28,7 @@ cd backend && uv run pytest -q tests/infra tests/test_config.py tests/test_stora
 fly apps list --org openantiquity
 # Expect: openantiquity and openantiquity-jobs alone
 fly machine list --app openantiquity
-# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit 22ab922 or later
+# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit 3958ced or later
 fly ips list --app openantiquity
 # Expect: the private address, the shared IPv4 address 66.241.124.216 and the IPv6 address 2a09:8280:1::1fe:8e38:0
 fly machine list --app openantiquity-jobs
@@ -37,7 +37,7 @@ fly mpg list --org openantiquity
 # Expect: the cluster openantiquity, d2gznoqz2n8opkm8, ready, attached to both apps
 fly storage list --org openantiquity
 # Expect: openantiquity-elevation, openantiquity-cache and openantiquity-photos
-uv run infra/fly_jobs.py --commit 7175a319e6cba1ce6a311c641a208ccee3e47d39 run fieldclub-terrain info
+uv run infra/fly_jobs.py --commit 3958ced9ab8a68df1bd5051f42e33ec190b1f0cb run fieldclub-terrain info
 fly logs --app openantiquity-jobs --no-tail | grep -e mirrored -e overview
 # Expect: mirrored 5877 tiles (100.00%), and overview c2a8a0e49f2f, 5877 tiles
 ```
@@ -56,9 +56,10 @@ The last pair names the jobs image that exists. `fly_jobs.py` looks for the imag
 | `9041d2c` | Publish the code under the AGPL version 3, with a README | The repository is public at `github.com/robtaylor/openantiquity`. Decision 0026 |
 | `e7c0794` | Draw terrain on Fly, and check the mirror before each deploy | The first commit to draw terrain on Fly. Decision 0027 |
 | The commit that last changed this file | Record step 10 | The hourly machine, and what the deploy of `e7c0794` showed |
-| `22ab922` | Pass over an activity kind or next step a later version stored | The commit the web app runs. Decision 0033, so a later version can be deployed beside it or rolled back to it |
-| `7175a31` | Keep an ingest run's lock connection in use while records flow | The commit the hourly machine runs. Found by the first nightly refresh |
+| `22ab922` | Pass over an activity kind or next step a later version stored | Decision 0033, so a later version can be deployed beside it or rolled back to it |
+| `7175a31` | Keep an ingest run's lock connection in use while records flow | Found by the first nightly refresh |
 | `a0d74e6` | Run the end-to-end tests on the real backend in CI | `pnpm e2e:full` has a CI job of its own |
+| `3958ced` | Lines and curves, 115 commits | The commit the web app and the hourly machine run since 2026-11-13. Its release added columns and a table, and the shapes backfill was run afterwards and found nothing to fill |
 
 ## Open follow-ups (priority-ordered)
 
@@ -66,9 +67,9 @@ The last pair names the jobs image that exists. `fly_jobs.py` looks for the imag
 
 The first refresh of every bulk source from Fly ran on 2026-11-13 from 03:41 to 07:42 UTC: 27 sources refreshed, 1 already current, 4 skipped and 2 failed. The two that failed, `he-aim-detailed-mapping` (497,629 records, 87 minutes) and `he-aim-monument-extents` (197,372 records, 62 minutes), stored every record and then stopped at their last step, because the connection holding each run's lock had been closed. The runbook's "What can only be checked on the real platform" has what was measured.
 
-Commit `7175a31` keeps the lock's connection in use, and the hourly machine runs its image. Both sources were then run by hand on that image and completed, in 54 and 56 minutes. Neither run lasted the 62 minutes at which a lock's connection was seen closed, so they don't show the fix by themselves. The 78-minute test in the runbook does, and no run of over an hour has completed on Fly yet.
+Commit `7175a31` keeps the lock's connection in use, and the hourly machine has run an image with it since that day. Both sources were then run by hand on that image and completed, in 54 and 56 minutes. Neither run lasted the 62 minutes at which a lock's connection was seen closed, so they don't show the fix by themselves. The 78-minute test in the runbook does, and no run of over an hour has completed on Fly yet.
 
-The two fall due again at the 03:41 UTC refresh of 2026-11-21, with the other sources refreshed weekly. Read that night with `fly logs --app openantiquity-jobs`, or ask the database for the runs. To run a source by hand: `uv run infra/fly_jobs.py --commit 7175a319e6cba1ce6a311c641a208ccee3e47d39 ingest <key>`.
+The two fall due again at the 03:41 UTC refresh of 2026-11-21, with the other sources refreshed weekly. Read that night with `fly logs --app openantiquity-jobs`, or ask the database for the runs. To run a source by hand: `uv run infra/fly_jobs.py --commit 3958ced9ab8a68df1bd5051f42e33ec190b1f0cb ingest <key>`.
 
 Still to look at: how much of the 10 GB volume the downloads took. `fly volumes list` doesn't say, so it needs `df` from a machine with the volume mounted.
 
@@ -97,7 +98,7 @@ The GitHub environment `production` and a deploy token for the web app alone. Th
 The domains were pointed at Fly on 2026-11-12 at the owner's word ("noone will be looking yet"). The site answers on `openantiquity.org` and anyone can look at the map.
 
 - OpenStreetMap and Google sign-in are on since 2026-11-12 (follow-up 2). So anyone with an account at either can now join and post.
-- Since 2026-11-13 a finding is open or protected, and no request can set the restricted level (Decision 0032, `docs/plans/two-sensitivity-levels.md`). The level's code comes out after lines and curves lands.
+- Since 2026-11-13 a finding is open or protected, and no request can set the restricted level (Decision 0032, `docs/plans/two-sensitivity-levels.md`). The level's code comes out next, now that lines and curves has landed.
 - The app has no gate. The owner was told on 2026-11-12, and that [`owner-actions.md`](../plans/owner-actions.md) holds a public launch until an operator is named and the terms, the privacy notice and the Online Safety Act assessment exist (WS14 to WS17). A setting that limits sign-up to named accounts was offered and not yet asked for.
 - The other providers and the mail relay are in `owner-actions.md`, WS3.
 

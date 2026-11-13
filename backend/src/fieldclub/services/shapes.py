@@ -4,7 +4,7 @@ The path is the source of truth. `derive` makes the stored geometry from it
 with one fixed curve, `catmull-rom-centripetal-1`, so a finder can reopen a
 path, move a point or extend it, and the geometry can be made again if the
 curve's definition ever changes. The definition is in prose in
-`docs/plans/lines-and-curves.md` ("The curve") and as data in
+`docs/architecture/findings.md` ("The curve") and as data in
 `docs/architecture/curve-vectors.json`, which the backend and the frontend
 suites both read.
 
@@ -69,7 +69,7 @@ logger = logging.getLogger(__name__)
 
 CURVE = "catmull-rom-centripetal-1"
 
-# The limits, and why each is set where it is: `docs/plans/lines-and-curves.md`, "Limits".
+# The limits: `docs/architecture/findings.md`, "Limits". Why each is set where it is: Decision 0028.
 PATH_MAX_POINTS = 5_000
 SHAPE_MAX_VERTICES = 50_000
 SHAPE_MAX_ACROSS_M = 25_000

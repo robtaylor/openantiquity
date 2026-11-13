@@ -59,7 +59,7 @@ The owner later raised other people's changes as suggestions the owner accepts o
 
 ## Links
 
-- [Plan: lines and curves for marking findings](../../plans/lines-and-curves.md) — "Extending, and what it does to second looks", "Once looked at, most of it stays" and "Left out of the first version".
+- [Plan: lines and curves for marking findings](../../plans/archive/lines-and-curves.md) — "Extending, and what it does to second looks", "Once looked at, most of it stays" and "Left out of the first version".
 - Decision 0003 — the confidence ladder.
 - Decision 0008 — second looks are blind.
 - Decision 0010 — people who answered are named only to those who may see answers.

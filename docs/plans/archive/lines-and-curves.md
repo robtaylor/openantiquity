@@ -1,6 +1,6 @@
 # Plan — Lines and curves for marking findings: draw a finding as a straight or curved line or shape, and extend it later
 
-**Status:** Active.
+**Status:** Implemented (2026-11-13).
 
 ## Goal
 
@@ -353,7 +353,7 @@ The contract above is what the workstreams build against. WS-A comes first, beca
 
 ### WS-A — Backend
 
-**Status:** Built on the branch, not yet on `main`. Steps 1 to 8 landed on 2026-11-12 and 2026-11-13, with the fixes two reviews of the finished backend asked for. The whole suite passes: 6,130 tests on 2026-11-13.
+**Status:** Shipped, on `main` as `3958ced` and deployed on 2026-11-13. Steps 1 to 8 landed on 2026-11-12 and 2026-11-13, with the fixes two reviews of the finished backend asked for. The whole suite passes: 6,130 tests on 2026-11-13.
 
 **Steps, in order, each test first:**
 
@@ -375,7 +375,7 @@ The contract above is what the workstreams build against. WS-A comes first, beca
 
 ### WS-B — Frontend
 
-**Status:** Built on the branch, not yet on `main`. Steps 1 to 5 landed on 2026-11-13 (`42e7947` to `f616f08`): the curve, the path model, the generated types, the one-flow drawing tool and drafts. Steps 6 to 8 landed the same day (`192afcc` to `88ab10f`), with the phone's drawing bar made one row of buttons and one line: changing a saved finding, second looks naming their shape revision, saved lines and areas on the map, and the chooser between overlapping findings. The chooser is built on `Dialog` alone, styled as a short sheet on a phone. WS-C is next.
+**Status:** Shipped, on `main` as `3958ced` and deployed on 2026-11-13. Steps 1 to 5 landed on 2026-11-13 (`42e7947` to `f616f08`): the curve, the path model, the generated types, the one-flow drawing tool and drafts. Steps 6 to 8 landed the same day (`192afcc` to `88ab10f`), with the phone's drawing bar made one row of buttons and one line: changing a saved finding, second looks naming their shape revision, saved lines and areas on the map, and the chooser between overlapping findings. The chooser is built on `Dialog` alone, styled as a short sheet on a phone. WS-C is next.
 
 **Steps, in order, each test first:**
 
@@ -395,7 +395,7 @@ The contract above is what the workstreams build against. WS-A comes first, beca
 
 ### WS-C — End-to-end checks and documents
 
-**Status:** Built on the branch, not yet on `main`. Steps 1 to 5 landed on 2026-11-13. Real-browser specs: `frontend/e2e-full/lines.spec.ts` and `leaks.spec.ts` against the real backend, and `frontend/e2e/lines.spec.ts`, `overlap.spec.ts` and the drawing tests in `accessibility.spec.ts` in fixture mode. The first area doc, [findings](../architecture/findings.md), holds the shapes reference. Two phone faults were put right on the way: "Change the shape" now frames a saved path clear of the search box, the map's buttons and the bars, and the finding page says when an old shape can only be replaced. Decisions 0028 to 0031 are still Proposed.
+**Status:** Shipped, on `main` as `3958ced` and deployed on 2026-11-13. Steps 1 to 5 landed on 2026-11-13. Real-browser specs: `frontend/e2e-full/lines.spec.ts` and `leaks.spec.ts` against the real backend, and `frontend/e2e/lines.spec.ts`, `overlap.spec.ts` and the drawing tests in `accessibility.spec.ts` in fixture mode. The first area doc, [findings](../../architecture/findings.md), holds the shapes reference. Two phone faults were put right on the way: "Change the shape" now frames a saved path clear of the search box, the map's buttons and the bars, and the finding page says when an old shape can only be replaced. Decisions 0028 to 0031 are still Proposed.
 
 **Steps:**
 
@@ -451,13 +451,13 @@ None. The three that were open were answered on 2026-11-12 and are under "Decide
 
 ## References
 
-- `../architecture/decisions/0005-sensitive-findings-are-generalised-by-viewer.md`
-- `../architecture/decisions/0008-second-looks-are-blind.md`
-- `../architecture/decisions/0019-answers-and-votes-keep-the-weight-they-were-given-with.md`
-- `../architecture/decisions/0021-what-is-written-and-drawn-beside-a-protected-finding-is-generalised-for-each-reader.md`
-- `../architecture/decisions/0022-signed-out-drafts-belong-to-the-tab-that-made-them.md`
-- `../architecture/decisions/0023-what-is-drawn-near-a-protected-finding-is-judged-by-distance-and-shown-as-whole-squares.md`
-- `../architecture/decisions/0024-drafts-taken-over-at-sign-in-wait-to-be-sent.md`
-- `../ARCHITECTURE.md` — Findings, API and Location sensitivity
-- `../UI.md` — layout, markers and behaviour rules the tool and the chooser follow
-- `v1-england.md` — the plan this follows on from
+- `../../architecture/decisions/0005-sensitive-findings-are-generalised-by-viewer.md`
+- `../../architecture/decisions/0008-second-looks-are-blind.md`
+- `../../architecture/decisions/0019-answers-and-votes-keep-the-weight-they-were-given-with.md`
+- `../../architecture/decisions/0021-what-is-written-and-drawn-beside-a-protected-finding-is-generalised-for-each-reader.md`
+- `../../architecture/decisions/0022-signed-out-drafts-belong-to-the-tab-that-made-them.md`
+- `../../architecture/decisions/0023-what-is-drawn-near-a-protected-finding-is-judged-by-distance-and-shown-as-whole-squares.md`
+- `../../architecture/decisions/0024-drafts-taken-over-at-sign-in-wait-to-be-sent.md`
+- `../../ARCHITECTURE.md` — Findings, API and Location sensitivity
+- `../../UI.md` — layout, markers and behaviour rules the tool and the chooser follow
+- `../v1-england.md` — the plan this follows on from

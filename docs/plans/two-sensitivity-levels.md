@@ -13,8 +13,8 @@ A finding is `open` or `protected`, as Decision 0032 chose, and nothing in the c
 
 ## Where things stand (2026-11-13)
 
-- WS1 is live. The web app runs commit `da60c5a` since 2026-11-13.
-- WS2 hasn't started and waits for lines and curves.
+- WS1 is live since 2026-11-13.
+- WS2 hasn't started. It waited for lines and curves, which landed on 2026-11-13 as `3958ced`.
 - The live site holds no restricted finding. Asked signed out on 2026-11-12, its API listed one finding, and it was open.
 
 ## Workstreams
@@ -41,7 +41,7 @@ This closes the fault Decision 0032 describes on the live site. It changes the e
 
 ### WS2 — The sweep
 
-**Status:** Not started. Waits for lines and curves.
+**Status:** Not started.
 
 **Deliverables:**
 
@@ -67,4 +67,4 @@ When all of these are true, this plan closes:
 - `architecture/decisions/0032-findings-are-open-or-protected-and-the-restricted-level-is-dropped.md` — the decision this carries out.
 - `architecture/decisions/0005-sensitive-findings-are-generalised-by-viewer.md` — the three levels it replaced.
 - `architecture/decisions/0023-what-is-drawn-near-a-protected-finding-is-judged-by-distance-and-shown-as-whole-squares.md` — the distance rule that stays.
-- `lines-and-curves.md` on `feat/lines-and-curves` — the work the sweep waits for.
+- `archive/lines-and-curves.md` on `feat/lines-and-curves` — the work the sweep waits for.
