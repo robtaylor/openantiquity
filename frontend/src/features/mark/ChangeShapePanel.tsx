@@ -144,6 +144,12 @@ function useLookedAtOnMap(map: MapLibreMap | null, geometry: GeoJSONGeometry | n
   }, [map, data]);
 }
 
+/** Cancel, or closing the panel: the change is thrown away, so the tool opens again on the saved shape. */
+function discardAndLeave(navigate: ReturnType<typeof useNavigate>, publicId: string): void {
+  useMarkStore.getState().start();
+  navigate(findingPath(publicId));
+}
+
 function NotYours({ finding }: { finding: FindingDetail }) {
   const navigate = useNavigate();
   return (
@@ -174,6 +180,12 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
   // The tool holds a change begun on an older shape than the finding's now.
   const stale = editing !== null && ready && editing !== key;
   const { lon, lat } = finding.location;
+  const unsaved = useMarkStore((state) => state.shape.past.length > 0);
+  // A change left unsaved by leaving some other way than Cancel, such as the tab bar or Back, is picked up again.
+  const [resumed, setResumed] = useState(() => {
+    const mark = useMarkStore.getState();
+    return baseRevision(mark.editing, finding.public_id) !== null && mark.shape.past.length > 0;
+  });
 
   const takeUpSaved = useCallback((): void => {
     const anchor: Path = { closed: false, points: [{ lon, lat, kind: "corner" }] };
@@ -269,6 +281,20 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
           </Button>
         </div>
       ) : null}
+      {resumed && unsaved && !stale ? (
+        <div className="fc-mark__notice" role="status">
+          <p>Carrying on from changes you hadn't saved.</p>
+          <Button
+            size="sm"
+            onClick={() => {
+              setResumed(false);
+              takeUpSaved();
+            }}
+          >
+            Discard them
+          </Button>
+        </div>
+      ) : null}
       {saved === null ? (
         <p className="fc-mark__notice">
           Its shape was drawn before the drawing tool and can't be changed point by point. What you draw here replaces
@@ -287,7 +313,7 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
         <Button variant="primary" disabled={saving || stale} onClick={() => void save()}>
           {saving ? "Saving…" : "Save the shape"}
         </Button>
-        <Button variant="ghost" onClick={() => navigate(findingPath(finding.public_id))}>
+        <Button variant="ghost" onClick={() => discardAndLeave(navigate, finding.public_id)}>
           Cancel
         </Button>
       </div>
@@ -297,7 +323,9 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
 
 /**
  * The panel at `/mark/finding/:publicId`. Escape, or closing it, stops
- * adding points first, as marking does, then goes back to the finding.
+ * adding points first, as marking does, then throws the change away and
+ * goes back to the finding, as Cancel does. Leaving any other way keeps
+ * the change, and the panel says so when it is picked up again.
  */
 export function ChangeShapePanel({ meta }: { meta: Meta }) {
   const { publicId = "" } = useParams();
@@ -312,7 +340,7 @@ export function ChangeShapePanel({ meta }: { meta: Meta }) {
       mark.finish();
       return;
     }
-    navigate(findingPath(publicId));
+    discardAndLeave(navigate, publicId);
   }
   const leaveRef = useRef(leave);
   leaveRef.current = leave;

@@ -351,6 +351,56 @@ describe("the finding changing elsewhere while its shape is open", () => {
   });
 });
 
+describe("leaving the tool", () => {
+  for (const [how, label] of [
+    ["Cancel", "Cancel"],
+    ["the panel's close button", "Close panel"],
+  ] as const) {
+    it(`throws the change away on ${how}, so the tool opens again on the saved shape`, async () => {
+      const user = userEvent.setup();
+      const finding = lineFinding();
+      const { routes } = await openChange(finding);
+      await user.click(screen.getByRole("button", { name: /^Point 2 of 3/ }));
+      await user.click(changePanel().getByRole("button", { name: "Delete point" }));
+      expect(handles()).toHaveLength(2);
+      await user.click(changePanel().getByRole("button", { name: label }));
+      await waitFor(() => expect(address()).toBe(`/f/${finding.public_id}`));
+      const page = within(await screen.findByRole("complementary", { name: finding.title }));
+      await user.click(page.getByRole("button", { name: "Change the shape" }));
+      await waitFor(() => expect(handles()).toHaveLength(3));
+      expect(changePanel().queryByText(/Carrying on from changes/)).toBeNull();
+      expect(changePanel().getByRole("button", { name: "Undo" })).toBeDisabled();
+      expect(routes.callsTo(`PATCH /findings/${finding.public_id}`)).toHaveLength(0);
+    });
+  }
+
+  it("says so when it picks up a change left unsaved some other way, and can throw it away", async () => {
+    const user = userEvent.setup();
+    const finding = lineFinding();
+    act(() => {
+      const mark = useMarkStore.getState();
+      mark.edit(`finding:${finding.public_id}:3`, {
+        closed: false,
+        points: POINTS.map(({ lon, lat }) => ({ lon, lat, kind: "corner" as const })),
+      });
+      mark.remove(1);
+    });
+    serve(finding);
+    renderShell(`/mark/finding/${finding.public_id}`, <Address />);
+    await mapReady();
+    expect(await changePanel().findByText("Carrying on from changes you hadn't saved.")).toBeInTheDocument();
+    expect(handles()).toHaveLength(2);
+    await user.click(changePanel().getByRole("button", { name: "Discard them" }));
+    await waitFor(() => expect(handles()).toHaveLength(3));
+    expect(changePanel().queryByText(/Carrying on from changes/)).toBeNull();
+  });
+
+  it("says nothing of carrying on when the tool opens on the saved shape", async () => {
+    await openChange(lineFinding());
+    expect(changePanel().queryByText(/Carrying on from changes/)).toBeNull();
+  });
+});
+
 describe("changing a shape on a phone", () => {
   it("floats the compact bar while points are added, as marking does", async () => {
     const user = userEvent.setup();
