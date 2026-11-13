@@ -26,7 +26,7 @@ import type { ReactNode } from "react";
 import { isMapLive } from "../../map/MapPane.js";
 import { useMapFrame } from "../../map/useMapFrame.js";
 import { IconButton } from "../../ui/IconButton.js";
-import { lengthWords, useSelectedPointActions } from "./DrawingTool.js";
+import { lengthWords, usePathLength, useSelectedPointActions } from "./DrawingTool.js";
 import { addAtReticle } from "./MarkLayer.js";
 import { useMarkPath, useMarkStore } from "./markStore.js";
 import { pointName, visibleHandles } from "./PathHandles.js";
@@ -37,11 +37,11 @@ import { canClose, lengthM, type Path, type PathEnd } from "./path.js";
  * how long: "3 points, 254 m. Tap to carry on, or tap the first point to
  * close it." The same words as the panel's guidance where they fit.
  */
-export function phoneStatusWords(path: Path, end: PathEnd): string {
+export function phoneStatusWords(path: Path, end: PathEnd, length = lengthM(path)): string {
   const count = path.points.length;
   if (count === 0) return "Tap the map where the feature is.";
   if (count === 1) return "1 point. Tap again to draw a line from it.";
-  const size = `${count} points, ${lengthWords(lengthM(path))}`;
+  const size = `${count} points, ${lengthWords(length)}`;
   if (!canClose(path)) return `${size}. Tap to carry on.`;
   return `${size}. Tap to carry on, or tap the ${end === "end" ? "first" : "last"} point to close it.`;
 }
@@ -65,14 +65,16 @@ function BarButton({
 }
 
 function PhoneStatus({ map }: { map: MapLibreMap | null }) {
+  // The handles in view, and so whether they are thinned, change as the map moves.
   useMapFrame(map);
   const path = useMarkPath();
+  const length = usePathLength(path);
   const end = useMarkStore((state) => state.end);
   const selected = useMarkStore((state) => state.selected);
   const thinned = map && isMapLive(map) && path.points.length > 0 ? visibleHandles(map, path, selected).thinned : false;
   return (
     <p className="fc-mark-float__line" role="status">
-      {phoneStatusWords(path, end)}
+      {phoneStatusWords(path, end, length)}
       {thinned ? " Zoom in to change points." : ""}
     </p>
   );

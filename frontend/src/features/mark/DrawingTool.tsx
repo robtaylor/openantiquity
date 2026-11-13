@@ -23,7 +23,7 @@ import {
   Waypoints,
 } from "lucide-react";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { isMapLive } from "../../map/MapPane.js";
 import { useMapFrame } from "../../map/useMapFrame.js";
 import { Button } from "../../ui/Button.js";
@@ -138,29 +138,45 @@ export function Guidance({ map, isPhone }: { map: MapLibreMap | null; isPhone: b
   );
 }
 
-/** "12 points, 4.3 km. Tap the map to add the next one at the north end." */
-export function statusWords(path: Path, drawing: boolean, end: PathEnd, isPhone: boolean): string {
+/**
+ * "12 points, 4.3 km. Tap the map to add the next one at the north end."
+ * `length` is `lengthM(path)`, which a component works out once per path.
+ */
+export function statusWords(
+  path: Path,
+  drawing: boolean,
+  end: PathEnd,
+  isPhone: boolean,
+  length = lengthM(path),
+): string {
   const count = path.points.length;
   const tap = isPhone ? "Tap" : "Click";
   if (count === 0) return "Nothing placed yet.";
-  if (path.closed) return `A closed shape of ${pointsWord(count)}, ${lengthWords(lengthM(path))} round.`;
-  const size = count === 1 ? "1 point" : `${pointsWord(count)}, ${lengthWords(lengthM(path))}`;
+  if (path.closed) return `A closed shape of ${pointsWord(count)}, ${lengthWords(length)} round.`;
+  const size = count === 1 ? "1 point" : `${pointsWord(count)}, ${lengthWords(length)}`;
   if (!drawing) return `${size}.`;
   if (count === 1) return `${size}. ${tap} the map to add the next one.`;
   const direction = endDirection(path, end);
   return `${size}. ${tap} the map to add the next one at the ${direction ?? (end === "end" ? "last" : "first")} end.`;
 }
 
+/** The length of the path, worked out again only when the path changes, not on every frame of the map. */
+export function usePathLength(path: Path): number {
+  return useMemo(() => lengthM(path), [path]);
+}
+
 function StatusLine({ map, isPhone }: { map: MapLibreMap | null; isPhone: boolean }) {
+  // The handles in view, and so whether they are thinned, change as the map moves.
   useMapFrame(map);
   const path = useMarkPath();
+  const length = usePathLength(path);
   const drawing = useMarkStore((state) => state.drawing);
   const end = useMarkStore((state) => state.end);
   const selected = useMarkStore((state) => state.selected);
   const thinned = map && isMapLive(map) && path.points.length > 0 ? visibleHandles(map, path, selected).thinned : false;
   return (
     <p className="fc-mark__status" role="status">
-      {statusWords(path, drawing, end, isPhone)}
+      {statusWords(path, drawing, end, isPhone, length)}
       {thinned ? " Zoom in to change points." : ""}
     </p>
   );
