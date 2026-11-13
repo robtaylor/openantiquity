@@ -51,6 +51,7 @@ from fieldclub.ingest.errors import (
 )
 from fieldclub.ingest.runner import (
     SHRINK_ALWAYS_ALLOWED,
+    LockCheck,
     check_bbox,
     source_lock,
     upsert_source,
@@ -129,7 +130,14 @@ def _check_geometry(source_key: str, row: dict[str, Any]) -> BaseGeometry:
     return geom
 
 
-def _replace(db: Session, loader: Loader, stats: LoadStats, bbox: BBox | None, batch_size: int) -> None:
+def _replace(
+    db: Session,
+    loader: Loader,
+    stats: LoadStats,
+    bbox: BBox | None,
+    batch_size: int,
+    still_held: LockCheck,
+) -> None:
     model = loader.model
     geom_column = model.__table__.c.geom
     scope = loader.owned()
@@ -140,6 +148,7 @@ def _replace(db: Session, loader: Loader, stats: LoadStats, bbox: BBox | None, b
     area = shapely.box(*bbox) if bbox is not None else None
     batch: list[dict[str, Any]] = []
     for row in loader.fetch(bbox=bbox):
+        still_held(if_due=True)
         geom = _check_geometry(loader.source.key, row)
         if area is not None and not area.intersects(geom):
             continue
@@ -209,7 +218,7 @@ def run_loader(
     with factory() as db:
         bind = db.get_bind()
         engine = bind if isinstance(bind, Engine) else bind.engine
-        with source_lock(engine, info.key):
+        with source_lock(engine, info.key) as still_held:
             upsert_source(db, info)
             db.execute(
                 update(IngestRun)
@@ -224,9 +233,12 @@ def run_loader(
             run_id = run.id
             logger.info("%s: run %d started (%s)", info.key, run_id, "full" if stats.full else "partial")
             try:
-                _replace(db, loader, stats, bbox, batch_size)
+                _replace(db, loader, stats, bbox, batch_size, still_held)
                 if stats.full:
                     _check_full_run(loader, stats, allow_shrink)
+                # A run that started after the lock went can't see these rows
+                # until they are committed, and would add its own beside them.
+                still_held()
                 db.commit()
             except BaseException as exc:
                 db.rollback()

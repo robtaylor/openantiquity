@@ -38,7 +38,7 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from functools import cache
-from typing import Any
+from typing import Any, Protocol
 
 import shapely
 from shapely.geometry.base import BaseGeometry
@@ -324,8 +324,22 @@ def upsert_source(db: Session, info: SourceInfo, obtained: datetime | None = Non
     db.execute(statement.on_conflict_do_update(index_elements=[Source.key], set_=values))
 
 
+# How often a run uses its lock's connection while records flow. The hosted
+# database closes a connection that carries no statement for somewhere between
+# half an hour and an hour, even with TCP keepalives, and the lock goes with
+# its connection (infra/README.md, "What can only be checked on the real
+# platform").
+LOCK_CHECK_EVERY_S = 60.0
+
+
+class LockCheck(Protocol):
+    def __call__(self, *, if_due: bool = False) -> None: ...
+
+
 @contextmanager
-def _source_lock(engine: Engine, source_key: str) -> Iterator[Callable[[], None]]:
+def _source_lock(
+    engine: Engine, source_key: str, clock: Callable[[], float] = time.monotonic
+) -> Iterator[LockCheck]:
     """Hold an advisory lock for the source on a connection of its own.
 
     A session gives its connection back to the pool at every commit, so the
@@ -333,14 +347,23 @@ def _source_lock(engine: Engine, source_key: str) -> Iterator[Callable[[], None]
 
     The lock lasts as long as that connection, which can die unseen while the
     run works on others. Yields a check that raises `IngestLockLostError` once
-    it has: call it before a step that must not overlap another run.
+    it has. Call it before a step that must not overlap another run. Call it
+    with `if_due` for every record: it then asks only when
+    `LOCK_CHECK_EVERY_S` has passed since it last asked, which keeps the
+    connection in use and ends a run that no longer holds its source.
     """
     params = {"namespace": _LOCK_NAMESPACE, "key": source_key}
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         if not conn.scalar(text("SELECT pg_try_advisory_lock(:namespace, hashtext(:key))"), params):
             raise IngestBusyError(f"Another ingest run for {source_key} is in progress.")
+        asked_at = clock()
 
-        def still_held() -> None:
+        def still_held(*, if_due: bool = False) -> None:
+            nonlocal asked_at
+            now = clock()
+            if if_due and now - asked_at < LOCK_CHECK_EVERY_S:
+                return
+            asked_at = now
             # A connection never reconnects by itself, so while it answers it
             # is the session that took the lock, and the lock is still held.
             try:
@@ -383,12 +406,14 @@ def _ingest(
     bbox: BBox | None,
     limit: int | None,
     batch_size: int,
+    still_held: LockCheck,
 ) -> None:
     info = connector.source
     area = shapely.box(*bbox) if bbox is not None else None
     seen_ids: set[str] = set()
     batch: list[dict[str, Any]] = []
     for record in connector.fetch(bbox=bbox, limit=limit):
+        still_held(if_due=True)
         if not isinstance(record, RecordIn):
             raise InvalidRecordError(f"{type(connector).__name__}.fetch() yielded a {type(record).__name__}.")
         row, repaired = prepare_row(record, info, connector.bounds, started_at)
@@ -499,7 +524,7 @@ def run_connector(
             logger.info("%s: run %d started (%s)", info.key, run_id, "full" if stats.full else "partial")
 
             try:
-                _ingest(db, connector, started_at, stats, bbox, limit, batch_size)
+                _ingest(db, connector, started_at, stats, bbox, limit, batch_size, still_held)
                 if stats.full:
                     if stats.seen == 0:
                         raise EmptyIngestError(
