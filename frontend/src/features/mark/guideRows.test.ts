@@ -105,18 +105,27 @@ describe("the rows of the drawing guide", () => {
   });
 
   it("names the keys, as keys, once the map or a point has keyboard focus", () => {
+    // Drawing, the keys add the next point too: the map moves under the cross, and the button puts a point there.
     const drawing = guideRows({ ...BASE, stage: "line", device: "keys" });
     expect(drawing.map((row) => `${gestureText(row)}: ${row.effect}`)).toEqual([
+      "Arrow keys on a point: Move it",
+      "[ and ]: Step between points",
+      "Delete: Removes the point",
+      "Arrow keys on the map: Slide the map under the cross",
+      "“Add a point at the cross”: Puts a point there",
+      "Enter or Esc: Stops adding points",
+    ]);
+    expect(keysOf(drawing)).toEqual(["Arrow keys", "[", "]", "Delete", "Arrow keys", "Enter", "Esc"]);
+    // Not drawing, nothing is added, and Shift's bigger step has the room.
+    expect(lines({ stage: "line", drawing: false, device: "keys" })).toEqual([
       "Arrow keys on a point: Move it",
       "Shift and an arrow key: Moves it further",
       "[ and ]: Step between points",
       "Delete: Removes the point",
-      "Enter or Esc: Stops adding points",
+      "Esc: Closes the tool",
     ]);
-    expect(keysOf(drawing)).toEqual(["Arrow keys", "Shift", "[", "]", "Delete", "Enter", "Esc"]);
-    expect(lines({ stage: "shape", drawing: false, device: "keys" }).at(-1)).toBe("Esc: Closes the tool");
     expect(lines({ device: "keys" })).toEqual([
-      "Arrow keys on the map: Move it under the cross",
+      "Arrow keys on the map: Slide the map under the cross",
       "“Add a point at the cross”: Puts a point there",
       "Esc: Closes the tool",
     ]);

@@ -39,6 +39,7 @@ export type GuideIcon =
   | "select"
   | "end"
   | "keys-move"
+  | "keys-pan"
   | "keys-further"
   | "keys-step"
   | "keys-delete"
@@ -82,26 +83,49 @@ function key(name: string): GesturePart {
 
 function keyRows(state: GuideState): GuideRow[] {
   const leave: GuideRow = { id: "leave", icon: "keys-leave", gesture: [key("Esc")], effect: "Closes the tool" };
-  if (state.stage === "empty") {
-    return [
-      { id: "pan", icon: "keys-move", gesture: [key("Arrow keys"), " on the map"], effect: "Move it under the cross" },
-      { id: "cross", icon: "cross", gesture: ["“Add a point at the cross”"], effect: "Puts a point there" },
-      leave,
-    ];
-  }
-  const stop: GuideRow = {
-    id: "stop",
-    icon: "keys-stop",
-    gesture: [key("Enter"), " or ", key("Esc")],
-    effect: "Stops adding points",
+  const pan: GuideRow = {
+    id: "pan",
+    icon: "keys-pan",
+    gesture: [key("Arrow keys"), " on the map"],
+    effect: "Slide the map under the cross",
   };
-  return [
-    { id: "nudge", icon: "keys-move", gesture: [key("Arrow keys"), " on a point"], effect: "Move it" },
-    { id: "further", icon: "keys-further", gesture: [key("Shift"), " and an arrow key"], effect: "Moves it further" },
-    { id: "step", icon: "keys-step", gesture: [key("["), " and ", key("]")], effect: "Step between points" },
-    { id: "delete", icon: "keys-delete", gesture: [key("Delete")], effect: "Removes the point" },
-    state.drawing ? stop : leave,
-  ];
+  const cross: GuideRow = {
+    id: "cross",
+    icon: "cross",
+    gesture: ["“Add a point at the cross”"],
+    effect: "Puts a point there",
+  };
+  if (state.stage === "empty") return [pan, cross, leave];
+  const nudge: GuideRow = {
+    id: "nudge",
+    icon: "keys-move",
+    gesture: [key("Arrow keys"), " on a point"],
+    effect: "Move it",
+  };
+  const step: GuideRow = {
+    id: "step",
+    icon: "keys-step",
+    gesture: [key("["), " and ", key("]")],
+    effect: "Step between points",
+  };
+  const remove: GuideRow = { id: "delete", icon: "keys-delete", gesture: [key("Delete")], effect: "Removes the point" };
+  if (state.drawing) {
+    // While drawing, how to add the next point matters more than Shift's bigger step.
+    const stop: GuideRow = {
+      id: "stop",
+      icon: "keys-stop",
+      gesture: [key("Enter"), " or ", key("Esc")],
+      effect: "Stops adding points",
+    };
+    return [nudge, step, remove, pan, cross, stop];
+  }
+  const further: GuideRow = {
+    id: "further",
+    icon: "keys-further",
+    gesture: [key("Shift"), " and an arrow key"],
+    effect: "Moves it further",
+  };
+  return [nudge, further, step, remove, leave];
 }
 
 function pointerRows(state: GuideState): GuideRow[] {
