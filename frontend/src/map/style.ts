@@ -284,9 +284,11 @@ function overlayParts(meta: Meta, overlay: Overlay, origin: string): OverlayPart
 /**
  * Drawing order by overlay type, bottom first, whatever order the catalogue
  * lists them in. Coverage shading sits under the map lines, and findings are
- * always on top.
+ * above the records. A layer marked `onTop`, such as a name on the street map,
+ * is drawn above them all.
  */
 const STACKING: Record<OverlayType, number> = { coverage: 0, openmaptiles: 1, records: 2, findings: 3 };
+const ON_TOP = Math.max(...Object.values(STACKING)) + 1;
 
 interface Catalogue {
   sources: Record<string, SourceSpecification>;
@@ -313,16 +315,19 @@ function catalogueFor(meta: Meta, origin: string): Catalogue {
   sources[DEM_SOURCE] = demSource(meta.layers.dem, origin, HILLSHADE_DEM_SCALE);
   sources[DEM_TERRAIN_SOURCE] = demSource(meta.layers.dem, origin);
 
-  const overlayLayers: Catalogue["overlayLayers"] = [];
-  const stacked = [...meta.layers.overlays].sort((a, b) => STACKING[a.type] - STACKING[b.type]);
-  for (const overlay of stacked) {
+  const ranked: Array<{ rank: number; entry: Catalogue["overlayLayers"][number] }> = [];
+  for (const overlay of meta.layers.overlays) {
     const parts = overlayParts(meta, overlay, origin);
     for (const [id, source] of Object.entries(parts.sources)) {
       if (id in sources) throw new MapStyleError(`Two map sources are both called "${id}"`);
       sources[id] = source;
     }
-    for (const layer of parts.layers) overlayLayers.push({ ...layer, overlayId: overlay.id });
+    for (const layer of parts.layers) {
+      ranked.push({ rank: layer.onTop ? ON_TOP : STACKING[overlay.type], entry: { ...layer, overlayId: overlay.id } });
+    }
   }
+  // The sort is stable: layers of one rank keep the order their overlays and their makers gave them.
+  const overlayLayers = ranked.sort((a, b) => a.rank - b.rank).map(({ entry }) => entry);
 
   const catalogue = { sources, overlayLayers };
   byOrigin.set(origin, catalogue);

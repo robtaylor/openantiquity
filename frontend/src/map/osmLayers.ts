@@ -205,6 +205,8 @@ export function osmLayers(source: string): OverlayLayer[] {
         paint: { "text-color": colour, "text-halo-color": HALO, "text-halo-width": 1.6, "text-halo-blur": 0.4 },
       } as LayerSpecification,
       opacity: { "text-opacity": 1 },
+      // Names are drawn over the records and findings, which would otherwise sit on them.
+      onTop: true,
     });
   }
 

@@ -329,7 +329,7 @@ describe("buildStyle", () => {
     ]);
   });
 
-  it("draws overlays above every base view, with findings on top", () => {
+  it("draws overlays above every base view, findings above records, and only the street map's names above findings", () => {
     const style = buildStyle(metaFixture, stateFor(metaFixture), "composite", OPTIONS);
     const ids = style.layers.map((l) => l.id);
     const lastBase = Math.max(
@@ -338,9 +338,19 @@ describe("buildStyle", () => {
     );
     expect(ids.indexOf("coverage-fill")).toBeGreaterThan(lastBase);
     expect(ids.indexOf("osm-water-area")).toBeGreaterThan(ids.indexOf("coverage-line"));
-    expect(ids.indexOf("records-squares")).toBeGreaterThan(ids.indexOf("osm-place-town"));
+    expect(ids.indexOf("records-squares")).toBeGreaterThan(ids.indexOf("osm-water-area"));
     expect(ids.indexOf("findings-points")).toBeGreaterThan(ids.indexOf("records-squares"));
-    expect(ids.at(-1)).toBe("findings-points");
+    // A town's name is read over the count that sits on the town, not hidden under it: every name
+    // of the street map, and nothing else, is drawn above the findings.
+    const street = style.layers.filter((l) => l.id.startsWith("osm-"));
+    const names = street.filter((l) => l.type === "symbol").map((l) => l.id);
+    expect(names.length).toBeGreaterThan(3);
+    expect(ids.slice(ids.indexOf("findings-points") + 1)).toEqual(names);
+    // The street map's lines stay below the records, and the biggest places are named last, over the rest.
+    for (const l of street.filter((l) => l.type !== "symbol")) {
+      expect(ids.indexOf(l.id), l.id).toBeLessThan(ids.indexOf("records-squares"));
+    }
+    expect(names.at(-1)).toBe("osm-place-town");
   });
 
   it("styles findings by tier and state, with obscured ones as squares", () => {

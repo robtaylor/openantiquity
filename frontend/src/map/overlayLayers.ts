@@ -12,6 +12,11 @@ export interface OverlayLayer {
   opacity: Record<string, number | ExpressionSpecification>;
   /** Drawn only while ruled-out findings are being shown. */
   ruledOutOnly?: boolean;
+  /**
+   * Drawn above every overlay's other layers, whichever overlay it belongs
+   * to: a name is read over the markers that sit on its place.
+   */
+  onTop?: boolean;
 }
 
 /**

@@ -147,6 +147,9 @@ export const MapPane = memo(function MapPane({ meta, viewId, pane: paneRole, fin
         maxZoom: LIMITS.zoom.max,
         // Attribution is drawn by the status bar and the layer panel, from /meta.
         attributionControl: false,
+        // Each source's symbols are placed among themselves. Placed together, the record counts
+        // took the room of the street map's names, and a city went unnamed under its own count.
+        crossSourceCollisions: false,
         // The permalink is richer than MapLibre's own hash, so it is handled in usePermalink.
         hash: false,
         fadeDuration: 150,
