@@ -1,6 +1,7 @@
 import type { Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
+import { create } from "zustand";
 import { findOverlay, type Meta } from "../../api/meta.js";
 import { useFindingHighlight, useFindingHighlightOnMap } from "../../map/findingHighlight.js";
 import { findingCandidatesAt, pickAt, pickFinding, REACH_PX } from "../../map/findingHits.js";
@@ -57,6 +58,33 @@ function onWindow(map: MapLibreMap, point: { x: number; y: number }): { x: numbe
 interface HoverHint {
   at: { x: number; y: number };
   words: string;
+}
+
+/**
+ * The hint as the pointer last left it. It is checked once a frame while
+ * the pointer moves, and kept here rather than in the layer's state so only
+ * the hint itself is drawn again, and only when it has changed.
+ */
+const useHoverHint = create<{ hint: HoverHint | null; show: (hint: HoverHint | null) => void }>()((set, get) => ({
+  hint: null,
+  show: (hint) => {
+    const now = get().hint;
+    const same =
+      now === hint ||
+      (now !== null && hint !== null && now.words === hint.words && now.at.x === hint.at.x && now.at.y === hint.at.y);
+    if (!same) set({ hint });
+  },
+}));
+
+/** "3 findings here" beside the pointer, unless the chooser is open. */
+function HoverHintNote({ hidden }: { hidden: boolean }) {
+  const hint = useHoverHint((state) => state.hint);
+  if (!hint || hidden) return null;
+  return (
+    <p className="fc-hover-hint" style={{ transform: `translate(${hint.at.x}px, ${hint.at.y}px)` }} role="status">
+      {hint.words}
+    </p>
+  );
 }
 
 /**
@@ -190,9 +218,8 @@ export function ExploreLayer({ meta }: { meta: Meta }) {
   const { pathname } = useLocation();
   const isPhone = useIsPhone();
   const [chooser, setChooser] = useState<ChooserRequest | null>(null);
-  const [hint, setHint] = useState<HoverHint | null>(null);
   const marking = isMarkPath(pathname);
-  useFindingClicks(map, meta, marking, setChooser, setHint);
+  useFindingClicks(map, meta, marking, setChooser, useHoverHint.getState().show);
   useFindingHighlightOnMap(map);
   // A chooser left open when the page changes, such as on Back, goes with it.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the address changing is the trigger
@@ -201,11 +228,7 @@ export function ExploreLayer({ meta }: { meta: Meta }) {
   return (
     <div className="fc-annotations">
       <Highlight map={map} />
-      {hint && !chooser ? (
-        <p className="fc-hover-hint" style={{ transform: `translate(${hint.at.x}px, ${hint.at.y}px)` }} role="status">
-          {hint.words}
-        </p>
-      ) : null}
+      <HoverHintNote hidden={chooser !== null} />
       {chooser ? (
         <FindingChooser meta={meta} map={map} request={chooser} sheet={isPhone} onClose={() => setChooser(null)} />
       ) : null}
