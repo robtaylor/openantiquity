@@ -58,4 +58,4 @@ The owner was given the recorded reasons for the level and what dropping it woul
 
 - Decision 0005 — the three levels. This record replaced its points 1, 3 and 6.
 - Decision 0021 and Decision 0023 — what is written and drawn beside a hidden finding. Unchanged.
-- [The plan for the sweep](../../plans/two-sensitivity-levels.md).
+- [The plan for the sweep](../../plans/archive/two-sensitivity-levels.md).
