@@ -25,6 +25,7 @@ import {
 } from "../../test/fixtures/findingPage.js";
 import { meFixture } from "../../test/fixtures/me.js";
 import { metaFixture } from "../../test/fixtures/meta.js";
+import { AVENUE_RECORD } from "../../test/fixtures/records.js";
 import {
   json,
   mapReady,
@@ -38,6 +39,7 @@ import { useAccountUi } from "../account/requireAccount.js";
 import { DRAFTS_STORAGE_KEY, resetDraftsForTests } from "../drafts/store.js";
 import { useSelectedFinding } from "../findings/selection.js";
 import { useSavedDrafts } from "../mark/findingDrafts.js";
+import { recordPath } from "../records/paths.js";
 import { useSavedAnswers } from "./secondLook/answerDrafts.js";
 import type { FindingDetail, Observation } from "./types.js";
 
@@ -648,6 +650,59 @@ describe("evidence", () => {
     expect(await screen.findByText(/Your evidence couldn't be added\./)).toBeInTheDocument();
     expect(await panel.findByLabelText("Which map")).toHaveValue("OS 1888");
     expect(panel.getByRole("alert")).toHaveTextContent("Say which map, book or paper it is.");
+  });
+
+  it("says what a linked record is, and opens its page here or the source's own in another tab", async () => {
+    // The server keeps the record's address on the link when it is made, as here.
+    const linked = evidenceFixture({
+      id: 9,
+      kind: "record_link",
+      record_id: AVENUE_RECORD.id,
+      title: null,
+      url: AVENUE_RECORD.url,
+    });
+    const finding = seenFixture({ evidence: [linked] });
+    const routes = serve(finding);
+    routes.on(`GET /records/${AVENUE_RECORD.id}`, () => json(AVENUE_RECORD));
+    const { panel } = await open(finding, MEMBER, routes);
+    const here = await panel.findByRole("link", { name: "West Kennet Avenue" });
+    expect(here).toHaveAttribute("href", recordPath(AVENUE_RECORD.id));
+    expect(here).not.toHaveAttribute("target");
+    const card = within(here.closest("li") as HTMLElement);
+    // What kind of record it is, and what the source says of it, without leaving the finding.
+    expect(card.getByText("Designations")).toBeInTheDocument();
+    expect(card.getByText("Scheduled monument")).toBeInTheDocument();
+    expect(card.getByText(/A double line of standing stones/)).toBeInTheDocument();
+    const original = card.getByRole("link", { name: "See the original record (opens in a new tab)" });
+    expect(original).toHaveAttribute("href", AVENUE_RECORD.url);
+    expect(original).toHaveAttribute("target", "_blank");
+    expect(original.getAttribute("rel")).toContain("noopener");
+    // The record's own link stands for the address kept on the evidence: one way out, not two.
+    expect(card.queryByRole("link", { name: "Open it" })).not.toBeInTheDocument();
+    // Its source and licence, as every list of records gives them.
+    expect(card.getByText(AVENUE_RECORD.source.name, { exact: false })).toBeInTheDocument();
+    expect(card.getByRole("link", { name: AVENUE_RECORD.source.licence })).toHaveAttribute(
+      "href",
+      AVENUE_RECORD.source.licence_url,
+    );
+  });
+
+  it("offers no original for a linked record whose source gives no page, or an address that isn't a web page", async () => {
+    const records = [
+      { ...AVENUE_RECORD, id: 201, name: "Tumulus", url: null },
+      { ...AVENUE_RECORD, id: 202, name: "Camp", url: "javascript:alert(1)" },
+    ];
+    const finding = seenFixture({
+      evidence: records.map((record, index) =>
+        evidenceFixture({ id: 20 + index, kind: "record_link", record_id: record.id, title: null, url: null }),
+      ),
+    });
+    const routes = serve(finding);
+    for (const record of records) routes.on(`GET /records/${record.id}`, () => json(record));
+    const { panel } = await open(finding, MEMBER, routes);
+    expect(await panel.findByRole("link", { name: "Tumulus" })).toHaveAttribute("href", recordPath(201));
+    expect(await panel.findByRole("link", { name: "Camp" })).toHaveAttribute("href", recordPath(202));
+    expect(panel.queryByRole("link", { name: /See the original record/ })).not.toBeInTheDocument();
   });
 
   it("links a suggested heritage record, with how it relates", async () => {

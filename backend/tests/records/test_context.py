@@ -229,6 +229,17 @@ def test_links_at_avebury_fill_each_coordinate_system(db: Session) -> None:
     assert not set(links) & set(context_data.EXCLUDED_LINKS)
 
 
+def test_a_source_with_no_page_for_each_record_is_seen_in_the_viewer_that_holds_its_material() -> None:
+    # The names read from the six-inch map: the map itself, at the place the lettering sits.
+    url = context.material_url("portsmouth-gb1900-gazetteer", -1.64501, 53.39622)
+    assert url == "https://maps.nls.uk/geo/explore/#zoom=16&lat=53.39622&lon=-1.64501&layers=6&b=1"
+    # Any other source's records have their own page or none.
+    assert context.material_url("he-nhle-scheduled-monuments", -1.64501, 53.39622) is None
+    # Every viewer named is a deep link that opens at a point.
+    at_a_point = {link["key"] for link in context.deep_links() if link["for_point"]}
+    assert {viewer for viewer, _ in context.MATERIAL_VIEWERS.values()} <= at_a_point
+
+
 def test_links_respect_a_viewers_bounds(db: Session) -> None:
     # Swindon is in Wiltshire's edition of Know Your Place. Norwich isn't.
     assert "know-your-place-wilts" in by_key(context.links_for(db, -1.78, 51.56))

@@ -117,6 +117,16 @@ class RecordResult:
     # Metres from the point asked about, for a search near a point.
     distance_m: float | None = None
 
+    @property
+    def url(self) -> str | None:
+        """Where the record is seen at its source: its own page, or the viewer of the source's material."""
+        if self.record.url is not None:
+            return self.record.url
+        # Imported here: `context` checks its points with this module.
+        from fieldclub.services import context
+
+        return context.material_url(self.record.source_key, self.lon, self.lat)
+
 
 @dataclass(frozen=True)
 class Suggestion:

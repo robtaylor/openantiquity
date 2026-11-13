@@ -465,6 +465,35 @@
   overflow-wrap: anywhere;
 }
 
+.fc-evidence__title--link {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.fc-evidence__title--link:hover {
+  text-decoration: underline;
+}
+
+/* A linked record's category and type, set out as a row of the records list is. */
+.fc-evidence__kind {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  font-size: 14px;
+}
+
+/* The start of what the source says. The record's own page has the rest. */
+.fc-evidence__summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
 .fc-evidence__meta,
 .fc-evidence__by,
 .fc-evidence__votes,

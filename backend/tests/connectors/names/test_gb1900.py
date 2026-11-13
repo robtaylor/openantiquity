@@ -238,6 +238,22 @@ def test_the_share_alike_terms_go_with_every_record(db: Session, client: TestCli
 
 
 @respx.mock
+def test_a_label_is_seen_on_the_map_it_was_read_from(db: Session, client: TestClient) -> None:
+    serve_file(DOWNLOAD, GB1900_ZIP.read_bytes())
+    run_connector(Gb1900Gazetteer())
+    sanctuary = db.scalars(select(Record).where(Record.external_id == "58186abe2c66dc3849025d6c")).one()
+    # The gazetteer has no page for a label, and none is stored.
+    assert sanctuary.url is None
+    # Served, its address is the six-inch map at the place the lettering sits, on its page and in a search.
+    body = client.get(f"/api/v1/records/{sanctuary.id}").json()
+    assert body["url"].startswith("https://maps.nls.uk/geo/explore/#zoom=16&lat=51.41")
+    assert "&lon=-1.83" in body["url"]
+    assert body["url"].endswith("&layers=6&b=1")
+    found = client.get("/api/v1/records/search", params={"q": "Sanctuary"}).json()["items"]
+    assert [item["url"] for item in found if item["id"] == sanctuary.id] == [body["url"]]
+
+
+@respx.mock
 def test_running_twice_gives_the_same_rows(db: Session) -> None:
     host = serve_file(DOWNLOAD, GB1900_ZIP.read_bytes())
     run_connector(Gb1900Gazetteer())

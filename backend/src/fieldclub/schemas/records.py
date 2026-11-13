@@ -271,7 +271,7 @@ def _summary_fields(result: RecordResult) -> dict[str, Any]:
         "lon": round(result.lon, 6),
         "lat": round(result.lat, 6),
         "precision_m": record.precision_m,
-        "url": record.url,
+        "url": result.url,
         "source": source_ref(result.source),
     }
 

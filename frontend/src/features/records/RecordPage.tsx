@@ -1,11 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { ExternalLink, Landmark, MapPinned, Unplug } from "lucide-react";
+import { Landmark, MapPinned, Unplug } from "lucide-react";
 import { type ReactNode, useEffect } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { ApiError, isTransient } from "../../api/client.js";
 import type { Meta } from "../../api/meta.js";
 import { useMeta } from "../../api/useMeta.js";
-import { safeHref } from "../../map/attribution.js";
 import { formatGridRef, wgs84ToGrid } from "../../map/gridref.js";
 import { useMapStore, useViewAreaStore } from "../../map/store.js";
 import { Button } from "../../ui/Button.js";
@@ -18,6 +17,7 @@ import { PanelFrame } from "../shell/PanelFrame.js";
 import { fetchRecord, parseRecordId, type RecordOut, recordKeys } from "./api.js";
 import { CategoryMark } from "./CategoryMark.js";
 import { LinkedFindings } from "./LinkedFindings.js";
+import { OriginalLink } from "./OriginalLink.js";
 import { elsewherePath, wasOpenedFromMap } from "./paths.js";
 import { SourceCredit } from "./SourceCredit.js";
 import { precisionText, recordShape, useRecordSelection } from "./shape.js";
@@ -53,7 +53,6 @@ function periodLabel(meta: Meta, value: string): string {
 
 function RecordBody({ record, meta }: { record: RecordOut; meta: Meta }) {
   const shape = recordShape(record);
-  const original = safeHref(record.url);
   const grid = wgs84ToGrid(record.lon, record.lat);
   const copied = dateText(record.ingested_at);
   const changed = dateText(record.source_updated_at);
@@ -118,20 +117,12 @@ function RecordBody({ record, meta }: { record: RecordOut; meta: Meta }) {
           {changed ? ` · changed there on ${changed}` : null}
           {copied ? ` · copied here on ${copied}` : null}
         </p>
-        {original ? (
-          <a
-            className="fc-button fc-button--secondary fc-button--md fc-record__original"
-            href={original}
-            target="_blank"
-            rel="noopener noreferrer external"
-          >
-            <ExternalLink size={16} aria-hidden />
-            See the original record
-            <span className="fc-visually-hidden"> (opens in a new tab)</span>
-          </a>
-        ) : (
-          <p className="fc-muted fc-record__small">The source doesn't give a page for this record.</p>
-        )}
+        <OriginalLink
+          url={record.url}
+          category={record.category}
+          className="fc-button fc-button--secondary fc-button--md fc-record__original"
+          fallback={<p className="fc-muted fc-record__small">The source doesn't give a page for this record.</p>}
+        />
       </section>
     </div>
   );

@@ -1,11 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { BadgeCheck, ExternalLink, ThumbsDown, ThumbsUp, Trash2 } from "lucide-react";
+import { Link } from "react-router";
 import type { Meta } from "../../../api/meta.js";
 import { safeHref } from "../../../map/attribution.js";
 import { Button } from "../../../ui/Button.js";
 import { HideButton } from "../../moderation/HideButton.js";
 import { photoAddress } from "../../photos/api.js";
 import { Photo, PhotoPlaceholder } from "../../photos/Photo.js";
+import { CategoryMark } from "../../records/CategoryMark.js";
+import { OriginalLink } from "../../records/OriginalLink.js";
+import { recordPath } from "../../records/paths.js";
+import { SourceCredit } from "../../records/SourceCredit.js";
+import { decodeEntities } from "../../records/text.js";
 import { fetchRecord } from "../api.js";
 import { formatDate, labelOf, needsVerifying, outcomeWords, stanceWords } from "../describe.js";
 import { findingPageKeys } from "../keys.js";
@@ -13,7 +19,12 @@ import { ReportSlot } from "../Slots.js";
 import type { Evidence } from "../types.js";
 import { RELATION_WORDS } from "./RecordLinkForm.js";
 
-/** A stored record's name and source, for a record link that holds only its id. */
+/**
+ * A stored record, for a record link that holds only its id: its name, which
+ * opens its page here, what kind of record it is, its source and licence as
+ * every list of records gives them, the start of what the source says, and
+ * the source's own page in another tab.
+ */
 function RecordName({ meta, recordId }: { meta: Meta; recordId: number }) {
   const record = useQuery({
     queryKey: findingPageKeys.record(recordId),
@@ -21,12 +32,21 @@ function RecordName({ meta, recordId }: { meta: Meta; recordId: number }) {
     staleTime: Number.POSITIVE_INFINITY,
   });
   if (!record.data) return <span className="fc-evidence__title">Record {recordId}</span>;
+  const { name, record_type, source, category, summary, url } = record.data;
   return (
     <>
-      <span className="fc-evidence__title">{record.data.name}</span>
-      <span className="fc-evidence__meta">
-        {record.data.source.name} · {labelOf(meta.vocab.record_categories, record.data.category)}
+      <Link className="fc-evidence__title fc-evidence__title--link" to={recordPath(recordId)}>
+        {decodeEntities(name)}
+      </Link>
+      <span className="fc-evidence__kind">
+        <CategoryMark meta={meta} category={category} />
+        {record_type ? <span className="fc-record__type">{record_type}</span> : null}
       </span>
+      <span className="fc-evidence__meta">
+        From <SourceCredit source={source} compact />
+      </span>
+      {summary ? <p className="fc-evidence__summary">{summary}</p> : null}
+      <OriginalLink url={url} category={category} className="fc-evidence__link" iconSize={14} />
     </>
   );
 }
@@ -90,10 +110,12 @@ export function EvidenceItem({
   onHidden,
   onHiddenDone,
 }: EvidenceItemProps) {
-  const external = item.kind === "record_link" && item.record_id === null;
+  const stored = item.kind === "record_link" && item.record_id !== null;
+  const external = item.kind === "record_link" && !stored;
   const official = needsVerifying(meta, item.kind);
   const dated = item.occurred_on !== null || item.outcome !== null;
-  const link = safeHref(item.url);
+  // A stored record gives its own way to its source, from the record as it is now.
+  const link = stored ? null : safeHref(item.url);
 
   return (
     <li className="fc-evidence" id={`evidence-${item.id}`} tabIndex={-1} aria-busy={pending || undefined}>

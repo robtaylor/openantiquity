@@ -127,6 +127,29 @@ def _fill(link: dict[str, Any], lon: float, lat: float, zoom: int, grid: Grid | 
     return url
 
 
+# A source that publishes no page for each of its records, and the viewer that holds the
+# material its records were taken from: the deep link's key, and the zoom that shows a record
+# with enough around it to place it. The names read from the six-inch map of about 1900 are
+# seen on that map, which the National Library of Scotland's viewer draws. Opened in a browser
+# on 2026-11-13: the address was kept and the map drawn at the place.
+MATERIAL_VIEWERS: dict[str, tuple[str, int]] = {
+    "portsmouth-gb1900-gazetteer": ("nls-explore-at-point", 16),
+}
+
+
+def material_url(source_key: str, lon: float, lat: float) -> str | None:
+    """Where a record at this point is seen in its source's own material.
+
+    None for a source that isn't in `MATERIAL_VIEWERS`: its records have a page each, or none.
+    """
+    if source_key not in MATERIAL_VIEWERS:
+        return None
+    viewer, zoom = MATERIAL_VIEWERS[source_key]
+    link = next(link for link in deep_links() if link["key"] == viewer)
+    # A viewer that takes degrees needs no grid.
+    return _fill(link, lon, lat, zoom, None)
+
+
 def _inside(bounds: list[float] | None, lon: float, lat: float) -> bool:
     return bounds is None or (bounds[0] <= lon <= bounds[2] and bounds[1] <= lat <= bounds[3])
 

@@ -163,6 +163,26 @@ describe("a record's page", () => {
     expect(useMapStore.getState().camera).toMatchObject({ lng: FIND_RECORD.lon, lat: FIND_RECORD.lat, zoom: 13.5 });
   });
 
+  it("calls a map label's original the old map, since no page describes one label", async () => {
+    const label = {
+      ...AVENUE_RECORD,
+      id: 301,
+      name: "Bamford Lodge (In Ruins)",
+      category: "map_label",
+      record_type: "Label on the six-inch map",
+      url: "https://maps.nls.uk/geo/explore/#zoom=16&lat=53.39622&lon=-1.64501&layers=6&b=1",
+    };
+    api.on("GET /records/301", () => json(label));
+    api.on("GET /records/301/findings", () => json({ items: [], next_cursor: null }));
+    renderShell("/r/301");
+    await mapReady();
+    const panel = await screen.findByRole("complementary", { name: label.name });
+    const original = within(panel).getByRole("link", { name: "See it on the old map (opens in a new tab)" });
+    expect(original).toHaveAttribute("href", label.url);
+    expect(original).toHaveAttribute("target", "_blank");
+    expect(within(panel).queryByRole("link", { name: /See the original record/ })).not.toBeInTheDocument();
+  });
+
   it("puts a hostile record's words on the page as text, and links only to web addresses", async () => {
     const alerts = vi.spyOn(window, "alert").mockImplementation(() => {});
     renderShell(`/r/${HOSTILE_RECORD.id}`);
