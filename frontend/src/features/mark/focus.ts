@@ -21,16 +21,29 @@ export function handleSelector(index: number): string {
   return `.fc-path-handle[data-index="${index}"]`;
 }
 
-/** True when focus has gone to the page, as it does when the focused control is taken away. */
-function focusLost(pressed: Element | null): boolean {
+/**
+ * True when focus is nowhere: on the page itself, as a browser leaves it
+ * when the focused control is taken away, or still named as a control that
+ * is no longer on the page. Focus that has since gone to a control that is
+ * there has not been lost, whatever became of the one that was pressed.
+ */
+function focusLost(): boolean {
   const active = document.activeElement;
-  return active === null || active === document.body || (pressed !== null && !pressed.isConnected);
+  return active === null || active === document.body || !active.isConnected;
 }
 
-/** Once a frame has passed, and only if focus went with `pressed`, focus goes to the first match of `selector`. */
+/**
+ * Once a frame has passed, and only if focus is then nowhere, focus goes to
+ * the first match of `selector`. `pressed` is the control whose going may
+ * have taken focus with it. If focus has moved on by the frame it is left
+ * where it is: taking it back would send the person's next key to a control
+ * they had left, and once deleted the wrong point.
+ */
 export function focusAfter(pressed: Element | null, selector: string): void {
   requestAnimationFrame(() => {
-    if (!focusLost(pressed)) return;
+    // Still on the control that was pressed, which is still there: nothing was taken away.
+    if (pressed?.isConnected && document.activeElement === pressed) return;
+    if (!focusLost()) return;
     document.querySelector<HTMLElement>(selector)?.focus();
   });
 }
