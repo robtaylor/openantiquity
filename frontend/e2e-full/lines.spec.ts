@@ -161,8 +161,13 @@ test("a closed shape drawn on a phone with taps, a long press and the bar is kep
   const handle = `Shaper${Date.now() % 1_000_000}`;
   await openMap(page, `/mark${view(at)}`);
 
-  // Four taps, then a tap on the first point closes it. They go below the drawing guide, which takes the search
-  // box's place and grows to six rows as the line does, and above the phone's drawing bar.
+  // The guide in the search box's place is folded to its header, since it never moves the map off a point it
+  // grows over, and the sheet rising for the form moves the shape up. Four taps go between it and the phone's
+  // drawing bar, then a tap on the first point closes the shape.
+  await page
+    .getByRole("region", { name: "How to draw" })
+    .getByRole("button", { name: "Gestures", exact: true })
+    .click();
   for (const [x, y] of [
     [90, 330],
     [280, 330],
