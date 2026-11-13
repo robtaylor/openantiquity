@@ -189,25 +189,20 @@ export function useCardAnswers(meta: Meta): CardAnswers {
     async function showComparison(card: ReviewCard, visible: Visible, detail: AnswerDraft): Promise<void> {
       const given = { ...detail, visible };
       const held = draftFor(card);
+      // What a draft of the answer holds, with its detail and the reveal asked for.
+      const data = {
+        public_id: card.public_id,
+        answer: answerBody(meta, given),
+        reveal: true,
+        shape_revision: card.shape_revision,
+      };
       if (ready && identity !== null && held?.held) {
         // Given here before signing in: the person now says it is theirs, with the detail as it stands.
-        const data = {
-          public_id: card.public_id,
-          answer: answerBody(meta, given),
-          reveal: true,
-          shape_revision: card.shape_revision,
-        };
         if (keepAnswerDraft(data, held.id)) sendHeldDraft(held.id, identity);
         return;
       }
       if (!ready) {
-        const data = {
-          public_id: card.public_id,
-          answer: answerBody(meta, given),
-          reveal: true,
-          shape_revision: card.shape_revision,
-        };
-        if (keepAnswerDraft(data, draftFor(card)?.id) && !(await signedIn())) {
+        if (keepAnswerDraft(data, held?.id) && !(await signedIn())) {
           toast("Your answer is kept in this browser until you sign in.");
         }
         return;

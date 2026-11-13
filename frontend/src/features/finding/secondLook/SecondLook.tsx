@@ -148,24 +148,19 @@ export function SecondLook({ meta, finding, position, ready, onRevealed, onHeld,
   }
 
   async function showComparison(visible: Visible, given: AnswerDraft): Promise<void> {
+    // What a draft of the answer holds, with its detail and the reveal asked for.
+    const data = {
+      public_id: publicId,
+      answer: answerBody(meta, { ...given, visible }),
+      reveal: true,
+      shape_revision: draft?.data.shape_revision ?? revision,
+    };
     if (ready && draft?.held && account !== null) {
       // Given here before signing in: the person now says it is theirs, with the detail as it stands.
-      const data = {
-        public_id: publicId,
-        answer: answerBody(meta, { ...given, visible }),
-        reveal: true,
-        shape_revision: draft.data.shape_revision ?? revision,
-      };
       if (keepAnswerDraft(data, draft.id)) sendHeldDraft(draft.id, account);
       return;
     }
     if (!ready) {
-      const data = {
-        public_id: publicId,
-        answer: answerBody(meta, { ...given, visible }),
-        reveal: true,
-        shape_revision: draft?.data.shape_revision ?? revision,
-      };
       if (keepAnswerDraft(data, draft?.id) && !(await signedIn())) {
         toast("Your answer is kept in this browser until you sign in.");
       }
