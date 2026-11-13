@@ -87,7 +87,7 @@ test("before an answer the page, its title, the address, the network and the map
   // The answer is in with one press, and still nothing of the claim has arrived: only the detail is offered.
   await look.getByRole("button", { name: "I can see it", exact: true }).click();
   await expect(look.getByText(/Your answer is in, and it counts\./)).toBeVisible();
-  expect(queue.answers["f-ring"]).toEqual([{ visible: "yes", detail_follows: true }]);
+  expect(queue.answers["f-ring"]).toEqual([{ visible: "yes", detail_follows: true, shape_revision: 0 }]);
   for (const words of CLAIM) {
     for (const body of bodies) expect(body, `a response holds "${words}"`).not.toContain(words);
   }
@@ -118,7 +118,7 @@ test("the keys 1, 2 and 3 answer with one press, and do nothing while a text fie
   await note.click();
   await page.keyboard.type("3 banks");
   await expect(note).toHaveValue("3 banks");
-  expect(queue.answers["f-ring"]).toEqual([{ visible: "unsure", detail_follows: true }]);
+  expect(queue.answers["f-ring"]).toEqual([{ visible: "unsure", detail_follows: true, shape_revision: 0 }]);
 });
 
 test("answers, sees how it compares and that it moved up, and goes on with one press", async ({ page }) => {
@@ -158,7 +158,7 @@ test("answers, sees how it compares and that it moved up, and goes on with one p
   await expect(look.getByRole("heading", { name: CLAIMED.title })).toBeVisible();
   await expect(look.getByText(/2 other people can see it and 1 isn't sure\./)).toBeVisible();
   await expect(look.getByText(/So did you\./)).toBeVisible();
-  expect(queue.answers["f-ring"]).toEqual([{ visible: "yes", detail_follows: true }]);
+  expect(queue.answers["f-ring"]).toEqual([{ visible: "yes", detail_follows: true, shape_revision: 0 }]);
   expect(queue.details["f-ring"]).toEqual([{ feature_class: "round_barrow" }]);
   await expect(look.getByRole("button", { name: "Next finding" })).toBeFocused();
   await page.keyboard.press("Enter");
@@ -232,7 +232,7 @@ test("a signed-out answer and its detail are a draft through a provider's round 
   await expect(look.getByRole("heading", { name: CLAIMED.title })).toBeVisible();
   expect(next.startsWith("/review")).toBe(true);
   await page.waitForTimeout(500);
-  expect(queue.answers["f-ring"]).toEqual([{ visible: "yes", detail_follows: true }]);
+  expect(queue.answers["f-ring"]).toEqual([{ visible: "yes", detail_follows: true, shape_revision: 0 }]);
   expect(queue.details["f-ring"]).toEqual([{ not_modern: true }]);
   const left = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "{}"), DRAFTS_STORAGE_KEY);
   expect(left.drafts).toEqual([]);
@@ -250,7 +250,7 @@ test("an answer left between the steps offers its detail again after a reload, a
   await expect(look.getByRole("group", { name: "Can you see it?" })).toHaveCount(0);
   await look.getByRole("button", { name: "See how it compares" }).click();
   await expect(look.getByRole("heading", { name: CLAIMED.title })).toBeVisible();
-  expect(queue.answers["f-ring"]).toEqual([{ visible: "no", detail_follows: true }]);
+  expect(queue.answers["f-ring"]).toEqual([{ visible: "no", detail_follows: true, shape_revision: 0 }]);
   expect(queue.details["f-ring"]).toEqual([{}]);
 });
 
@@ -288,7 +288,7 @@ test.describe("failures", () => {
     await look.getByRole("button", { name: "I can see it", exact: true }).click();
     await look.getByRole("button", { name: "See how it compares" }).click();
     await expect(look.getByRole("heading", { name: CLAIMED.title })).toBeVisible();
-    expect(queue.answers["f-ring"]).toEqual([{ visible: "yes", detail_follows: true }]);
+    expect(queue.answers["f-ring"]).toEqual([{ visible: "yes", detail_follows: true, shape_revision: 0 }]);
     await expect(page.getByRole("region", { name: "Drafts" })).toHaveCount(0);
     const left = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "{}"), DRAFTS_STORAGE_KEY);
     expect(left.drafts).toEqual([]);
