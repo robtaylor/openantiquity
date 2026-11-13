@@ -173,6 +173,11 @@ class TooManyItemsError(ConflictError):
     message = f"An investigation can hold at most {MAX_ITEMS} items."
 
 
+class ItemUnavailableError(ConflictError):
+    code = "item_unavailable"
+    message = "This item's finding isn't shown, so its title and note can't be changed."
+
+
 class InvalidItemError(ValidationFailedError):
     code = "invalid_item"
     message = "That item is missing what its kind needs."
@@ -932,7 +937,10 @@ def update_item(
     """Change an item's title, note or data. Its kind and what it points at stay.
 
     `content_kinds` names the kinds of content the request sent, which must
-    be the item's own kind and nothing else.
+    be the item's own kind and nothing else. The text of a finding item whose
+    finding `actor` isn't shown can't be changed: they are shown it with every
+    place hidden (`item_text`), and saving that back would write the
+    placeholder over what was written.
     """
     assert set(changes) <= ITEM_EDITABLE, f"not editable: {set(changes) - ITEM_EDITABLE}"
     if not access.may_edit:
@@ -941,6 +949,10 @@ def update_item(
     kind = InvestigationItemKind(item.kind)
     if content_kinds and list(content_kinds) != [kind]:
         raise InvalidItemError(f"A {kind} item takes only its own content.")
+    if kind is InvestigationItemKind.FINDING and changes.keys() & {"title", "note"}:
+        (view,) = item_views(db, [item], actor)
+        if view.unavailable is not None:
+            raise ItemUnavailableError()
     merged = {"title": item.title, "note": item.note, "data": item.data} | changes
     _check_item(kind, title=merged["title"], note=merged["note"], data=merged["data"])
     for name, value in changes.items():

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fieldclub.models import Activity, Investigation
+from fieldclub.models import Activity, Investigation, InvestigationItem
 from fieldclub.services import investigations
 from fieldclub.vocab import FindingState
 from tests.helpers import ClientAs, MakeFinding, MakeUser, add_record, add_source, error_code
@@ -286,6 +286,49 @@ def test_unavailable_items_render_as_lines(
     as_finder = client_as(finder).get(url(inv, "/items")).json()["items"]
     assert as_finder[0]["finding"]["title"] == "Secret barrow"
     assert as_finder[1]["unavailable"] == "withdrawn"
+
+
+@pytest.mark.parametrize("gone_how", ["hidden", "withdrawn"])
+def test_what_an_editor_isn_t_shown_of_an_item_they_can_t_write_over(
+    db: Session, make_user: MakeUser, make_finding: MakeFinding, client_as: ClientAs, gone_how: str
+) -> None:
+    """A finding item whose finding isn't shown has the places in its text hidden, from its editors too.
+
+    Saving back what they were shown would put the placeholder where the
+    place was written. The interface offers no edit for such an item, and the
+    API refuses one.
+    """
+    owner, finder = make_user(), make_user()
+    inv = make(db, owner)
+    finding = make_finding(finder, title="A barrow")
+    db.commit()
+    me = client_as(owner)
+    written = "Bank on the east side, at SU 1310 6707."
+    added = me.post(
+        url(inv, "/items"), json={"kind": "finding", "finding": finding.public_id, "note": written}
+    )
+    assert added.status_code == 201, added.text
+    if gone_how == "hidden":
+        finding.hidden_at = datetime(2026, 11, 10, tzinfo=UTC)
+    else:
+        finding.state = FindingState.WITHDRAWN.value
+    db.commit()
+
+    (shown,) = me.get(url(inv, "/items")).json()["items"]
+    assert shown["unavailable"] == gone_how
+    assert "SU 1310 6707" not in shown["note"], "the editor is shown the note with the place hidden"
+
+    path = url(inv, f"/items/{added.json()['id']}")
+    refused = me.patch(path, json={"note": shown["note"]})
+    assert error_code(refused) == "item_unavailable", refused.text
+    assert refused.status_code == 409
+    assert error_code(me.patch(path, json={"title": "Renamed"})) == "item_unavailable"
+    stored = db.scalars(select(InvestigationItem).where(InvestigationItem.investigation_id == inv.id)).one()
+    db.refresh(stored)
+    assert (stored.title, stored.note) == (None, written)
+
+    # It can still be moved and removed.
+    assert me.delete(path).status_code == 204
 
 
 # --------------------------------------------------------------------------
