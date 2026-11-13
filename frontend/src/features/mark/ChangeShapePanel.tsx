@@ -148,7 +148,7 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
   const path = useMarkPath();
   const drawing = useMarkStore((state) => state.drawing);
   const editing = useMarkStore((state) => state.editing);
-  const [saving, setSaving] = useState(false);
+  const saving = useMarkStore((state) => state.saving);
   const [notice, setNotice] = useState<string | null>(null);
   const saved = useMemo(() => savedPath(finding), [finding]);
   const key = editingKey(finding);
@@ -196,8 +196,8 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
   );
 
   async function save(): Promise<void> {
-    if (saving || stale || base === null) return;
     const mark = useMarkStore.getState();
+    if (mark.saving || stale || base === null) return;
     const body = changeBody(finding, mark.shape.present, base);
     if (body === null) {
       if (saved === null) {
@@ -213,7 +213,7 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
     }
     mark.setProblem(null);
     setNotice(null);
-    setSaving(true);
+    mark.setSaving(true);
     try {
       const updated = await updateFinding(finding.public_id, body);
       client.setQueryData(findingPageKeys.detail(updated.public_id), updated);
@@ -241,7 +241,7 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
         );
       } else toast(`The shape couldn't be saved. ${problem.message}`, { kind: "error" });
     } finally {
-      setSaving(false);
+      useMarkStore.getState().setSaving(false);
     }
   }
 
