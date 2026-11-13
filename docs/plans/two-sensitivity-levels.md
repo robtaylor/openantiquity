@@ -11,17 +11,17 @@ A finding is `open` or `protected`, as Decision 0032 chose, and nothing in the c
 - Decision 0032, proposed.
 - For WS2: lines and curves has landed on `main`. That branch touches the same services and leak tests, so the sweep runs once over the whole tree after it.
 
-## Where things stand (2026-11-12)
+## Where things stand (2026-11-13)
 
-- WS1 is being built on `feat/two-sensitivity-levels`.
+- WS1 is live. The web app runs commit `da60c5a` since 2026-11-13.
 - WS2 hasn't started and waits for lines and curves.
-- The live site holds no restricted finding. Asked signed out that day, its API listed one finding, and it was open.
+- The live site holds no restricted finding. Asked signed out on 2026-11-12, its API listed one finding, and it was open.
 
 ## Workstreams
 
 ### WS1 — Nothing can be set to `restricted`
 
-**Status:** In flight.
+**Status:** Shipped, commits `639e4f7` to `da60c5a`, deployed 2026-11-13.
 
 This closes the fault Decision 0032 describes on the live site. It changes the edge of the application and leaves the inside alone.
 
@@ -31,12 +31,13 @@ This closes the fault Decision 0032 describes on the live site. It changes the e
 - `/api/v1/meta` lists `open` and `protected` only, and the two choosers in the interface offer those.
 - A test walks the API's schema and fails if any request admits `restricted`.
 - A test pins that every active signed-in member sees a finding of every offered level exactly, which is what keeps Decision 0023's distance rule from giving a place away.
+- A finding a moderator has hidden is left out when what is drawn near it is judged. A review of this workstream found it still held views back, which said something hidden was there.
 - `DESIGN.md`, `ARCHITECTURE.md`, `UI.md`, the interface's copy and the changelog say two levels.
 
 **Exit criteria:**
 
-- Both full suites and the end-to-end tests pass.
-- It is deployed, and a request to the live API that sets `restricted` is refused.
+- Both full suites and the end-to-end tests pass. Met on `da60c5a`: 5,830 backend tests, 1,282 frontend tests and 268 end-to-end tests.
+- It is deployed, and the live API offers two levels. Met: `/api/v1/meta` on openantiquity.org lists `open` and `protected`. The refusal of `restricted` is proved by the suite for a member, the finder, a trusted member and a moderator. It wasn't tried against the live API, which needs a signed-in session.
 
 ### WS2 — The sweep
 
@@ -58,7 +59,7 @@ This closes the fault Decision 0032 describes on the live site. It changes the e
 
 When all of these are true, this plan closes:
 
-- [ ] WS1 shipped and deployed.
+- [x] WS1 shipped and deployed.
 - [ ] WS2 shipped.
 
 ## References
