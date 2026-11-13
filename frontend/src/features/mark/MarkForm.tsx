@@ -25,13 +25,13 @@ import { useSession } from "../account/session.js";
 import { DraftBadge } from "../drafts/DraftBadge.js";
 import type { KindDraft } from "../drafts/savers.js";
 import { discardDraft, restoreDraft, retryDraft } from "../drafts/store.js";
-import { crossesBox } from "../finding/mapView.js";
 import { namedFields, POSITION_IN_TEXT, positionWords } from "../finding/positionInText.js";
 import { BARE_MAP_PATH } from "../shell/navigation.js";
 import { type PanelEnvironment, usePanelEnvironment } from "../shell/panelContext.js";
 import { DrawingBar, SelectedPointBar } from "./DrawingTool.js";
 import { exactGridRefOf, suggestTitle } from "./describe.js";
 import type { FindingDraft } from "./findingDrafts.js";
+import { slideIntoView } from "./keepClear.js";
 import { isAdding, useMarkPath, useMarkStore } from "./markStore.js";
 import { FINDS_NOTICE, findsRoute, sensitivityNotice } from "./notices.js";
 import { anchorOf, type LngLat, placesOf } from "./path.js";
@@ -72,28 +72,20 @@ export function uncoveredBox(
   };
 }
 
-/**
- * Move the map, if it must, so the mark is well inside the part of it on
- * show. A line or a shape is in sight when any part of it is: someone who has
- * drawn along a road to its end is looking at the end, and the map stays
- * there. When none of it is in sight, the point of it nearest the middle of
- * what is on show is brought there, which moves the map least.
- */
+/** Move the map, if it must, so the mark is well inside the part of it on show (`slideIntoView`). */
 function keepInView(map: MapLibreMap, points: readonly LngLat[], box: ReturnType<typeof uncoveredBox>): void {
-  if (!isMapLive(map) || points.length === 0) return;
-  const onPage = points.map((point) => screenPoint(map, point));
+  if (!isMapLive(map)) return;
   const well = {
     left: box.left + VIEW_MARGIN,
     top: box.top + VIEW_MARGIN,
     right: box.right - VIEW_MARGIN,
     bottom: box.bottom - VIEW_MARGIN,
   };
-  if (crossesBox(onPage, well)) return;
-  const middle = { x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 };
-  const nearest = onPage.reduce((best, each) =>
-    Math.hypot(each.x - middle.x, each.y - middle.y) < Math.hypot(best.x - middle.x, best.y - middle.y) ? each : best,
+  const slide = slideIntoView(
+    points.map((point) => screenPoint(map, point)),
+    well,
   );
-  map.panBy([nearest.x - middle.x, nearest.y - middle.y], { duration: 0 });
+  if (slide) map.panBy(slide, { duration: 0 });
 }
 
 /**

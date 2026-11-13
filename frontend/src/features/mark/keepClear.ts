@@ -7,6 +7,7 @@
 
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { screenPoint } from "../../map/useMapFrame.js";
+import { crossesBox } from "../finding/mapView.js";
 import { useMarkStore } from "./markStore.js";
 
 /** Half a handle's dot, in pixels. */
@@ -55,4 +56,36 @@ export function clearPointsOfBar(map: MapLibreMap, bar: DOMRect): void {
   if (bar.height === 0) return;
   const up = liftOverBar(placesOnPage(map), bar);
   if (up > 0) map.panBy([0, up], { duration: 0 });
+}
+
+/**
+ * How far to pan the map so a marking can be seen in `box`, the part of the
+ * map on show, or null to leave the map alone. Positive moves what is drawn
+ * left and up, as `map.panBy` does.
+ *
+ * A marking that fits the box is slid by the least that shows all of it.
+ * One too big for the box is left where it is while any part of it is in
+ * sight: someone who has drawn along a road to its end is looking at the
+ * end. When none of it is, its point nearest the middle of the box is
+ * brought there, which moves the map least.
+ */
+export function slideIntoView(points: readonly Place[], box: Box): [number, number] | null {
+  if (points.length === 0) return null;
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const west = Math.min(...xs);
+  const east = Math.max(...xs);
+  const north = Math.min(...ys);
+  const south = Math.max(...ys);
+  if (east - west <= box.right - box.left && south - north <= box.bottom - box.top) {
+    const across = west < box.left ? west - box.left : east > box.right ? east - box.right : 0;
+    const down = north < box.top ? north - box.top : south > box.bottom ? south - box.bottom : 0;
+    return across === 0 && down === 0 ? null : [across, down];
+  }
+  if (crossesBox(points, box)) return null;
+  const middle = { x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 };
+  const nearest = points.reduce((best, each) =>
+    Math.hypot(each.x - middle.x, each.y - middle.y) < Math.hypot(best.x - middle.x, best.y - middle.y) ? each : best,
+  );
+  return [nearest.x - middle.x, nearest.y - middle.y];
 }
