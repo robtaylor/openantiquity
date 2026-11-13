@@ -25,7 +25,7 @@ import { lngLatAtClient, screenPoint } from "../../map/useMapFrame.js";
 import { exactGridRefOf } from "./describe.js";
 import { focusAddAtCrossAfter, focusHandleIfLost } from "./focus.js";
 import { useMarkStore } from "./markStore.js";
-import { canClose, endIndex, type Path, type PathPoint } from "./path.js";
+import { canClose, endIndex, otherEnd, type Path, type PathPoint, stepIndex } from "./path.js";
 
 /** How far one press of an arrow key moves a point, in pixels, and with Shift held. */
 export const NUDGE_PX = 3;
@@ -229,7 +229,7 @@ function Handle({
       mark.switchPointKind(index);
       return;
     }
-    const far = endIndex(path, mark.end === "end" ? "start" : "end");
+    const far = endIndex(path, otherEnd(mark.end));
     // A tap on the far end closes the shape. From the keyboard, Enter selects, and "Close the shape" closes.
     if (event.detail > 0 && mark.drawing && canClose(path) && index === far) {
       mark.closeShape();
@@ -252,10 +252,7 @@ function Handle({
     }
     if (event.key === "[" || event.key === "]") {
       event.preventDefault();
-      const count = path.points.length;
-      const step = event.key === "[" ? -1 : 1;
-      const next = path.closed ? (index + step + count) % count : Math.min(count - 1, Math.max(0, index + step));
-      mark.select(next);
+      mark.select(stepIndex(path, index, event.key === "[" ? -1 : 1));
       return;
     }
     if (event.key === "Delete" || event.key === "Backspace") {

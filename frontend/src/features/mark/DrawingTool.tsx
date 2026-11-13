@@ -32,7 +32,17 @@ import { ADD_AT_CROSS, focusFirstControlAfter } from "./focus.js";
 import { addAtReticle } from "./MarkLayer.js";
 import { useMarkPath, useMarkStore } from "./markStore.js";
 import { pointName, visibleHandles } from "./PathHandles.js";
-import { canClose, endDirection, endIndex, lengthM, type Path, type PathEnd } from "./path.js";
+import {
+  canClose,
+  endDirection,
+  endIndex,
+  endWord,
+  lengthM,
+  otherEnd,
+  type Path,
+  type PathEnd,
+  stepIndex,
+} from "./path.js";
 
 /** A length as the readout gives it: metres under a kilometre, otherwise kilometres to one place. */
 export function lengthWords(metres: number): string {
@@ -102,7 +112,7 @@ export function useDevice(map: MapLibreMap | null, isPhone: boolean): Device {
 /** What a tap does now, and what else can be done, as the marking stands. */
 export function guidanceFor(stage: MarkingStage, drawing: boolean, end: PathEnd, isPhone: boolean): string {
   const tap = isPhone ? "Tap" : "Click";
-  const far = end === "end" ? "first" : "last";
+  const far = endWord(otherEnd(end));
   if (stage === "empty") return `${tap} the map where the feature is. One ${tap.toLowerCase()} marks a spot.`;
   if (stage === "shape") return "Drag a point to move it, and select one to change or delete it.";
   if (!drawing) {
@@ -158,7 +168,7 @@ export function statusWords(
   if (!drawing) return `${size}.`;
   if (count === 1) return `${size}. ${tap} the map to add the next one.`;
   const direction = endDirection(path, end);
-  return `${size}. ${tap} the map to add the next one at the ${direction ?? (end === "end" ? "last" : "first")} end.`;
+  return `${size}. ${tap} the map to add the next one at the ${direction ?? endWord(end)} end.`;
 }
 
 /** The length of the path, worked out again only when the path changes, not on every frame of the map. */
@@ -289,10 +299,7 @@ export function useSelectedPointActions(map: MapLibreMap | null) {
       const at = path.points[endIndex(path, from)];
       if (at && map && isMapLive(map)) map.easeTo({ center: [at.lon, at.lat] });
     },
-    step: (by: 1 | -1) => {
-      const next = path.closed ? selected + by : Math.min(count - 1, Math.max(0, selected + by));
-      store.select((next + count) % count);
-    },
+    step: (by: 1 | -1) => store.select(stepIndex(path, selected, by)),
     done: () => store.select(null),
   };
 }

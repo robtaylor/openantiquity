@@ -29,7 +29,7 @@ import { ADD_AT_CROSS, focusFirstControlAfter } from "./focus.js";
 import { addAtReticle } from "./MarkLayer.js";
 import { useMarkPath, useMarkStore } from "./markStore.js";
 import { pointName } from "./PathHandles.js";
-import { canClose, lengthM, type Path, type PathEnd } from "./path.js";
+import { canClose, endWord, lengthM, otherEnd, type Path, type PathEnd } from "./path.js";
 
 /**
  * What a tap does now, in one line, and once there are points how many and
@@ -42,7 +42,7 @@ export function phoneStatusWords(path: Path, end: PathEnd, length = lengthM(path
   if (count === 1) return "1 point. Tap again to draw a line from it.";
   const size = `${count} points, ${lengthWords(length)}`;
   if (!canClose(path)) return `${size}. Tap to carry on.`;
-  return `${size}. Tap to carry on, or tap the ${end === "end" ? "first" : "last"} point to close it.`;
+  return `${size}. Tap to carry on, or tap the ${endWord(otherEnd(end))} point to close it.`;
 }
 
 function BarButton({

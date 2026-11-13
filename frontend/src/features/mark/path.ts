@@ -57,6 +57,23 @@ export function endIndex(path: Path, end: PathEnd): number {
   return end === "start" ? 0 : path.points.length - 1;
 }
 
+/** The end of an open path that isn't `end`. */
+export function otherEnd(end: PathEnd): PathEnd {
+  return end === "end" ? "start" : "end";
+}
+
+/** How the tool names an end of an open path: its first point or its last. */
+export function endWord(end: PathEnd): "first" | "last" {
+  return end === "start" ? "first" : "last";
+}
+
+/** The point `by` places on from `index`: round the ring of a closed shape, stopping at the ends of an open path. */
+export function stepIndex(path: Path, index: number, by: number): number {
+  const count = path.points.length;
+  if (path.closed) return (((index + by) % count) + count) % count;
+  return Math.min(count - 1, Math.max(0, index + by));
+}
+
 /** True when the path can be drawn as a line or shape, not just a spot. */
 export function isDrawable(path: Path): boolean {
   return path.points.length >= (path.closed ? MIN_CLOSED_POINTS : MIN_OPEN_POINTS);
@@ -222,7 +239,7 @@ export function closesAt(
   project: (point: LngLat) => { x: number; y: number },
 ): boolean {
   if (!canClose(path)) return false;
-  const far = pointAt(path, endIndex(path, active === "end" ? "start" : "end"));
+  const far = pointAt(path, endIndex(path, otherEnd(active)));
   const at = project([far.lon, far.lat]);
   return Math.hypot(at.x - tap.x, at.y - tap.y) <= CLOSE_TOLERANCE_PX;
 }
@@ -527,7 +544,7 @@ const COMPASS = ["north", "north-east", "east", "south-east", "south", "south-we
 export function endDirection(path: Path, active: PathEnd): string | null {
   if (path.closed || path.points.length < MIN_OPEN_POINTS) return null;
   const here = pointAt(path, endIndex(path, active));
-  const there = pointAt(path, endIndex(path, active === "end" ? "start" : "end"));
+  const there = pointAt(path, endIndex(path, otherEnd(active)));
   const k = Math.cos(radians((here.lat + there.lat) / 2));
   const east = (here.lon - there.lon) * k;
   const north = here.lat - there.lat;
