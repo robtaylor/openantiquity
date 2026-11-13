@@ -124,7 +124,6 @@ Decision 0033 passes over an activity kind or a next step this version has no na
 
 - Multi-direction shade is three colour channels where Composite is one, so its tiles are about two and a half times the bytes: 360 to 450 KB against 140 to 170 KB, measured on the live site on 2026-11-13. It is now the view the map opens on. A palette or WebP encoding would cut that, and changes the pixels, so the style's version goes up with it.
 - Marking a finding doesn't record itself as the tool that has the map (`map/tool.ts`), so each handler asks about marking in its own way: the records hook, the findings layer and the scan layer. Having the marking pages set the tool would leave one question to ask.
-- "Change the shape" on a saved finding takes the marking tool over without a word, and a new marking that was never saved is lost to it. Since `3fd51cb` such a marking is drawn on the map, which makes it look safe. Either ask first, as "Mark a finding" now does, or keep it automatically as a draft of a kind that needn't be complete.
 - Terrain past zoom 16 was tried and gives a modest gain for Composite alone ([the spike](../architecture/decisions/spikes/deeper-terrain-tiles.md)).
 
 ### 9. What the security review left for hosting

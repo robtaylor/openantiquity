@@ -48,9 +48,12 @@ import { saveProblem } from "./compose.js";
 import { baseRevision, changeShapePath, editingKey } from "./editingKey.js";
 import { DrawingSection, useMarkInView } from "./MarkForm.js";
 import { MARK_PATH_LAYERS, useSourceData } from "./MarkLayer.js";
-import { useMarkPath, useMarkStore } from "./markStore.js";
+import { CARRY_ON, MARK_PATH } from "./markPaths.js";
+import { type MarkFields, type Unsaved, unsavedInHand, unsavedKey, useMarkPath, useMarkStore } from "./markStore.js";
 import { apiPath, type Path, placesOf, plainPoints, spotPath } from "./path.js";
+import { TakeOverNotice } from "./TakeOverNotice.js";
 import { useLeaveOnEscape } from "./useLeaveOnEscape.js";
+import { draftPath } from "./useSaveMark.js";
 import "./mark.css";
 
 export const LOOKED_AT_SOURCE = "mark-looked-at";
@@ -114,10 +117,41 @@ function useLookedAtOnMap(map: MapLibreMap | null, geometry: GeoJSONGeometry | n
   useSourceData(map, LOOKED_AT_SOURCE, data, addLookedAtLayer, true);
 }
 
-/** Cancel, or closing the panel: the change is thrown away, so the tool opens again on the saved shape. */
+/** Whether what the tool holds is this finding's shape, taken up here. */
+function holdsThisFinding(publicId: string): boolean {
+  return baseRevision(useMarkStore.getState().editing, publicId) !== null;
+}
+
+/**
+ * Cancel, or closing the panel: the change is thrown away, so the tool opens
+ * again on the saved shape. What the tool holds for something else, which
+ * this panel only asked about, is left as it is.
+ */
 function discardAndLeave(navigate: ReturnType<typeof useNavigate>, publicId: string): void {
-  useMarkStore.getState().start();
+  if (holdsThisFinding(publicId)) useMarkStore.getState().start();
   navigate(findingPath(publicId));
+}
+
+/** What would be discarded, in words, and the way back to it. */
+const IN_THE_WAY: Record<Unsaved["kind"], string> = {
+  marking: "You have an unfinished marking. Changing this shape would discard it.",
+  change: "You have a change to another finding's shape that isn't saved. Changing this shape would discard it.",
+  draft: "You have a draft with changes that aren't kept. Changing this shape would discard them.",
+};
+
+/**
+ * Something unsaved the tool holds that isn't this finding's, which taking
+ * this shape up would throw away without a word. A draft as it was kept, and
+ * a saved shape taken up and not changed, are no loss.
+ */
+function inTheWayOf(publicId: string, state: MarkFields): Unsaved | null {
+  const held = unsavedInHand(state);
+  return held?.kind === "change" && held.publicId === publicId ? null : held;
+}
+
+function wayBackTo(held: Unsaved): { to: string; state?: object } {
+  if (held.kind === "marking") return { to: MARK_PATH, state: CARRY_ON };
+  return { to: held.kind === "change" ? changeShapePath(held.publicId) : draftPath(held.draftId) };
 }
 
 function NotYours({ finding }: { finding: FindingDetail }) {
@@ -161,6 +195,12 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
   const takeUpSaved = useCallback((): void => {
     useMarkStore.getState().edit(key, saved ?? spotPath([lon, lat]));
   }, [key, saved, lon, lat]);
+  // Something unsaved the tool already holds, which taking this shape up would throw away. Followed as
+  // text, so the question goes when what it is about goes, as when the person signs out.
+  const heldKey = useMarkStore((state) => {
+    const held = inTheWayOf(finding.public_id, state);
+    return held === null ? null : unsavedKey(state);
+  });
 
   // The saved path is taken up once per revision, so a change in progress survives the panel going and coming back.
   // A newer revision is taken up only when nothing has been changed here: otherwise the change stays, and `stale` says so.
@@ -169,8 +209,9 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
     const mark = useMarkStore.getState();
     if (mark.editing === key) return;
     if (baseRevision(mark.editing, finding.public_id) !== null && mark.shape.past.length > 0) return;
-    takeUpSaved();
-  }, [key, finding.public_id, takeUpSaved]);
+    // It is asked about first. Until then nothing is taken up, and the tool isn't open on either.
+    if (heldKey === null) takeUpSaved();
+  }, [key, finding.public_id, takeUpSaved, heldKey]);
   const framed = useRef<string | null>(null);
   useEffect(() => {
     if (!ready || framed.current === editing) return;
@@ -243,7 +284,18 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
     }
   }
 
-  if (!ready) return null;
+  if (!ready) {
+    const held = heldKey === null ? null : inTheWayOf(finding.public_id, useMarkStore.getState());
+    if (held === null) return null;
+    const back = wayBackTo(held);
+    return (
+      <TakeOverNotice
+        words={IN_THE_WAY[held.kind]}
+        back={{ label: "Go back to it", onClick: () => navigate(back.to, { state: back.state }) }}
+        on={{ label: "Discard it and change this shape", onClick: takeUpSaved }}
+      />
+    );
+  }
   const limits = meta.shapes;
   return (
     <div className="fc-mark">
@@ -313,7 +365,10 @@ export function ChangeShapePanel({ meta }: { meta: Meta }) {
   const finding = query.data;
   useDocumentTitle("Change the shape");
 
-  const leave = useLeaveOnEscape(() => discardAndLeave(navigate, publicId));
+  const leave = useLeaveOnEscape(
+    () => discardAndLeave(navigate, publicId),
+    () => holdsThisFinding(publicId),
+  );
 
   return (
     <PanelFrame panelKey={changeShapePath(publicId)} title="Change the shape" subtitle={finding?.title} onClose={leave}>

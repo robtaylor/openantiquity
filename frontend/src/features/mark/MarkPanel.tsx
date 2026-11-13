@@ -17,10 +17,11 @@ import { PanelFrame } from "../shell/PanelFrame.js";
 import { usePanelEnvironment } from "../shell/panelContext.js";
 import { findingDrafts, useSavedDrafts } from "./findingDrafts.js";
 import { MarkForm, markInSight, uncoveredBox } from "./MarkForm.js";
-import { MARK_PATH } from "./markPaths.js";
+import { MARK_PATH, wasToldToCarryOn } from "./markPaths.js";
 import { useMarkReturn } from "./markReturn.js";
 import { EMPTY_MARK, isUnsavedNewMark, type MarkFields, useMarkStore } from "./markStore.js";
 import { type LngLat, placesOf } from "./path.js";
+import { focusPanelTitle, TakeOverNotice } from "./TakeOverNotice.js";
 import { useLeaveOnEscape } from "./useLeaveOnEscape.js";
 import { openSavedFinding } from "./useSaveMark.js";
 import "./mark.css";
@@ -38,6 +39,13 @@ function useOpenSavedDraft(draftId: string | undefined): boolean {
     openSavedFinding(client, navigate, saved);
   }, [saved, draftId, client, navigate]);
   return saved !== undefined;
+}
+
+/** Move the map to a marking: framed if it has an extent, centred on it if it is one point. */
+function bringIntoView(places: readonly LngLat[]): void {
+  const [only] = places;
+  if (places.length > 1) frameExtent(places);
+  else if (only) useMapStore.getState().requestCamera({ lng: only[0], lat: only[1] });
 }
 
 /**
@@ -110,6 +118,9 @@ export function MarkPanel({ meta }: { meta: Meta }) {
     !markInSight(map, places, uncoveredBox({ isPhone, sheetHeight }, window.innerWidth, window.innerHeight));
   const elsewhereNow = useRef(elsewhere);
   elsewhereNow.current = elsewhere;
+  const { state: arrivedWith } = useLocation();
+  const stateNow = useRef(arrivedWith);
+  stateNow.current = arrivedWith;
   const host = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const mark = useMarkStore.getState();
@@ -122,7 +133,10 @@ export function MarkPanel({ meta }: { meta: Meta }) {
       } else if (!begun.current && isUnsavedNewMark(mark)) {
         // The button was pressed to mark what is on the map now. A marking left somewhere else
         // is asked about, and the map stays where it is until the person says to go to it.
-        const away = elsewhereNow.current(placesOf(mark.shape.present));
+        // Sent here by a panel where the person already said to go back to it: they aren't asked again.
+        const chosen = wasToldToCarryOn(stateNow.current);
+        const away = !chosen && elsewhereNow.current(placesOf(mark.shape.present));
+        if (chosen) bringIntoView(placesOf(mark.shape.present));
         // Said both ways, so an answer left from an earlier opening never stands.
         if (mark.setAside !== away) useMarkStore.setState({ setAside: away });
         if (!away) setCarriedOn(true);
@@ -144,23 +158,13 @@ export function MarkPanel({ meta }: { meta: Meta }) {
   const placed = useMarkStore((state) => state.shape.present.points.length > 0);
   const setAside = useMarkStore((state) => state.setAside) && draftId === undefined;
 
-  // The button pressed goes when the choice is made, and focus would go nowhere with it.
-  function focusTitle(): void {
-    host.current?.closest(".fc-panel")?.querySelector<HTMLElement>(".fc-panel__title")?.focus();
-  }
-
   function goToIt(): void {
-    const places = placesOf(useMarkStore.getState().shape.present);
-    const [only] = places;
-    if (places.length > 1) frameExtent(places);
-    else if (only) useMapStore.getState().requestCamera({ lng: only[0], lat: only[1] });
-    focusTitle();
+    bringIntoView(placesOf(useMarkStore.getState().shape.present));
     useMarkStore.setState({ setAside: false });
     setCarriedOn(true);
   }
 
   function discard(): void {
-    focusTitle();
     setCarriedOn(false);
     discardUnfinished((places) => elsewhereNow.current(places));
   }
@@ -190,24 +194,24 @@ export function MarkPanel({ meta }: { meta: Meta }) {
         </EmptyState>
       ) : !looked || (draftId !== undefined && loaded !== draftId) ? null : setAside ? (
         // The form isn't shown yet: it would bring the marking into view, and taps would add to it.
-        // An alert, since it is put in after the panel's title has been read and nothing goes on until it is answered.
-        <div className="fc-mark__notice" role="alert" ref={host}>
-          <p>You have an unfinished marking somewhere else on the map.</p>
-          <div className="fc-mark__notice-actions">
-            <Button size="sm" variant="primary" onClick={goToIt}>
-              Go to it
-            </Button>
-            <Button size="sm" onClick={discard}>
-              Discard it and start here
-            </Button>
-          </div>
-        </div>
+        // The form isn't shown yet: it would bring the marking into view, and taps would add to it.
+        <TakeOverNotice
+          words="You have an unfinished marking somewhere else on the map."
+          back={{ label: "Go to it", onClick: goToIt }}
+          on={{ label: "Discard it and start here", onClick: discard }}
+        />
       ) : (
         <>
           {carriedOn && placed && draftId === undefined ? (
             <div className="fc-mark__notice" role="status" ref={host}>
               <p>Carrying on with the marking you hadn't saved.</p>
-              <Button size="sm" onClick={discard}>
+              <Button
+                size="sm"
+                onClick={() => {
+                  focusPanelTitle(host.current);
+                  discard();
+                }}
+              >
                 Discard it
               </Button>
             </div>

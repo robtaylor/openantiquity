@@ -72,6 +72,23 @@ describe("the phone's drawing bar", () => {
     expect(await screen.findByRole("region", { name: "Drawing" })).toBeInTheDocument();
   });
 
+  it("isn't offered at a saved finding's shape while a new marking is in the way of it", async () => {
+    usePhoneLayout();
+    routeApi(harness.fetchMock(), { "GET /auth/me": () => json(meFixture()) });
+    act(() =>
+      useMarkStore.setState({
+        shape: history({ closed: false, points: [at(-1.2, 52.1), at(-1.201, 52.1)] } satisfies Path),
+        drawing: true,
+      }),
+    );
+    renderShell("/mark/finding/f-ring");
+    await mapReady();
+    // The tool isn't open on the saved shape, nor on the marking, so there is nothing for the bar to work on.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByRole("region", { name: "Drawing" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add a point at the cross" })).toBeNull();
+  });
+
   it("is one row of named icon buttons and one status line, and nothing else", async () => {
     usePhoneLayout();
     const map = await openMarking();

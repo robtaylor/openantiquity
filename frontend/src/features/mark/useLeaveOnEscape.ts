@@ -10,28 +10,30 @@ import { useMarkStore } from "./markStore.js";
  *
  * Returns the same step for the panel's close button.
  */
-export function useLeaveOnEscape(leave: () => void): () => void {
+export function useLeaveOnEscape(leave: () => void, own: () => boolean = () => true): () => void {
+  // `own` says whether what the tool holds is this panel's to finish. What it holds for another
+  // panel, behind a question this one is asking, is left exactly as it is.
   const leaveRef = useRef(leave);
-  leaveRef.current = leave;
+  leaveRef.current = () => finishOrLeave(leave, own());
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
       if (event.key !== "Escape" || event.defaultPrevented) return;
       if (useAccountUi.getState().sheet !== null) return;
       if (event.target instanceof Element && event.target.closest('[role="dialog"], .fc-panel')) return;
-      finishOrLeave(leaveRef.current);
+      leaveRef.current();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  return () => finishOrLeave(leaveRef.current);
+  return () => leaveRef.current();
 }
 
-function finishOrLeave(leave: () => void): void {
+function finishOrLeave(leave: () => void, own: boolean): void {
   const mark = useMarkStore.getState();
   // A marking set aside isn't being drawn here, so there is nothing to stop first.
-  if (!mark.setAside && mark.drawing && mark.shape.present.points.length > 0) {
+  if (own && !mark.setAside && mark.drawing && mark.shape.present.points.length > 0) {
     mark.finish();
     return;
   }

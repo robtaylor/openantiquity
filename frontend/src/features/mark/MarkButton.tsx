@@ -6,7 +6,7 @@ import { isMapLive } from "../../map/MapPane.js";
 import { useMainMap } from "../../map/mainMap.js";
 import { Button } from "../../ui/Button.js";
 import { clearPointsOfBar } from "./keepClear.js";
-import { isMarkPath } from "./MarkLayer.js";
+import { isMarkPath, useMarkingOpen } from "./MarkLayer.js";
 import { MARK_PATH } from "./MarkPanel.js";
 import { isAdding, useMarkStore } from "./markStore.js";
 import { PhoneDrawingBar, PhoneSelectedPointBar } from "./PhoneBars.js";
@@ -45,9 +45,9 @@ export function MarkButton({ isPhone }: { isPhone: boolean }) {
   const selected = useMarkStore((state) => state.selected !== null);
   const adding = useMarkStore(isAdding);
   const float = useRef<HTMLDivElement>(null);
-  // A marking set aside is out of sight, and nothing is added to it until the person goes back to it.
-  const setAside = useMarkStore((state) => state.setAside);
-  const floating = isMarkPath(pathname) && isPhone && adding && !setAside;
+  // Only while the tool is open on what it holds: not on a marking set aside, nor on one in the way of a saved shape.
+  const open = useMarkingOpen();
+  const floating = open && isPhone && adding;
   useBarKeepsPointsClear(map, float, floating);
 
   if (!isMarkPath(pathname)) {

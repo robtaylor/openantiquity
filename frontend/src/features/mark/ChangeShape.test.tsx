@@ -7,6 +7,7 @@ import { type ApiRoutes, apiError, routeApi } from "../../test/apiRoutes.js";
 import { FINDER, finderView, pageFixture, suggestionsFixture } from "../../test/fixtures/findingPage.js";
 import { offset } from "../../test/fixtures/findings.js";
 import { meFixture } from "../../test/fixtures/me.js";
+import { metaFixture } from "../../test/fixtures/meta.js";
 import {
   json,
   mapReady,
@@ -19,7 +20,9 @@ import { signedOut } from "../account/session.js";
 import type { FindingDetail } from "../finding/types.js";
 import { useSelectedFinding } from "../findings/selection.js";
 import { changeBody, LOOKED_AT_LAYER, LOOKED_AT_SOURCE } from "./ChangeShapePanel.js";
+import { editingKey } from "./editingKey.js";
 import { useMarkStore } from "./markStore.js";
+import { history } from "./path.js";
 
 vi.mock("maplibre-gl", async () => {
   const fake = await import("../../test/fakeMapLibre.js");
@@ -100,6 +103,168 @@ async function openChange(finding: FindingDetail, routes = serve(finding)) {
   await waitFor(() => expect(handles()).toHaveLength(finding.location.path?.points.length ?? 1));
   return { map, routes };
 }
+
+describe("opening the tool while something unsaved is in hand", () => {
+  const NEW_MARK = [offset(400, 300), offset(450, 340)];
+
+  /** The tool holding a new marking of two points that was never saved. */
+  function leaveNewMarking(): void {
+    const mark = useMarkStore.getState();
+    mark.start();
+    for (const { lon, lat } of NEW_MARK) mark.add([lon, lat], metaFixture.shapes);
+    mark.finish();
+  }
+
+  async function openOver(finding: FindingDetail) {
+    serve(finding);
+    renderShell(`/mark/finding/${finding.public_id}`, <Address />);
+    const map = await mapReady();
+    await screen.findByRole("complementary", { name: "Change the shape" });
+    return map;
+  }
+
+  it("asks before a new marking that was never saved is lost to it, and can go back to that", async () => {
+    const user = userEvent.setup();
+    leaveNewMarking();
+    const kept = useMarkStore.getState().shape.present.points;
+    await openOver(lineFinding());
+
+    expect(
+      await changePanel().findByText("You have an unfinished marking. Changing this shape would discard it."),
+    ).toBeInTheDocument();
+    // Nothing has been taken up, and nothing can be added to either shape until they choose.
+    expect(useMarkStore.getState().shape.present.points).toEqual(kept);
+    expect(useMarkStore.getState().editing).toBeNull();
+    expect(handles()).toHaveLength(0);
+
+    await user.click(changePanel().getByRole("button", { name: "Go back to it" }));
+    await screen.findByRole("complementary", { name: "Mark a finding" });
+    expect(address()).toBe("/mark");
+    expect(useMarkStore.getState().shape.present.points).toEqual(kept);
+  });
+
+  it("keeps the marking when the panel is closed, or Escape pressed, without choosing", async () => {
+    const user = userEvent.setup();
+    leaveNewMarking();
+    // Left while points were still being added, as leaving by the rail does.
+    act(() => useMarkStore.setState({ drawing: true }));
+    const kept = useMarkStore.getState().shape.present.points;
+    const finding = lineFinding();
+    await openOver(finding);
+    await changePanel().findByText("You have an unfinished marking. Changing this shape would discard it.");
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(address()).toBe(`/f/${finding.public_id}`));
+    // One Escape leaves, and the marking is as it was: not finished behind the notice, and not thrown away.
+    expect(useMarkStore.getState().shape.present.points).toEqual(kept);
+    expect(useMarkStore.getState().drawing).toBe(true);
+    expect(useMarkStore.getState().editing).toBeNull();
+  });
+
+  it("keeps the marking when the panel's own Close is pressed", async () => {
+    const user = userEvent.setup();
+    leaveNewMarking();
+    const kept = useMarkStore.getState().shape.present.points;
+    const finding = lineFinding();
+    await openOver(finding);
+    await changePanel().findByText("You have an unfinished marking. Changing this shape would discard it.");
+
+    await user.click(changePanel().getByRole("button", { name: "Close panel" }));
+    await waitFor(() => expect(address()).toBe(`/f/${finding.public_id}`));
+    expect(useMarkStore.getState().shape.present.points).toEqual(kept);
+  });
+
+  it("goes back to a marking that is out of view without asking a second time", async () => {
+    const user = userEvent.setup();
+    leaveNewMarking();
+    const kept = useMarkStore.getState().shape.present.points;
+    const map = await openOver(lineFinding());
+    await changePanel().findByText("You have an unfinished marking. Changing this shape would discard it.");
+    const { lng, lat } = map.getCenter();
+    act(() => map.userMove({ lng: lng + 0.5, lat: lat + 0.3 }));
+
+    await user.click(changePanel().getByRole("button", { name: "Go back to it" }));
+
+    const marking = within(await screen.findByRole("complementary", { name: "Mark a finding" }));
+    await waitFor(() => expect(handles()).toHaveLength(2));
+    expect(marking.queryByText("You have an unfinished marking somewhere else on the map.")).toBeNull();
+    expect(useMarkStore.getState().shape.present.points).toEqual(kept);
+  });
+
+  it("asks before a draft's unkept line is lost, and leaves a draft as it was kept alone", async () => {
+    const draft = { closed: false, points: NEW_MARK.map(({ lon, lat }) => ({ lon, lat, kind: "corner" as const })) };
+    act(() =>
+      useMarkStore.setState({ draftId: "d-1", shape: history(draft), kept: draft, drawing: false, editing: null }),
+    );
+    // Moved since it was kept.
+    act(() => useMarkStore.getState().move(0, [offset(380, 290).lon, offset(380, 290).lat]));
+    const changed = useMarkStore.getState().shape.present.points;
+    await openOver(lineFinding());
+
+    expect(
+      await changePanel().findByText(
+        "You have a draft with changes that aren't kept. Changing this shape would discard them.",
+      ),
+    ).toBeInTheDocument();
+    expect(useMarkStore.getState().shape.present.points).toEqual(changed);
+  });
+
+  it("takes the saved shape up over a draft that is as it was kept", async () => {
+    const draft = { closed: false, points: NEW_MARK.map(({ lon, lat }) => ({ lon, lat, kind: "corner" as const })) };
+    act(() =>
+      useMarkStore.setState({ draftId: "d-1", shape: history(draft), kept: draft, drawing: false, editing: null }),
+    );
+    const finding = lineFinding();
+    await openOver(finding);
+    await waitFor(() => expect(useMarkStore.getState().editing).toBe(editingKey(finding)));
+    expect(handles()).toHaveLength(3);
+  });
+
+  it("takes the saved shape up once they say to discard the marking, with focus on the panel's title", async () => {
+    const user = userEvent.setup();
+    leaveNewMarking();
+    const finding = lineFinding();
+    await openOver(finding);
+
+    await user.click(await changePanel().findByRole("button", { name: "Discard it and change this shape" }));
+
+    await waitFor(() => expect(handles()).toHaveLength(3));
+    expect(useMarkStore.getState().editing).toBe(editingKey(finding));
+    expect(changePanel().queryByText(/You have an unfinished marking/)).toBeNull();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Change the shape" })).toHaveFocus());
+  });
+
+  it("asks before an unsaved change to another finding's shape is lost, and can go back to that finding", async () => {
+    const user = userEvent.setup();
+    const other = lineFinding({ public_id: "f-other" });
+    const mark = useMarkStore.getState();
+    mark.edit(editingKey(other), {
+      closed: false,
+      points: POINTS.map(({ lon, lat }) => ({ lon, lat, kind: "corner" as const })),
+    });
+    useMarkStore.getState().move(0, [offset(-120, 10).lon, offset(-120, 10).lat]);
+    expect(useMarkStore.getState().shape.past.length).toBeGreaterThan(0);
+    const changed = useMarkStore.getState().shape.present.points;
+
+    const routes = serve(lineFinding());
+    routes.on("GET /findings/f-other", () => json(other));
+    renderShell(`/mark/finding/${lineFinding().public_id}`, <Address />);
+    await mapReady();
+    await screen.findByRole("complementary", { name: "Change the shape" });
+
+    expect(
+      await changePanel().findByText(
+        "You have a change to another finding's shape that isn't saved. Changing this shape would discard it.",
+      ),
+    ).toBeInTheDocument();
+    expect(useMarkStore.getState().shape.present.points).toEqual(changed);
+
+    await user.click(changePanel().getByRole("button", { name: "Go back to it" }));
+    await waitFor(() => expect(address()).toBe("/mark/finding/f-other"));
+    expect(useMarkStore.getState().shape.present.points).toEqual(changed);
+    expect(await changePanel().findByText("Carrying on from changes you hadn't saved.")).toBeInTheDocument();
+  });
+});
 
 describe("opening the tool on a saved finding", () => {
   it("is offered on the finding's page when the server says it may be edited, and opens with the saved path", async () => {

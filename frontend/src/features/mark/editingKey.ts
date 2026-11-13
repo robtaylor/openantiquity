@@ -19,13 +19,27 @@ export function editingKey(finding: FindingDetail): string {
   return `${editingPrefix(finding.public_id)}${finding.location.shape.revision ?? 0}`;
 }
 
+/** The finding and the revision a key names, or null for no key or one this file didn't make. */
+function parseEditingKey(editing: string | null): { publicId: string; revision: number } | null {
+  const prefix = editingPrefix("");
+  // Read from the right, so nothing depends on what an id may hold.
+  const cut = editing?.lastIndexOf(":") ?? -1;
+  if (!editing?.startsWith(prefix.slice(0, -1)) || cut < prefix.length - 1) return null;
+  const publicId = editing.slice(prefix.length - 1, cut);
+  const revision = Number(editing.slice(cut + 1));
+  return publicId !== "" && Number.isInteger(revision) ? { publicId, revision } : null;
+}
+
 /** The revision the change in the tool began on, or null when the tool holds no change to this finding. */
 export function baseRevision(editing: string | null, publicId: string): number | null {
-  const prefix = editingPrefix(publicId);
-  if (!editing?.startsWith(prefix)) return null;
-  const revision = Number(editing.slice(prefix.length));
+  const named = parseEditingKey(editing);
   // A key this panel didn't make holds no change it can save.
-  return Number.isInteger(revision) ? revision : null;
+  return named?.publicId === publicId ? named.revision : null;
+}
+
+/** The finding a key names, or null for no key or one this file didn't make. */
+export function editedFinding(editing: string | null): string | null {
+  return parseEditingKey(editing)?.publicId ?? null;
 }
 
 /** The address of the tool for a saved finding. */

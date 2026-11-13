@@ -21,6 +21,7 @@ import type { ShapeLimits } from "../../api/meta.js";
 import { onPersonChanged } from "../account/session.js";
 import type { PositionField } from "../finding/positionInText.js";
 import type { MarkProblemField } from "./compose.js";
+import { editedFinding } from "./editingKey.js";
 import type { FindingDraft } from "./findingDrafts.js";
 import {
   addPoint,
@@ -329,6 +330,30 @@ export function isUnsavedNewMark(state: MarkFields): boolean {
 export function hasUnkeptLine(state: MarkFields): boolean {
   const path = state.shape.present;
   return path.points.length >= 2 && path !== state.kept;
+}
+
+/**
+ * Something unsaved the tool holds: a new marking, a change to a saved
+ * finding's shape, or a draft whose line has changed since it was kept. A
+ * panel that would take the tool over asks before it does, and one that
+ * closes without having taken it over leaves it alone.
+ */
+export type Unsaved = { kind: "marking" } | { kind: "change"; publicId: string } | { kind: "draft"; draftId: string };
+
+export function unsavedInHand(state: MarkFields): Unsaved | null {
+  if (isUnsavedNewMark(state)) return { kind: "marking" };
+  const publicId = editedFinding(state.editing);
+  if (publicId !== null) return state.shape.past.length > 0 ? { kind: "change", publicId } : null;
+  // A draft as it was kept is safe where it is kept. Its title and note aren't looked at: only its line.
+  if (state.draftId !== null && hasUnkeptLine(state)) return { kind: "draft", draftId: state.draftId };
+  return null;
+}
+
+/** `unsavedInHand` as text, so a component can follow it without a new object each time. */
+export function unsavedKey(state: MarkFields): string | null {
+  const held = unsavedInHand(state);
+  if (held === null) return null;
+  return held.kind === "marking" ? "marking" : `${held.kind}:${held.kind === "change" ? held.publicId : held.draftId}`;
 }
 
 /** The path being marked, for components. */
