@@ -81,7 +81,7 @@ On `findings` (`models/findings.py`):
 | Column | Holds |
 |--------|-------|
 | `path` jsonb | The path. Null for a spot, and for an old outline until it is next saved |
-| `outline` Geometry, GIST index | The derived shape |
+| `outline` Geometry, GIST index, and a second over shaped findings alone (`shape_kind` not null), which the map's box query uses | The derived shape |
 | `outline_mid` Geometry | `outline` simplified at 0.00005° (about 3 to 5 m), for map zooms 13 to 15 and the finding page |
 | `outline_low` Geometry, GIST index | `outline` simplified at 0.0005° (about 35 to 55 m), for map zooms 9 to 12 |
 | `shape_kind` text | `line` or `area`, null without a shape |

@@ -389,6 +389,7 @@ def test_records_search_is_a_generated_tsvector(database: Engine) -> None:
         ("idx_findings_location_public", ("USING gist", "(location_public)")),
         ("idx_findings_outline", ("USING gist", "(outline)")),
         ("idx_findings_outline_low", ("USING gist", "(outline_low)")),
+        ("idx_findings_outline_shaped", ("USING gist", "(outline)", "shape_kind IS NOT NULL")),
         ("ix_findings_location_public_geography", ("USING gist", "location_public", "geography")),
         ("idx_records_geom", ("USING gist", "(geom)")),
         ("ix_records_centroid_geography", ("USING gist", "geography")),

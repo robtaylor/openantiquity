@@ -96,6 +96,9 @@ def test_a_map_box_uses_the_spatial_index_and_is_quick(
         viewer, {"idx_findings_location", "idx_findings_location_public"}
     )
     assert expected <= indexes, f"{viewer} used {indexes}"
+    # The shapes crossing the box are found through the index of shaped findings alone. With the
+    # whole-table index the planner sometimes read every finding for them.
+    assert "idx_findings_outline_shaped" in indexes, f"{viewer} used {indexes}"
 
     returned = len(db.execute(text(sql)).all())
     # The box is crowded enough to fill the page.

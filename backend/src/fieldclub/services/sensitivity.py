@@ -220,7 +220,8 @@ def visible_match_clause(viewer: User | None, area: ColumnElement[Any]) -> Colum
     the box.
 
     The findings whose shape crosses the box are found first, through the
-    index on `outline`, as an array the outer query looks ids up in. Written
+    index of shaped findings alone (`idx_findings_outline_shaped`), as an
+    array the outer query looks ids up in. Written
     as one more spatial test in the `OR`, the planner would sometimes give up
     the spatial indexes for a scan in date order. An outline saved before
     `shape_kind` existed matches by its point until the backfill fills it.

@@ -66,6 +66,13 @@ $$;
 -- Map views match a finding's shape as well as its point, for viewers who see it exactly.
 CREATE INDEX IF NOT EXISTS idx_findings_outline ON findings USING gist (outline);
 
+-- The shapes that cross a map box are looked up by themselves
+-- (sensitivity.visible_match_clause). Few findings have a shape, so this index
+-- is small and the planner always takes it. With the index of every outline
+-- above, it sometimes read the whole table for them.
+CREATE INDEX IF NOT EXISTS idx_findings_outline_shaped ON findings USING gist (outline)
+    WHERE shape_kind IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_findings_outline_low ON findings USING gist (outline_low);
 
 -- Full-text search over records. The name counts most, then the type terms,
