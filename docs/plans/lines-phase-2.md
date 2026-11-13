@@ -8,7 +8,6 @@ Someone other than a marking's keeper can propose a change to its shape, which t
 
 ## Prerequisites
 
-- The owner's answer to the one question still open.
 - Lines and curves is live (`3958ced`, deployed 2026-11-13), and Decisions 0028 to 0031 are checked against it.
 - A local PostGIS from `infra/docker-compose.yml` for the backend suite.
 
@@ -40,6 +39,7 @@ Each claim was checked by reading the code on `main` on 2026-11-13, after lines 
 - When a keeper's account is deleted, the marking is orphaned and the admins are told. Asked on 2026-11-13 whether keeping should go back to the finder instead, the owner said: "lets just orphan, and alert the admin".
 - An admin can offer an orphaned marking's keeping to a volunteer: "yes".
 - Removing is for admins alone: "admin - they can always pass it over to a moderator. we can adjust once we have real behaviour and issues to address".
+- Keeping covers the whole edit: a new keeper changes the title, the description, the kind of feature and the period as well as the shape, and the finder keeps only withdrawing. Asked on 2026-11-13 whether the finder should keep the words, with the whole edit recommended, the owner said: "i agree with your reccomendation".
 
 ## Design
 
@@ -226,14 +226,7 @@ Build in this order. Each step is test first, against real PostGIS.
 
 ## Open questions for the owner
 
-One is left. The other three were answered on 2026-11-13 and are under "Decided by the owner".
-
-**When a marking is handed on, does the new keeper take over its words as well as its shape?** Today the person who marked a finding can change two things: its shape on the map, and its details, which are the title, the description, the kind of feature and the period. Say Alice marks a road and hands it on to Bob.
-
-- (a) Bob changes the shape and the details. Alice changes neither, is still shown as "Found by", and is still the only one who can withdraw it. One rule says who may edit, as now.
-- (b) Bob changes the shape. Alice still changes the details. Two people are then checked for one finding, and if Alice has left, nobody can correct the title or the kind of feature.
-
-Recommended: (a). It is what "kept by is who may edit" says, and a finder who has gone doesn't leave a marking's words frozen.
+None. The four that were open were answered on 2026-11-13 and are under "Decided by the owner".
 
 ## References
 

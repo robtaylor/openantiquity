@@ -82,13 +82,12 @@ Issue text comes from strangers and would be read by a model, on a public reposi
 Asked on 2026-11-13 with a recommendation for each, the owner replied: "sounds good to me all round".
 
 - **Logs.** Fly's own log search and nothing else for now. Fly's documentation says it keeps an app's logs for 7 days, searchable in its Grafana, free while the feature is in beta, and names no set-up ([Search logs](https://docs.fly.io/monitoring/search-logs)). It hasn't been tried on this account. The privacy notice says seven days. If that proves too short, or the beta ends, the next step is Fly's log shipper writing to a Tigris bucket that expires objects after 30 days, which needs one small machine running all the time.
-- **The address for email reports.** One role address on the project's domain that forwards to the owner, used for reports, for the privacy notice's contact and for complaints, so that no personal address is published. Its name isn't chosen yet, and WS2's email link waits for it.
+- **The address for email reports.** One role address on the project's domain that forwards to the owner, used for reports, for the privacy notice's contact and for complaints, so that no personal address is published. The owner chose `help@openantiquity.org` on 2026-11-13. The domain's mail records already point at Gandi, and the forward itself is still to be made there by the owner: the project's token may read the domain's forwarding addresses and may not create one. WS2's email link waits for it.
 - **Security reports** go by GitHub's private vulnerability reporting, switched on for the repository on 2026-11-13, with [`SECURITY.md`](../../SECURITY.md) pointing to it.
 - **No stored reports.** A prefilled issue and a copy-and-email route cover the need. A table of reports would add moderation and personal data to look after. Revisit if emailed reports become regular, or if reports about protected places need somewhere private.
 
 ## Open questions
 
-- **The role address's name**, and where it forwards. The owner's to choose.
 - **Whether GitHub's duplicate suggestions are on for this repository.** See below. If they are, WS3 is dropped.
 
 **Checked on 2026-11-13:**
