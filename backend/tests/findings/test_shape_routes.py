@@ -167,30 +167,30 @@ def test_a_line_drawn_first_and_extended_over_http(client_as: ClientAs, make_use
 def test_someone_who_sees_only_the_square_learns_only_that_the_shape_changed_and_when(
     client, client_as: ClientAs, make_user: MakeUser
 ) -> None:
+    """A signed-out visitor is the one reader kept to a protected finding's square (Decision 0032)."""
     finder = client_as(make_user())
-    made = finder.post(
-        f"{API}/findings", json=body(path=up(0, 0.006, 0.012), sensitivity="restricted")
-    ).json()
+    made = finder.post(f"{API}/findings", json=body(path=up(0, 0.006, 0.012), sensitivity="protected")).json()
     at = f"{API}/findings/{made['public_id']}"
     finder.patch(at, json={"path": up(0, 0.006, 0.012, 0.02), "path_revision": 0})
-    for viewer in (client, client_as(make_user())):
-        where = viewer.get(at).json()["location"]
-        assert where["obscured"] is True
-        assert (where["outline"], where["path"], where["shape_kind"]) == (None, None, None)
-        (change,) = where["shape"]["changes"]
-        assert where["shape"] == {
-            "kind": None,
-            "length_m": None,
-            "revision": None,
-            "extent": None,
-            "changes": [{"kind": "changed", "on": change["on"], "added_length_m": None, "added_view": None}],
-            "added_since_looked_m": None,
-            "added_view": None,
-            "looked_at": None,
-        }
-        listed = viewer.get(f"{API}/findings").json()["items"]
-        assert [item["location"]["shape_kind"] for item in listed] == [None]
-    assert finder.get(f"{API}/findings").json()["items"][0]["location"]["shape_kind"] == "line"
+    where = client.get(at).json()["location"]
+    assert where["obscured"] is True
+    assert (where["outline"], where["path"], where["shape_kind"]) == (None, None, None)
+    (change,) = where["shape"]["changes"]
+    assert where["shape"] == {
+        "kind": None,
+        "length_m": None,
+        "revision": None,
+        "extent": None,
+        "changes": [{"kind": "changed", "on": change["on"], "added_length_m": None, "added_view": None}],
+        "added_since_looked_m": None,
+        "added_view": None,
+        "looked_at": None,
+    }
+    listed = client.get(f"{API}/findings").json()["items"]
+    assert [item["location"]["shape_kind"] for item in listed] == [None]
+    # Any member sees a protected finding exactly, its shape with it.
+    for exact in (finder, client_as(make_user())):
+        assert exact.get(f"{API}/findings").json()["items"][0]["location"]["shape_kind"] == "line"
 
 
 def test_a_point_finding_has_an_empty_shape(client_as: ClientAs, make_user: MakeUser) -> None:
@@ -272,27 +272,28 @@ def test_the_map_clips_a_shape_to_the_box_widened_by_500_m(client_as: ClientAs, 
 def test_a_box_matches_a_shape_only_for_someone_who_sees_it_exactly(
     client, client_as: ClientAs, make_user: MakeUser
 ) -> None:
+    """A signed-out visitor is the one reader kept to a protected finding's square (Decision 0032)."""
     finder = client_as(make_user())
-    restricted = finder.post(
-        f"{API}/findings", json=body(path=up(0, 0.1, 0.2), sensitivity="restricted")
+    protected = finder.post(
+        f"{API}/findings", json=body(path=up(0, 0.1, 0.2), sensitivity="protected")
     ).json()
     opened = finder.post(f"{API}/findings", json=body(path=up(0, 0.1, 0.2, lon=LON + 0.05))).json()
     # The far end of both lines, kilometres from their anchors and squares.
     far_end = ",".join(map(str, (LON - 0.01, LAT + 0.18, LON + 0.06, LAT + 0.19)))
-    assert {f["id"] for f in _features(finder, bbox=far_end)} == {
-        restricted["public_id"],
-        opened["public_id"],
-    }
-    for viewer in (client, client_as(make_user())):
-        (only,) = _features(viewer, bbox=far_end)
-        assert only["id"] == opened["public_id"]
-        assert only["properties"]["shape"]["type"] == "LineString"
-        listed = viewer.get(f"{API}/findings", params={"bbox": far_end}).json()["items"]
-        assert [item["public_id"] for item in listed] == [opened["public_id"]]
-        # Where it is seen as a square, it has no shape.
-        (square,) = [f for f in _features(viewer) if f["id"] == restricted["public_id"]]
-        assert square["properties"]["obscured"] is True
-        assert square["properties"]["shape"] is None
+    for exact in (finder, client_as(make_user())):
+        assert {f["id"] for f in _features(exact, bbox=far_end)} == {
+            protected["public_id"],
+            opened["public_id"],
+        }
+    (only,) = _features(client, bbox=far_end)
+    assert only["id"] == opened["public_id"]
+    assert only["properties"]["shape"]["type"] == "LineString"
+    listed = client.get(f"{API}/findings", params={"bbox": far_end}).json()["items"]
+    assert [item["public_id"] for item in listed] == [opened["public_id"]]
+    # Where it is seen as a square, it has no shape.
+    (square,) = [f for f in _features(client) if f["id"] == protected["public_id"]]
+    assert square["properties"]["obscured"] is True
+    assert square["properties"]["shape"] is None
 
 
 # --------------------------------------------------------------------------
