@@ -332,7 +332,9 @@ export function viewIsOwn(publicId: string): boolean {
 /**
  * Move the map so every point is on the part of it nothing covers, clear
  * of the controls floating on it, as close as `maxZoom` and the points
- * allow, keeping the bearing. Fewer than two points leave it be.
+ * allow, keeping the bearing. Fewer than two points leave it be. A shape
+ * too small to work on at `maxZoom` is brought `WORKING_SPAN_PX` across,
+ * as far in as the map goes.
  *
  * With `keepOwnView`, the map is left alone when the person chose a view
  * that holds under half of the shape. A road is worked on a stretch at a
@@ -340,6 +342,9 @@ export function viewIsOwn(publicId: string): boolean {
  * came to change. A shape that fits the view, or nearly, is still framed,
  * since that only tidies its points clear of the controls.
  */
+/** A shape being changed is brought at least this far across, so its points have room between them. */
+const WORKING_SPAN_PX = 240;
+
 export function frameExtent(
   points: ReadonlyArray<readonly [number, number]>,
   { maxZoom = 18, keepOwnView }: { maxZoom?: number; keepOwnView?: string } = {},
@@ -350,7 +355,12 @@ export function frameExtent(
   if (!canvas || !cover) return;
   const { camera, requestCamera } = useMapStore.getState();
   const size = { width: canvas.width, height: canvas.height };
-  const framing = framePoints(points, size, cover, { margin: FRAME_MARGIN, maxZoom, bearing: camera.bearing });
+  const framing = framePoints(points, size, cover, {
+    margin: FRAME_MARGIN,
+    maxZoom,
+    bearing: camera.bearing,
+    workingSpan: { pixels: WORKING_SPAN_PX, closest: LIMITS.zoom.max },
+  });
   if (!framing) return;
   const farOut = framing.zoom <= camera.zoom - UNDER_HALF_ZOOMS;
   if (farOut && keepOwnView !== undefined && viewIsOwn(keepOwnView) && partInView([points])) return;

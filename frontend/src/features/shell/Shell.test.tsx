@@ -342,13 +342,13 @@ describe("Shell", () => {
   });
 
   it("takes the map's word for where it is when a link asks for more than the map allows", async () => {
-    window.history.replaceState(null, "", "/#m=22/51.4286/-1.8542/0/0&v=composite");
+    window.history.replaceState(null, "", "/#m=24/51.4286/-1.8542/0/0&v=composite");
     renderShell();
     const map = await mapReady();
-    expect(map.options.maxZoom).toBe(20);
-    expect(map.getZoom()).toBe(20);
-    expect(useMapStore.getState().camera.zoom).toBe(20);
-    expect(screen.getByTestId("status-zoom")).toHaveTextContent("z20.0");
+    expect(map.options.maxZoom).toBe(22);
+    expect(map.getZoom()).toBe(22);
+    expect(useMapStore.getState().camera.zoom).toBe(22);
+    expect(screen.getByTestId("status-zoom")).toHaveTextContent("z22.0");
   });
 
   it("uses the tab bar and a bottom sheet on a phone", async () => {

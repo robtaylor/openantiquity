@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { centreForVisible, NO_COVER, uncoveredBounds, visibleCentre, visibleOffset } from "./visibleArea.js";
+import {
+  centreForVisible,
+  framePoints,
+  NO_COVER,
+  uncoveredBounds,
+  visibleCentre,
+  visibleOffset,
+} from "./visibleArea.js";
 
 describe("the uncovered map", () => {
   const phone = { left: 0, right: 0, top: 68, bottom: 450 };
@@ -60,5 +67,53 @@ describe("the uncovered map", () => {
     );
     expect(turned.lng).toBeCloseTo(-1.85, 9);
     expect(turned.lat).toBeGreaterThan(51.43);
+  });
+});
+
+describe("framing a shape that is being changed", () => {
+  const size = { width: 1000, height: 800 };
+  const open = { top: 0, right: 0, bottom: 0, left: 0 };
+  const working = { pixels: 240, closest: 22 };
+  // A square `metres` across at Avebury's latitude.
+  const square = (metres: number): Array<[number, number]> => {
+    const lat = 51.4286;
+    const dLat = metres / 111_320;
+    const dLng = metres / (111_320 * Math.cos((lat * Math.PI) / 180));
+    return [
+      [-1.8542, lat],
+      [-1.8542 + dLng, lat],
+      [-1.8542 + dLng, lat + dLat],
+      [-1.8542, lat + dLat],
+    ];
+  };
+  // How many pixels `metres` take at `zoom`, 512 px a tile, at that latitude.
+  const pixels = (metres: number, zoom: number): number =>
+    metres / ((40_075_016.7 * Math.cos((51.4286 * Math.PI) / 180)) / (512 * 2 ** zoom));
+
+  it("comes closer than the usual limit for a small shape, until it is a workable size", () => {
+    const framed = framePoints(square(10), size, open, { maxZoom: 18, workingSpan: working });
+    expect(framed?.zoom).toBeGreaterThan(18);
+    expect(framed?.zoom).toBeLessThan(22);
+    expect(pixels(10, framed?.zoom ?? 0)).toBeCloseTo(240, -1);
+  });
+
+  it("stops at the closest the map goes for a very small one", () => {
+    expect(framePoints(square(2), size, open, { maxZoom: 18, workingSpan: working })?.zoom).toBe(22);
+  });
+
+  it("leaves a shape that is already a workable size at the usual limit, and a big one fitted", () => {
+    const usual = (metres: number) => framePoints(square(metres), size, open, { maxZoom: 18 })?.zoom;
+    const worked = (metres: number) =>
+      framePoints(square(metres), size, open, { maxZoom: 18, workingSpan: working })?.zoom;
+    expect(pixels(100, 18)).toBeGreaterThan(240);
+    expect(worked(100)).toBe(18);
+    expect(worked(100)).toBe(usual(100));
+    expect(worked(2000)).toBe(usual(2000));
+    expect(worked(2000)).toBeLessThan(18);
+  });
+
+  it("keeps one point alone at the usual limit, since it has no size to bring up", () => {
+    const spot: Array<[number, number]> = [[-1.8542, 51.4286]];
+    expect(framePoints(spot, size, open, { maxZoom: 18, workingSpan: working })?.zoom).toBe(18);
   });
 });

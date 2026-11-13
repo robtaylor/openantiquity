@@ -407,6 +407,28 @@ describe("records on the map", () => {
     expect(useRecordFilters.getState().hiddenSources).toEqual([]);
   });
 
+  it("leaves a right-click alone while a tool has the map, so a stray one doesn't end a drawing", async () => {
+    renderShell("/mark");
+    const map = await mapReady();
+    await screen.findByRole("complementary", { name: "Mark a finding" });
+    let prevented = 0;
+    act(() =>
+      map.fire("contextmenu", {
+        point: { x: 1, y: 1 },
+        lngLat: { lng: -1.85421, lat: 51.42861 },
+        // The browser's own menu would cover the drawing, so it is still held back.
+        preventDefault: () => {
+          prevented += 1;
+        },
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(prevented).toBe(1);
+    expect(screen.queryByRole("complementary", { name: "Open elsewhere" })).not.toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Mark a finding" })).toBeInTheDocument();
+    expect(api.callsTo("GET /context/links")).toHaveLength(0);
+  });
+
   it("opens other viewers for the spot that was right-clicked", async () => {
     renderShell();
     const map = await mapReady();

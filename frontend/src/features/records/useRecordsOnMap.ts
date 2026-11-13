@@ -263,9 +263,10 @@ export function useRecordsOnMap(meta: Meta, main: MapLibreMap | null, compare: M
     const detach: Array<() => void> = [];
     for (const map of maps) {
       const fillsView = makeFillsView(map);
+      // A tool such as the height profile has the clicks while it is open, and marking a finding has them too.
+      const toolHasTheMap = (): boolean => mapToolActive() || isMarkPath(latest.current.location.pathname);
       const onClick = (event: MapMouseEvent): void => {
-        // A tool such as the height profile has the clicks while it is open, and marking a finding has them too.
-        if (!isMapLive(map) || mapToolActive() || isMarkPath(latest.current.location.pathname)) return;
+        if (!isMapLive(map) || toolHasTheMap()) return;
         // Findings sit above records, so a click with a finding in reach is Explore's.
         if (findingInReach(map, event)) return;
         const target = recordTarget(query(map, CLICKABLE, event.point), event.lngLat, fillsView);
@@ -299,7 +300,11 @@ export function useRecordsOnMap(meta: Meta, main: MapLibreMap | null, compare: M
         });
       };
       const onContextMenu = (event: MapMouseEvent): void => {
+        // The browser's own menu has nothing for a map, and would cover what is being drawn.
         event.preventDefault();
+        // A two-finger click or Ctrl-click is a right-click on a Mac, and one stray one while
+        // drawing would leave for another panel and close the tool.
+        if (toolHasTheMap()) return;
         latest.current.navigate(elsewherePath(event.lngLat.lng, event.lngLat.lat));
       };
       map.on("click", onClick);

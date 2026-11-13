@@ -6,6 +6,7 @@ import { metaFixture } from "../test/fixtures/meta.js";
 import { liveMaps, mapReady, metaResponse, renderShell, setUpShellTests } from "../test/shellHarness.js";
 import { TERRAIN_SETTLE_MS } from "./MapPane.js";
 import { SWIPE_MARGIN } from "./MapView.js";
+import { LIMITS } from "./permalink.js";
 import { useMapStore } from "./store.js";
 import { viewLayerId } from "./style.js";
 
@@ -257,6 +258,8 @@ describe("zoom buttons and the compass", () => {
     expect(map.easeTo).toHaveBeenLastCalledWith(expect.objectContaining({ zoom: 15 }), expect.anything());
 
     act(() => useMapStore.getState().requestCamera({ zoom: 20 }));
+    expect(screen.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+    act(() => useMapStore.getState().requestCamera({ zoom: LIMITS.zoom.max }));
     expect(screen.getByRole("button", { name: "Zoom in" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Zoom out" })).toBeEnabled();
     act(() => useMapStore.getState().requestCamera({ zoom: 0 }));

@@ -95,9 +95,9 @@ test.describe("desktop", () => {
   test("keeps the URL, the readout and the map in step when a link asks for more zoom than the map has", async ({
     page,
   }) => {
-    await openMap(page, "/?panel=none#m=22/51.4286/-1.8542/0/0&v=composite");
-    await expect(page.getByTestId("status-zoom")).toHaveText("z20.0");
-    await expect(page).toHaveURL(/#m=20\/51\.4286\/-1\.8542\/0\/0&/);
+    await openMap(page, "/?panel=none#m=24/51.4286/-1.8542/0/0&v=composite");
+    await expect(page.getByTestId("status-zoom")).toHaveText("z22.0");
+    await expect(page).toHaveURL(/#m=22\/51\.4286\/-1\.8542\/0\/0&/);
     // Already at the limit, so there is no further to go.
     await expect(page.getByRole("button", { name: "Zoom in" })).toBeDisabled();
   });

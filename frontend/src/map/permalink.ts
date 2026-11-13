@@ -69,8 +69,14 @@ const PERMALINK_FIELDS: Record<keyof PermalinkState, true> = {
 export const PERMALINK_KEYS = Object.keys(PERMALINK_FIELDS) as ReadonlyArray<keyof PermalinkState>;
 
 export const LIMITS = {
-  /** The map is created with these limits too, so a link can never ask for a zoom the map cannot show. */
-  zoom: { min: 0, max: 20 },
+  /**
+   * The map is created with these limits too, so a link can never ask for a zoom the map cannot show.
+   *
+   * 22 is the closest. The terrain stops sharpening at 16, where a pixel is about a metre of
+   * the survey, but drawing round something a couple of metres across needs the room: at 20
+   * its points were too close on screen to place and to grab.
+   */
+  zoom: { min: 0, max: 22 },
   pitch: { min: 0, max: 75 },
   /**
    * Below 15 degrees no backdrop keeps level ground mid-grey under the raking
@@ -110,8 +116,9 @@ export function normalisePermalinkState(state: PermalinkState): PermalinkState {
   }
   return {
     camera: {
-      lng: round(state.camera.lng, 5),
-      lat: round(state.camera.lat, 5),
+      // Six places, about 10 cm. Five moved a reloaded or shared view by up to 47 px at the closest zoom.
+      lng: round(state.camera.lng, 6),
+      lat: round(state.camera.lat, 6),
       zoom: round(clamp(state.camera.zoom, LIMITS.zoom.min, LIMITS.zoom.max), 2),
       bearing: round(wrapBearing(state.camera.bearing), 1),
       pitch: round(clamp(state.camera.pitch, LIMITS.pitch.min, LIMITS.pitch.max), 1),

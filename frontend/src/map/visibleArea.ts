@@ -104,6 +104,13 @@ export interface FramingOptions {
   margin?: number;
   /** The closest the camera comes, which is also the zoom for a single point. */
   maxZoom: number;
+  /**
+   * For a small extent that is to be worked on: come closer than `maxZoom`,
+   * as far as `closest`, until the extent is `pixels` across. Without it a
+   * shape a few metres wide is framed a few pixels wide, and the points of
+   * its outline can't be told apart or grabbed.
+   */
+  workingSpan?: { pixels: number; closest: number };
   /** The bearing the camera keeps. The points' extent is measured as if the map faced north. */
   bearing?: number;
 }
@@ -118,7 +125,7 @@ export function framePoints(
   points: ReadonlyArray<readonly [number, number]>,
   size: { width: number; height: number },
   cover: MapCover,
-  { fill = 1, margin = 0, maxZoom, bearing = 0 }: FramingOptions,
+  { fill = 1, margin = 0, maxZoom, bearing = 0, workingSpan }: FramingOptions,
 ): { lng: number; lat: number; zoom: number } | null {
   if (points.length === 0) return null;
   const lngs = points.map((point) => point[0]);
@@ -134,7 +141,11 @@ export function framePoints(
   const height = size.height - cover.top - cover.bottom - margin * 2;
   const zoomToFit = (pixels: number, span: number): number =>
     span > 0 ? Math.log2((Math.max(1, pixels) * fill) / span) : maxZoom;
-  const zoom = Math.max(0, Math.min(maxZoom, zoomToFit(width, across), zoomToFit(height, down)));
+  const span = Math.max(across, down);
+  // The zoom at which the extent is the working span across, if that is closer than the usual limit.
+  const worked = workingSpan && span > 0 ? Math.min(workingSpan.closest, Math.log2(workingSpan.pixels / span)) : 0;
+  const limit = Math.max(maxZoom, worked);
+  const zoom = Math.max(0, Math.min(limit, zoomToFit(width, across), zoomToFit(height, down)));
   return { ...centreForVisible((west + east) / 2, (south + north) / 2, zoom, cover, bearing), zoom };
 }
 

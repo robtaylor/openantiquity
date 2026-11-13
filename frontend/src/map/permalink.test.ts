@@ -54,7 +54,7 @@ describe("encodePermalink", () => {
   });
 
   it("never writes negative zero", () => {
-    const hash = encodePermalink({ ...BASE, camera: { ...BASE.camera, bearing: -0.01, lng: -0.000001 } });
+    const hash = encodePermalink({ ...BASE, camera: { ...BASE.camera, bearing: -0.01, lng: -0.0000001 } });
     expect(hash).toContain("m=14/51.4286/0/0/0");
   });
 });
@@ -86,8 +86,9 @@ describe("decodePermalink", () => {
     };
     const expected = normalisePermalinkState(messy);
     expect(expected.camera).toEqual({
-      lng: -1.85421,
-      lat: 51.42861,
+      // Six places, about ten centimetres: at the closest zoom a fifth place alone moved a shared view 47 px.
+      lng: -1.854212,
+      lat: 51.428612,
       zoom: 14.12,
       bearing: 10,
       pitch: LIMITS.pitch.max,
@@ -119,8 +120,10 @@ describe("decodePermalink", () => {
 
   it("allows no zoom the map itself would refuse", () => {
     // The map is created with LIMITS.zoom, so a link can never leave the URL saying one zoom and the map showing another.
-    expect(LIMITS.zoom).toEqual({ min: 0, max: 20 });
-    expect(decodePermalink("#m=22/51.4286/-1.8542/0/0").camera?.zoom).toBe(20);
+    // 22 is close enough to draw round something a couple of metres across: at 20 its points crowd each other.
+    expect(LIMITS.zoom).toEqual({ min: 0, max: 22 });
+    expect(decodePermalink("#m=24/51.4286/-1.8542/0/0").camera?.zoom).toBe(22);
+    expect(decodePermalink("#m=21.5/51.4286/-1.8542/0/0").camera?.zoom).toBe(21.5);
     expect(decodePermalink("#m=-3/51.4286/-1.8542/0/0").camera?.zoom).toBe(0);
   });
 
