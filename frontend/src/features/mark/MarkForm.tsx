@@ -90,7 +90,7 @@ function keepInView(map: MapLibreMap, point: LngLat, box: ReturnType<typeof unco
  * to tap, then opens half-way for the form once drawing stops, with the map
  * moved if need be so the mark stays in sight above it.
  */
-function useMarkInView(anchor: LngLat | null, drawing: boolean): void {
+export function useMarkInView(anchor: LngLat | null, drawing: boolean): void {
   const environment = usePanelEnvironment();
   const map = useMainMap();
   const { isPhone, setStop, sheetHeight } = environment;
@@ -162,7 +162,7 @@ function ClassChooser({ meta }: { meta: Meta }) {
 }
 
 /** The guidance and the drawing bars, with what the server or the limits said of the shape. */
-function DrawingSection({ map, isPhone }: { map: MapLibreMap | null; isPhone: boolean }) {
+export function DrawingSection({ map, isPhone }: { map: MapLibreMap | null; isPhone: boolean }) {
   const problem = useMarkStore((state) => (state.problem?.field === "path" ? state.problem.message : null));
   // On a phone the bars float above the sheet while points are being added (`MarkButton`).
   const adding = useMarkStore(isAdding);

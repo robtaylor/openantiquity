@@ -47,6 +47,12 @@ export const UNKNOWN_PERIOD = "unknown";
 export interface MarkFields {
   /** The draft being edited, or null for a new mark. */
   draftId: string | null;
+  /**
+   * What the path was taken up from, as the caller named it, such as a saved
+   * finding whose shape is being changed. The tool doesn't read it: it only
+   * lets the caller tell its own path from another.
+   */
+  editing: string | null;
   /** The path and the states undo and redo step through. */
   shape: History<Path>;
   /** Which end of an open path a tap adds to. */
@@ -77,6 +83,8 @@ export interface MarkState extends MarkFields {
   start: () => void;
   /** Take up a draft to change or save it. */
   load: (draftId: string, draft: FindingDraft) => void;
+  /** Take up a path to change, named `editing` by the caller, with nothing selected and no points being added. */
+  edit: (editing: string, path: Path) => void;
   /** A tap on the map, or "Add a point at the cross": a point of the chosen kind, or the other with `otherKind`. */
   add: (point: LngLat, limits: ShapeLimits, otherKind?: boolean) => void;
   /** "Add a point at the cross": a point of the chosen kind, noted as placed by the button. */
@@ -112,6 +120,7 @@ export interface MarkState extends MarkFields {
 
 export const EMPTY_MARK: MarkFields = {
   draftId: null,
+  editing: null,
   shape: history(EMPTY_PATH),
   end: "end",
   nextKind: "corner",
@@ -176,6 +185,8 @@ export const useMarkStore = create<MarkState>()((set, get) => {
         title: draft.title,
         note: draft.description ?? "",
       }),
+
+    edit: (editing, path) => set({ ...EMPTY_MARK, editing, shape: history(path), drawing: false }),
 
     add: (point, limits, otherKind = false) => {
       const { nextKind, end, drawing } = get();

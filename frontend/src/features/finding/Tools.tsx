@@ -1,5 +1,6 @@
-import { Download, Link2, Pencil, ShieldMinus, ShieldPlus, Undo2 } from "lucide-react";
+import { Download, Link2, Pencil, ShieldMinus, ShieldPlus, Spline, Undo2 } from "lucide-react";
 import { useRef, useState } from "react";
+import { useNavigate } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { Button } from "../../ui/Button.js";
 import { ChipGroup } from "../../ui/Chip.js";
@@ -10,6 +11,7 @@ import { useFocusLater } from "../../ui/useFocusLater.js";
 import { findingPath } from "../findings/selection.js";
 import { type OfferedSensitivity, offeredBeside, type Sensitivity } from "../findings/types.js";
 import { AddToInvestigation } from "../investigations/AddToInvestigation.js";
+import { changeShapePath } from "../mark/ChangeShapePanel.js";
 import { changeSensitivity, exportUrl, lowerSensitivity, updateFinding, withdrawFinding } from "./api.js";
 import { type ViewerPosition, whoSees } from "./describe.js";
 import { reasonOf, toastFailure } from "./feedback.js";
@@ -343,13 +345,14 @@ export interface ToolsProps {
 }
 
 /**
- * The controls for whoever the server lets use them: edit and withdraw for
- * the finder, raising the level for the finder, trusted members and
+ * The controls for whoever the server lets use them: edit, change the shape
+ * and withdraw for the finder, raising the level for the finder, trusted members and
  * moderators, lowering it for moderators; and everyone's: copy a link,
  * download as GeoJSON or as a spreadsheet.
  */
 export function Tools({ meta, finding, position, onApplied }: ToolsProps) {
   const [dialog, setDialog] = useState<"edit" | "raise" | "lower" | "withdraw" | null>(null);
+  const navigate = useNavigate();
   const close = () => setDialog(null);
   const own = position.isFinder || position.mayEdit || position.mayWithdraw;
 
@@ -373,6 +376,15 @@ export function Tools({ meta, finding, position, onApplied }: ToolsProps) {
             {position.mayEdit ? (
               <Button size="sm" icon={<Pencil size={15} aria-hidden />} onClick={() => setDialog("edit")}>
                 Edit
+              </Button>
+            ) : null}
+            {position.mayEdit ? (
+              <Button
+                size="sm"
+                icon={<Spline size={15} aria-hidden />}
+                onClick={() => navigate(changeShapePath(finding.public_id))}
+              >
+                Change the shape
               </Button>
             ) : null}
             {position.mayRaise ? (

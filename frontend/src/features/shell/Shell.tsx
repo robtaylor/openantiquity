@@ -48,6 +48,7 @@ import { InvestigationsPanel } from "../investigations/InvestigationsPanel.js";
 import { CoverageNotice } from "../layers/MapNotices.js";
 import { PROFILE_PATH } from "../layers/profile/line.js";
 import { ProfilePanel } from "../layers/profile/ProfilePanel.js";
+import { ChangeShapePanel } from "../mark/ChangeShapePanel.js";
 import { MarkButton } from "../mark/MarkButton.js";
 import { isMarkPath, MarkLayer } from "../mark/MarkLayer.js";
 import { MARK_PATH, MarkPanel } from "../mark/MarkPanel.js";
@@ -340,6 +341,7 @@ function ReadyShell({ meta }: { meta: Meta }) {
         ) : (
           <Routes>
             <Route path="/" element={bareMap ? null : <ExplorePanel meta={meta} />} />
+            <Route path="/mark/finding/:publicId" element={<ChangeShapePanel meta={meta} />} />
             <Route path="/mark/:draftId?" element={<MarkPanel meta={meta} />} />
             <Route path="/f/:id" element={<FindingPanel meta={meta} />} />
             <Route path={REVIEW_PATH} element={<ReviewPanel meta={meta} />} />

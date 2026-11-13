@@ -217,6 +217,28 @@ function PendingMarks({ map }: { map: MapLibreMap }) {
   );
 }
 
+/**
+ * Why the server refused the path, beside its last point, so it is read
+ * where the change was made. The panel says the same as an alert, which is
+ * what a screen reader hears, so this copy is hidden from it.
+ */
+function PathProblem({ map, path }: { map: MapLibreMap; path: Path }) {
+  const problem = useMarkStore((state) => (state.problem?.field === "path" ? state.problem.message : null));
+  const last = path.points.at(-1);
+  if (!problem || !last) return null;
+  const { x, y } = screenPoint(map, [last.lon, last.lat]);
+  return (
+    <p
+      className="fc-path-problem"
+      style={{ transform: `translate(${x}px, ${y}px)` }}
+      aria-hidden="true"
+      data-testid="path-problem"
+    >
+      {problem}
+    </p>
+  );
+}
+
 /** Where "Add a point at the cross" puts a point: the middle of the part of the map nothing covers. */
 export function Reticle() {
   return (
@@ -286,6 +308,7 @@ export function MarkLayer() {
       <DraftMarks map={map} editing={marking ? editing : null} />
       <PendingMarks map={map} />
       {marking && path.points.length > 0 ? <PathHandles map={map} path={path} /> : null}
+      {marking ? <PathProblem map={map} path={path} /> : null}
       {marking && drawing && !path.closed ? <Reticle /> : null}
     </div>
   );
