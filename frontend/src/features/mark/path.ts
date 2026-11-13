@@ -118,7 +118,7 @@ export function insertAfter(path: Path, index: number): Path {
   pointAt(path, index);
   if (index >= segmentCount(path)) return path;
   const counts = segmentVertexCounts(path);
-  const vertices = geometryVertices(derive(path));
+  const vertices = geometryVertices(drawnGeometry(path));
   const start = counts.slice(0, index).reduce((sum, count) => sum + count, 0);
   const steps = counts[index] ?? 1;
   const a = pointAt(path, index);
@@ -289,14 +289,33 @@ export function groundDistanceM([lon1, lat1]: LngLat, [lon2, lat2]: LngLat): num
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-function geometryVertices(geometry: CurveGeometry): LngLat[] {
-  const list = geometry.type === "Polygon" ? (geometry.coordinates[0] ?? []) : geometry.coordinates;
-  return list;
+/** The geometry's vertices in order: a line's, or a shape's ring with its first point repeated at the end. */
+export function geometryVertices(geometry: CurveGeometry | null): LngLat[] {
+  if (!geometry) return [];
+  return geometry.type === "Polygon" ? (geometry.coordinates[0] ?? []) : geometry.coordinates;
 }
+
+/**
+ * Each path's geometry, derived once. A path is never changed once made, so
+ * the drawing, the length, the anchor and the limits read one derivation
+ * between them, and a path that is replaced is forgotten with it.
+ */
+const geometries = new WeakMap<Path, CurveGeometry | null>();
 
 /** The drawn geometry, or null for a spot or nothing. */
 export function pathGeometry(path: Path): CurveGeometry | null {
-  return isDrawable(path) ? derive(path) : null;
+  const known = geometries.get(path);
+  if (known !== undefined) return known;
+  const geometry = isDrawable(path) ? derive(path) : null;
+  geometries.set(path, geometry);
+  return geometry;
+}
+
+/** The geometry of a path already known to be drawable. */
+function drawnGeometry(path: Path): CurveGeometry {
+  const geometry = pathGeometry(path);
+  if (!geometry) throw new RangeError(`A path of ${path.points.length} points draws nothing`);
+  return geometry;
 }
 
 function measure(vertices: readonly LngLat[]): number {
@@ -311,8 +330,7 @@ function measure(vertices: readonly LngLat[]): number {
 
 /** A line's length, or a shape's perimeter, in metres, along the curve as drawn. Nothing for a spot. */
 export function lengthM(path: Path): number {
-  const geometry = pathGeometry(path);
-  return geometry ? measure(geometryVertices(geometry)) : 0;
+  return measure(geometryVertices(pathGeometry(path)));
 }
 
 /** The larger of a shape's east–west width at its middle latitude and its north–south height, in metres. */
@@ -356,7 +374,7 @@ export function pathProblem(path: Path, limits: ShapeLimits): string | null {
   if (vertexCount > limits.shape_max_vertices) {
     return "That would draw too fine a curve to keep. Use straight points on the long straight stretches.";
   }
-  const vertices = geometryVertices(derive(path));
+  const vertices = geometryVertices(drawnGeometry(path));
   if (path.closed) {
     if (acrossM(vertices) > limits.shape_max_across_m) {
       return `A closed shape can be at most ${km(limits.shape_max_across_m)} km across.`;

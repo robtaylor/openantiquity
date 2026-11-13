@@ -16,7 +16,7 @@ import { baseRevision, changeShapeId } from "./editingKey.js";
 import { findingDrafts, useSavedDrafts } from "./findingDrafts.js";
 import { hasUnkeptLine, useMarkPath, useMarkStore } from "./markStore.js";
 import { PathHandles } from "./PathHandles.js";
-import { closesAt, type LngLat, type Path, pathGeometry, segmentNear } from "./path.js";
+import { closesAt, geometryVertices, type LngLat, type Path, pathGeometry, segmentNear } from "./path.js";
 import { usePendingFindings } from "./pending.js";
 import { draftPath } from "./useSaveMark.js";
 import "./mark.css";
@@ -95,17 +95,11 @@ function useMarkingClicks(map: MapLibreMap | null, marking: boolean): void {
   }, [map, marking]);
 }
 
-function vertices(path: Path): LngLat[] {
-  const geometry = pathGeometry(path);
-  if (!geometry) return [];
-  const list = geometry.type === "Polygon" ? (geometry.coordinates[0] ?? []) : geometry.coordinates;
-  return list;
-}
-
 /** The path as the map draws it, once it is too long for SVG. */
 export function pathFeatures(path: Path): FeatureCollection {
+  if (path.points.length <= SVG_MAX_POINTS) return EMPTY_COLLECTION;
   const geometry = pathGeometry(path);
-  if (!geometry || path.points.length <= SVG_MAX_POINTS) return EMPTY_COLLECTION;
+  if (!geometry) return EMPTY_COLLECTION;
   return { type: "FeatureCollection", features: [{ type: "Feature", geometry, properties: {} }] };
 }
 
@@ -152,8 +146,9 @@ function useLongPathOnMap(map: MapLibreMap | null, path: Path, marking: boolean)
 
 /** The path as it is drawn while short enough for SVG: a line through the curve, lightly filled once closed. */
 function PathShape({ map, path }: { map: MapLibreMap; path: Path }) {
-  const drawn = useMemo(() => vertices(path), [path]);
-  if (drawn.length === 0 || path.points.length > SVG_MAX_POINTS) return null;
+  const short = path.points.length <= SVG_MAX_POINTS;
+  const drawn = useMemo(() => (short ? geometryVertices(pathGeometry(path)) : []), [path, short]);
+  if (drawn.length === 0) return null;
   const text = drawn
     .map((point) => screenPoint(map, point))
     .map(({ x, y }) => `${x},${y}`)
