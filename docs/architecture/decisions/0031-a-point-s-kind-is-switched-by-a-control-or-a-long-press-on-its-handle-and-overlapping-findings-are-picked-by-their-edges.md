@@ -1,6 +1,6 @@
 # Decision 0031 — A point's kind is switched by a control or a long press on its handle, and overlapping findings are picked by their edges
 
-**Status:** Proposed.
+**Status:** Proposed. Its second point is replaced by Decision 0034.
 
 **Current architecture:** [UI.md, "The drawing tool"](../../UI.md#the-drawing-tool) and [Findings, "Picking one of overlapping findings"](../findings.md#picking-one-of-overlapping-findings).
 
