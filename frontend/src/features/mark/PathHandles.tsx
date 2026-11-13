@@ -73,19 +73,38 @@ function mapSize(map: MapLibreMap): { width: number; height: number } {
   };
 }
 
-/**
- * Which points get a handle: every point in view while there are few
- * enough, otherwise only the ends and the selected point. `thinned` is true
- * when points in view have no handle.
- */
-export function visibleHandles(
-  map: MapLibreMap,
-  path: Path,
-  selected: number | null,
-): { indices: number[]; thinned: boolean } {
+export interface HandlesInView {
+  indices: number[];
+  thinned: boolean;
+}
+
+/** Where the map is looking, as far as it decides which points are in view. */
+function viewOf(map: MapLibreMap): string {
+  const { lng, lat } = map.getCenter();
   const { width, height } = mapSize(map);
+  return [lng, lat, map.getZoom(), map.getBearing(), map.getPitch(), width, height].join(",");
+}
+
+/** The last answer for each map, so the handles and the status line share one for each frame. */
+const lastHandles = new WeakMap<
+  MapLibreMap,
+  { path: Path; selected: number | null; view: string; handles: HandlesInView }
+>();
+
+function handlesFor(map: MapLibreMap, path: Path, selected: number | null): HandlesInView {
+  const { width, height } = mapSize(map);
+  // The bounds are of the ground at sea level, and terrain lifts a point towards the edge of a pitched view, so they
+  // are widened by a quarter on each side. Only a point inside them can be on screen, so the rest are never projected.
+  const bounds = map.getBounds();
+  const padLon = (bounds.getEast() - bounds.getWest()) / 4;
+  const padLat = (bounds.getNorth() - bounds.getSouth()) / 4;
+  const west = bounds.getWest() - padLon;
+  const east = bounds.getEast() + padLon;
+  const south = bounds.getSouth() - padLat;
+  const north = bounds.getNorth() + padLat;
   const inView: number[] = [];
   path.points.forEach((point, index) => {
+    if (point.lon < west || point.lon > east || point.lat < south || point.lat > north) return;
     const { x, y } = screenPoint(map, [point.lon, point.lat]);
     if (x >= 0 && x <= width && y >= 0 && y <= height) inView.push(index);
   });
@@ -95,6 +114,20 @@ export function visibleHandles(
   }
   const shown = new Set([...inView, ...always]);
   return { indices: [...shown].filter((index) => index < path.points.length).sort((a, b) => a - b), thinned: false };
+}
+
+/**
+ * Which points get a handle: every point in view while there are few
+ * enough, otherwise only the ends and the selected point. `thinned` is true
+ * when points in view have no handle.
+ */
+export function visibleHandles(map: MapLibreMap, path: Path, selected: number | null): HandlesInView {
+  const view = viewOf(map);
+  const last = lastHandles.get(map);
+  if (last && last.path === path && last.selected === selected && last.view === view) return last.handles;
+  const handles = handlesFor(map, path, selected);
+  lastHandles.set(map, { path, selected, view, handles });
+  return handles;
 }
 
 interface Press {
@@ -273,14 +306,11 @@ export function PathHandles({ map, path }: { map: MapLibreMap; path: Path }) {
   const tabbable = selected ?? endIndex(path, end);
 
   // Stepping with [ and ], or deleting, moves the selection: focus follows it while it is on a handle.
-  const lastSelected = useRef(selected);
   useEffect(() => {
-    if (lastSelected.current === selected) return;
-    lastSelected.current = selected;
     const active = document.activeElement;
     const onHandle = active instanceof HTMLElement && active.classList.contains("fc-path-handle");
     if (onHandle && selected !== null) elements.current.get(selected)?.focus();
-  });
+  }, [selected]);
 
   function register(index: number, element: HTMLButtonElement | null): void {
     if (element) elements.current.set(index, element);

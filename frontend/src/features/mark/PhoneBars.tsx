@@ -23,14 +23,12 @@ import {
 } from "lucide-react";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import type { ReactNode } from "react";
-import { isMapLive } from "../../map/MapPane.js";
-import { useMapFrame } from "../../map/useMapFrame.js";
 import { IconButton } from "../../ui/IconButton.js";
-import { lengthWords, usePathLength, useSelectedPointActions } from "./DrawingTool.js";
+import { lengthWords, THINNED_WORDS, usePathStatus, useSelectedPointActions } from "./DrawingTool.js";
 import { ADD_AT_CROSS, focusFirstControlAfter } from "./focus.js";
 import { addAtReticle } from "./MarkLayer.js";
 import { useMarkPath, useMarkStore } from "./markStore.js";
-import { pointName, visibleHandles } from "./PathHandles.js";
+import { pointName } from "./PathHandles.js";
 import { canClose, lengthM, type Path, type PathEnd } from "./path.js";
 
 /**
@@ -66,17 +64,11 @@ function BarButton({
 }
 
 function PhoneStatus({ map }: { map: MapLibreMap | null }) {
-  // The handles in view, and so whether they are thinned, change as the map moves.
-  useMapFrame(map);
-  const path = useMarkPath();
-  const length = usePathLength(path);
-  const end = useMarkStore((state) => state.end);
-  const selected = useMarkStore((state) => state.selected);
-  const thinned = map && isMapLive(map) && path.points.length > 0 ? visibleHandles(map, path, selected).thinned : false;
+  const { path, length, end, thinned } = usePathStatus(map);
   return (
     <p className="fc-mark-float__line" role="status">
       {phoneStatusWords(path, end, length)}
-      {thinned ? " Zoom in to change points." : ""}
+      {thinned ? THINNED_WORDS : ""}
     </p>
   );
 }

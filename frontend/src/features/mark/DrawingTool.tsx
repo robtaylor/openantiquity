@@ -166,19 +166,31 @@ export function usePathLength(path: Path): number {
   return useMemo(() => lengthM(path), [path]);
 }
 
-function StatusLine({ map, isPhone }: { map: MapLibreMap | null; isPhone: boolean }) {
-  // The handles in view, and so whether they are thinned, change as the map moves.
+/** Said after the status when points in view have no handle. */
+export const THINNED_WORDS = " Zoom in to change points.";
+
+/**
+ * What the status lines read, the panel's and the phone's: the path, its
+ * length, the active end, and whether points in view have no handle, which
+ * changes as the map moves.
+ */
+export function usePathStatus(map: MapLibreMap | null) {
   useMapFrame(map);
   const path = useMarkPath();
   const length = usePathLength(path);
-  const drawing = useMarkStore((state) => state.drawing);
   const end = useMarkStore((state) => state.end);
   const selected = useMarkStore((state) => state.selected);
   const thinned = map && isMapLive(map) && path.points.length > 0 ? visibleHandles(map, path, selected).thinned : false;
+  return { path, length, end, thinned };
+}
+
+function StatusLine({ map, isPhone }: { map: MapLibreMap | null; isPhone: boolean }) {
+  const { path, length, end, thinned } = usePathStatus(map);
+  const drawing = useMarkStore((state) => state.drawing);
   return (
     <p className="fc-mark__status" role="status">
       {statusWords(path, drawing, end, isPhone, length)}
-      {thinned ? " Zoom in to change points." : ""}
+      {thinned ? THINNED_WORDS : ""}
     </p>
   );
 }
