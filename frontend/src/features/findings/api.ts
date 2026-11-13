@@ -62,15 +62,29 @@ function checkBox([west, south, east, north]: Bbox): void {
   if (!(west < east && south < north)) throw new RangeError(`A findings box must run west to east and south to north`);
 }
 
-/** `GET /findings?bbox=&format=geojson`: the findings in a box, as this viewer may see them. */
+/** The zooms `GET /findings?format=geojson` takes, between which it chooses how far to simplify each shape. */
+export const SHAPE_ZOOMS = { min: 9, max: 22 } as const;
+
+/** A map's zoom as the findings box takes it: a whole number from 9 to 22. */
+export function shapeZoom(zoom: number): number {
+  return Math.min(SHAPE_ZOOMS.max, Math.max(SHAPE_ZOOMS.min, Math.floor(zoom)));
+}
+
+/** `GET /findings?bbox=&format=geojson&zoom=`: the findings in a box, as this viewer may see them. */
 export async function fetchFindingsInBox(
   bbox: Bbox,
   signal?: AbortSignal,
   filters: FindingFilters = NO_FILTERS,
+  zoom: number | null = null,
 ): Promise<FindingCollection> {
   checkBox(bbox);
   const body = await apiFetch<unknown>(FINDINGS_PATH, {
-    query: { bbox: bboxParam(bbox), format: "geojson", ...filterParams(filters) },
+    query: {
+      bbox: bboxParam(bbox),
+      format: "geojson",
+      ...(zoom === null ? {} : { zoom: shapeZoom(zoom) }),
+      ...filterParams(filters),
+    },
     signal,
   });
   return parseFindingCollection(body);

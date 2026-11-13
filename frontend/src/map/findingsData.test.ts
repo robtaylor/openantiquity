@@ -97,4 +97,51 @@ describe("findingsMapData", () => {
     expect(points.map((f) => (f.properties as { public_id: string }).public_id)).toEqual(exactIds);
     expect(squares.length).toBeGreaterThan(0);
   });
+
+  it("draws an exact line as a line beside its anchor marker, which names its tier and takes taps", () => {
+    const road: [number, number][] = [
+      [-1.86, 51.42],
+      [-1.85, 51.425],
+      [-1.84, 51.43],
+    ];
+    const { features } = collection(
+      finding(-1.85, 51.425, { tier: "probable", shape: { type: "LineString", coordinates: road } }),
+    );
+    expect(features.map((f) => f.geometry.type)).toEqual(["LineString", "Point"]);
+    const [line] = features;
+    expect(line?.geometry).toEqual({ type: "LineString", coordinates: road });
+    expect(line?.properties).toMatchObject({ public_id: "f1", tier: "probable", state: "open", shape: "line" });
+    // Its size, for picking the smaller of two alike: the line's length on the ground, about 1.8 km.
+    const size = (line?.properties as { size?: number } | undefined)?.size ?? 0;
+    expect(size).toBeGreaterThan(1700);
+    expect(size).toBeLessThan(1850);
+  });
+
+  it("draws an exact area as its own shape, told apart from an obscured square", () => {
+    const ring: [number, number][] = [
+      [-1.85, 51.42],
+      [-1.849, 51.42],
+      [-1.849, 51.421],
+      [-1.85, 51.42],
+    ];
+    const { features } = collection(finding(-1.8495, 51.4205, { shape: { type: "Polygon", coordinates: [ring] } }));
+    const [area] = features;
+    expect(area?.geometry.type).toBe("Polygon");
+    expect(area?.properties).toMatchObject({ public_id: "f1", shape: "area" });
+    expect(area?.properties).not.toHaveProperty("square");
+  });
+
+  it("never draws an obscured finding as a line or an area, even if a shape came with it", () => {
+    // What a signed-out reader is sent for a protected line: the square, and no shape. Were one to come, it is dropped.
+    const { features } = collection(
+      finding(...AVEBURY, {
+        obscured: true,
+        square: "SU1069",
+        shape: { type: "LineString", coordinates: [AVEBURY, [-1.84, 51.43]] },
+      }),
+    );
+    expect(features.map((f) => f.geometry.type)).toEqual(["Polygon"]);
+    expect(features[0]?.properties).toHaveProperty("square", "SU1069");
+    expect(features[0]?.properties).not.toHaveProperty("shape");
+  });
 });

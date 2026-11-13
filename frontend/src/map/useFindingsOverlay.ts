@@ -36,7 +36,7 @@ export function useFindingsOverlay(meta: Meta): FindingsMapData {
   const hidden = useFindingsHidden();
 
   const wanted = shown && !hidden && zoom >= FINDINGS_MIN_ZOOM;
-  const { findings, error, errorAt } = useFindingsInBox(wanted ? bounds : null, attempt);
+  const { findings, error, errorAt } = useFindingsInBox(wanted ? bounds : null, attempt, zoom);
 
   // A failure already acted on comes back when the same box is asked for again, so each is handled once.
   const handled = useRef(0);

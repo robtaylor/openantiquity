@@ -41,6 +41,41 @@ describe("the findings overlay", () => {
     expect(squares.map((f) => f.properties.tier).sort()).toEqual(["corroborated", "seen"]);
   });
 
+  it("draws an exact line as a line, and a signed-out reader's obscured line as its square alone", async () => {
+    const road = [
+      [-1.86, 51.425],
+      [-1.85, 51.43],
+    ];
+    const [exact, hidden] = [
+      findingsData.features.find((f) => !f.properties.obscured),
+      findingsData.features.find((f) => f.properties.obscured),
+    ];
+    if (!exact || !hidden) throw new Error("The fixture lacks an exact or an obscured finding");
+    // As a signed-out reader is sent them: the exact one with its shape, the obscured one with none. A shape sent
+    // by mistake with an obscured one is still never drawn.
+    answerFindings(() =>
+      json({
+        type: "FeatureCollection",
+        features: [
+          { ...exact, properties: { ...exact.properties, shape: { type: "LineString", coordinates: road } } },
+          { ...hidden, properties: { ...hidden.properties, shape: { type: "LineString", coordinates: road } } },
+        ],
+      }),
+    );
+    renderShell();
+    const map = await mapReady();
+    await waitFor(() => expect(drawn(map)?.features.length).toBeGreaterThan(0));
+    const data = drawn(map) as FindingsMapData;
+    const lines = data.features.filter((f) => f.geometry.type === "LineString");
+    expect(lines.map((f) => (f.properties as { public_id: string }).public_id)).toEqual([exact.properties.public_id]);
+    expect(JSON.stringify(data)).not.toContain(`"public_id":"${hidden.properties.public_id}"`);
+    const url = harness
+      .fetchMock()
+      .mock.calls.map(([input]) => new URL(String(input), "http://localhost"))
+      .find((each) => each.pathname === "/api/v1/findings");
+    expect(url?.searchParams.get("zoom")).toMatch(/^\d+$/);
+  });
+
   it("asks again where the map comes to rest, and draws the same findings in the comparison pane", async () => {
     renderShell();
     const main = await mapReady();

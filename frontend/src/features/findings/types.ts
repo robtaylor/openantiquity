@@ -67,6 +67,18 @@ type WireProperties = Schemas["FindingFeatureProperties"];
  * than this build still draws, in the fallback colour. Sensitivity is left
  * out when the server sends a level this build does not know.
  */
+/**
+ * A finding's line or area as the map draws it: `properties.shape` of
+ * `GET /findings?format=geojson`, clipped to the box and simplified for the
+ * zoom asked for. Clipping can cut a line into several, or an area into
+ * several parts. Sent only to someone who sees the finding exactly.
+ */
+export type FindingShape =
+  | { type: "LineString"; coordinates: [number, number][] }
+  | { type: "MultiLineString"; coordinates: [number, number][][] }
+  | { type: "Polygon"; coordinates: [number, number][][] }
+  | { type: "MultiPolygon"; coordinates: [number, number][][][] };
+
 export interface FindingProperties extends Pick<WireProperties, "public_id" | "obscured"> {
   tier: string;
   state: string;
@@ -75,6 +87,8 @@ export interface FindingProperties extends Pick<WireProperties, "public_id" | "o
   square?: string;
   title?: string;
   feature_class?: string;
+  /** The line or area, for an exact finding that has one. Never set when `obscured` is. */
+  shape?: FindingShape;
 }
 
 export interface FindingFeature {
@@ -110,6 +124,33 @@ function isLonLat(value: unknown): value is [number, number] {
   );
 }
 
+function isLine(value: unknown): value is [number, number][] {
+  return Array.isArray(value) && value.length >= 2 && value.every(isLonLat);
+}
+
+function isRing(value: unknown): value is [number, number][] {
+  return Array.isArray(value) && value.length >= 4 && value.every(isLonLat);
+}
+
+function isRings(value: unknown): value is [number, number][][] {
+  return Array.isArray(value) && value.length >= 1 && value.every(isRing);
+}
+
+/** The shape, if it is a line or an area the map can draw, or undefined. */
+function parseShape(value: unknown): FindingShape | undefined {
+  if (!isRecord(value)) return undefined;
+  const { type, coordinates } = value;
+  if (type === "LineString" && isLine(coordinates)) return { type, coordinates };
+  if (type === "MultiLineString" && Array.isArray(coordinates) && coordinates.length > 0 && coordinates.every(isLine)) {
+    return { type, coordinates: coordinates as [number, number][][] };
+  }
+  if (type === "Polygon" && isRings(coordinates)) return { type, coordinates };
+  if (type === "MultiPolygon" && Array.isArray(coordinates) && coordinates.length > 0 && coordinates.every(isRings)) {
+    return { type, coordinates: coordinates as [number, number][][][] };
+  }
+  return undefined;
+}
+
 /**
  * The feature, checked and trimmed to what the map uses, or null if it cannot
  * be drawn. `obscured` accepts true only, so anything else draws a point, and
@@ -128,6 +169,7 @@ function parseFeature(value: unknown): FindingFeature | null {
     square,
     title,
     feature_class: featureClass,
+    shape,
   } = properties;
   if (typeof publicId !== "string" || publicId === "" || typeof tier !== "string") return null;
 
@@ -141,6 +183,9 @@ function parseFeature(value: unknown): FindingFeature | null {
   if (typeof square === "string") parsed.square = square;
   if (typeof title === "string") parsed.title = title;
   if (typeof featureClass === "string") parsed.feature_class = featureClass;
+  // A square stands for an obscured finding, and its shape is never drawn, whatever was sent.
+  const drawn = parsed.obscured ? undefined : parseShape(shape);
+  if (drawn) parsed.shape = drawn;
 
   const feature: FindingFeature = {
     type: "Feature",

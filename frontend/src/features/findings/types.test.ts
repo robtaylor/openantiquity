@@ -45,6 +45,46 @@ describe("parseFindingCollection", () => {
     expect(parsed.features.map((f) => f.properties.obscured)).toEqual([true, false, false, false, false]);
   });
 
+  it("keeps an exact finding's line or area, and never an obscured one's", () => {
+    const line = {
+      type: "LineString",
+      coordinates: [
+        [-1.85, 51.43],
+        [-1.84, 51.44],
+      ],
+    };
+    const area = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [-1.85, 51.43],
+          [-1.84, 51.43],
+          [-1.84, 51.44],
+          [-1.85, 51.43],
+        ],
+      ],
+    };
+    const parsed = parseFindingCollection({
+      type: "FeatureCollection",
+      features: [
+        feature({ ...BASE, public_id: "line", shape: line }),
+        feature({ ...BASE, public_id: "area", shape: area }),
+        feature({ ...BASE, public_id: "hidden", obscured: true, shape: line }),
+        feature({ ...BASE, public_id: "odd", shape: { type: "GeometryCollection", geometries: [] } }),
+        feature({ ...BASE, public_id: "broken", shape: { type: "LineString", coordinates: [[-1.85]] } }),
+        feature({ ...BASE, public_id: "none", shape: null }),
+      ],
+    });
+    expect(parsed.features.map((f) => [f.properties.public_id, f.properties.shape?.type ?? null])).toEqual([
+      ["line", "LineString"],
+      ["area", "Polygon"],
+      ["hidden", null],
+      ["odd", null],
+      ["broken", null],
+      ["none", null],
+    ]);
+  });
+
   it("drops a feature it cannot draw and keeps the rest", () => {
     const parsed = parseFindingCollection({
       type: "FeatureCollection",

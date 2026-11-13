@@ -72,6 +72,18 @@ describe("useFindingsInBox", () => {
     expect(result.current.error).toBeNull();
   });
 
+  it("sends the zoom with the box, as a whole number the server takes, so shapes come simplified for it", async () => {
+    const { result, rerender } = renderHook(({ zoom }: { zoom: number }) => useFindingsInBox(AVEBURY, 0, zoom), {
+      initialProps: { zoom: 12.7 },
+      wrapper: wrapper(),
+    });
+    await waitFor(() => expect(result.current.findings.features.length).toBeGreaterThan(0));
+    expect(requestedUrls()[0]?.searchParams.get("zoom")).toBe("12");
+    rerender({ zoom: 23.5 });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(requestedUrls()[1]?.searchParams.get("zoom")).toBe("22");
+  });
+
   it("waits for the map to hold still, and asks once for where it stopped", async () => {
     vi.useFakeTimers();
     const { rerender } = render(null);

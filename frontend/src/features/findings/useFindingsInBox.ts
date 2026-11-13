@@ -2,7 +2,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { isEndpointMissing, isTransient } from "../../api/client.js";
 import { useOptionalEndpointQuery } from "../../api/useOptionalEndpointQuery.js";
 import { useDebounced } from "../../ui/useDebounced.js";
-import { type Bbox, bboxParam, fetchFindingsInBox, parseBboxParam, snapBbox } from "./api.js";
+import { type Bbox, bboxParam, fetchFindingsInBox, parseBboxParam, shapeZoom, snapBbox } from "./api.js";
 import { filtersKey, useEffectiveFilters } from "./filters.js";
 import { findingKeys } from "./keys.js";
 import { type FindingCollection, NO_FINDINGS } from "./types.js";
@@ -35,6 +35,9 @@ export interface FindingsInBox {
  * The Explore panel's filters (`useEffectiveFilters`) go with the box, so the
  * map shows what the list lists.
  *
+ * `zoom`, when given, goes with the box as a whole number from 9 to 22,
+ * so the server sends each line and area simplified for it.
+ *
  * `attempt` is part of the cache key. Raising it asks for the same box
  * afresh, which is how a person's "Try again" gets past a failure.
  *
@@ -42,9 +45,10 @@ export interface FindingsInBox {
  * of the page and never asked again. Other failures are retried once if they
  * may pass, then reported through `error`.
  */
-export function useFindingsInBox(bbox: Bbox | null, attempt = 0): FindingsInBox {
-  // Debounced as text, because a caller hands over a new array on every render.
-  const settled = useDebounced(bbox === null ? null : bboxParam(snapBbox(bbox)), FINDINGS_DEBOUNCE_MS);
+export function useFindingsInBox(bbox: Bbox | null, attempt = 0, zoom: number | null = null): FindingsInBox {
+  // Debounced as text, because a caller hands over a new array on every render. The zoom goes with the box.
+  const asked = bbox === null ? null : `${bboxParam(snapBbox(bbox))}${zoom === null ? "" : `@${shapeZoom(zoom)}`}`;
+  const settled = useDebounced(asked, FINDINGS_DEBOUNCE_MS);
   const filters = useEffectiveFilters({ forMap: true });
   const asking = settled !== null && !filters.empty;
 
@@ -52,7 +56,8 @@ export function useFindingsInBox(bbox: Bbox | null, attempt = 0): FindingsInBox 
     queryKey: findingKeys.box(settled, filtersKey(filters), attempt),
     queryFn: async ({ signal }) => {
       if (settled === null) throw new Error("useFindingsInBox ran with no box");
-      return fetchFindingsInBox(parseBboxParam(settled), signal, filters);
+      const [box = "", at] = settled.split("@");
+      return fetchFindingsInBox(parseBboxParam(box), signal, filters, at === undefined ? null : Number(at));
     },
     enabled: asking,
     staleTime: FINDINGS_STALE_MS,

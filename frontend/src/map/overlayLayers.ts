@@ -43,12 +43,29 @@ export const FINDING_POINT_LAYERS = {
   ruledOut: "findings-ruled-out",
 } as const;
 
+/**
+ * The layers that draw an exact finding's line, and an area's edge, which a
+ * tap or click picks by (Decision 0031). An area's inside is drawn too, but
+ * never picked, so what lies inside it stays in reach.
+ */
+export const FINDING_SHAPE_LAYERS = {
+  areaFills: "findings-area-fills",
+  areaEdges: "findings-area-edges",
+  lines: "findings-lines",
+  ruledOut: "findings-shapes-ruled-out",
+} as const;
+
 /** States that are not drawn as ordinary filled circles. */
 const SPECIAL_STATES = ["known", "ruled_out", "withdrawn"];
 
 const STATE: ExpressionSpecification = ["coalesce", ["get", "state"], "open"];
 const IS_POINT: ExpressionSpecification = ["==", ["geometry-type"], "Point"];
-const IS_SQUARE: ExpressionSpecification = ["==", ["geometry-type"], "Polygon"];
+/** An obscured finding's square. An exact area is a polygon too, and is told apart by having no `square`. */
+const IS_SQUARE: ExpressionSpecification = ["all", ["==", ["geometry-type"], "Polygon"], ["has", "square"]];
+const IS_LINE: ExpressionSpecification = ["==", ["get", "shape"], "line"];
+const IS_AREA: ExpressionSpecification = ["==", ["get", "shape"], "area"];
+/** Drawn as they are, not as the ruled-out ones behind their switch, nor withdrawn ones. */
+const LIVE: ExpressionSpecification = ["!", ["in", STATE, ["literal", ["ruled_out", "withdrawn"]]]];
 
 function matchOn(
   property: string,
@@ -85,8 +102,16 @@ export function tierRadiusExpression(meta: Meta, base: number): ExpressionSpecif
  * A finding whose position this viewer may not see is a dashed
  * one-kilometre square and never a point.
  *
+ * An exact finding with a line is that line in its tier colour over the
+ * same dark casing as the markers, with round joins. An area is its edge in
+ * the tier colour over the faintest fill, so the terrain inside stays
+ * readable, as record outlines are. Known findings' shapes are thinner, and
+ * ruled-out ones grey behind the ruled-out switch, as the markers are. Every
+ * shape finding keeps its marker at its anchor, drawn above all the shapes.
+ *
  * `source` is the GeoJSON built by `findingsMapData`: points for exact
- * positions, and polygons for the squares of obscured ones.
+ * positions, lines and areas for exact shapes, and polygons for the squares
+ * of obscured ones.
  */
 export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
   const colour = tierColourExpression(meta);
@@ -157,7 +182,65 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
     ];
   }
 
+  function shapeLayer(id: string, type: "line" | "fill", filter: FilterSpecification, paint: Record<string, unknown>) {
+    const layout = type === "line" ? { "line-join": "round", "line-cap": "round" } : undefined;
+    return { id, type, source, filter, ...(layout ? { layout } : {}), paint } as LayerSpecification;
+  }
+
+  const isKnown: ExpressionSpecification = ["==", STATE, "known"];
+  const lineWidth: ExpressionSpecification = ["case", isKnown, 1.5, 2.5];
+  const edgeWidth: ExpressionSpecification = ["case", isKnown, 1.25, 2];
+  const casing = (width: ExpressionSpecification): ExpressionSpecification =>
+    ["+", width, OUTLINE_WIDTH * 2] as unknown as ExpressionSpecification;
+  const lines: FilterSpecification = ["all", IS_LINE, LIVE];
+  const areas: FilterSpecification = ["all", IS_AREA, LIVE];
+  const ruledOutShapes: FilterSpecification = ["all", ["has", "shape"], ["==", STATE, "ruled_out"]];
+
+  const shapes: OverlayLayer[] = [
+    {
+      layer: shapeLayer(FINDING_SHAPE_LAYERS.areaFills, "fill", areas, {
+        "fill-color": colour,
+        "fill-antialias": false,
+      }),
+      opacity: { "fill-opacity": 0.04 },
+    },
+    {
+      layer: shapeLayer(`${FINDING_SHAPE_LAYERS.areaEdges}-casing`, "line", areas, {
+        "line-color": OUTLINE,
+        "line-width": casing(edgeWidth),
+      }),
+      opacity: { "line-opacity": 0.75 },
+    },
+    {
+      layer: shapeLayer(FINDING_SHAPE_LAYERS.areaEdges, "line", areas, {
+        "line-color": colour,
+        "line-width": edgeWidth,
+      }),
+      opacity: { "line-opacity": 1 },
+    },
+    {
+      layer: shapeLayer(`${FINDING_SHAPE_LAYERS.lines}-casing`, "line", lines, {
+        "line-color": OUTLINE,
+        "line-width": casing(lineWidth),
+      }),
+      opacity: { "line-opacity": 0.9 },
+    },
+    {
+      layer: shapeLayer(FINDING_SHAPE_LAYERS.lines, "line", lines, { "line-color": colour, "line-width": lineWidth }),
+      opacity: { "line-opacity": 1 },
+    },
+    {
+      layer: shapeLayer(FINDING_SHAPE_LAYERS.ruledOut, "line", ruledOutShapes, {
+        "line-color": ruledOutColour,
+        "line-width": 1.5,
+      }),
+      opacity: { "line-opacity": 0.9 },
+      ruledOutOnly: true,
+    },
+  ];
+
   return [
+    ...shapes,
     {
       layer: squareLine("findings-obscured-casing", liveSquare, { "line-color": OUTLINE, "line-width": 5 }),
       opacity: { "line-opacity": 0.75 },
