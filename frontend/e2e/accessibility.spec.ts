@@ -399,6 +399,27 @@ test.describe("phone", () => {
  * What the focused element is, and whether it is the topmost thing at its
  * middle. The map canvas is the one thing meant to lie under everything else.
  */
+/** True while the main map is moving, by a gesture or by the app. */
+function mapMoving(page: Page): Promise<boolean> {
+  return page.evaluate(async () => {
+    const url = "/src/map/mainMap.ts";
+    const { useMainMapStore } = (await import(/* @vite-ignore */ url)) as typeof import("../src/map/mainMap.js");
+    return useMainMapStore.getState().map?.isMoving() ?? true;
+  });
+}
+
+/** Move what the main map shows by this many pixels, as a finger dragging it would. */
+async function panMapBy(page: Page, x: number, y: number): Promise<void> {
+  await page.evaluate(
+    async ({ x, y }) => {
+      const url = "/src/map/mainMap.ts";
+      const { useMainMapStore } = (await import(/* @vite-ignore */ url)) as typeof import("../src/map/mainMap.js");
+      useMainMapStore.getState().map?.panBy([-x, -y], { duration: 0 });
+    },
+    { x, y },
+  );
+}
+
 function focusState(page: Page) {
   return page.evaluate(() => {
     const element = document.activeElement as HTMLElement | null;
@@ -455,36 +476,60 @@ test.describe("drawing", () => {
 test.describe("phone drawing", () => {
   test.skip(({ viewport }) => (viewport?.width ?? 0) >= 720, "phone layout only");
 
-  test("keeps the drawing bar off every point tapped, and Tab off anything hidden", async ({ page }) => {
+  test("keeps the drawing bar and the selected-point bar off every point placed, and Tab off anything hidden", async ({
+    page,
+  }) => {
     await openMap(page, `/mark${VIEW}`);
-    await page.touchscreen.tap(195, 160);
     const bar = page.locator(".fc-mark-float");
-    await expect(bar).toBeVisible();
-    const barBox = await boxOf(bar);
-    // Down the screen to just above the bar, the last tap half a handle from its top.
-    const taps = [240, 340, 440, barBox.y - 24].filter((y) => y > 160 && y < barBox.y);
-    for (const [index, y] of taps.entries()) {
-      await page.touchscreen.tap(index % 2 === 0 ? 120 : 270, y);
-    }
     const handles = page.locator(".fc-path-handle");
-    await expect(handles).toHaveCount(taps.length + 1);
-    const clear = await handles.evaluateAll((elements) =>
-      elements.map((element) => {
-        const box = element.getBoundingClientRect();
-        const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-        return hit !== null && element.contains(hit);
-      }),
-    );
-    expect(clear, "each point's handle is the topmost thing where it was tapped").toEqual(clear.map(() => true));
-    for (const box of await handles.evaluateAll((elements) =>
-      elements.map((element) => {
-        const { x, y } = element.getBoundingClientRect();
-        // The dot itself, 12 px in the middle of the 44 px target.
-        return { x: x + 16, y: y + 16, width: 12, height: 12 };
-      }),
-    )) {
-      expect(overlaps(box, await boxOf(bar)), "a point under the drawing bar").toBe(false);
+
+    /** Every point under the floating bar, or whose handle isn't the topmost thing where it is. */
+    const hidden = async (): Promise<string[]> => {
+      const barBox = await boxOf(bar);
+      const dots = await handles.evaluateAll((elements) =>
+        elements.map((element) => {
+          const box = element.getBoundingClientRect();
+          const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+          // The dot itself, 12 px in the middle of the 44 px target.
+          return {
+            box: { x: box.x + 16, y: box.y + 16, width: 12, height: 12 },
+            onTop: hit !== null && element.contains(hit),
+            name: element.getAttribute("aria-label")?.split(",")[0] ?? "",
+          };
+        }),
+      );
+      return dots.filter((dot) => overlaps(dot.box, barBox) || !dot.onTop).map((dot) => dot.name);
+    };
+    /** The map is moved to clear the bar a frame or two after it changes, so this waits a moment for it. */
+    const expectClear = async (when: string): Promise<void> => {
+      await expect.poll(hidden, { message: `points under the bar ${when}`, timeout: 2_000 }).toEqual([]);
+      await expect.poll(() => mapMoving(page)).toBe(false);
+      expect(await hidden(), `points under the bar ${when}, once the map has stopped`).toEqual([]);
+    };
+
+    await page.touchscreen.tap(195, 160);
+    await expect(bar).toBeVisible();
+    await expectClear("once it appears");
+    // Each next point goes down just above the bar as it is, while its status line grows with the path.
+    for (const [index, x] of [120, 270, 150, 240].entries()) {
+      const top = (await boxOf(bar)).y;
+      await page.touchscreen.tap(x, top - 10);
+      await expect(handles).toHaveCount(index + 2);
+      await expectClear(`after point ${index + 2}`);
     }
+
+    // A point in the middle is selected, which brings up its bar in the drawing bar's place.
+    await handles.nth(2).tap();
+    await expect(page.getByRole("region", { name: "Selected point" })).toBeVisible();
+    await expectClear("once the selected-point bar appears");
+    // The map panned so the last point sits just above the selected-point bar, where the drawing bar comes back.
+    const lastBox = await boxOf(handles.last());
+    await panMapBy(page, 0, (await boxOf(bar)).y - 8 - (lastBox.y + lastBox.height / 2));
+    await expect.poll(() => mapMoving(page)).toBe(false);
+    await expectClear("after the map is panned");
+    await page.getByRole("button", { name: "Done" }).tap();
+    await expect(page.getByRole("region", { name: "Drawing" })).toBeVisible();
+    await expectClear("once the drawing bar is back");
 
     const seen = new Set<string>();
     for (let presses = 0; presses < 40; presses++) {
