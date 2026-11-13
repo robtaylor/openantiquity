@@ -4,7 +4,8 @@ Each registered connector for a `bulk` source, and each reference loader
 (`ingest/reference/`: the gazetteer and the boundaries), is run, one at a
 time, when its last successful full run finished longer ago than its
 `max_age` (a class attribute, such as 20 hours for a daily export) or there
-has been none. One that declares no `max_age` is refreshed weekly. A source
+has been none. One that declares no `max_age` is refreshed once a week has
+passed, so every eighth night where the refresh runs nightly. A source
 is skipped when its `sources` row has been disabled, or when no row exists
 yet and its connector declares it disabled, as the Wikidata cross-walk does
 (Decision 0011).
