@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import secrets
 import time
 from collections.abc import Iterator
@@ -19,7 +20,7 @@ from sqlalchemy.pool import NullPool
 from fieldclub import db as fieldclub_db
 from fieldclub.db import Base, _split_sql, create_schema, extras_statements, get_db
 from fieldclub.models import User
-from fieldclub.vocab import ActivityKind
+from fieldclub.vocab import ActivityKind, ShapeKind
 
 EXPECTED_TABLES = {
     "users",
@@ -348,6 +349,25 @@ def test_the_activity_kind_check_follows_the_vocabulary(
     assert validated
     with pytest.raises(IntegrityError), scratch_database.begin() as conn:
         conn.execute(text("INSERT INTO activity (kind) VALUES ('made_up')"))
+
+
+def test_the_hand_written_shape_kind_check_holds_the_vocabulary() -> None:
+    """`extras.sql` writes the check on `findings.shape_kind` by hand, for a database made before the column.
+
+    The model makes the same check from `ShapeKind`, so the two must hold the same values.
+    """
+    name = "ck_findings_shape_kind_valid"
+    (model_check,) = [
+        constraint
+        for constraint in Base.metadata.tables["findings"].constraints
+        if isinstance(constraint, CheckConstraint) and constraint.name == name
+    ]
+    assert model_check.info["enum"] is ShapeKind
+    (statement,) = [statement for statement in extras_statements() if name in statement]
+    found = re.search(rf"CONSTRAINT {name} CHECK \(shape_kind IN \(([^)]*)\)\)", statement)
+    assert found is not None, "extras.sql checks shape_kind with IN (...)"
+    written = re.findall(r"'([^']*)'", found.group(1))
+    assert sorted(written) == sorted(kind.value for kind in ShapeKind)
 
 
 def test_records_search_is_a_generated_tsvector(database: Engine) -> None:
