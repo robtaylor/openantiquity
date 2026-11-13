@@ -11,6 +11,8 @@
  * - A tap or click without a drag inserts the point and selects it.
  * - A long press by a finger or a pen, held 500 ms without dragging, does
  *   nothing when it lets go.
+ * - A drag ends when a move arrives with no button held, or when the path's
+ *   point count changes under it, as Undo by another finger does.
  *
  * A dot is shown only where its target keeps clear of every point handle's
  * target, so a handle always wins, and only while the handles themselves
@@ -82,6 +84,8 @@ interface DotPress {
   y: number;
   at: number;
   dragging: boolean;
+  /** How many points the path had just after the insert. */
+  count: number;
   stop: () => void;
 }
 
@@ -104,6 +108,16 @@ function useDotPress(map: MapLibreMap): (event: ReactPointerEvent<HTMLElement>, 
     const onMove = (move: PointerEvent): void => {
       const current = press.current;
       if (!current || move.pointerId !== pointerId) return;
+      // A button let go where the page didn't hear it ends the drag.
+      if (move.buttons === 0) {
+        current.stop();
+        return;
+      }
+      // So does a change to the path from elsewhere, such as Undo by another finger: the point may be gone.
+      if (current.dragging && useMarkStore.getState().shape.present.points.length !== current.count) {
+        current.stop();
+        return;
+      }
       if (!current.dragging) {
         const moved = Math.hypot(move.clientX - current.x, move.clientY - current.y);
         if (moved <= dragStartPx(pointerType)) return;
@@ -113,6 +127,7 @@ function useDotPress(map: MapLibreMap): (event: ReactPointerEvent<HTMLElement>, 
           return;
         }
         current.dragging = true;
+        current.count = useMarkStore.getState().shape.present.points.length;
       }
       useMarkStore.getState().move(index + 1, lngLatAtClient(map, move.clientX, move.clientY), true);
     };
@@ -145,6 +160,7 @@ function useDotPress(map: MapLibreMap): (event: ReactPointerEvent<HTMLElement>, 
       y: event.clientY,
       at: performance.now(),
       dragging: false,
+      count: 0,
       stop,
     };
   };

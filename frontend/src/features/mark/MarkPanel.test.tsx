@@ -960,12 +960,13 @@ describe("the midpoint dots", () => {
       await line();
       const [dot] = dots();
       if (!dot) throw new Error("No dot");
+      const before = useMarkStore.getState().shape.present;
       fireEvent.pointerDown(dot, { pointerId: 11, button: 0, pointerType, clientX: 400, clientY: 300 });
-      fireEvent.pointerMove(dot, { pointerId: 11, pointerType, clientX: 400 + under, clientY: 300 });
+      fireEvent.pointerMove(dot, { pointerId: 11, buttons: 1, pointerType, clientX: 400 + under, clientY: 300 });
       expect(points()).toHaveLength(2);
-      fireEvent.pointerMove(dot, { pointerId: 11, pointerType, clientX: 400 + past, clientY: 300 });
+      fireEvent.pointerMove(dot, { pointerId: 11, buttons: 1, pointerType, clientX: 400 + past, clientY: 300 });
       expect(points()).toHaveLength(3);
-      fireEvent.pointerMove(window, { pointerId: 11, pointerType, clientX: 410, clientY: 360 });
+      fireEvent.pointerMove(window, { pointerId: 11, buttons: 1, pointerType, clientX: 410, clientY: 360 });
       fireEvent.pointerUp(window, { pointerId: 11, pointerType, clientX: 410, clientY: 360 });
       expect(points()).toHaveLength(3);
       expect(at(1).x).toBeCloseTo(410, 6);
@@ -974,11 +975,11 @@ describe("the midpoint dots", () => {
       expect(at(2).x).toBeCloseTo(500, 6);
       expect(useMarkStore.getState().selected).toBeNull();
       // Lifted, a move does nothing.
-      fireEvent.pointerMove(window, { pointerId: 11, pointerType, clientX: 10, clientY: 10 });
+      fireEvent.pointerMove(window, { pointerId: 11, buttons: 1, pointerType, clientX: 10, clientY: 10 });
       expect(at(1).x).toBeCloseTo(410, 6);
 
       await user.click(panel().getByRole("button", { name: "Undo" }));
-      expect(points()).toHaveLength(2);
+      expect(useMarkStore.getState().shape.present).toEqual(before);
     });
   }
 
@@ -986,13 +987,16 @@ describe("the midpoint dots", () => {
     await line();
     const [dot] = dots();
     if (!dot) throw new Error("No dot");
+    const before = useMarkStore.getState().shape.present;
     fireEvent.pointerDown(dot, { pointerId: 12, button: 0, pointerType: "mouse", clientX: 400, clientY: 300 });
-    fireEvent.pointerMove(dot, { pointerId: 12, pointerType: "mouse", clientX: 401, clientY: 301 });
+    fireEvent.pointerMove(dot, { pointerId: 12, buttons: 1, pointerType: "mouse", clientX: 401, clientY: 301 });
     fireEvent.pointerUp(dot, { pointerId: 12, pointerType: "mouse", clientX: 401, clientY: 301 });
     expect(points()).toHaveLength(3);
     expect(at(1).x).toBeCloseTo(400, 6);
     expect(useMarkStore.getState().selected).toBe(1);
     expect(panel().getByText(/^Point 2 of 3, straight, SU \d{4} \d{4}$/)).toBeInTheDocument();
+    useMarkStore.getState().undo();
+    expect(useMarkStore.getState().shape.present).toEqual(before);
   });
 
   it("does nothing on a long press by a finger", async () => {
@@ -1004,6 +1008,42 @@ describe("the midpoint dots", () => {
     fireEvent.pointerUp(dot, { pointerId: 13, pointerType: "touch", clientX: 400, clientY: 300 });
     expect(points()).toHaveLength(2);
     expect(useMarkStore.getState().selected).toBeNull();
+  });
+
+  it("stops the drag when a move comes with no button held", async () => {
+    await line();
+    const [dot] = dots();
+    if (!dot) throw new Error("No dot");
+    fireEvent.pointerDown(dot, { pointerId: 14, button: 0, pointerType: "mouse", clientX: 400, clientY: 300 });
+    fireEvent.pointerMove(window, { pointerId: 14, buttons: 1, pointerType: "mouse", clientX: 410, clientY: 340 });
+    expect(points()).toHaveLength(3);
+    // The button was let go somewhere the page didn't hear it.
+    fireEvent.pointerMove(window, { pointerId: 14, buttons: 0, pointerType: "mouse", clientX: 450, clientY: 380 });
+    fireEvent.pointerMove(window, { pointerId: 14, buttons: 1, pointerType: "mouse", clientX: 460, clientY: 390 });
+    expect(at(1).x).toBeCloseTo(410, 6);
+    expect(at(1).y).toBeCloseTo(340, 6);
+  });
+
+  it("stops the drag when the path changes under it, as an undo by another finger does on a closed shape's last segment", async () => {
+    current = (await openMarking()).map;
+    act(() => map().click(300, 300));
+    act(() => map().click(500, 300));
+    act(() => map().click(500, 500));
+    act(() => map().click(300, 300));
+    expect(useMarkStore.getState().shape.present.closed).toBe(true);
+    const before = useMarkStore.getState().shape.present;
+    const last = dots().find((dot) => dot.getAttribute("data-segment") === "2");
+    if (!last) throw new Error("No dot on the closing segment");
+    fireEvent.pointerDown(last, { pointerId: 15, button: 0, pointerType: "touch", clientX: 400, clientY: 400 });
+    fireEvent.pointerMove(window, { pointerId: 15, buttons: 1, pointerType: "touch", clientX: 380, clientY: 430 });
+    expect(points()).toHaveLength(4);
+    act(() => useMarkStore.getState().undo());
+    expect(useMarkStore.getState().shape.present).toEqual(before);
+    expect(() =>
+      fireEvent.pointerMove(window, { pointerId: 15, buttons: 1, pointerType: "touch", clientX: 360, clientY: 450 }),
+    ).not.toThrow();
+    fireEvent.pointerUp(window, { pointerId: 15, pointerType: "touch", clientX: 360, clientY: 450 });
+    expect(useMarkStore.getState().shape.present).toEqual(before);
   });
 
   it("shows none for a path at its point limit", async () => {
