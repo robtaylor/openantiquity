@@ -282,6 +282,21 @@ FEATURE_CLASSES: tuple[FeatureClassInfo, ...] = (
 )
 
 
+def stored_class(value: str) -> FeatureClass:
+    """What a stored feature class is to this version: itself, or `unknown` for one it has no name for.
+
+    A later version serving beside this one during a deploy, or one this
+    version was gone back from, can have stored a class it added. Every
+    reader of a stored class goes through here, so such a finding is shown,
+    listed, assessed and downloaded as "Not sure" and never answers 500. The
+    stored value is left as it is (Decision 0035).
+    """
+    try:
+        return FeatureClass(value)
+    except ValueError:
+        return FeatureClass.UNKNOWN
+
+
 # --------------------------------------------------------------------------
 # Periods
 # --------------------------------------------------------------------------

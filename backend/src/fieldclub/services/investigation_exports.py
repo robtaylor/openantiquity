@@ -44,12 +44,19 @@ from fieldclub.schemas.records import record_feature
 from fieldclub.services import exports, investigations, notes_markdown
 from fieldclub.services.investigations import ItemView, MemberView, Unavailable
 from fieldclub.services.records import RecordResult
-from fieldclub.vocab import CONTRIBUTION_LICENCE, FEATURE_CLASSES, PERIODS, InvestigationItemKind, Visibility
+from fieldclub.vocab import (
+    CONTRIBUTION_LICENCE,
+    FEATURE_CLASSES,
+    PERIODS,
+    InvestigationItemKind,
+    Visibility,
+    stored_class,
+)
 
 # The spreadsheet's columns: the findings export's, then what an investigation adds.
 CSV_COLUMNS: tuple[str, ...] = (*exports.COLUMNS, "attribution", "source", "item_kind", "item_note")
 
-_CLASS_LABELS = {info.id.value: info.label for info in FEATURE_CLASSES}
+_CLASS_LABELS = {info.id: info.label for info in FEATURE_CLASSES}
 _PERIOD_LABELS = {info.id.value: info.label for info in PERIODS}
 
 _UNAVAILABLE_TEXT = {
@@ -344,7 +351,7 @@ def _finding_html(entry: Entry) -> tuple[str, str]:
         position += " (the 1 km square only: the exact position isn't in this download)"
     body = _pairs(
         [
-            ("Feature", _e(_CLASS_LABELS[finding.feature_class])),
+            ("Feature", _e(_CLASS_LABELS[stored_class(finding.feature_class)])),
             ("Period", _e(_PERIOD_LABELS[finding.period])),
             ("Confidence", _e(row.tier)),
             ("Position", _e(position)),

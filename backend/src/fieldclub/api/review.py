@@ -23,7 +23,7 @@ from fieldclub.schemas.findings import (
     review_view,
 )
 from fieldclub.services import review, sensitivity
-from fieldclub.vocab import FeatureClass, FindingState, NextStepCode, Strand, Tier
+from fieldclub.vocab import FindingState, NextStepCode, Strand, Tier, stored_class
 
 router = APIRouter(prefix="/review", tags=["review"])
 
@@ -121,7 +121,7 @@ def _task(db: Session, task: review.Task, viewer: User | None) -> TaskItem:
         finding=(
             TaskFinding(
                 title=sensitivity.visible_text(finding, viewer, finding.title) or "",
-                feature_class=FeatureClass(finding.feature_class),
+                feature_class=stored_class(finding.feature_class),
                 tier=Tier(finding.tier),
                 state=FindingState(finding.state),
             )

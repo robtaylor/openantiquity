@@ -90,6 +90,7 @@ from fieldclub.vocab import (
     Sensitivity,
     ShapeKind,
     sensitivity_rank,
+    stored_class,
 )
 
 logger = logging.getLogger(__name__)
@@ -464,7 +465,7 @@ def square_centre(finding: Finding) -> tuple[float, float] | None:
 
 def default_sensitivity(feature_class: FeatureClass | str) -> Sensitivity:
     """The level a new finding of this class starts at."""
-    return Sensitivity.PROTECTED if FeatureClass(feature_class) in PROTECTED_CLASSES else Sensitivity.OPEN
+    return Sensitivity.PROTECTED if stored_class(feature_class) in PROTECTED_CLASSES else Sensitivity.OPEN
 
 
 def starting_sensitivity(

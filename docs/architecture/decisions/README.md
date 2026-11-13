@@ -72,6 +72,7 @@ Write all three in the same present tense and a reader can't tell *why we did it
 | [0032](0032-findings-are-open-or-protected-and-the-restricted-level-is-dropped.md) | Findings are open or protected, and the restricted level is dropped | Proposed |
 | [0033](0033-a-version-passes-over-stored-values-a-later-one-added.md) | A version passes over stored values a later one added | Proposed |
 | [0034](0034-the-drawing-guidance-is-a-list-on-the-map-and-a-line-is-bent-by-dots-on-it-not-by-curve-handles.md) | The drawing guidance is a list on the map, and a line is bent by dots on it, not by curve handles | Proposed |
+| [0035](0035-a-version-reads-a-stored-class-it-has-no-name-for-as-not-sure.md) | A version reads a stored class it has no name for as not sure | Proposed |
 
 (`new decision` appends rows for you. `uv run docs/scripts/doctool.py lint` checks this table against the files.)
 

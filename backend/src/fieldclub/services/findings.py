@@ -120,6 +120,7 @@ from fieldclub.vocab import (
     ShapeKind,
     Stance,
     Tier,
+    stored_class,
     tier_rank,
 )
 
@@ -385,7 +386,7 @@ def gather_inputs(db: Session, finding: Finding, state: FindingState | None = No
             user_id=obs.user_id,
             role=Role(role),
             visible=obs.visible,  # pyright: ignore[reportArgumentType]
-            feature_class=obs.feature_class,  # pyright: ignore[reportArgumentType]
+            feature_class=stored_class(obs.feature_class) if obs.feature_class is not None else None,
             explanation=obs.explanation,  # pyright: ignore[reportArgumentType]
             not_modern=obs.not_modern,
             not_natural=obs.not_natural,
@@ -429,7 +430,7 @@ def gather_inputs(db: Session, finding: Finding, state: FindingState | None = No
     return FindingInputs(
         author_id=finding.author_id,
         author_role=Role(author_role),
-        feature_class=finding.feature_class,  # pyright: ignore[reportArgumentType]
+        feature_class=stored_class(finding.feature_class),
         state=state if state is not None else FindingState(finding.state),
         observations=observations,
         evidence=evidence,
@@ -580,7 +581,7 @@ def suggested_title(feature_class: FeatureClass | str, lon: float, lat: float) -
     that (Decision 0005), and `services.text_positions` doesn't count a
     square as a position. A point on neither grid gets the class alone.
     """
-    label = _CLASS_LABELS[FeatureClass(feature_class)]
+    label = _CLASS_LABELS[stored_class(feature_class)]
     try:
         square = gridref.gridref_at(lon, lat, sensitivity.SQUARE_DIGITS).format()
     except gridref.GridRefError:
@@ -787,9 +788,13 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
         finding.description = changes["description"]
     if changes.get("period") is not None:
         finding.period = Period(changes["period"]).value
+    # Compared with the class this version showed, not the one stored: a class
+    # a later version added is shown as "Not sure", and "Not sure" sent back
+    # is no choice to replace it (Decision 0035).
     class_changed = False
-    if changes.get("feature_class") is not None and changes["feature_class"] != finding.feature_class:
-        finding.feature_class = FeatureClass(changes["feature_class"]).value
+    chosen = changes.get("feature_class")
+    if chosen is not None and FeatureClass(chosen) is not stored_class(finding.feature_class):
+        finding.feature_class = FeatureClass(chosen).value
         class_changed = True
     if suggested and changes.get("title") is None and (moved or class_changed):
         finding.title = suggested_title(finding.feature_class, *after)
@@ -877,6 +882,20 @@ _SORT_COLUMNS: dict[FindingSort, tuple[Any, bool, Callable[[Any], Any]]] = {
 }
 
 
+def _class_clause(classes: Iterable[FeatureClass]) -> ColumnElement[bool]:
+    """Findings whose stored class this version reads as one of `classes` (`vocab.stored_class`).
+
+    "Not sure" takes in a class a later version stored and this one has no name for.
+    """
+    wanted = [feature_class.value for feature_class in classes]
+    assert wanted, "a filter names at least one class"
+    if FeatureClass.UNKNOWN.value not in wanted:
+        return Finding.feature_class.in_(wanted)
+    return or_(
+        Finding.feature_class.in_(wanted), Finding.feature_class.not_in([c.value for c in FeatureClass])
+    )
+
+
 def findings_query(viewer: User | None, filters: FindingFilters) -> Select[Finding]:
     """The findings this viewer may list, filtered and sorted. No cursor or limit."""
     query = select(Finding).where(not_hidden_clause(viewer))
@@ -889,7 +908,7 @@ def findings_query(viewer: User | None, filters: FindingFilters) -> Select[Findi
     else:
         query = query.where(Finding.state != FindingState.WITHDRAWN.value)
     if filters.feature_class:
-        query = query.where(Finding.feature_class.in_([cls.value for cls in filters.feature_class]))
+        query = query.where(_class_clause(filters.feature_class))
     if filters.author is not None:
         query = query.join(User, User.id == Finding.author_id).where(
             User.handle == filters.author, User.deleted_at.is_(None)

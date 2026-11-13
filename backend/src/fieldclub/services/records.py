@@ -58,7 +58,7 @@ from fieldclub.schemas.common import (
     paginate,
 )
 from fieldclub.services import findings, geo, name_rank, record_tiles, sensitivity
-from fieldclub.vocab import COVERAGE_RECORD_TYPES, FeatureClass, FindingState
+from fieldclub.vocab import COVERAGE_RECORD_TYPES, FeatureClass, FindingState, stored_class
 
 # The search box sends at most this much. The API refuses longer, and the
 # service cuts anything longer that reaches it another way.
@@ -564,7 +564,7 @@ def type_fits(feature_classes: list[str], record: Record) -> bool:
     """Whether the record's name, type or monument types name something of one of the classes."""
     text = " ".join([record.name, record.record_type or "", *(record.monument_types or [])]).lower()
     for value in feature_classes:
-        pattern = _CLASS_PATTERNS.get(FeatureClass(value))
+        pattern = _CLASS_PATTERNS.get(stored_class(value))
         if pattern is not None and pattern.search(text):
             return True
     return False

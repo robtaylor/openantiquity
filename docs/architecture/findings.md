@@ -197,3 +197,4 @@ The overlay asks for nothing below zoom 9, sends the map's zoom with the box, an
 - [Decision 0030 — The privacy guard measures to a protected finding's whole shape, and open shapes near one aren't generalised](decisions/0030-the-privacy-guard-measures-to-a-protected-finding-s-whole-shape-and-open-shapes-near-one-aren-t-generalised.md)
 - [Decision 0031 — A point's kind is switched by a control or a long press on its handle, and overlapping findings are picked by their edges](decisions/0031-a-point-s-kind-is-switched-by-a-control-or-a-long-press-on-its-handle-and-overlapping-findings-are-picked-by-their-edges.md)
 - [Decision 0032 — Findings are open or protected, and the restricted level is dropped](decisions/0032-findings-are-open-or-protected-and-the-restricted-level-is-dropped.md)
+- [Decision 0035 — A version reads a stored class it has no name for as not sure](decisions/0035-a-version-reads-a-stored-class-it-has-no-name-for-as-not-sure.md)

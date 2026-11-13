@@ -21,7 +21,7 @@ from fieldclub.api.deps import BBoxQuery, Db, OptionalUser, PageQuery, private, 
 from fieldclub.schemas import records as schema
 from fieldclub.schemas.common import GeoJSONFeatureCollection, Page, parse_bbox
 from fieldclub.services import findings, records, sensitivity
-from fieldclub.vocab import RecordCategory
+from fieldclub.vocab import RecordCategory, stored_class
 
 router = APIRouter(tags=["records"])
 
@@ -133,7 +133,7 @@ def record_findings(
             schema.LinkedFinding(
                 public_id=finding.public_id,
                 title=sensitivity.visible_text(finding, viewer, finding.title) or "",
-                feature_class=finding.feature_class,
+                feature_class=stored_class(finding.feature_class),
                 tier=finding.tier,
                 state=finding.state,
             )

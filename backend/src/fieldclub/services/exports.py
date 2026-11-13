@@ -47,9 +47,10 @@ from fieldclub.vocab import (
     FEATURE_CLASSES,
     PERIODS,
     TIERS,
+    stored_class,
 )
 
-_FISH = {info.id.value: info.fish_term for info in FEATURE_CLASSES}
+_FISH = {info.id: info.fish_term for info in FEATURE_CLASSES}
 _PERIODS = {info.id.value: info.label for info in PERIODS}
 _KINDS = {info.id.value: info.label for info in EVIDENCE_KINDS}
 _TIERS = {info.id.value: info.label for info in TIERS}
@@ -148,7 +149,7 @@ def export_rows(db: Session, chosen: Sequence[Finding], viewer: User | None) -> 
             easting=round(easting),
             northing=round(northing),
             grid=system.value,
-            monument_type=_FISH[finding.feature_class],
+            monument_type=_FISH[stored_class(finding.feature_class)],
             period=_PERIODS[finding.period],
             description=shown(finding.description) or "",
             evidence_summary=_evidence_summary(evidence[finding.id], shown),

@@ -85,6 +85,7 @@ from fieldclub.vocab import (
     Strand,
     Tier,
     Visible,
+    stored_class,
 )
 
 
@@ -188,7 +189,16 @@ def _column(value: StrEnum | bool | None) -> str | bool | None:
 
 
 def _stored(observation: Observation) -> dict[str, Any]:
-    return {name: getattr(observation, name) for name in _FINAL_COLUMNS}
+    """The stored answer as this version reads it, to compare with one sent again.
+
+    A class a later version added reads as "Not sure", the class this version
+    showed, so sending it back keeps the stored class and changes nothing
+    (Decision 0035).
+    """
+    stored = {name: getattr(observation, name) for name in _FINAL_COLUMNS}
+    if stored["feature_class"] is not None:
+        stored["feature_class"] = stored_class(stored["feature_class"]).value
+    return stored
 
 
 @dataclass(frozen=True)
@@ -377,10 +387,11 @@ def compare(result: Reassessment, user: User, observation: Observation) -> Compa
     others = dict.fromkeys(Visible, 0)
     others.update(Counter(obs.visible for obs in result.assessment.observations if obs.user_id != user.id))
     named = observation.feature_class
+    finder_class = stored_class(finding.feature_class)
     return Comparison(
-        finder_class=FeatureClass(finding.feature_class),
-        community_class=FeatureClass(finding.community_class) if finding.community_class else None,
-        matches_finder=None if named is None else named == finding.feature_class,
+        finder_class=finder_class,
+        community_class=stored_class(finding.community_class) if finding.community_class else None,
+        matches_finder=None if named is None else stored_class(named) is finder_class,
         others=others,
     )
 

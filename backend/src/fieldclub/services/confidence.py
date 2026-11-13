@@ -14,7 +14,7 @@ Interface
     inputs = FindingInputs(
         author_id=finding.author_id,
         author_role=Role(author.role),
-        feature_class=FeatureClass(finding.feature_class),
+        feature_class=stored_class(finding.feature_class),
         state=FindingState(finding.state),
         observations=(ObservationInput(user_id=..., role=..., visible=Visible.YES, ...), ...),
         evidence=(EvidenceInput(id=..., user_id=..., role=..., kind=..., votes=(VoteInput(...),)), ...),
@@ -165,6 +165,7 @@ from fieldclub.vocab import (
     Tier,
     Visible,
     role_weight,
+    stored_class,
     strand_for,
     tier_rank,
 )
@@ -651,7 +652,11 @@ class Assessment:
                 f"assessment version {data.get('version')!r} is not {ASSESSMENT_VERSION}"
             )
         stored = {key: value for key, value in data.items() if key != "version"}
-        decoded = _decode(cls, {**stored, "next_steps": _known_steps(stored["next_steps"])})
+        known = {
+            "next_steps": _known_steps(stored["next_steps"]),
+            "class_support": _known_support(stored["class_support"]),
+        }
+        decoded = _decode(cls, {**stored, **known})
         assert isinstance(decoded, cls)
         return decoded
 
@@ -670,6 +675,17 @@ def load_next_steps(data: Mapping[str, Any]) -> tuple[NextStep, ...]:
     steps = _decode(tuple[NextStep, ...], _known_steps(data["next_steps"]))
     assert isinstance(steps, tuple)
     return steps
+
+
+def _known_support(stored: Mapping[str, float]) -> dict[str, float]:
+    """The stored support for the classes this version has a name for.
+
+    Support is never given to "Not sure", so support a later version gave to a
+    class it added is left out, not counted as "Not sure". Every other
+    stored class this version can't name reads as `unknown` (`_decode`,
+    Decision 0035).
+    """
+    return {name: weight for name, weight in stored.items() if name in FeatureClass}
 
 
 def _known_steps(stored: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
@@ -1225,6 +1241,8 @@ def _decode(tp: Any, value: Any) -> Any:
         required = {f.name for f in fields(tp) if f.default is MISSING and f.default_factory is MISSING}
         assert required <= set(value) <= names, f"stored {tp.__name__} has the wrong fields"
         return tp(**{name: _decode(hints[name], item) for name, item in value.items()})
+    if tp is FeatureClass:
+        return stored_class(value)
     if isinstance(tp, type) and issubclass(tp, StrEnum):
         return tp(value)
     if tp is float:

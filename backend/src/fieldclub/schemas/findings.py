@@ -62,6 +62,7 @@ from fieldclub.vocab import (
     Strand,
     Tier,
     Visible,
+    stored_class,
 )
 
 TITLE_MAX = 120
@@ -70,9 +71,7 @@ URL_MAX = 2000
 REFERENCE_MAX = 200
 
 
-def _maybe[E: (FeatureClass, Period, Explanation, Relation, Outcome)](
-    enum: type[E], value: str | None
-) -> E | None:
+def _maybe[E: (Period, Explanation, Relation, Outcome)](enum: type[E], value: str | None) -> E | None:
     return enum(value) if value is not None else None
 
 
@@ -388,7 +387,7 @@ def _summary_fields(finding: Finding, author: User, viewer: User | None) -> dict
     return {
         "public_id": finding.public_id,
         "title": sensitivity.visible_text(finding, viewer, finding.title),
-        "feature_class": finding.feature_class,
+        "feature_class": stored_class(finding.feature_class),
         "period": finding.period,
         "tier": finding.tier,
         "state": finding.state,
@@ -565,7 +564,9 @@ class ObservationOut(ApiModel):
         return cls(
             user=PublicUser.from_user(user),
             visible=Visible(observation.visible),
-            feature_class=_maybe(FeatureClass, observation.feature_class),
+            feature_class=stored_class(observation.feature_class)
+            if observation.feature_class is not None
+            else None,
             period=_maybe(Period, observation.period),
             explanation=_maybe(Explanation, observation.explanation),
             not_modern=observation.not_modern,
@@ -771,7 +772,7 @@ def finding_feature(
         properties=FindingFeatureProperties(
             public_id=finding.public_id,
             title=sensitivity.visible_text(finding, viewer, finding.title) or "",
-            feature_class=FeatureClass(finding.feature_class),
+            feature_class=stored_class(finding.feature_class),
             period=Period(finding.period),
             tier=Tier(finding.tier),
             state=FindingState(finding.state),

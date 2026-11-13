@@ -16,7 +16,7 @@ from fieldclub.schemas.findings import Location, location_out
 from fieldclub.services import sensitivity, unfurl
 from fieldclub.services.mentions import NOTE_MAX, Preview
 from fieldclub.services.unfurl import MAX_START_SECONDS, URL_MAX, FetchStatus
-from fieldclub.vocab import FeatureClass, FindingState, MentionKind, Tier
+from fieldclub.vocab import FeatureClass, FindingState, MentionKind, Tier, stored_class
 
 
 class MentionPreviewIn(RequestModel):
@@ -138,7 +138,7 @@ class MentionedFinding(ApiModel):
         return cls(
             public_id=finding.public_id,
             title=sensitivity.visible_text(finding, viewer, finding.title) or "",
-            feature_class=FeatureClass(finding.feature_class),
+            feature_class=stored_class(finding.feature_class),
             tier=Tier(finding.tier),
             state=FindingState(finding.state),
             location=location_out(finding, viewer),
