@@ -42,6 +42,9 @@ function squareDraftFor(square: string): void {
 }
 
 beforeEach(() => {
+  // Each test opens the marking tool with nothing in hand. A marking left by the test before would
+  // be asked about, as one left somewhere else on the map is.
+  useMarkStore.getState().start();
   useTerrainLoading.getState().setPreparing(false);
   useAccountUi.setState({ sheet: null, waiting: [] });
   useScanStore.getState().reset();

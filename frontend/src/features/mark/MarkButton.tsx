@@ -45,7 +45,9 @@ export function MarkButton({ isPhone }: { isPhone: boolean }) {
   const selected = useMarkStore((state) => state.selected !== null);
   const adding = useMarkStore(isAdding);
   const float = useRef<HTMLDivElement>(null);
-  const floating = isMarkPath(pathname) && isPhone && adding;
+  // A marking set aside is out of sight, and nothing is added to it until the person goes back to it.
+  const setAside = useMarkStore((state) => state.setAside);
+  const floating = isMarkPath(pathname) && isPhone && adding && !setAside;
   useBarKeepsPointsClear(map, float, floating);
 
   if (!isMarkPath(pathname)) {

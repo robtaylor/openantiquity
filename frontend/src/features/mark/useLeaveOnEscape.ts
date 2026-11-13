@@ -30,7 +30,8 @@ export function useLeaveOnEscape(leave: () => void): () => void {
 
 function finishOrLeave(leave: () => void): void {
   const mark = useMarkStore.getState();
-  if (mark.drawing && mark.shape.present.points.length > 0) {
+  // A marking set aside isn't being drawn here, so there is nothing to stop first.
+  if (!mark.setAside && mark.drawing && mark.shape.present.points.length > 0) {
     mark.finish();
     return;
   }

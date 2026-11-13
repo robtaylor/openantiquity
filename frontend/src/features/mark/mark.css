@@ -39,6 +39,17 @@
   fill: rgb(224 164 58 / 0.14);
 }
 
+/* A marking never saved, while the tool isn't on it: dashed, so it can't be taken for a finding or for work in hand. */
+.fc-mark-outline[data-unsaved] polyline,
+.fc-mark-outline[data-unsaved] polygon {
+  stroke-dasharray: 6 5;
+  stroke-width: 2;
+}
+
+.fc-mark-outline[data-unsaved] polygon {
+  fill: none;
+}
+
 /* A point of the path: a 12 px dot in a 44 px target, square when straight and round when curved. */
 .fc-path-handles {
   position: absolute;
@@ -321,6 +332,13 @@
 }
 
 .fc-mark__notice p + button {
+  margin-top: 8px;
+}
+
+.fc-mark__notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 8px;
 }
 

@@ -25,6 +25,7 @@ import { useSession } from "../account/session.js";
 import { DraftBadge } from "../drafts/DraftBadge.js";
 import type { KindDraft } from "../drafts/savers.js";
 import { discardDraft, restoreDraft, retryDraft } from "../drafts/store.js";
+import { crossesBox } from "../finding/mapView.js";
 import { namedFields, POSITION_IN_TEXT, positionWords } from "../finding/positionInText.js";
 import { BARE_MAP_PATH } from "../shell/navigation.js";
 import { type PanelEnvironment, usePanelEnvironment } from "../shell/panelContext.js";
@@ -70,6 +71,25 @@ export function uncoveredBox(
     right: width - LAYOUT.panelWidth,
     bottom: height - LAYOUT.statusHeight,
   };
+}
+
+/**
+ * Whether any of a marking is where the person can see it: a point of it, or
+ * a stretch crossing, inside the part of the map `box` says is on show. The
+ * same box `keepInView` works to, so a marking found in sight is one it
+ * will at most nudge.
+ */
+export function markInSight(
+  map: MapLibreMap | null,
+  points: readonly LngLat[],
+  box: ReturnType<typeof uncoveredBox>,
+): boolean {
+  // With no map to ask, nothing can be said to be elsewhere.
+  if (!map || !isMapLive(map)) return true;
+  return crossesBox(
+    points.map((point) => screenPoint(map, point)),
+    box,
+  );
 }
 
 /** Move the map, if it must, so the mark is well inside the part of it on show (`slideIntoView`). */

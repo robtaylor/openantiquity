@@ -55,6 +55,23 @@ describe("the phone's status line", () => {
 });
 
 describe("the phone's drawing bar", () => {
+  it("isn't offered for a marking that is set aside, so nothing can be added to one that is out of sight", async () => {
+    usePhoneLayout();
+    await openMarking();
+    act(() =>
+      useMarkStore.setState({
+        shape: history({ closed: false, points: [at(-1.2, 52.1), at(-1.201, 52.1)] } satisfies Path),
+        drawing: true,
+        setAside: true,
+      }),
+    );
+    expect(screen.queryByRole("region", { name: "Drawing" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add a point at the cross" })).toBeNull();
+
+    act(() => useMarkStore.setState({ setAside: false }));
+    expect(await screen.findByRole("region", { name: "Drawing" })).toBeInTheDocument();
+  });
+
   it("is one row of named icon buttons and one status line, and nothing else", async () => {
     usePhoneLayout();
     const map = await openMarking();

@@ -15,7 +15,8 @@ import { EMPTY_COLLECTION, type FeatureCollection } from "../records/geojson.js"
 import { baseRevision, changeShapeId } from "./editingKey.js";
 import { findingDrafts, useSavedDrafts } from "./findingDrafts.js";
 import { MidpointDots } from "./MidpointDots.js";
-import { hasUnkeptLine, useMarkPath, useMarkStore } from "./markStore.js";
+import { isMarkPath, MARK_PATH } from "./markPaths.js";
+import { hasUnkeptLine, isUnsavedNewMark, useMarkPath, useMarkStore } from "./markStore.js";
 import { PathHandles } from "./PathHandles.js";
 import { closesAt, geometryVertices, type LngLat, type Path, pathGeometry, segmentNear } from "./path.js";
 import { usePendingFindings } from "./pending.js";
@@ -30,10 +31,7 @@ export const SVG_MAX_POINTS = 200;
 export const MARK_PATH_SOURCE = "mark-path";
 export const MARK_PATH_LAYERS = { fill: "mark-path-fill", casing: "mark-path-casing", line: "mark-path-line" } as const;
 
-/** True on any page of the marking panel. */
-export function isMarkPath(pathname: string): boolean {
-  return pathname === "/mark" || pathname.startsWith("/mark/");
-}
+export { isMarkPath } from "./markPaths.js";
 
 function projector(map: MapLibreMap): (point: LngLat) => { x: number; y: number } {
   return (point) => screenPoint(map, point);
@@ -167,7 +165,7 @@ function useLongPathOnMap(map: MapLibreMap | null, path: Path, marking: boolean)
 }
 
 /** The path as it is drawn while short enough for SVG: a line through the curve, lightly filled once closed. */
-function PathShape({ map, path }: { map: MapLibreMap; path: Path }) {
+function PathShape({ map, path, unsaved = false }: { map: MapLibreMap; path: Path; unsaved?: boolean }) {
   const short = path.points.length <= SVG_MAX_POINTS;
   const drawn = useMemo(() => (short ? geometryVertices(pathGeometry(path)) : []), [path, short]);
   if (drawn.length === 0) return null;
@@ -176,9 +174,58 @@ function PathShape({ map, path }: { map: MapLibreMap; path: Path }) {
     .map(({ x, y }) => `${x},${y}`)
     .join(" ");
   return (
-    <g className="fc-mark-outline" data-shape={path.closed ? "polygon" : "line"} data-testid="mark-path">
+    <g
+      className="fc-mark-outline"
+      data-shape={path.closed ? "polygon" : "line"}
+      data-unsaved={unsaved || undefined}
+      data-testid="mark-path"
+    >
       {path.closed ? <polygon points={text} /> : <polyline points={text} />}
     </g>
+  );
+}
+
+/** The dashed ring and "not saved" sign of something on the map that isn't saved yet. */
+function NotSavedRing() {
+  return (
+    <>
+      <span className="fc-draft-mark__ring" aria-hidden="true" />
+      <CloudOff className="fc-draft-mark__sign" size={12} aria-hidden />
+    </>
+  );
+}
+
+/**
+ * A new marking that was never saved, while the tool isn't working on it:
+ * its line or shape dashed, and at its first point the ring and "not saved"
+ * sign a draft has, which takes the tool back to it. Without this it was
+ * held out of sight, and "Mark a finding" brought it back from wherever it
+ * had been left.
+ */
+function UnfinishedMark({ map, path }: { map: MapLibreMap; path: Path }) {
+  const navigate = useNavigate();
+  const [first] = path.points;
+  if (first === undefined) return null;
+  const { x, y } = screenPoint(map, [first.lon, first.lat]);
+  return (
+    <>
+      <svg className="fc-annotations__shapes" aria-hidden="true">
+        <PathShape map={map} path={path} unsaved />
+      </svg>
+      <button
+        type="button"
+        className="fc-draft-mark"
+        style={{ transform: `translate(${x}px, ${y}px)` }}
+        aria-label="Carry on with your unfinished marking"
+        title="Your unfinished marking: not saved yet"
+        onClick={() => {
+          useMarkStore.setState({ setAside: false });
+          navigate(MARK_PATH);
+        }}
+      >
+        <NotSavedRing />
+      </button>
+    </>
   );
 }
 
@@ -206,8 +253,7 @@ function DraftMarks({ map, openDraft }: { map: MapLibreMap; openDraft: string | 
               title={`${draft.data.title}: not saved yet`}
               onClick={() => navigate(draftPath(draft.id))}
             >
-              <span className="fc-draft-mark__ring" aria-hidden="true" />
-              <CloudOff className="fc-draft-mark__sign" size={12} aria-hidden />
+              <NotSavedRing />
             </button>
           );
         })}
@@ -338,13 +384,29 @@ function useChangeShapeAllowed(pathname: string): boolean | null {
 }
 
 /**
+ * A marking is set aside for one opening of the tool. Once the marking pages
+ * are left it is simply in hand again, and the next opening looks afresh at
+ * whether it is in view. The Layers panel opens over the tool at the same
+ * address, so looking at the layers doesn't end the question.
+ */
+function useForgetSetAsideOnLeaving(): void {
+  const { pathname } = useLocation();
+  const onMarkPage = isMarkPath(pathname);
+  useEffect(() => {
+    if (!onMarkPage && useMarkStore.getState().setAside) useMarkStore.setState({ setAside: false });
+  }, [onMarkPage]);
+}
+
+/**
  * True while the drawing tool is open: on any page of the marking panel,
  * except "Change the shape" for a finding the reader may not change.
  */
 export function useMarkingOpen(): boolean {
   const { pathname } = useLocation();
   const changing = useChangeShapeAllowed(pathname);
-  return isMarkPath(pathname) && changing !== false;
+  // A marking set aside isn't being worked on until the person goes back to it.
+  const setAside = useMarkStore((state) => state.setAside);
+  return isMarkPath(pathname) && changing !== false && !setAside;
 }
 
 /**
@@ -356,14 +418,16 @@ export function MarkLayer() {
   const map = useMainMap();
   const marking = useMarkingOpen();
   const drawn = useKindDrafts(findingDrafts).length + usePendingFindings((state) => state.pending.length);
+  const unfinished = useMarkStore(isUnsavedNewMark) && !marking;
+  useForgetSetAsideOnLeaving();
   // Follow the map only while there is something on it to keep in place.
-  useMapFrame(marking || drawn > 0 ? map : null);
+  useMapFrame(marking || unfinished || drawn > 0 ? map : null);
   const path = useMarkPath();
   const drawing = useMarkStore((state) => state.drawing);
   const draftId = useMarkStore((state) => state.draftId);
   useMarkingClicks(map, marking);
-  useAskBeforeLeaving(marking);
-  useLongPathOnMap(map, path, marking);
+  useAskBeforeLeaving(marking || unfinished);
+  useLongPathOnMap(map, path, marking || unfinished);
   useRefreshOnSavedDrafts();
 
   if (!map || !isMapLive(map)) return null;
@@ -374,6 +438,7 @@ export function MarkLayer() {
           <PathShape map={map} path={path} />
         </svg>
       ) : null}
+      {unfinished ? <UnfinishedMark map={map} path={path} /> : null}
       <DraftMarks map={map} openDraft={marking ? draftId : null} />
       <PendingMarks map={map} />
       {marking && path.points.length > 1 ? <MidpointDots map={map} path={path} /> : null}

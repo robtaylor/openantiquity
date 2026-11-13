@@ -89,6 +89,12 @@ export interface MarkFields {
   placed: readonly PositionField[];
   /** True while the save is on its way. */
   saving: boolean;
+  /**
+   * True while the marking in hand is set aside: the tool was opened with the
+   * map somewhere else, and the person hasn't yet said whether to go back to
+   * it. It isn't drawn as being worked on, and a tap adds nothing to it.
+   */
+  setAside: boolean;
 }
 
 export interface MarkState extends MarkFields {
@@ -157,6 +163,7 @@ export const EMPTY_MARK: MarkFields = {
   problem: null,
   placed: [],
   saving: false,
+  setAside: false,
 };
 
 /** The path a draft holds: its line or shape, or its one point. */

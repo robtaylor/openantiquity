@@ -3,22 +3,29 @@ import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import type { Meta } from "../../api/meta.js";
+import { useMainMap } from "../../map/mainMap.js";
+import { useMapStore } from "../../map/store.js";
 import { Button } from "../../ui/Button.js";
 import { EmptyState } from "../../ui/EmptyState.js";
+import { toast } from "../../ui/toastStore.js";
 import { useKindDrafts } from "../drafts/savers.js";
+import { frameExtent } from "../finding/mapView.js";
 import { useDocumentTitle } from "../placeholders.js";
 import { firstArrival } from "../shell/arrival.js";
 import { BARE_MAP_PATH } from "../shell/navigation.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
+import { usePanelEnvironment } from "../shell/panelContext.js";
 import { findingDrafts, useSavedDrafts } from "./findingDrafts.js";
-import { MarkForm } from "./MarkForm.js";
+import { MarkForm, markInSight, uncoveredBox } from "./MarkForm.js";
+import { MARK_PATH } from "./markPaths.js";
 import { useMarkReturn } from "./markReturn.js";
-import { isUnsavedNewMark, useMarkStore } from "./markStore.js";
+import { EMPTY_MARK, isUnsavedNewMark, type MarkFields, useMarkStore } from "./markStore.js";
+import { type LngLat, placesOf } from "./path.js";
 import { useLeaveOnEscape } from "./useLeaveOnEscape.js";
 import { openSavedFinding } from "./useSaveMark.js";
 import "./mark.css";
 
-export const MARK_PATH = "/mark";
+export { MARK_PATH };
 
 /** A draft that was saved since the page loaded opens the finding it became. */
 function useOpenSavedDraft(draftId: string | undefined): boolean {
@@ -31,6 +38,38 @@ function useOpenSavedDraft(draftId: string | undefined): boolean {
     openSavedFinding(client, navigate, saved);
   }, [saved, draftId, client, navigate]);
   return saved !== undefined;
+}
+
+/**
+ * Let go of the new marking in hand and start afresh, with a way back: a
+ * long road is a lot to lose to one press. It comes back only while nothing
+ * new has been placed, and set aside if the map is somewhere else
+ * (`elsewhere`), so the map isn't moved to it.
+ */
+function discardUnfinished(elsewhere: (places: readonly LngLat[]) => boolean): void {
+  const before = useMarkStore.getState();
+  // The store replaces its values and never changes one in place, so the fields can be kept as they are.
+  const kept = Object.fromEntries(Object.keys(EMPTY_MARK).map((key) => [key, before[key as keyof MarkFields]]));
+  before.start();
+  toast("The unfinished marking was discarded.", {
+    action: {
+      label: "Undo",
+      onClick: () => {
+        const now = useMarkStore.getState();
+        if (now.editing !== null || now.draftId !== null || now.shape.present.points.length > 0) {
+          toast("Finish or discard what you have in hand first.", { kind: "error" });
+          return;
+        }
+        useMarkStore.setState({
+          ...(kept as unknown as MarkFields),
+          // A point that came from the cross would be taken for one just added.
+          crossAdded: false,
+          // Away from the tool this means nothing, and the next opening of the tool looks afresh.
+          setAside: elsewhere(placesOf(before.shape.present)),
+        });
+      },
+    },
+  });
 }
 
 /**
@@ -59,7 +98,19 @@ export function MarkPanel({ meta }: { meta: Meta }) {
   // lost for that. A draft is taken up once, so changes made to it here are kept. The store
   // forgets everything when the person changes, and a draft open here is then taken up again.
   const begun = useRef(false);
+  // The form is held back until this panel has looked at what is in hand. The form's own
+  // effects run before this one's, and one of them brings the marking into view: that was the
+  // jump to a marking left somewhere else.
+  const [looked, setLooked] = useState(false);
   const [carriedOn, setCarriedOn] = useState(false);
+  const map = useMainMap();
+  const { isPhone, sheetHeight } = usePanelEnvironment();
+  // Whether a marking is out of the part of the map on show, as things stand when it is asked.
+  const elsewhere = (places: readonly LngLat[]): boolean =>
+    !markInSight(map, places, uncoveredBox({ isPhone, sheetHeight }, window.innerWidth, window.innerHeight));
+  const elsewhereNow = useRef(elsewhere);
+  elsewhereNow.current = elsewhere;
+  const host = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const mark = useMarkStore.getState();
     // The Layers panel opens over this one and closes back onto it. That isn't opening the tool.
@@ -68,12 +119,19 @@ export function MarkPanel({ meta }: { meta: Meta }) {
       const ownToTool = mark.editing === null && mark.draftId === null;
       if (!begun.current && !arriving && ownToTool) {
         // Back from under the Layers panel: everything is as it was left.
-      } else if (!begun.current && isUnsavedNewMark(mark)) setCarriedOn(true);
-      else if (!begun.current || mark.draftId !== null) mark.start();
+      } else if (!begun.current && isUnsavedNewMark(mark)) {
+        // The button was pressed to mark what is on the map now. A marking left somewhere else
+        // is asked about, and the map stays where it is until the person says to go to it.
+        const away = elsewhereNow.current(placesOf(mark.shape.present));
+        // Said both ways, so an answer left from an earlier opening never stands.
+        if (mark.setAside !== away) useMarkStore.setState({ setAside: away });
+        if (!away) setCarriedOn(true);
+      } else if (!begun.current || mark.draftId !== null) mark.start();
     } else if (draft && mark.draftId !== draftId) {
       mark.load(draftId, draft.data);
     }
     begun.current = true;
+    setLooked(true);
   }, [draftId, draft, pathname]);
   useEffect(() => {
     if (draftId !== undefined && draft && loaded === null) useMarkStore.getState().load(draftId, draft.data);
@@ -84,13 +142,38 @@ export function MarkPanel({ meta }: { meta: Meta }) {
 
   const missingDraft = draftId !== undefined && draft === null && !opening;
   const placed = useMarkStore((state) => state.shape.present.points.length > 0);
+  const setAside = useMarkStore((state) => state.setAside) && draftId === undefined;
+
+  // The button pressed goes when the choice is made, and focus would go nowhere with it.
+  function focusTitle(): void {
+    host.current?.closest(".fc-panel")?.querySelector<HTMLElement>(".fc-panel__title")?.focus();
+  }
+
+  function goToIt(): void {
+    const places = placesOf(useMarkStore.getState().shape.present);
+    const [only] = places;
+    if (places.length > 1) frameExtent(places);
+    else if (only) useMapStore.getState().requestCamera({ lng: only[0], lat: only[1] });
+    focusTitle();
+    useMarkStore.setState({ setAside: false });
+    setCarriedOn(true);
+  }
+
+  function discard(): void {
+    focusTitle();
+    setCarriedOn(false);
+    discardUnfinished((places) => elsewhereNow.current(places));
+  }
+
   const subtitle = missingDraft
     ? undefined
-    : !placed
-      ? "Put the mark where you see it"
-      : draftId !== undefined
-        ? "Not saved yet"
-        : "Say what it looks like, then save";
+    : setAside
+      ? "An unfinished marking is waiting"
+      : !placed
+        ? "Put the mark where you see it"
+        : draftId !== undefined
+          ? "Not saved yet"
+          : "Say what it looks like, then save";
 
   return (
     <PanelFrame panelKey={MARK_PATH} title="Mark a finding" subtitle={subtitle} onClose={leave}>
@@ -105,18 +188,26 @@ export function MarkPanel({ meta }: { meta: Meta }) {
         >
           <p>It may have been saved or discarded in another tab.</p>
         </EmptyState>
-      ) : draftId !== undefined && loaded !== draftId ? null : (
+      ) : !looked || (draftId !== undefined && loaded !== draftId) ? null : setAside ? (
+        // The form isn't shown yet: it would bring the marking into view, and taps would add to it.
+        // An alert, since it is put in after the panel's title has been read and nothing goes on until it is answered.
+        <div className="fc-mark__notice" role="alert" ref={host}>
+          <p>You have an unfinished marking somewhere else on the map.</p>
+          <div className="fc-mark__notice-actions">
+            <Button size="sm" variant="primary" onClick={goToIt}>
+              Go to it
+            </Button>
+            <Button size="sm" onClick={discard}>
+              Discard it and start here
+            </Button>
+          </div>
+        </div>
+      ) : (
         <>
           {carriedOn && placed && draftId === undefined ? (
-            <div className="fc-mark__notice" role="status">
+            <div className="fc-mark__notice" role="status" ref={host}>
               <p>Carrying on with the marking you hadn't saved.</p>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setCarriedOn(false);
-                  useMarkStore.getState().start();
-                }}
-              >
+              <Button size="sm" onClick={discard}>
                 Discard it
               </Button>
             </div>

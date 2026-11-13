@@ -15,6 +15,7 @@ import {
   signedOutResponse,
   usePhoneLayout,
 } from "../../test/shellHarness.js";
+import { useToastStore } from "../../ui/toastStore.js";
 import { useAccountUi } from "../account/requireAccount.js";
 import { signedIn } from "../account/session.js";
 import {
@@ -138,6 +139,144 @@ describe("a marking that hasn't been saved", () => {
     await user.click(panel().getByRole("button", { name: "Discard it" }));
     expect(points()).toEqual([]);
     expect(panel().queryByText("Carrying on with the marking you hadn't saved.")).toBeNull();
+  });
+
+  /** A two-point marking left unsaved, the tool closed, and the map moved well away from it. */
+  async function leaveOneBehind() {
+    const user = userEvent.setup();
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    act(() => map.click(450, 340));
+    const drawn = points();
+    await user.click(panel().getByRole("button", { name: "Finish" }));
+    await user.click(panel().getByRole("button", { name: "Close panel" }));
+    await screen.findByRole("button", { name: "Mark a finding" });
+    const { lng, lat } = map.getCenter();
+    act(() => map.userMove({ lng: lng + 0.5, lat: lat + 0.3 }));
+    await waitFor(() => expect(useMapStore.getState().camera.lng).toBeCloseTo(lng + 0.5, 3));
+    expect(map.getCenter().lng).toBeCloseTo(lng + 0.5, 3);
+    return { user, map, drawn };
+  }
+
+  it("asks before going back to one left somewhere else, and leaves the map where it is", async () => {
+    const { user, map, drawn } = await leaveOneBehind();
+    const before = map.getCenter();
+    map.panBy.mockClear();
+    map.easeTo.mockClear();
+    map.jumpTo.mockClear();
+
+    await user.click(await screen.findByRole("button", { name: "Mark a finding" }));
+
+    expect(panel().getByText("You have an unfinished marking somewhere else on the map.")).toBeInTheDocument();
+    // Nothing moved the map: the person pressed the button to mark what they are looking at.
+    expect(map.panBy).not.toHaveBeenCalled();
+    expect(map.easeTo).not.toHaveBeenCalled();
+    expect(map.jumpTo).not.toHaveBeenCalled();
+    expect(map.getCenter()).toEqual(before);
+    // Until they choose, a click here adds nothing to a marking that is out of sight.
+    expect(handles()).toHaveLength(0);
+    act(() => map.click(400, 300));
+    expect(points()).toEqual(drawn);
+
+    await user.click(panel().getByRole("button", { name: "Go to it" }));
+    expect(points()).toEqual(drawn);
+    await waitFor(() => expect(handles()).toHaveLength(2));
+    const [first] = drawn;
+    if (!first) throw new Error("No mark was placed");
+    const at = map.project([first.lon, first.lat]);
+    expect(at.x).toBeGreaterThan(0);
+    expect(at.x).toBeLessThan(1024);
+    expect(at.y).toBeGreaterThan(0);
+    expect(at.y).toBeLessThan(768);
+    expect(panel().getByText("Carrying on with the marking you hadn't saved.")).toBeInTheDocument();
+  });
+
+  it("can be discarded to start a new one here, and brought back", async () => {
+    const { user, map, drawn } = await leaveOneBehind();
+    const before = map.getCenter();
+    await user.click(await screen.findByRole("button", { name: "Mark a finding" }));
+
+    await user.click(panel().getByRole("button", { name: "Discard it and start here" }));
+    expect(points()).toEqual([]);
+    expect(map.getCenter()).toEqual(before);
+    expect(panel().queryByText("You have an unfinished marking somewhere else on the map.")).toBeNull();
+
+    // A long road is a lot to lose to one press. It comes back as it was left: set aside, the map unmoved.
+    const undo = () => useToastStore.getState().toasts.at(-1)?.action;
+    expect(undo()?.label).toBe("Undo");
+    act(() => undo()?.onClick());
+    expect(points()).toEqual(drawn);
+    expect(map.getCenter()).toEqual(before);
+    expect(panel().getByText("You have an unfinished marking somewhere else on the map.")).toBeInTheDocument();
+
+    // Once a new marking has been started here, the old one can't be brought back over it.
+    await user.click(panel().getByRole("button", { name: "Discard it and start here" }));
+    const bringBack = undo();
+    act(() => map.click(400, 300));
+    expect(points()).toHaveLength(1);
+    const started = points();
+    act(() => bringBack?.onClick());
+    expect(points()).toEqual(started);
+    expect(useToastStore.getState().toasts.at(-1)?.message).toBe("Finish or discard what you have in hand first.");
+  });
+
+  it("is carried on with after all, once the map has been brought back to it", async () => {
+    const { user, map } = await leaveOneBehind();
+    const { lng, lat } = map.getCenter();
+    await user.click(await screen.findByRole("button", { name: "Mark a finding" }));
+    expect(panel().getByText("You have an unfinished marking somewhere else on the map.")).toBeInTheDocument();
+
+    // The panel is closed without choosing, and the person goes back to the marking themselves.
+    await user.click(panel().getByRole("button", { name: "Close panel" }));
+    await screen.findByRole("button", { name: "Mark a finding" });
+    act(() => map.userMove({ lng: lng - 0.5, lat: lat - 0.3 }));
+    await waitFor(() => expect(useMapStore.getState().camera.lng).toBeCloseTo(lng - 0.5, 3));
+    await user.click(screen.getByRole("button", { name: "Mark a finding" }));
+
+    // It is in view now, so nothing says it is somewhere else.
+    expect(await panel().findByText("Carrying on with the marking you hadn't saved.")).toBeInTheDocument();
+    expect(panel().queryByText("You have an unfinished marking somewhere else on the map.")).toBeNull();
+    expect(handles()).toHaveLength(2);
+  });
+
+  it("leaves at the first Escape while one is waiting, and doesn't touch it", async () => {
+    const { user, drawn } = await leaveOneBehind();
+    // Left while points were still being added, as leaving by the rail does.
+    act(() => useMarkStore.setState({ drawing: true }));
+    await user.click(await screen.findByRole("button", { name: "Mark a finding" }));
+    expect(panel().getByText("You have an unfinished marking somewhere else on the map.")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    await screen.findByRole("button", { name: "Mark a finding" });
+    expect(screen.queryByRole("complementary", { name: "Mark a finding" })).toBeNull();
+    expect(points()).toEqual(drawn);
+    expect(useMarkStore.getState().drawing).toBe(true);
+  });
+
+  it("puts focus on the panel's title once the choice is made, not nowhere", async () => {
+    const { user } = await leaveOneBehind();
+    await user.click(await screen.findByRole("button", { name: "Mark a finding" }));
+    await user.click(panel().getByRole("button", { name: "Go to it" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Mark a finding" })).toHaveFocus());
+  });
+
+  it("stays drawn on the map while the tool is closed, where it can't be taken for a finding or changed", async () => {
+    const user = userEvent.setup();
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    act(() => map.click(450, 340));
+    await user.click(panel().getByRole("button", { name: "Finish" }));
+    await user.click(panel().getByRole("button", { name: "Close panel" }));
+    await screen.findByRole("button", { name: "Mark a finding" });
+
+    const left = screen.getByTestId("mark-path");
+    expect(left).toHaveAttribute("data-unsaved", "true");
+    expect(handles()).toHaveLength(0);
+    // Pressing it takes the tool back to it.
+    await user.click(screen.getByRole("button", { name: "Carry on with your unfinished marking" }));
+    await screen.findByRole("complementary", { name: "Mark a finding" });
+    expect(handles()).toHaveLength(2);
   });
 
   it("starts afresh once a marking has been saved", async () => {
