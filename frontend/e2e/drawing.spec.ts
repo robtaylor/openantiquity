@@ -119,6 +119,22 @@ test.describe("the drawing guide", () => {
     await expect(page.getByRole("complementary", { name: "Mark a finding" })).toBeVisible();
   });
 
+  test("never moves the map as it grows, folds or unfolds, even over a point", async ({ page }) => {
+    await openMap(page, `/mark${VIEW}`);
+    const card = await boxOf(guide(page));
+    // Just below the card as it is with nothing placed. Once a point is there the card grows over it.
+    await tapAt(page, { x: card.x + 60, y: card.y + card.height + 12 });
+    await expect(point(page, 1, 1)).toBeVisible();
+    await page.waitForTimeout(300);
+    const hash = new URL(page.url()).hash;
+    await tapAt(page, { x: card.x + 220, y: card.y + card.height + 200 });
+    await expect(point(page, 2, 2)).toBeVisible();
+    await guide(page).getByRole("button", { name: /gestures/i }).click();
+    await guide(page).getByRole("button", { name: /gestures/i }).click();
+    await page.waitForTimeout(500);
+    expect(new URL(page.url()).hash).toBe(hash);
+  });
+
   test("folds to its header, and stays folded next time", async ({ page }) => {
     await openMap(page, `/mark${VIEW}`);
     const open = await boxOf(guide(page));

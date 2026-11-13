@@ -4,8 +4,8 @@
  * (`guideRows`), each as an icon, the gesture and what it does, so the eye
  * runs down the gestures. Its header has a button that swaps it for the
  * search box and one that folds it down to the header, a choice the
- * browser keeps for next time. As it grows or folds, the map moves so that
- * no point placed is under it.
+ * browser keeps for next time. The card never moves the map: a point under
+ * it is the person's to uncover, by panning or folding it.
  */
 
 import {
@@ -31,15 +31,13 @@ import {
   Waypoints,
   X,
 } from "lucide-react";
-import { type RefObject, useEffect, useId, useRef, useState } from "react";
-import { isMapLive } from "../../map/MapPane.js";
+import { useEffect, useId, useRef, useState } from "react";
 import { useMainMap } from "../../map/mainMap.js";
 import { useMapStore } from "../../map/store.js";
 import { IconButton } from "../../ui/IconButton.js";
 import { useIsPhone } from "../shell/useIsPhone.js";
 import { useDevice } from "./DrawingTool.js";
 import { GUIDE_FOLDED_KEY, type GuideIcon, type GuideRow, guideRows, stageOf } from "./guideRows.js";
-import { clearPointsOfGuide } from "./keepClear.js";
 import { useMarkPath, useMarkStore } from "./markStore.js";
 import { canClose, hasRoomForPoint, segmentMiddles } from "./path.js";
 import "./mark.css";
@@ -80,41 +78,6 @@ function keepFolded(folded: boolean): void {
   } catch {
     // A browser that refuses storage folds the guide all the same, for this visit.
   }
-}
-
-/**
- * Whenever the guide appears or changes size, as its rows change or it
- * folds, the map moves down by as little as keeps every point placed out
- * from under it, unless that would put one under the phone's bar.
- */
-function useGuideKeepsPointsClear(card: RefObject<HTMLElement | null>): void {
-  const map = useMainMap();
-  useEffect(() => {
-    const element = card.current;
-    if (!map || !element || !isMapLive(map) || typeof ResizeObserver === "undefined") return;
-    let waiting = false;
-    const clear = (): void => {
-      waiting = false;
-      if (!isMapLive(map)) return;
-      const bar = document.querySelector(".fc-mark-float")?.getBoundingClientRect() ?? null;
-      clearPointsOfGuide(map, element.getBoundingClientRect(), bar);
-    };
-    const observer = new ResizeObserver(() => {
-      if (!isMapLive(map) || waiting) return;
-      // A pan now would cut short a move under way, such as framing a saved shape, so it waits for the move to end.
-      if (map.isMoving?.()) {
-        waiting = true;
-        map.once("moveend", clear);
-        return;
-      }
-      clear();
-    });
-    observer.observe(element);
-    return () => {
-      observer.disconnect();
-      if (waiting && isMapLive(map)) map.off("moveend", clear);
-    };
-  }, [map, card]);
 }
 
 /** The rows for the marking as it stands and the device in hand. */
@@ -164,8 +127,6 @@ export function DrawingGuide({ onSearch, focusSearch = false }: { onSearch: () =
   const headingId = useId();
   const listId = useId();
   const searchButton = useRef<HTMLButtonElement>(null);
-  const card = useRef<HTMLElement>(null);
-  useGuideKeepsPointsClear(card);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: focus goes back once, as the card appears
   useEffect(() => {
@@ -179,7 +140,7 @@ export function DrawingGuide({ onSearch, focusSearch = false }: { onSearch: () =
   }
 
   return (
-    <section className="fc-draw-guide" aria-labelledby={headingId} data-folded={folded} ref={card}>
+    <section className="fc-draw-guide" aria-labelledby={headingId} data-folded={folded}>
       <div className="fc-draw-guide__header">
         <h2 className="fc-draw-guide__title" id={headingId}>
           How to draw

@@ -18,7 +18,7 @@ In the same message he asked: "I think it would also be able to see and adjust t
 
 1. While the drawing tool is open, the search box isn't shown and a card, "How to draw", sits in its place, on a computer and on a phone. It lists the gestures that apply to the marking as it stands and to the device in hand, each as an icon, the gesture and what it does. The mark panel carries no guidance block. This replaces point 2 of Decision 0031.
 2. The card's header has a button that swaps the card for the search box, which gives way to the card again when the search is over, and a button that folds the card down to its header. The browser remembers the fold.
-3. Whatever frames a shape, or keeps placed points clear of floating controls, counts the card as it counted the search box.
+3. Whatever frames a shape counts the card as it counted the search box. The card itself never moves the map.
 4. A segment long enough on screen has a dot half way along it, on the curve as drawn. Dragging the dot inserts a point there and moves it, as one step for undo. A tap or click on it inserts the point and selects it. The dots are a pointer's shortcut and not tab stops: "Insert a point after" stays the keyboard's way, as Decision 0031's third point requires of every gesture.
 5. The tool has no curve handles. The stored path and the curve are as they were.
 
