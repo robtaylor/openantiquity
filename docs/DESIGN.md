@@ -41,7 +41,9 @@ Records from the heritage index appear as map layers by kind: designations, monu
 
 ## Findings
 
-Marking a finding takes about ten seconds. You click the feature, pick what you think it is from a short list of pictured types, and save. A note, a period guess and a drawn outline are optional. The finding stores the layer, zoom and light you were using, so the next person sees what you saw.
+Marking a finding takes about ten seconds. You click the feature, pick what you think it is from a short list of pictured types, and save. A note and a period guess are optional. The finding stores the layer, zoom and light you were using, so the next person sees what you saw.
+
+A finding can be a spot, a line or a shape. One click marks a spot. Keep clicking and it becomes a line, straight or curved through the points you choose, and clicking the first point closes it into a shape such as an enclosure. A line can be as long as a Roman road, and whoever marked it can carry it on from either end later, or move its points. Second looks given before stay, and the page says how much has been added since anyone looked, inviting fresh looks at the new part. Once others have looked, most of what they looked at has to stay where it was.
 
 The feature list is short on purpose: enclosure, hillfort, round barrow or mound, long barrow, hut circle, settlement earthworks, field system, ridge and furrow, linear bank or ditch, trackway or hollow way, road, moat, motte or castle earthwork, platform, pond or water management, pit or quarry, industrial, military, ritual monument, garden earthworks, and "not sure". Each maps to a term in the national monument-type thesaurus, so exports speak the language records officers use.
 

@@ -64,6 +64,8 @@ Panels are opaque. Controls floating directly on the map use `--surface` at 92% 
 
 Findings are circles coloured by tier, with a dark 1.5 px outline so they hold up against any layer. Size grows slightly with tier. Known findings are hollow rings. Ruled-out findings are small hollow grey rings and are hidden by default. A finding the viewer may not see exactly arrives with `obscured` set and is drawn as a dashed one-kilometre square in its tier colour, never a point. Records are small squares coloured by category, clearly different in shape from findings, with the same dark outline. Several category colours are close in lightness to mid-grey terrain, so the outline, not the fill, is what separates a square from a grey LIDAR view. A category swatch in a panel sits beside its label and carries a 1 px `--text-muted` outline, because some colours fall below 3:1 against `--surface` and `--raised`.
 
+A finding drawn as a line or an area keeps its tier marker at its anchor, and its shape is drawn under the markers in the tier colour on the same dark casing, 1.5 px on each side. A line is 2.5 px wide with round joins and caps. An area is its edge, 2 px wide, over a fill at 4% opacity so the terrain inside stays readable. A known finding's line or edge is thinner, 1.5 px and 1.25 px. A ruled-out finding's shape is a 1.5 px line in `--state-ruled-out`, behind the ruled-out switch like its marker. An obscured finding is still its dashed square, never a line.
+
 Colour never carries meaning alone. Tier is also shown as a label in every list and panel.
 
 ## Components
@@ -79,6 +81,23 @@ Build these once in `src/ui/` and reuse them: `Button` (primary, secondary, ghos
 - The sign-in sheet shows one button per provider in the provider's own style, with "email me a link" underneath. It says in one sentence why an account is needed.
 - Empty states say what to do next. Errors say what happened and offer a retry.
 - Every control is reachable by keyboard and has a visible focus ring. Map features are also listed in the panel, so nothing depends on pointing at a canvas. Text contrast is at least 4.5 to 1.
+
+## The drawing tool
+
+One tool marks a finding, whether it is a spot, a line or a closed shape, and changes a saved one ("Change the shape"). It works the same by pointer, by touch and by keyboard, and every gesture has a visible control that does the same (Decision 0031).
+
+- **Taps.** "Mark a finding" opens the tool with nothing placed. Each tap or click adds a point at the active end, of the kind chosen in the bar, and a tap on the far end of three points or more closes the shape. A tap never moves a point: a drag on its handle does. On a computer, Shift-click adds the other kind of point, Shift-click on a handle switches its kind, and Alt-click on the line inserts a point there. While the tool is open, double-click and double-tap zoom and Shift-drag box zoom are off, and findings already on the map don't take taps.
+- **Handles.** Each point has a handle: a 12 px dot in a 44 px target, square for a straight point and round for a curved one, larger and filled when selected. A long press on a handle, 500 ms without moving 8 px, switches its kind, with a short vibration where the device has one. Handles take no text selection, no callout and no context menu. The path is one tab stop with a roving tabindex. On a handle the arrow keys move the point 3 px, or 24 px with Shift, `[` and `]` step to the previous and next point, and Delete removes it. Handles are drawn only for points in view and only while 150 or fewer are. Past that the ends and the selected point keep theirs, and the status line says "Zoom in to change points".
+- **The drawing bar**, in the panel: Undo, Redo, "Add a point at the cross" (the keyboard's and the switch user's way to add a point), "Next point: Straight | Curved", "Close the shape" and Finish, with a status line (`role="status"`) such as "3 points, 254 m. Click the map to add the next one at the north-east end." Undo and Redo go back through 100 states.
+- **The selected-point bar**, when a handle is selected: its name ("Point 2 of 4, curved, SU 1234 5678"), "Make it straight" or "Make it curved", "Delete point", "Insert a point after", "Continue from this end" on either end of an open path, which moves the map to it, "Previous point", "Next point" and Done.
+- **The phone's bar.** While points are being added on a phone, the sheet rests at its peek stop and a floating bar takes the primary action's place above it: one row of 44 px icon buttons and one line of status, so the map above stays free to tap. A selected point gets its own bar the same way. Once drawing stops, the sheet rises and the full bars are in it.
+- **Guidance.** A plain-text block at the top of the panel, "How to mark it", says what a tap does now and what else is possible, and changes as the marking grows from nothing to a spot, a line and a closed shape. Its second line names the gestures of the device in hand, or the keys once the map or a handle has keyboard focus.
+- **The preview.** Up to 200 points the path is drawn in SVG over the map, and past that as a map layer.
+- **Changing a saved shape.** The tool opens with the saved path framed clear of the search box, the map's buttons, the panel or the sheet, and the bars. Where others have given second looks, that ground is drawn as a faint wide line under the path, and a refusal of the change is shown beside the path.
+
+## Choosing between findings
+
+A tap where several findings meet opens the one that is clearly most specific: markers beat lines, lines beat area edges, and the smaller of two alike wins only when it is under half the other's size. An area is picked by its edge, never its inside. A finger reaches 16 px from the tap and a mouse 6 px. Anything else opens the chooser, which says "2 findings here" and lists each with its title, tier badge and class, at most 8 and then "Show all in Explore". On a computer it is a popover beside the pointer, and on a phone a short sheet at the top or the bottom, whichever leaves the tap in sight. Hovering or focusing an entry highlights its shape on the map. The arrow keys, Home and End move through it, Enter opens one, and Escape closes it and puts focus back on the map. On a computer the pointer highlights what a click would open, or says "2 findings here" where it would open the chooser. Explore's list is the keyboard route to every finding in view.
 
 ## Words
 

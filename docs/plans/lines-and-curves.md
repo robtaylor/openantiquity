@@ -395,13 +395,13 @@ The contract above is what the workstreams build against. WS-A comes first, beca
 
 ### WS-C — End-to-end checks and documents
 
-**Status:** Not started. Depends on WS-A and WS-B.
+**Status:** Built on the branch, not yet on `main`. Steps 1 to 5 landed on 2026-11-13. Real-browser specs: `frontend/e2e-full/lines.spec.ts` and `leaks.spec.ts` against the real backend, and `frontend/e2e/lines.spec.ts`, `overlap.spec.ts` and the drawing tests in `accessibility.spec.ts` in fixture mode. The first area doc, [findings](../architecture/findings.md), holds the shapes reference. Two phone faults were put right on the way: "Change the shape" now frames a saved path clear of the search box, the map's buttons and the bars, and the finding page says when an old shape can only be replaced. Decisions 0028 to 0031 are still Proposed.
 
 **Steps:**
 
-1. `frontend/e2e/lines.spec.ts`, against a real backend: draw a mixed line by mouse with Shift-click, save it signed in, reopen it, continue from the far end, and see "added since the last second look" after a second account's answer. Draw a closed shape on the phone project with taps, a long press on a handle and the bar's buttons, and save it as a draft, sign in, send it.
+1. `frontend/e2e-full/lines.spec.ts`, against a real backend, where the real-backend specs live: draw a mixed line by mouse with Shift-click, save it signed in, reopen it, continue from the far end, and see "added since the last second look" after a second account's answer. Draw a closed shape on the phone project with taps, a long press on a handle and the bar's buttons, and save it as a draft, sign in, send it.
 2. `e2e/accessibility.spec.ts`: draw and finish a line with the keyboard alone, and, on the phone project, check that the drawing bar and the chooser never cover the point tapped and that Tab never lands on anything hidden.
-3. A leak run: a protected line seen signed out shows only its square on the map, the page, the activity feed and a download. A member sees it exactly: since Decision 0032 a signed-out visitor is the only reader kept to a square.
+3. A leak run, `frontend/e2e-full/leaks.spec.ts`: a protected line seen signed out shows only its square on the map, the page, the activity feed and a download. A member sees it exactly: since Decision 0032 a signed-out visitor is the only reader kept to a square.
 4. The overlap cases: a point inside an area opens the point, a tap inside an area away from its edge opens nothing of it, a road through a field system opens the road, a tap where two roads cross shows the chooser with both, a finger's tap opens the chooser where a mouse's click at the same spot opens one finding, and Explore's list reaches all of them by keyboard.
 5. Documents: the findings area doc gains "Shapes" with the curve definition and the limits, `docs/ARCHITECTURE.md` gains the columns, routes and codes, `docs/UI.md` gains the drawing tool, the line and area styles and the chooser, `docs/DESIGN.md`'s "Findings" says a finding can be a line or a shape and extended later, `CHANGELOG.md` `[Unreleased]` leads with what it means for you, and the decision records below. `uv run docs/scripts/doctool.py lint` passes.
 
