@@ -91,17 +91,34 @@ const lastHandles = new WeakMap<
   { path: Path; selected: number | null; view: string; handles: HandlesInView }
 >();
 
-function handlesFor(map: MapLibreMap, path: Path, selected: number | null): HandlesInView {
-  const { width, height } = mapSize(map);
-  // The bounds are of the ground at sea level, and terrain lifts a point towards the edge of a pitched view, so they
-  // are widened by a quarter on each side. Only a point inside them can be on screen, so the rest are never projected.
+export interface LonLatBounds {
+  west: number;
+  east: number;
+  south: number;
+  north: number;
+}
+
+/**
+ * The view's bounds, widened by a quarter on each side. They are of the
+ * ground at sea level, and terrain lifts a point towards the edge of a
+ * pitched view. Only a place inside them can be on screen, so the rest
+ * need never be projected.
+ */
+export function paddedBounds(map: MapLibreMap): LonLatBounds {
   const bounds = map.getBounds();
   const padLon = (bounds.getEast() - bounds.getWest()) / 4;
   const padLat = (bounds.getNorth() - bounds.getSouth()) / 4;
-  const west = bounds.getWest() - padLon;
-  const east = bounds.getEast() + padLon;
-  const south = bounds.getSouth() - padLat;
-  const north = bounds.getNorth() + padLat;
+  return {
+    west: bounds.getWest() - padLon,
+    east: bounds.getEast() + padLon,
+    south: bounds.getSouth() - padLat,
+    north: bounds.getNorth() + padLat,
+  };
+}
+
+function handlesFor(map: MapLibreMap, path: Path, selected: number | null): HandlesInView {
+  const { width, height } = mapSize(map);
+  const { west, east, south, north } = paddedBounds(map);
   const inView: number[] = [];
   path.points.forEach((point, index) => {
     if (point.lon < west || point.lon > east || point.lat < south || point.lat > north) return;

@@ -25,7 +25,7 @@ import type { ShapeLimits } from "../../api/meta.js";
 import { useMapStore } from "../../map/store.js";
 import { lngLatAtClient, screenPoint } from "../../map/useMapFrame.js";
 import { useMarkStore } from "./markStore.js";
-import { dragStartPx, LONG_PRESS_MS, mapSize, visibleHandles } from "./PathHandles.js";
+import { dragStartPx, LONG_PRESS_MS, type LonLatBounds, mapSize, paddedBounds, visibleHandles } from "./PathHandles.js";
 import { hasRoomForPoint, type LngLat, type Path, segmentMiddles } from "./path.js";
 
 /** A dot's target, and a point handle's, across in pixels. */
@@ -47,7 +47,8 @@ type Project = (point: LngLat) => { x: number; y: number };
  * Which segments get a dot, and where on screen: those whose middle is in
  * view and at least `DOT_CLEARANCE_PX` from the segment's ends and from
  * every handle drawn (`handles`). None while the handles are `thinned`, or
- * without room for one more point under `limits`.
+ * without room for one more point under `limits`. A middle outside
+ * `bounds`, the view's padded bounds, is left out before it is projected.
  */
 export function dotsInView(
   path: Path,
@@ -56,6 +57,7 @@ export function dotsInView(
   handles: readonly number[],
   thinned: boolean,
   limits: ShapeLimits | undefined,
+  bounds?: LonLatBounds,
 ): Dot[] {
   if (thinned || !limits || !hasRoomForPoint(path, limits)) return [];
   const middles = segmentMiddles(path);
@@ -68,6 +70,8 @@ export function dotsInView(
   const handlePlaces = handles.map(at).filter((place) => place !== null);
   const dots: Dot[] = [];
   middles.forEach((middle, index) => {
+    const [lon, lat] = middle;
+    if (bounds && (lon < bounds.west || lon > bounds.east || lat < bounds.south || lat > bounds.north)) return;
     const { x, y } = project(middle);
     if (x < 0 || x > size.width || y < 0 || y > size.height) return;
     const near = [at(index), at((index + 1) % count), ...handlePlaces];
@@ -172,7 +176,15 @@ export function MidpointDots({ map, path }: { map: MapLibreMap; path: Path }) {
   const limits = useMapStore((state) => state.meta?.shapes);
   const onPointerDown = useDotPress(map);
   const { indices, thinned } = visibleHandles(map, path, selected);
-  const dots = dotsInView(path, (point) => screenPoint(map, point), mapSize(map), indices, thinned, limits);
+  const dots = dotsInView(
+    path,
+    (point) => screenPoint(map, point),
+    mapSize(map),
+    indices,
+    thinned,
+    limits,
+    paddedBounds(map),
+  );
   return (
     <div className="fc-midpoints" aria-hidden="true">
       {dots.map((dot) => (

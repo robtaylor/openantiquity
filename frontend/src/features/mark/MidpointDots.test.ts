@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { metaFixture } from "../../test/fixtures/meta.js";
 import { DOT_CLEARANCE_PX, dotsInView } from "./MidpointDots.js";
-import { closePath, type LngLat, type Path } from "./path.js";
+import { closePath, type LngLat, type Path, segmentMiddles } from "./path.js";
 
 const limits = metaFixture.shapes;
 const SIZE = { width: 1000, height: 800 };
@@ -50,6 +50,23 @@ describe("which midpoint dots are shown", () => {
   it("shows only what is in view", () => {
     const path = onScreen([100, 100], [300, 100], [2400, 100]);
     expect(dotsInView(path, project, SIZE, [0, 1], false, limits).map((dot) => dot.index)).toEqual([0]);
+  });
+
+  it("projects no middle that lies outside the padded bounds of the view", () => {
+    const path = onScreen([100, 100], [300, 100], [2400, 100], [2600, 100]);
+    const projected: LngLat[] = [];
+    const counting = (point: LngLat) => {
+      projected.push(point);
+      return project(point);
+    };
+    // The bounds reach as far as x 1200 on this projection, so the last two middles are left out unprojected.
+    const bounds = { west: -2, east: 1200 / 100_000 - 2, south: 51, north: 52 };
+    const dots = dotsInView(path, counting, SIZE, [0, 1], false, limits, bounds);
+    expect(dots.map((dot) => dot.index)).toEqual([0]);
+    const middles = segmentMiddles(path);
+    expect(projected).toContain(middles[0]);
+    expect(projected).not.toContain(middles[1]);
+    expect(projected).not.toContain(middles[2]);
   });
 
   it("shows none while the handles are thinned, for a spot, or at the point limit", () => {
