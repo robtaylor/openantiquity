@@ -28,7 +28,7 @@ cd backend && uv run pytest -q tests/infra tests/test_config.py tests/test_stora
 fly apps list --org openantiquity
 # Expect: openantiquity and openantiquity-jobs alone
 fly machine list --app openantiquity
-# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit de016fa or later
+# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit db914b9 or later
 fly ips list --app openantiquity
 # Expect: the private address, the shared IPv4 address 66.241.124.216 and the IPv6 address 2a09:8280:1::1fe:8e38:0
 fly machine list --app openantiquity-jobs
@@ -61,7 +61,9 @@ The last pair names the jobs image that exists. `fly_jobs.py` looks for the imag
 | `a0d74e6` | Run the end-to-end tests on the real backend in CI | `pnpm e2e:full` has a CI job of its own |
 | `3958ced` | Lines and curves, 115 commits | Its release added columns and a table, and the shapes backfill was run afterwards and found nothing to fill |
 | `945e33a` | The first point follows the chosen kind, and an index of shaped findings | The index steadies the map query's plan, which had failed a plan test on one CI run |
-| `de016fa` | The restricted level's code removed | The commit the web app and the hourly machine run since 2026-11-13. Its release made the check on `findings.sensitivity` again with two values |
+| `de016fa` | The restricted level's code removed | The commit the hourly machine runs, since nothing in the backend has changed after it. Its release made the check on `findings.sensitivity` again with two values |
+| `25a218d` | Terrain tiles that wait, and the map switch first in the layer panel | The map asks again for a tile the server answers 503 with a `Retry-After`. Found by the owner on the live site |
+| `db914b9` | The drawing guide, midpoint dots, an unsaved marking kept, and a map that stays put | The commit the web app runs since 2026-11-13. Frontend only |
 
 ## Open follow-ups (priority-ordered)
 
