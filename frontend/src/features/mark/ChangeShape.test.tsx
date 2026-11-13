@@ -522,6 +522,31 @@ describe("replacing an old shape of several parts", () => {
   });
 });
 
+describe("leaving the page while changing a shape", () => {
+  function asksBeforeLeaving(): boolean {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+
+  it("asks only while there is a change not saved, and not after Cancel", async () => {
+    const user = userEvent.setup();
+    const finding = lineFinding();
+    await openChange(finding);
+    expect(asksBeforeLeaving()).toBe(false);
+    await user.click(screen.getByRole("button", { name: /^Point 2 of 3/ }));
+    await user.click(changePanel().getByRole("button", { name: "Delete point" }));
+    expect(asksBeforeLeaving()).toBe(true);
+    await user.click(changePanel().getByRole("button", { name: "Undo" }));
+    expect(asksBeforeLeaving()).toBe(false);
+    await user.click(changePanel().getByRole("button", { name: "Redo" }));
+    expect(asksBeforeLeaving()).toBe(true);
+    await user.click(changePanel().getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(address()).toBe(`/f/${finding.public_id}`));
+    expect(asksBeforeLeaving()).toBe(false);
+  });
+});
+
 describe("changing a shape on a phone", () => {
   it("floats the compact bar while points are added, as marking does", async () => {
     const user = userEvent.setup();

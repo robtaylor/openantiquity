@@ -93,6 +93,7 @@ One tool marks a finding, whether it is a spot, a line or a closed shape, and ch
 - **The phone's bar.** While points are being added on a phone, the sheet rests at its peek stop and a floating bar takes the primary action's place above it: one row of 44 px icon buttons and one line of status, so the map above stays free to tap. A selected point gets its own bar the same way. When either bar appears or grows, the map moves up just enough that no point already placed is under it. Once drawing stops, the sheet rises and the full bars are in it.
 - **Guidance.** A plain-text block at the top of the panel, "How to mark it", says what a tap does now and what else is possible, and changes as the marking grows from nothing to a spot, a line and a closed shape. Its second line names the gestures of the device in hand, or the keys once the map or a handle has keyboard focus.
 - **The preview.** Up to 200 points the path is drawn in SVG over the map, and past that as a map layer.
+- **Leaving.** Nothing is kept until it is saved, or kept as a draft. Until then, closing or reloading the page with a line or a shape of two points or more brings up the browser's own "leave this page?".
 - **Changing a saved shape.** The tool opens with the saved path framed clear of the search box, the map's buttons, the panel or the sheet, and the bars. Where others have given second looks, that ground is drawn as a faint wide line under the path, and a refusal of the change is shown beside the path.
 
 ## Choosing between findings

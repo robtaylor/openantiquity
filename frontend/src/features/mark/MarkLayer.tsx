@@ -14,7 +14,7 @@ import { findingKeys } from "../findings/keys.js";
 import { EMPTY_COLLECTION, type FeatureCollection } from "../records/geojson.js";
 import { baseRevision, changeShapeId } from "./editingKey.js";
 import { findingDrafts, useSavedDrafts } from "./findingDrafts.js";
-import { useMarkPath, useMarkStore } from "./markStore.js";
+import { hasUnkeptLine, useMarkPath, useMarkStore } from "./markStore.js";
 import { PathHandles } from "./PathHandles.js";
 import { closesAt, type LngLat, type Path, pathGeometry, segmentNear } from "./path.js";
 import { usePendingFindings } from "./pending.js";
@@ -287,6 +287,25 @@ function useRefreshOnSavedDrafts(): void {
 }
 
 /**
+ * The browser's own "leave this page?" while a line or a shape is drawn on
+ * a marking page that isn't saved or kept as a draft. Nothing is kept until
+ * then, so closing or reloading the page would lose it.
+ */
+function useAskBeforeLeaving(marking: boolean): void {
+  const unkept = useMarkStore(hasUnkeptLine);
+  useEffect(() => {
+    if (!marking || !unkept) return;
+    const ask = (event: BeforeUnloadEvent): void => {
+      event.preventDefault();
+      // Browsers before the preventDefault() way ask only when this is set.
+      event.returnValue = true;
+    };
+    window.addEventListener("beforeunload", ask);
+    return () => window.removeEventListener("beforeunload", ask);
+  }, [marking, unkept]);
+}
+
+/**
  * At "Change the shape", whether the path in the tool is this finding's and
  * the reader may change it, as the finding's page last said: nothing is
  * drawn otherwise, so a reader who may not see the shape exactly never sees
@@ -318,6 +337,7 @@ export function MarkLayer() {
   const drawing = useMarkStore((state) => state.drawing);
   const editing = useMarkStore((state) => state.draftId);
   useMarkingClicks(map, marking);
+  useAskBeforeLeaving(marking);
   useLongPathOnMap(map, path, marking);
   useRefreshOnSavedDrafts();
 

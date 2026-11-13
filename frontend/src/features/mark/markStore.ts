@@ -58,6 +58,12 @@ export interface MarkFields {
   editing: string | null;
   /** The path and the states undo and redo step through. */
   shape: History<Path>;
+  /**
+   * The path as it was last kept: a draft's as it was taken up or kept, a
+   * saved finding's as it was taken up. Null for a new mark. While the path
+   * is another, it is only here, and leaving the page loses it.
+   */
+  kept: Path | null;
   /** Which end of an open path a tap adds to. */
   end: PathEnd;
   /** The kind of point a tap adds, as set on the drawing bar. */
@@ -86,6 +92,8 @@ export interface MarkState extends MarkFields {
   start: () => void;
   /** Take up a draft to change or save it. */
   load: (draftId: string, draft: FindingDraft) => void;
+  /** The path as it is now has been kept as draft `draftId`. */
+  keptAs: (draftId: string) => void;
   /** Take up a path to change, named `editing` by the caller, with nothing selected and no points being added. */
   edit: (editing: string, path: Path) => void;
   /** A tap on the map, or "Add a point at the cross": a point of the chosen kind, or the other with `otherKind`. */
@@ -125,6 +133,7 @@ export const EMPTY_MARK: MarkFields = {
   draftId: null,
   editing: null,
   shape: history(EMPTY_PATH),
+  kept: null,
   end: "end",
   nextKind: "corner",
   selected: null,
@@ -177,19 +186,24 @@ export const useMarkStore = create<MarkState>()((set, get) => {
 
     start: () => set({ ...EMPTY_MARK }),
 
-    load: (draftId, draft) =>
+    load: (draftId, draft) => {
+      const path = pathFrom(draft);
       set({
         ...EMPTY_MARK,
         draftId,
-        shape: history(pathFrom(draft)),
+        shape: history(path),
+        kept: path,
         drawing: false,
         featureClass: draft.feature_class,
         period: draft.period,
         title: draft.title,
         note: draft.description ?? "",
-      }),
+      });
+    },
 
-    edit: (editing, path) => set({ ...EMPTY_MARK, editing, shape: history(path), drawing: false }),
+    edit: (editing, path) => set({ ...EMPTY_MARK, editing, shape: history(path), kept: path, drawing: false }),
+
+    keptAs: (draftId) => set((state) => ({ draftId, kept: state.shape.present })),
 
     add: (point, limits, otherKind = false) => {
       const { nextKind, end, drawing } = get();
@@ -265,6 +279,12 @@ onPersonChanged(() => useMarkStore.getState().start());
 /** True while taps add points: drawing, and the shape not closed. */
 export function isAdding(state: MarkFields): boolean {
   return state.drawing && !state.shape.present.closed;
+}
+
+/** True while a line or a shape is drawn that isn't saved or kept as a draft, which leaving the page would lose. */
+export function hasUnkeptLine(state: MarkFields): boolean {
+  const path = state.shape.present;
+  return path.points.length >= 2 && path !== state.kept;
 }
 
 /** The path being marked, for components. */

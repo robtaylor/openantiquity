@@ -249,7 +249,16 @@ export const MapPane = memo(function MapPane({ meta, viewId, pane: paneRole, fin
     const onReturn = (): void => {
       leaving = false;
     };
-    window.addEventListener("beforeunload", onLeave);
+    // Something on the page may ask "leave this page?" (marking does, with a
+    // line not yet kept). When the person stays, the page is still here a
+    // moment later, and tiles are reported again.
+    const onBeforeUnload = (event: Event): void => {
+      leaving = true;
+      window.setTimeout(() => {
+        if (event.defaultPrevented) leaving = false;
+      }, 0);
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
     window.addEventListener("pagehide", onLeave);
     window.addEventListener("pageshow", onReturn);
 
@@ -372,7 +381,7 @@ export const MapPane = memo(function MapPane({ meta, viewId, pane: paneRole, fin
       unsubscribe();
       health.dispose();
       cancelTerrainTimer();
-      window.removeEventListener("beforeunload", onLeave);
+      window.removeEventListener("beforeunload", onBeforeUnload);
       window.removeEventListener("pagehide", onLeave);
       window.removeEventListener("pageshow", onReturn);
       applyRef.current = null;

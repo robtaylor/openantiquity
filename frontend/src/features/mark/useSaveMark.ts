@@ -89,7 +89,7 @@ export function useSaveMark(meta: Meta): () => Promise<void> {
         }
         throw error;
       }
-      useMarkStore.setState({ draftId: kept.id });
+      useMarkStore.getState().keptAs(kept.id);
       navigate(draftPath(kept.id), { replace: true });
       // Once ready, the drafts machinery sends it, so nothing is sent from here: that could
       // save it twice. A draft taken over at sign-in is held until the person says so

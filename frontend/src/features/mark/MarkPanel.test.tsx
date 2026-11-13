@@ -793,6 +793,46 @@ describe("the person changing", () => {
   });
 });
 
+/** True when leaving the page now would bring up the browser's "leave this page?". */
+function asksBeforeLeaving(): boolean {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
+describe("leaving the page with a line drawn", () => {
+  it("asks once a line of two points is drawn, and not once it is kept as a draft", async () => {
+    const user = userEvent.setup();
+    const { map } = await openMarking(false);
+    expect(asksBeforeLeaving()).toBe(false);
+    act(() => map.click(400, 300));
+    expect(asksBeforeLeaving()).toBe(false);
+    act(() => map.click(450, 300));
+    expect(asksBeforeLeaving()).toBe(true);
+    await user.click(panel().getByRole("radio", { name: "Hillfort" }));
+    await user.click(panel().getByRole("button", { name: "Save finding" }));
+    expect(await screen.findByRole("dialog", { name: "Sign in" })).toBeInTheDocument();
+    expect(asksBeforeLeaving()).toBe(false);
+    // A change to the draft isn't kept until it is saved again.
+    await user.click(within(screen.getByRole("dialog", { name: "Sign in" })).getByRole("button", { name: "Close" }));
+    act(() => useMarkStore.getState().move(1, [points()[1]?.lon ?? 0, (points()[1]?.lat ?? 0) + 0.001]));
+    expect(asksBeforeLeaving()).toBe(true);
+  });
+
+  it("doesn't ask once the line is saved", async () => {
+    const user = userEvent.setup();
+    const { map, routes } = await openMarking();
+    routes.on("POST /findings", (call) => json(createdFinding(call.body as FindingCreate, "abc123"), 201));
+    act(() => map.click(400, 300));
+    act(() => map.click(450, 300));
+    expect(asksBeforeLeaving()).toBe(true);
+    await user.click(panel().getByRole("radio", { name: "Hillfort" }));
+    await user.click(panel().getByRole("button", { name: "Save finding" }));
+    await waitFor(() => expect(address()).toBe("/f/abc123"));
+    expect(asksBeforeLeaving()).toBe(false);
+  });
+});
+
 describe("saving, signed out", () => {
   it("sends a draft taken over at sign-in when Save is pressed on its own form", async () => {
     const user = userEvent.setup();

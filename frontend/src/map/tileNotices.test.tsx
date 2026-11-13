@@ -212,6 +212,35 @@ describe("a view whose tiles fail", () => {
   });
 });
 
+describe("leaving the page", () => {
+  /** The browser's "leave this page?", with the page told to ask when `asked`. */
+  function leave(asked: boolean): void {
+    const ask = (event: Event): void => event.preventDefault();
+    if (asked) window.addEventListener("beforeunload", ask);
+    act(() => {
+      window.dispatchEvent(new Event("beforeunload", { cancelable: true }));
+    });
+    window.removeEventListener("beforeunload", ask);
+  }
+
+  it("says nothing of tiles cut off as the page goes", async () => {
+    const map = await ready("/");
+    leave(false);
+    wait(0);
+    failTwice(map, "view-composite");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("says again that tiles fail once the person chooses to stay on the page", async () => {
+    const map = await ready("/");
+    leave(true);
+    // The page is still here once the prompt has been answered.
+    wait(0);
+    failTwice(map, "view-composite");
+    expect(screen.getByRole("alert")).toHaveTextContent("The Composite layer isn't loading.");
+  });
+});
+
 describe("noticesFor", () => {
   it("mentions only what is on screen", () => {
     const base = {
