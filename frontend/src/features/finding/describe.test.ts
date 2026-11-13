@@ -17,6 +17,7 @@ import { MEMBER_ACTIONS } from "../../test/fixtures/findings.js";
 import { metaFixture as meta } from "../../test/fixtures/meta.js";
 import {
   changeMessage,
+  classLabel,
   formatDate,
   groupEvidence,
   isAnswerStep,
@@ -25,6 +26,7 @@ import {
   offered,
   positionOf,
   SQUARE_SENTENCE,
+  shownClass,
   stateReason,
   stepActions,
   type Viewer,
@@ -34,6 +36,22 @@ import {
 const SIGNED_OUT: Viewer = { ready: false, signedIn: false, handle: null, role: null };
 const MEMBER: Viewer = { ready: true, signedIn: true, handle: OTHER.handle, role: "member" };
 const THE_FINDER: Viewer = { ready: true, signedIn: true, handle: FINDER.handle, role: "member" };
+
+describe("a class this page's /meta doesn't list", () => {
+  // Sent by a later version of the server to a page left open across a deploy.
+  const LATER = "added_by_a_later_version";
+
+  it("is shown as Not sure", () => {
+    expect(shownClass(meta, LATER)).toBe("unknown");
+    expect(classLabel(meta, LATER)).toBe("Not sure");
+  });
+
+  it("leaves a class it lists as it is", () => {
+    expect(shownClass(meta, "round_barrow")).toBe("round_barrow");
+    expect(classLabel(meta, "round_barrow")).toBe("Round barrow or mound");
+    expect(classLabel(meta, "unknown")).toBe("Not sure");
+  });
+});
 
 describe("positionOf", () => {
   it("offers a second look to a member the server lets answer", () => {

@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiFetch } from "../../api/client.js";
@@ -34,6 +34,7 @@ import {
   setUpShellTests,
   signedOutResponse,
 } from "../../test/shellHarness.js";
+import { FeatureIcon } from "../../ui/featureIcons.js";
 import type { Me } from "../account/api.js";
 import { useAccountUi } from "../account/requireAccount.js";
 import { DRAFTS_STORAGE_KEY, resetDraftsForTests } from "../drafts/store.js";
@@ -971,5 +972,63 @@ describe("states of the page", () => {
       "/api/v1/findings/f-ring/export?format=csv",
     );
     expect(panel.getByRole("button", { name: "Copy link" })).toBeInTheDocument();
+  });
+});
+
+describe("a class a later version of the server added", () => {
+  // This page's `/meta` was loaded before the deploy, so it has no name for the class.
+  const LATER = "added_by_a_later_version" as FindingDetail["feature_class"];
+
+  it("is shown as Not sure, with its icon, in the head and in the answers", async () => {
+    const finding = finderView({
+      feature_class: LATER,
+      assessment: {
+        ...finderView().assessment,
+        tallies: {
+          ...(finderView().assessment.tallies as NonNullable<FindingDetail["assessment"]["tallies"]>),
+          community_class: LATER,
+        },
+      },
+    });
+    const routes = serve(finding, THE_FINDER);
+    routes.on(`GET /findings/${finding.public_id}/observations`, () =>
+      json({
+        items: [observationFixture({ feature_class: LATER as Observation["feature_class"] })],
+        next_cursor: null,
+      }),
+    );
+    const { panel } = await open(finding, THE_FINDER, routes);
+    const facts = document.querySelector(".fc-finding__facts") as HTMLElement;
+    expect(within(facts).getByText("Not sure")).toBeInTheDocument();
+    expect(within(facts).queryByText(/later version/)).toBeNull();
+    // The same class twice is not a disagreement to point out.
+    expect(within(facts).queryByText("Others think it's")).toBeNull();
+    const icon = facts.querySelector(".fc-feature-icon") as SVGElement;
+    const notSure = render(<FeatureIcon classId="unknown" />).container.querySelector("svg");
+    expect(icon.innerHTML).toBe(notSure?.innerHTML);
+    expect(await panel.findByText(/: not sure/)).toBeInTheDocument();
+  });
+
+  it("keeps the class when the finder saves other changes, and sends one they choose", async () => {
+    const user = userEvent.setup();
+    const finding = finderView({ feature_class: LATER });
+    const routes = serve(finding, THE_FINDER);
+    routes.on("PATCH /findings/f-ring", (call) => json({ ...finding, ...(call.body as object) }));
+    const { panel } = await open(finding, THE_FINDER, routes);
+
+    await user.click(panel.getByRole("button", { name: "Edit" }));
+    let dialog = within(screen.getByRole("dialog", { name: "Edit your finding" }));
+    expect(dialog.getByLabelText("What it looks like")).toHaveValue("unknown");
+    await user.type(dialog.getByLabelText("Title"), " again");
+    await user.click(dialog.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(routes.callsTo("PATCH /findings/f-ring")).toHaveLength(1));
+    expect(routes.callsTo("PATCH /findings/f-ring")[0]?.body).toEqual({ title: `${finding.title} again` });
+
+    await user.click(panel.getByRole("button", { name: "Edit" }));
+    dialog = within(screen.getByRole("dialog", { name: "Edit your finding" }));
+    await user.selectOptions(dialog.getByLabelText("What it looks like"), "moat");
+    await user.click(dialog.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(routes.callsTo("PATCH /findings/f-ring")).toHaveLength(2));
+    expect(routes.callsTo("PATCH /findings/f-ring")[1]?.body).toEqual({ feature_class: "moat" });
   });
 });

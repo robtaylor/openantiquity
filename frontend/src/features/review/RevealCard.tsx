@@ -6,7 +6,7 @@ import { Button } from "../../ui/Button.js";
 import { FeatureIcon } from "../../ui/featureIcons.js";
 import { Meter } from "../../ui/Meter.js";
 import { TierBadge } from "../../ui/TierBadge.js";
-import { labelOf } from "../finding/describe.js";
+import { classLabel, labelOf } from "../finding/describe.js";
 import { RevealSummary } from "../finding/secondLook/RevealSummary.js";
 import type { Reveal } from "../finding/types.js";
 import { findingPath } from "../findings/selection.js";
@@ -57,7 +57,7 @@ export function RevealCard({ meta, reveal, onNext }: RevealCardProps) {
             <dt>Looks like</dt>
             <dd>
               <FeatureIcon classId={finding.feature_class} size={18} />
-              {labelOf(meta.vocab.feature_classes, finding.feature_class)}
+              {classLabel(meta, finding.feature_class)}
             </dd>
           </div>
           <div>

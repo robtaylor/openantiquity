@@ -16,7 +16,7 @@ import { isMapLive } from "../../map/MapPane.js";
 import { useDrawnFindings } from "../../map/useFindingsOverlay.js";
 import { Chooser, type ChooserEntry } from "../../ui/Chooser.js";
 import { TierBadge } from "../../ui/TierBadge.js";
-import { labelOf } from "../finding/describe.js";
+import { classLabel, labelOf } from "../finding/describe.js";
 import { findingPath, useSelectedFinding } from "../findings/selection.js";
 import { useOpenExploreAt } from "./openExplore.js";
 
@@ -61,7 +61,7 @@ export function FindingChooser({
   const entries: ChooserEntry[] = shown.map((candidate) => {
     const finding = drawn.get(candidate.publicId);
     const tier = { id: finding?.tier ?? "", label: labelOf(meta.vocab.tiers, finding?.tier ?? "") };
-    const featureClass = labelOf(meta.vocab.feature_classes, finding?.feature_class ?? "");
+    const featureClass = finding?.feature_class ? classLabel(meta, finding.feature_class) : "";
     const title = finding?.title ?? "A finding";
     return {
       id: candidate.publicId,

@@ -6,11 +6,12 @@ import { RECORD_LAYERS } from "../../map/overlayLayers.js";
 import { overlayTroubleKey, useMapStore, useViewAreaStore } from "../../map/store.js";
 import { FINDINGS_MIN_ZOOM } from "../../map/useFindingsOverlay.js";
 import { apiError, routeApi } from "../../test/apiRoutes.js";
-import { findingCollection, findingPage, findingsData, offset } from "../../test/fixtures/findings.js";
+import { findingCollection, findingPage, findingSummary, findingsData, offset } from "../../test/fixtures/findings.js";
 import { json, mapReady, renderShell, setUpShellTests } from "../../test/shellHarness.js";
 import { FINDINGS_PAGE_SIZE } from "../findings/api.js";
 import { useFindingFilters } from "../findings/filters.js";
 import { useSelectedFinding } from "../findings/selection.js";
+import type { FindingSummary } from "../findings/types.js";
 
 vi.mock("maplibre-gl", async () => {
   const fake = await import("../../test/fakeMapLibre.js");
@@ -64,6 +65,27 @@ describe("the Explore panel", () => {
 
     const hidden = within(list).getByRole("link", { name: /Finding protected/ });
     expect(hidden).toHaveTextContent(/Somewhere in square SU \d{2} \d{2}/);
+  });
+
+  it("names a finding of a class a later version of the server added as Not sure", async () => {
+    const one = findingCollection([{ at: offset(0, 0), public_id: "f-later", tier: "spotted" }]);
+    routeApi(harness.fetchMock(), {
+      "GET /findings": (call) =>
+        call.url.searchParams.get("format") === "geojson"
+          ? json(one)
+          : json({
+              items: one.features.map((feature) =>
+                findingSummary(feature, {
+                  feature_class: "added_by_a_later_version" as FindingSummary["feature_class"],
+                }),
+              ),
+              next_cursor: null,
+            }),
+    });
+    renderShell("/");
+    await mapReady();
+    const list = await screen.findByRole("list", { name: "Findings in view" });
+    expect(within(list).getByRole("link", { name: /Finding f-later/ })).toHaveTextContent("Not sure");
   });
 
   it("asks the server with the filters, for the list and the map alike", async () => {

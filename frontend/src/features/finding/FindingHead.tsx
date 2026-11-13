@@ -10,7 +10,15 @@ import { TierBadge } from "../../ui/TierBadge.js";
 import { tierVar } from "../../ui/tokens.js";
 import { useAccountUi } from "../account/requireAccount.js";
 import { whereRef } from "../findings/square.js";
-import { distanceWords, formatDate, labelOf, SQUARE_SENTENCE, stateReason } from "./describe.js";
+import {
+  classLabel,
+  distanceWords,
+  formatDate,
+  labelOf,
+  SQUARE_SENTENCE,
+  shownClass,
+  stateReason,
+} from "./describe.js";
 import { seeAsFinderDid } from "./mapView.js";
 import { ReportSlot } from "./Slots.js";
 import type { FindingDetail } from "./types.js";
@@ -115,15 +123,15 @@ export function FindingHead({ meta, finding, signedIn, change }: FindingHeadProp
           <dt>Looks like</dt>
           <dd>
             <FeatureIcon classId={finding.feature_class} size={18} />
-            {labelOf(meta.vocab.feature_classes, finding.feature_class)}
+            {classLabel(meta, finding.feature_class)}
           </dd>
         </div>
-        {community && community !== finding.feature_class ? (
+        {community && shownClass(meta, community) !== shownClass(meta, finding.feature_class) ? (
           <div>
             <dt>Others think it's</dt>
             <dd>
               <FeatureIcon classId={community} size={18} />
-              {labelOf(meta.vocab.feature_classes, community)}
+              {classLabel(meta, community)}
             </dd>
           </div>
         ) : null}

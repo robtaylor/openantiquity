@@ -14,7 +14,7 @@ import { AddToInvestigation } from "../investigations/AddToInvestigation.js";
 import { savedPath } from "../mark/ChangeShapePanel.js";
 import { changeShapePath } from "../mark/editingKey.js";
 import { changeSensitivity, exportUrl, lowerSensitivity, updateFinding, withdrawFinding } from "./api.js";
-import { type ViewerPosition, whoSees } from "./describe.js";
+import { shownClass, type ViewerPosition, whoSees } from "./describe.js";
 import { reasonOf, toastFailure } from "./feedback.js";
 import { type PositionField, positionFields, positionWords } from "./positionInText.js";
 import type { FindingDetail, FindingUpdate } from "./types.js";
@@ -56,7 +56,10 @@ function EditDialog({
 }) {
   const [title, setTitle] = useState(finding.title);
   const [description, setDescription] = useState(finding.description ?? "");
-  const [featureClass, setFeatureClass] = useState<string>(finding.feature_class);
+  // A class this page's `/meta` doesn't list is chosen as "Not sure", and
+  // left alone unless another class is chosen, as the server does.
+  const shownFeatureClass = shownClass(meta, finding.feature_class);
+  const [featureClass, setFeatureClass] = useState<string>(shownFeatureClass);
   const [period, setPeriod] = useState<string>(finding.period);
   const [problem, setProblem] = useState<string | null>(null);
   /** The fields the server refused for saying where it is more closely than its square. */
@@ -75,7 +78,7 @@ function EditDialog({
     const changes: FindingUpdate = {};
     if (title.trim() !== finding.title) changes.title = title.trim();
     if (description.trim() !== (finding.description ?? "")) changes.description = description.trim();
-    if (featureClass !== finding.feature_class) changes.feature_class = featureClass as FindingUpdate["feature_class"];
+    if (featureClass !== shownFeatureClass) changes.feature_class = featureClass as FindingUpdate["feature_class"];
     if (period !== finding.period) changes.period = period as FindingUpdate["period"];
     if (Object.keys(changes).length === 0) {
       onClose();

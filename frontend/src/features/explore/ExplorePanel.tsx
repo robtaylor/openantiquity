@@ -12,7 +12,7 @@ import { Skeleton } from "../../ui/Skeleton.js";
 import { TierBadge } from "../../ui/TierBadge.js";
 import { DraftBadge } from "../drafts/DraftBadge.js";
 import { useKindDrafts } from "../drafts/savers.js";
-import { labelOf } from "../finding/describe.js";
+import { classLabel, labelOf } from "../finding/describe.js";
 import { type FilterKey, filterableStates, hasFilters, useFindingFilters } from "../findings/filters.js";
 import { findingPath, useSelectedFinding } from "../findings/selection.js";
 import { whereRef } from "../findings/square.js";
@@ -68,7 +68,7 @@ export function FindingLink({ meta, finding, detail }: { meta: Meta; finding: Fi
         <span className="fc-explore__title">{finding.title}</span>
         <span className="fc-explore__meta">
           <TierBadge tier={tier} state={state} size="sm" />
-          <span className="fc-explore__class">{labelOf(meta.vocab.feature_classes, finding.feature_class)}</span>
+          <span className="fc-explore__class">{classLabel(meta, finding.feature_class)}</span>
         </span>
         {location.obscured ? (
           <span className="fc-explore__where">

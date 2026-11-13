@@ -7,6 +7,7 @@ import { Button } from "../../ui/Button.js";
 import { FeatureIcon } from "../../ui/featureIcons.js";
 import { Skeleton } from "../../ui/Skeleton.js";
 import { TierBadge } from "../../ui/TierBadge.js";
+import { classLabel } from "../finding/describe.js";
 import { fetchRecordFindings, type LinkedFinding, recordKeys } from "./api.js";
 
 /** A step or state by its id, labelled from the vocabulary, or by its id when the vocabulary lacks it. */
@@ -15,14 +16,13 @@ function labelled(list: ReadonlyArray<{ id: string; label: string }>, id: string
 }
 
 function FindingItem({ finding, meta }: { finding: LinkedFinding; meta: Meta }) {
-  const featureClass = labelled(meta.vocab.feature_classes, finding.feature_class);
   return (
     <li className="fc-linked-finding">
       <Link className="fc-linked-finding__link" to={`/f/${encodeURIComponent(finding.public_id)}`}>
         <FeatureIcon classId={finding.feature_class} size={20} />
         <span className="fc-linked-finding__text">
           <span className="fc-linked-finding__title">{finding.title}</span>
-          <span className="fc-linked-finding__class">{featureClass.label}</span>
+          <span className="fc-linked-finding__class">{classLabel(meta, finding.feature_class)}</span>
         </span>
       </Link>
       <TierBadge

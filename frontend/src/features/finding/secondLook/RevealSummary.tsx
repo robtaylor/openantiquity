@@ -1,7 +1,7 @@
 import { Sparkles } from "lucide-react";
 import type { Meta } from "../../../api/meta.js";
 import { FeatureIcon } from "../../../ui/featureIcons.js";
-import { changeMessage, labelOf } from "../describe.js";
+import { changeMessage, classLabel, shownClass } from "../describe.js";
 import type { Comparison, Reveal } from "../types.js";
 import { ANSWER_WORDS } from "./answer.js";
 
@@ -42,7 +42,6 @@ export function RevealSummary({ meta, reveal, id }: { meta: Meta; reveal: Reveal
     { tier: reveal.tier_after, state: reveal.state_after },
   );
   const yours = observation.feature_class;
-  const classes = meta.vocab.feature_classes;
   return (
     <div className="fc-reveal" id={id}>
       <p className="fc-reveal__answer">
@@ -51,11 +50,12 @@ export function RevealSummary({ meta, reveal, id }: { meta: Meta; reveal: Reveal
       <p className="fc-reveal__class">
         <FeatureIcon classId={comparison.finder_class} size={18} />
         <span>
-          The finder marked it as: {labelOf(classes, comparison.finder_class)}.
+          The finder marked it as: {classLabel(meta, comparison.finder_class)}.
           {comparison.matches_finder === true ? " So did you." : null}
-          {comparison.matches_finder === false && yours ? ` You said: ${labelOf(classes, yours)}.` : null}
-          {comparison.community_class && comparison.community_class !== comparison.finder_class
-            ? ` Most people say: ${labelOf(classes, comparison.community_class)}.`
+          {comparison.matches_finder === false && yours ? ` You said: ${classLabel(meta, yours)}.` : null}
+          {comparison.community_class &&
+          shownClass(meta, comparison.community_class) !== shownClass(meta, comparison.finder_class)
+            ? ` Most people say: ${classLabel(meta, comparison.community_class)}.`
             : null}
         </span>
       </p>

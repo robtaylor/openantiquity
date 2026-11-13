@@ -13,6 +13,26 @@ export function labelOf(list: ReadonlyArray<{ id: string; label: string }>, id: 
   return list.find((entry) => entry.id === id)?.label ?? id.replaceAll("_", " ");
 }
 
+/**
+ * The class this page shows for a stored class id: the id itself, or
+ * "unknown" for one this page's `/meta` doesn't list. A page left open
+ * across a deploy keeps the classes it loaded, and the server can then send a
+ * class a later version added. Such a class is shown as "Not sure", as the
+ * server's own earlier version shows it (Decision 0035).
+ */
+export function shownClass(meta: Meta, id: string): string {
+  return meta.vocab.feature_classes.some((entry) => entry.id === id) ? id : UNKNOWN_CLASS;
+}
+
+/** A feature class's label, or "Not sure" for one this page's `/meta` doesn't list. */
+export function classLabel(meta: Meta, id: string): string {
+  const shown = shownClass(meta, id);
+  return meta.vocab.feature_classes.find((entry) => entry.id === shown)?.label ?? NOT_SURE;
+}
+
+const UNKNOWN_CLASS = "unknown";
+const NOT_SURE = "Not sure";
+
 /** "Old map" becomes "old map", but "LIDAR view" keeps its capitals. */
 export function lowerFirst(text: string): string {
   const [first = "", second = ""] = text;

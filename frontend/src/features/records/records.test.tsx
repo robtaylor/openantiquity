@@ -142,6 +142,20 @@ describe("a record's page", () => {
     );
   });
 
+  it("names a finding of a class a later version of the server added as Not sure", async () => {
+    const [first] = AVENUE_LINKED_FINDINGS.items;
+    const later = {
+      ...(first as (typeof AVENUE_LINKED_FINDINGS.items)[number]),
+      feature_class: "added_by_a_later_version",
+    };
+    api.on(`GET /records/${AVENUE_RECORD.id}/findings`, () => json({ items: [later], next_cursor: null }));
+    renderShell(`/r/${AVENUE_RECORD.id}`);
+    const panel = await screen.findByRole("complementary", { name: AVENUE_RECORD.name });
+    const section = await within(panel).findByRole("region", { name: "Findings linked to it" });
+    const link = await within(section).findByRole("link", { name: /Bank beside the avenue/ });
+    expect(within(link).getByText("Not sure")).toBeInTheDocument();
+  });
+
   it("says when no finding has been linked to it yet", async () => {
     renderShell(`/r/${AVENUE_RECORD.id}`);
     const panel = await screen.findByRole("complementary", { name: AVENUE_RECORD.name });

@@ -3,7 +3,7 @@ import type { Meta } from "../../api/meta.js";
 import { Avatar } from "../../ui/Avatar.js";
 import { Skeleton } from "../../ui/Skeleton.js";
 import { fetchObservations } from "./api.js";
-import { creditWords, labelOf } from "./describe.js";
+import { classLabel, creditWords, labelOf } from "./describe.js";
 import { findingPageKeys } from "./keys.js";
 import { ANSWER_WORDS } from "./secondLook/answer.js";
 import type { FindingDetail } from "./types.js";
@@ -43,9 +43,7 @@ export function Answers({ meta, finding }: { meta: Meta; finding: FindingDetail 
                 <strong>{answer.user.display_name}</strong>{" "}
                 <span className="fc-muted">
                   {ANSWER_WORDS[answer.visible].theirs}
-                  {answer.feature_class
-                    ? `: ${labelOf(meta.vocab.feature_classes, answer.feature_class).toLowerCase()}`
-                    : ""}
+                  {answer.feature_class ? `: ${classLabel(meta, answer.feature_class).toLowerCase()}` : ""}
                   {answer.explanation
                     ? `, maybe a ${labelOf(meta.vocab.explanations, answer.explanation).toLowerCase()}`
                     : ""}

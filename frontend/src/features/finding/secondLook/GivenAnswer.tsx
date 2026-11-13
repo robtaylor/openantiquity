@@ -6,7 +6,7 @@ import { Dialog } from "../../../ui/Dialog.js";
 import { Field } from "../../../ui/Field.js";
 import { toast } from "../../../ui/toastStore.js";
 import { putObservation, shapeRevisionField, withdrawObservation } from "../api.js";
-import { labelOf } from "../describe.js";
+import { classLabel } from "../describe.js";
 import { toastFailure } from "../feedback.js";
 import type { FindingDetail, Observation, Reveal } from "../types.js";
 import { ANSWER_WORDS, isReveal, sameAnswer } from "./answer.js";
@@ -75,7 +75,7 @@ export function GivenAnswer({
     }
   }
 
-  const what = observation.feature_class ? ` (${labelOf(meta.vocab.feature_classes, observation.feature_class)})` : "";
+  const what = observation.feature_class ? ` (${classLabel(meta, observation.feature_class)})` : "";
   return (
     <div className="fc-given">
       <p>

@@ -130,3 +130,19 @@ describe("help wanted", () => {
     expect(panel.getByRole("heading", { name: "There's no such kind of help" })).toBeInTheDocument();
   });
 });
+
+describe("a finding of a class a later version of the server added", () => {
+  it("is listed as Not sure", async () => {
+    const later = task("f-ring", "need_strand", "Ring ditch by the long barrow", ["historic_map"]);
+    const finding = {
+      ...(later.finding as NonNullable<TaskItem["finding"]>),
+      feature_class: "added_by_a_later_version",
+    };
+    serve([{ ...(GROUPS[1] as TaskGroup), items: [{ ...later, finding: finding as TaskItem["finding"] }] }]);
+    await openHelp("/help/historic_map");
+
+    const panel = within(await screen.findByRole("complementary", { name: "Map detectives" }));
+    const list = within(await panel.findByRole("list", { name: "Findings that need this" }));
+    expect(list.getByText("Not sure")).toBeInTheDocument();
+  });
+});
