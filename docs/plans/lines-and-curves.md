@@ -1,6 +1,6 @@
 # Plan — Lines and curves for marking findings: draw a finding as a straight or curved line or shape, and extend it later
 
-**Status:** Proposed.
+**Status:** Active.
 
 ## Goal
 
@@ -353,7 +353,7 @@ The contract above is what the workstreams build against. WS-A comes first, beca
 
 ### WS-A — Backend
 
-**Status:** In progress. Steps 1 to 4 landed on 2026-11-12 (`96e2ca4` to `7a712e8`): the curve and its shared vectors, the schema, create and edit, and the routes. Steps 5 to 8 are next.
+**Status:** Built on the branch, not yet on `main`. Steps 1 to 8 landed on 2026-11-12 and 2026-11-13, with the fixes two reviews of the finished backend asked for. The whole suite passes: 6,130 tests on 2026-11-13.
 
 **Steps, in order, each test first:**
 
@@ -375,7 +375,7 @@ The contract above is what the workstreams build against. WS-A comes first, beca
 
 ### WS-B — Frontend
 
-**Status:** Not started. Depends on WS-A step 4 for `pnpm gen:api`. Steps 1 and 2 can start at once.
+**Status:** In progress. Steps 1 to 5 landed on 2026-11-13 (`42e7947` to `f616f08`): the curve, the path model, the generated types, the one-flow drawing tool and drafts. Steps 6 to 8 are next, with the phone's drawing bar made compact.
 
 **Steps, in order, each test first:**
 
@@ -401,7 +401,7 @@ The contract above is what the workstreams build against. WS-A comes first, beca
 
 1. `frontend/e2e/lines.spec.ts`, against a real backend: draw a mixed line by mouse with Shift-click, save it signed in, reopen it, continue from the far end, and see "added since the last second look" after a second account's answer. Draw a closed shape on the phone project with taps, a long press on a handle and the bar's buttons, and save it as a draft, sign in, send it.
 2. `e2e/accessibility.spec.ts`: draw and finish a line with the keyboard alone, and, on the phone project, check that the drawing bar and the chooser never cover the point tapped and that Tab never lands on anything hidden.
-3. A leak run: a restricted line seen signed out and as a member shows only its square on the map, the page, the activity feed and a download.
+3. A leak run: a protected line seen signed out shows only its square on the map, the page, the activity feed and a download. A member sees it exactly: since Decision 0032 a signed-out visitor is the only reader kept to a square.
 4. The overlap cases: a point inside an area opens the point, a tap inside an area away from its edge opens nothing of it, a road through a field system opens the road, a tap where two roads cross shows the chooser with both, a finger's tap opens the chooser where a mouse's click at the same spot opens one finding, and Explore's list reaches all of them by keyboard.
 5. Documents: the findings area doc gains "Shapes" with the curve definition and the limits, `docs/ARCHITECTURE.md` gains the columns, routes and codes, `docs/UI.md` gains the drawing tool, the line and area styles and the chooser, `docs/DESIGN.md`'s "Findings" says a finding can be a line or a shape and extended later, `CHANGELOG.md` `[Unreleased]` leads with what it means for you, and the decision records below. `uv run docs/scripts/doctool.py lint` passes.
 
