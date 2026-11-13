@@ -1,13 +1,16 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { signedOut } from "../features/account/session.js";
 import type { FakeMap } from "../test/fakeMapLibre.js";
 import { findingsData } from "../test/fixtures/findings.js";
+import { meFixture } from "../test/fixtures/me.js";
 import { json, liveMaps, mapReady, renderShell, setUpShellTests } from "../test/shellHarness.js";
 import type { FindingsMapData } from "./findingsData.js";
 import { SQUARE_IMAGE } from "./overlayLayers.js";
 import { overlayTroubleKey, useMapStore } from "./store.js";
 import { overlaySourceId } from "./style.js";
-import { FINDINGS_MIN_ZOOM } from "./useFindingsOverlay.js";
+import { FINDINGS_MIN_ZOOM, useDrawnFindings } from "./useFindingsOverlay.js";
 
 vi.mock("maplibre-gl", async () => {
   const fake = await import("../test/fakeMapLibre.js");
@@ -23,6 +26,15 @@ function answerFindings(respond: () => Response): void {
 
 function drawn(map: FakeMap): FindingsMapData | undefined {
   return map.sourceData(SOURCE) as FindingsMapData | undefined;
+}
+
+function SignOutHere() {
+  const client = useQueryClient();
+  return (
+    <button type="button" onClick={() => signedOut(client)}>
+      Sign out for the test
+    </button>
+  );
 }
 
 describe("the findings overlay", () => {
@@ -74,6 +86,21 @@ describe("the findings overlay", () => {
       .mock.calls.map(([input]) => new URL(String(input), "http://localhost"))
       .find((each) => each.pathname === "/api/v1/findings");
     expect(url?.searchParams.get("zoom")).toMatch(/^\d+$/);
+  });
+
+  it("draws nothing it was sent for the last person while the next person's answer is awaited", async () => {
+    harness.answer("/auth/me", () => json(meFixture()));
+    renderShell(undefined, <SignOutHere />);
+    const map = await mapReady();
+    await waitFor(() => expect(drawn(map)?.features.length).toBeGreaterThan(0));
+    expect(useDrawnFindings.getState().byId.size).toBeGreaterThan(0);
+
+    // What a member was sent holds exact places. The answer for whoever is here now never comes.
+    harness.answer("/findings", () => new Promise<Response>(() => {}));
+    fireEvent.click(screen.getByRole("button", { name: "Sign out for the test" }));
+
+    await waitFor(() => expect(drawn(map)?.features).toHaveLength(0));
+    expect(useDrawnFindings.getState().byId.size).toBe(0);
   });
 
   it("asks again where the map comes to rest, and draws the same findings in the comparison pane", async () => {
