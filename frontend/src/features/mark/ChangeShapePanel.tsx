@@ -8,6 +8,12 @@
  * - A 409 `shape_changed` means the shape was changed elsewhere meanwhile:
  *   the finding is asked for again and shown as it now is, with a sentence
  *   saying so.
+ * - The finding may also come back newer while the panel is open, when the
+ *   window regains focus or another tab extends the line. With nothing
+ *   changed here the newer shape is taken up. With a change in progress the
+ *   change stays, with its undo, Save is off, and one button takes up the
+ *   shape as it now is, so the change is never saved over a shape it didn't
+ *   start from.
  * - A 422 `looked_at_moved` is said beside the path, and the change is kept
  *   so the finder can put it right.
  * - The ground earlier second looks were given on (`location.shape.looked_at`,
@@ -18,7 +24,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { MapPinned } from "lucide-react";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { isMapLive } from "../../map/MapPane.js";
@@ -50,15 +56,34 @@ export const LOOKED_AT_SOURCE = "mark-looked-at";
 export const LOOKED_AT_LAYER = "mark-looked-at-line";
 
 export const CHANGED_ELSEWHERE = "The shape was changed somewhere else while you had it open. This is it as it is now.";
+export const CHANGED_UNDER_YOU =
+  "The shape was changed somewhere else while you had it open, so what is here can't be saved over it.";
 
 /** The address of the tool for a saved finding. */
 export function changeShapePath(publicId: string): string {
   return `/mark/finding/${encodeURIComponent(publicId)}`;
 }
 
-/** How the tool names the path it was given, so it is taken up once and not over a change in progress. */
+function editingPrefix(publicId: string): string {
+  return `finding:${publicId}:`;
+}
+
+/**
+ * How the tool names the path it was given: the finding and the shape
+ * revision the change begins on, so it is taken up once and not over a
+ * change in progress.
+ */
 function editingKey(finding: FindingDetail): string {
-  return `finding:${finding.public_id}:${finding.location.shape.revision ?? 0}`;
+  return `${editingPrefix(finding.public_id)}${finding.location.shape.revision ?? 0}`;
+}
+
+/** The revision the change in the tool began on, or null when the tool holds no change to this finding. */
+function baseRevision(editing: string | null, publicId: string): number | null {
+  const prefix = editingPrefix(publicId);
+  if (!editing?.startsWith(prefix)) return null;
+  const revision = Number(editing.slice(prefix.length));
+  // A key this panel didn't make holds no change it can save.
+  return Number.isInteger(revision) ? revision : null;
 }
 
 /**
@@ -73,9 +98,11 @@ export function savedPath(finding: FindingDetail): Path | null {
   return { closed: false, points: [{ lon, lat, kind: "corner" }] };
 }
 
-/** The body that saves `path` over the finding's shape, or null when there is nothing to save. */
-export function changeBody(finding: FindingDetail, path: Path): FindingUpdate | null {
-  const revision = finding.location.shape.revision ?? 0;
+/**
+ * The body that saves `path` over the finding's shape, begun on shape
+ * `revision`, or null when there is nothing to save.
+ */
+export function changeBody(finding: FindingDetail, path: Path, revision: number): FindingUpdate | null {
   const hadShape = finding.location.path !== null || finding.location.outline !== null;
   if (path.points.length >= 2) return { path: apiPath(path), path_revision: revision };
   const [only] = path.points;
@@ -142,27 +169,35 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
   const [notice, setNotice] = useState<string | null>(null);
   const saved = useMemo(() => savedPath(finding), [finding]);
   const key = editingKey(finding);
-  const ready = editing === key;
+  const base = baseRevision(editing, finding.public_id);
+  const ready = base !== null;
+  // The tool holds a change begun on an older shape than the finding's now.
+  const stale = editing !== null && ready && editing !== key;
+  const { lon, lat } = finding.location;
+
+  const takeUpSaved = useCallback((): void => {
+    const anchor: Path = { closed: false, points: [{ lon, lat, kind: "corner" }] };
+    useMarkStore.getState().edit(key, saved ?? anchor);
+  }, [key, saved, lon, lat]);
 
   // The saved path is taken up once per revision, so a change in progress survives the panel going and coming back.
+  // A newer revision is taken up only when nothing has been changed here: otherwise the change stays, and `stale` says so.
   // It is framed on the map as it is taken up, once the panel or the sheet has settled.
   useEffect(() => {
-    if (useMarkStore.getState().editing === key) return;
-    const anchor: Path = {
-      closed: false,
-      points: [{ lon: finding.location.lon, lat: finding.location.lat, kind: "corner" }],
-    };
-    useMarkStore.getState().edit(key, saved ?? anchor);
-  }, [key, saved, finding.location.lon, finding.location.lat]);
+    const mark = useMarkStore.getState();
+    if (mark.editing === key) return;
+    if (baseRevision(mark.editing, finding.public_id) !== null && mark.shape.past.length > 0) return;
+    takeUpSaved();
+  }, [key, finding.public_id, takeUpSaved]);
   const framed = useRef<string | null>(null);
   useEffect(() => {
-    if (!ready || framed.current === key) return;
+    if (!ready || framed.current === editing) return;
     return whenStageSettled(() => {
-      framed.current = key;
+      framed.current = editing;
       const { points } = useMarkStore.getState().shape.present;
       frameExtent(points.map(({ lon, lat }) => [lon, lat] as const));
     });
-  }, [ready, key]);
+  }, [ready, editing]);
 
   const lookedAt = finding.location.shape.looked_at;
   useLookedAtOnMap(ready ? map : null, lookedAt);
@@ -172,9 +207,9 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
   );
 
   async function save(): Promise<void> {
-    if (saving) return;
+    if (saving || stale || base === null) return;
     const mark = useMarkStore.getState();
-    const body = changeBody(finding, mark.shape.present);
+    const body = changeBody(finding, mark.shape.present, base);
     if (body === null) {
       if (mark.shape.present.points.length === 0) {
         mark.setProblem({ field: "path", message: "Put at least one point down, or cancel to leave it as it was." });
@@ -226,6 +261,14 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
           {notice}
         </p>
       ) : null}
+      {stale ? (
+        <div className="fc-mark__notice" role="status">
+          <p>{CHANGED_UNDER_YOU}</p>
+          <Button size="sm" onClick={takeUpSaved}>
+            Show it as it is now
+          </Button>
+        </div>
+      ) : null}
       {saved === null ? (
         <p className="fc-mark__notice">
           Its shape was drawn before the drawing tool and can't be changed point by point. What you draw here replaces
@@ -241,7 +284,7 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
         </p>
       ) : null}
       <div className="fc-mark__actions">
-        <Button variant="primary" disabled={saving} onClick={() => void save()}>
+        <Button variant="primary" disabled={saving || stale} onClick={() => void save()}>
           {saving ? "Saving…" : "Save the shape"}
         </Button>
         <Button variant="ghost" onClick={() => navigate(findingPath(finding.public_id))}>

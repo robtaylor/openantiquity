@@ -1,3 +1,4 @@
+import { focusManager } from "@tanstack/react-query";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { useLocation } from "react-router";
@@ -9,7 +10,7 @@ import { meFixture } from "../../test/fixtures/me.js";
 import { json, mapReady, renderShell, setUpShellTests, usePhoneLayout } from "../../test/shellHarness.js";
 import type { FindingDetail } from "../finding/types.js";
 import { useSelectedFinding } from "../findings/selection.js";
-import { LOOKED_AT_LAYER, LOOKED_AT_SOURCE } from "./ChangeShapePanel.js";
+import { changeBody, LOOKED_AT_LAYER, LOOKED_AT_SOURCE } from "./ChangeShapePanel.js";
 import { useMarkStore } from "./markStore.js";
 
 vi.mock("maplibre-gl", async () => {
@@ -276,6 +277,77 @@ describe("saving a changed shape", () => {
     expect(screen.getByTestId("path-problem")).toHaveTextContent(message);
     expect(handles()).toHaveLength(2);
     expect(address()).toBe(`/mark/finding/${finding.public_id}`);
+  });
+});
+
+/** The finder's line as another tab left it: a fourth point, at revision 4. */
+function extendedElsewhere(): FindingDetail {
+  const moved = lineFinding();
+  const extra = offset(200, 0);
+  moved.location.path?.points.push({ lon: extra.lon, lat: extra.lat, kind: "smooth" });
+  moved.location.shape.revision = 4;
+  return moved;
+}
+
+/** The window losing focus and gaining it again, which asks for the finding again. */
+function refocus(): void {
+  act(() => {
+    focusManager.setFocused(false);
+    focusManager.setFocused(true);
+  });
+}
+
+describe("the finding changing elsewhere while its shape is open", () => {
+  it("names the revision the change began on, not the finding's as it is now", () => {
+    const now = extendedElsewhere();
+    const path = { closed: false, points: POINTS.map(({ lon, lat }) => ({ lon, lat, kind: "corner" as const })) };
+    expect(changeBody(now, path, 3)).toMatchObject({ path_revision: 3 });
+  });
+
+  it("takes up the newer shape when nothing has been changed here", async () => {
+    const finding = lineFinding();
+    const { routes } = await openChange(finding);
+    routes.on(`GET /findings/${finding.public_id}`, () => json(extendedElsewhere()));
+    refocus();
+    await waitFor(() => expect(handles()).toHaveLength(4));
+    expect(changePanel().queryByText(/changed somewhere else/)).toBeNull();
+    expect(changePanel().getByRole("button", { name: "Save the shape" })).toBeEnabled();
+  });
+
+  it("keeps a change in progress with its undo, says it can't be saved over the newer shape, and offers to take that up", async () => {
+    const user = userEvent.setup();
+    const finding = lineFinding();
+    const { routes } = await openChange(finding);
+    await user.click(screen.getByRole("button", { name: /^Point 2 of 3/ }));
+    await user.click(changePanel().getByRole("button", { name: "Delete point" }));
+    expect(handles()).toHaveLength(2);
+    const fetched = routes.callsTo(`GET /findings/${finding.public_id}`).length;
+    routes.on(`GET /findings/${finding.public_id}`, () => json(extendedElsewhere()));
+    refocus();
+    await waitFor(() => expect(routes.callsTo(`GET /findings/${finding.public_id}`).length).toBeGreaterThan(fetched));
+    expect(
+      await changePanel().findByText(
+        "The shape was changed somewhere else while you had it open, so what is here can't be saved over it.",
+      ),
+    ).toBeInTheDocument();
+    expect(handles()).toHaveLength(2);
+    expect(changePanel().getByRole("button", { name: "Undo" })).toBeEnabled();
+    expect(changePanel().getByRole("button", { name: "Save the shape" })).toBeDisabled();
+    expect(routes.callsTo(`PATCH /findings/${finding.public_id}`)).toHaveLength(0);
+
+    await user.click(changePanel().getByRole("button", { name: "Show it as it is now" }));
+    await waitFor(() => expect(handles()).toHaveLength(4));
+    expect(changePanel().queryByText(/can't be saved over it/)).toBeNull();
+    expect(changePanel().getByRole("button", { name: "Undo" })).toBeDisabled();
+
+    // A save from here starts from the revision now shown.
+    routes.on(`PATCH /findings/${finding.public_id}`, () => json(extendedElsewhere()));
+    await user.click(screen.getByRole("button", { name: /^Point 4 of 4/ }));
+    await user.click(changePanel().getByRole("button", { name: "Delete point" }));
+    await user.click(changePanel().getByRole("button", { name: "Save the shape" }));
+    await waitFor(() => expect(routes.callsTo(`PATCH /findings/${finding.public_id}`)).toHaveLength(1));
+    const body = routes.callsTo(`PATCH /findings/${finding.public_id}`)[0]?.body as { path_revision?: number };
+    expect(body.path_revision).toBe(4);
   });
 });
 

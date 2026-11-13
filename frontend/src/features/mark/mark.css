@@ -275,6 +275,10 @@
   margin-top: 4px;
 }
 
+.fc-mark__notice p + button {
+  margin-top: 8px;
+}
+
 .fc-mark__row {
   display: flex;
   flex-wrap: wrap;
