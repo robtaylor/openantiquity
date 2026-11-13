@@ -4,6 +4,7 @@ import "./ui/tokens.css";
 import "./ui/base.css";
 // Before anything makes a map.
 import "./map/maplibreWorker.js";
+import "./map/tileProtocol.js";
 import { App } from "./App.js";
 import { captureEmailLinkToken } from "./features/account/emailLink.js";
 

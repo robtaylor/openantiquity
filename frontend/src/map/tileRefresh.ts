@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import type { Meta } from "../api/meta.js";
 import { fetchMeta } from "../api/useMeta.js";
 import { isMapLive } from "./MapPane.js";
-import { absoluteUrl, DEM_SOURCE, DEM_TERRAIN_SOURCE, overlaySourceId, viewSourceId } from "./style.js";
+import { DEM_SOURCE, DEM_TERRAIN_SOURCE, overlaySourceId, tileUrl, viewSourceId } from "./style.js";
 
 /**
  * Terrain and record tile addresses carry a version token (`?v=`) that
@@ -65,7 +65,7 @@ export function applyTileChanges(
 ): void {
   for (const [sourceId, tiles] of changes) {
     const source = map.getSource(sourceId);
-    if (hasSetTiles(source)) source.setTiles(tiles.map((url) => absoluteUrl(url, origin)));
+    if (hasSetTiles(source)) source.setTiles(tiles.map((url) => tileUrl(url, origin)));
   }
 }
 

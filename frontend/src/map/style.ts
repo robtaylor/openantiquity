@@ -26,6 +26,7 @@ import {
   recordsLiveSourceId,
   recordsSelectionSourceId,
 } from "./overlayLayers.js";
+import { patientUrl } from "./patientTiles.js";
 import type { OverlayState, SunState, TerrainState } from "./permalink.js";
 import { overlayTroubleKey } from "./trouble.js";
 
@@ -148,6 +149,15 @@ export function absoluteUrl(url: string, origin: string): string {
   return `${origin.replace(/\/$/, "")}${url}`;
 }
 
+/**
+ * A tile address as a source is given it: absolute, and for this site's own
+ * terrain tiles, fetched so that a tile the server is too busy to draw is
+ * asked for again (`patientTiles.ts`).
+ */
+export function tileUrl(url: string, origin: string): string {
+  return patientUrl(absoluteUrl(url, origin), origin);
+}
+
 function resolveOrigin(options: StyleOptions): string {
   if (options.origin !== undefined) return options.origin;
   if (typeof window === "undefined") throw new MapStyleError("buildStyle needs an origin outside the browser");
@@ -157,7 +167,7 @@ function resolveOrigin(options: StyleOptions): string {
 function rasterSource(view: RasterView, origin: string): SourceSpecification {
   return {
     type: "raster",
-    tiles: view.tiles.map((url) => absoluteUrl(url, origin)),
+    tiles: view.tiles.map((url) => tileUrl(url, origin)),
     tileSize: view.tile_size,
     minzoom: view.minzoom,
     maxzoom: view.maxzoom,
@@ -180,7 +190,7 @@ const DEM_UNPACK: Record<DemLayer["encoding"], readonly [number, number, number,
 function demSource(dem: DemLayer, origin: string, scale = 1): SourceSpecification {
   const base = {
     type: "raster-dem" as const,
-    tiles: dem.tiles.map((url) => absoluteUrl(url, origin)),
+    tiles: dem.tiles.map((url) => tileUrl(url, origin)),
     tileSize: dem.tile_size,
     minzoom: dem.minzoom,
     maxzoom: dem.maxzoom,
