@@ -278,7 +278,7 @@ export function useSelectedPointActions(map: MapLibreMap | null) {
     end,
     isFirst: !path.closed && isStart,
     isLast: !path.closed && isEnd,
-    switchKind: () => store.setPointKind(selected, point.kind === "corner" ? "smooth" : "corner"),
+    switchKind: () => store.switchPointKind(selected),
     remove: () => store.remove(selected),
     insertAfter: () => store.insertAfterPoint(selected),
     continueFrom: (from: PathEnd) => {

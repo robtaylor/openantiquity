@@ -99,8 +99,13 @@ export function setKind(path: Path, index: number, kind: PointKind): Path {
   return { closed: path.closed, points: path.points.map((each, i) => (i === index ? { ...point, kind } : each)) };
 }
 
+/** A curved point's kind for a straight one, and a straight one's for a curved. */
+export function oppositeKind(kind: PointKind): PointKind {
+  return kind === "corner" ? "smooth" : "corner";
+}
+
 export function switchKind(path: Path, index: number): Path {
-  return setKind(path, index, pointAt(path, index).kind === "corner" ? "smooth" : "corner");
+  return setKind(path, index, oppositeKind(pointAt(path, index).kind));
 }
 
 /** How many segments the path has: one fewer than its points when open, as many when closed. */

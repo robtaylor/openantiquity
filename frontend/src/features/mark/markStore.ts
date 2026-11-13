@@ -35,12 +35,12 @@ import {
   insertAt,
   type LngLat,
   movePoint,
+  oppositeKind,
   type Path,
   type PathEnd,
   type PointKind,
   redo,
   replace,
-  setKind,
   switchKind,
   undo,
 } from "./path.js";
@@ -109,7 +109,6 @@ export interface MarkState extends MarkFields {
    */
   move: (index: number, point: LngLat, continuing?: boolean) => void;
   remove: (index: number) => void;
-  setPointKind: (index: number, kind: PointKind) => void;
   switchPointKind: (index: number) => void;
   insertAfterPoint: (index: number) => void;
   setNextKind: (kind: PointKind) => void;
@@ -182,6 +181,14 @@ export const useMarkStore = create<MarkState>()((set, get) => {
     });
   }
 
+  /** A point at the active end, of the chosen kind or the other, noting whether the cross placed it. */
+  function addAtEnd([lon, lat]: LngLat, limits: ShapeLimits, otherKind: boolean, crossAdded: boolean): void {
+    const { nextKind, end, drawing } = get();
+    if (!drawing) return;
+    const kind = otherKind ? oppositeKind(nextKind) : nextKind;
+    change((path) => addPoint(path, { lon, lat, kind }, end, limits), { selected: null, crossAdded });
+  }
+
   return {
     ...EMPTY_MARK,
 
@@ -206,23 +213,8 @@ export const useMarkStore = create<MarkState>()((set, get) => {
 
     keptAs: (draftId) => set((state) => ({ draftId, kept: state.shape.present })),
 
-    add: (point, limits, otherKind = false) => {
-      const { nextKind, end, drawing } = get();
-      if (!drawing) return;
-      const kind: PointKind = otherKind ? (nextKind === "corner" ? "smooth" : "corner") : nextKind;
-      change((path) => addPoint(path, { lon: point[0], lat: point[1], kind }, end, limits), {
-        selected: null,
-        crossAdded: false,
-      });
-    },
-    addAtCross: (point, limits) => {
-      const { nextKind, end, drawing } = get();
-      if (!drawing) return;
-      change((path) => addPoint(path, { lon: point[0], lat: point[1], kind: nextKind }, end, limits), {
-        selected: null,
-        crossAdded: true,
-      });
-    },
+    add: (point, limits, otherKind = false) => addAtEnd(point, limits, otherKind, false),
+    addAtCross: (point, limits) => addAtEnd(point, limits, false, true),
     insertOnSegment: (index, point) => change((path) => insertAt(path, index, point), { selected: index + 1 }),
     move: (index, point, continuing = false) => change((path) => movePoint(path, index, point), {}, continuing),
     remove: (index) => {
@@ -232,7 +224,6 @@ export const useMarkStore = create<MarkState>()((set, get) => {
       const emptied = after.points.length === 0 ? { drawing: true, end: "end" as const } : {};
       change(() => after, { selected: after.points.length > 1 ? selected : null, ...emptied });
     },
-    setPointKind: (index, kind) => change((path) => setKind(path, index, kind)),
     switchPointKind: (index) => change((path) => switchKind(path, index)),
     insertAfterPoint: (index) => {
       const before = get().shape.present;
