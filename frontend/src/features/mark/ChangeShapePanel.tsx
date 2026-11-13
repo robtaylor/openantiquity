@@ -48,7 +48,7 @@ import { baseRevision, changeShapePath, editingKey } from "./editingKey.js";
 import { DrawingSection, useMarkInView } from "./MarkForm.js";
 import { MARK_PATH_LAYERS, useSourceData } from "./MarkLayer.js";
 import { useMarkPath, useMarkStore } from "./markStore.js";
-import { anchorOf, apiPath, type Path, plainPoints, spotPath } from "./path.js";
+import { apiPath, type Path, placesOf, plainPoints, spotPath } from "./path.js";
 import { useLeaveOnEscape } from "./useLeaveOnEscape.js";
 import "./mark.css";
 
@@ -175,14 +175,17 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
     return whenStageSettled(() => {
       framed.current = editing;
       const { points } = useMarkStore.getState().shape.present;
-      frameExtent(points.map(({ lon, lat }) => [lon, lat] as const));
+      frameExtent(
+        points.map(({ lon, lat }) => [lon, lat] as const),
+        { keepOwnView: finding.public_id },
+      );
     });
-  }, [ready, editing]);
+  }, [ready, editing, finding.public_id]);
 
   const lookedAt = finding.location.shape.looked_at;
   useLookedAtOnMap(ready ? map : null, lookedAt);
   useMarkInView(
-    useMemo(() => anchorOf(path), [path]),
+    useMemo(() => placesOf(path), [path]),
     drawing,
   );
 

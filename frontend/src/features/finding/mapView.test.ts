@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { centreFor, clearOf } from "./mapView.js";
+import { centreFor, clearOf, crossesBox, linesOf } from "./mapView.js";
 
 const POINT: [number, number] = [-1.8542, 51.4286];
 
@@ -101,5 +101,103 @@ describe("clearOf on the page's own boxes", () => {
     const stage = new Rect(0, 0, 390, 400);
     const search = new Rect(12, 12, 366, 44);
     expect(clearOf(stage, [search])).toEqual({ left: 0, top: 56, right: 390, bottom: 400 });
+  });
+});
+
+describe("crossesBox", () => {
+  const box = { left: 100, top: 100, right: 500, bottom: 400 };
+
+  it("is true for a line with a point inside", () => {
+    expect(
+      crossesBox(
+        [
+          { x: 0, y: 0 },
+          { x: 300, y: 250 },
+        ],
+        box,
+      ),
+    ).toBe(true);
+  });
+
+  it("is true for a line that passes through with both ends outside, as a road across the screen does", () => {
+    expect(
+      crossesBox(
+        [
+          { x: -2000, y: 250 },
+          { x: 3000, y: 260 },
+        ],
+        box,
+      ),
+    ).toBe(true);
+    expect(
+      crossesBox(
+        [
+          { x: 90, y: 0 },
+          { x: 520, y: 500 },
+        ],
+        box,
+      ),
+    ).toBe(true);
+  });
+
+  it("is false for a line that runs past the box", () => {
+    expect(
+      crossesBox(
+        [
+          { x: 0, y: 50 },
+          { x: 900, y: 60 },
+        ],
+        box,
+      ),
+    ).toBe(false);
+    expect(
+      crossesBox(
+        [
+          { x: 0, y: 300 },
+          { x: 90, y: 900 },
+        ],
+        box,
+      ),
+    ).toBe(false);
+  });
+
+  it("looks at every segment, and takes one point alone as a spot", () => {
+    const bend = [
+      { x: 0, y: 0 },
+      { x: 50, y: 900 },
+      { x: 300, y: 300 },
+    ];
+    expect(crossesBox(bend, box)).toBe(true);
+    expect(crossesBox([{ x: 300, y: 300 }], box)).toBe(true);
+    expect(crossesBox([{ x: 30, y: 30 }], box)).toBe(false);
+    expect(crossesBox([], box)).toBe(false);
+  });
+});
+
+describe("linesOf", () => {
+  it("gives a line as itself, an area as its rings, and a shape in parts as each part", () => {
+    const a: [number, number] = [-1.85, 51.4];
+    const b: [number, number] = [-1.84, 51.41];
+    const c: [number, number] = [-1.83, 51.4];
+    expect(linesOf({ type: "LineString", coordinates: [a, b] })).toEqual([[a, b]]);
+    expect(linesOf({ type: "Polygon", coordinates: [[a, b, c, a]] })).toEqual([[a, b, c, a]]);
+    expect(
+      linesOf({
+        type: "MultiLineString",
+        coordinates: [
+          [a, b],
+          [b, c],
+        ],
+      }),
+    ).toEqual([
+      [a, b],
+      [b, c],
+    ]);
+    expect(linesOf({ type: "MultiPolygon", coordinates: [[[a, b, c, a]]] })).toEqual([[a, b, c, a]]);
+  });
+
+  it("gives nothing for a point, or for no shape", () => {
+    expect(linesOf({ type: "Point", coordinates: [-1.85, 51.4] })).toEqual([]);
+    expect(linesOf(null)).toEqual([]);
   });
 });

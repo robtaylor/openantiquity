@@ -17,6 +17,7 @@ import { stubNetwork } from "./support/network.js";
 
 const CENTRE = { lon: -1.8542, lat: 51.4286 };
 const VIEW = `#m=15/${CENTRE.lat}/${CENTRE.lon}/0/0&v=composite`;
+const WIDE_VIEW = `#m=12/${CENTRE.lat}/${CENTRE.lon}/0/0&v=composite`;
 const FINDER = meWith({ handle: "QuietBarrow42", display_name: "Ada Lovelace" });
 
 /** The shapes framed: a line rising to the north-east, one running north to south, and a wide closed one. */
@@ -133,7 +134,9 @@ for (const [name, shape] of Object.entries(SHAPES)) {
       const finding = shapeFinding(shape.points, shape.closed);
       await fakeSession(page, FINDER);
       await fakeFindingPage(page, finding, { me: FINDER });
-      await openMap(page, `/f/${finding.public_id}${VIEW}`);
+      // Arriving from far out, as from a list or a search. From a view of their own that holds
+      // under half of the shape, the tool would leave the map where the person had it.
+      await openMap(page, `/f/${finding.public_id}${WIDE_VIEW}`);
       const findingPanel = page.getByRole("complementary", { name: finding.title });
       await findingPanel.getByRole("button", { name: "Change the shape" }).click();
       await page.getByRole("complementary", { name: "Change the shape" }).waitFor();
@@ -144,6 +147,52 @@ for (const [name, shape] of Object.entries(SHAPES)) {
     });
   }
 }
+
+/** The zoom, latitude and longitude in a page address's `m=` part. */
+function viewOf(hash: string): [number, number, number] {
+  const [zoom, lat, lon] = (/m=([^&]*)/.exec(hash)?.[1] ?? "").split("/").map(Number);
+  if (zoom === undefined || lat === undefined || lon === undefined) throw new Error(`no view in ${hash}`);
+  return [zoom, lat, lon];
+}
+
+/** A road of about 17 km, far longer than any view close enough to change it in. */
+const ROAD_POINTS: Array<[number, number]> = [
+  [-1.95, 51.42],
+  [-1.85, 51.43],
+  [-1.78, 51.425],
+  [-1.7, 51.432],
+];
+
+test("opening a road, and then its shape, leaves the map on the stretch being looked at", async ({ page }) => {
+  await stubNetwork(page);
+  const finding = shapeFinding(ROAD_POINTS, false);
+  await fakeSession(page, FINDER);
+  await fakeFindingPage(page, finding, { me: FINDER });
+  // Close in on the road's east end. Its anchor, and most of it, are far off the screen.
+  const view = "#m=16/51.4318/-1.7020/0/0";
+  await openMap(page, `/f/${finding.public_id}${view}`);
+  const findingPanel = page.getByRole("complementary", { name: finding.title });
+  await expect(findingPanel.getByRole("button", { name: "Change the shape" })).toBeVisible();
+  await page.waitForTimeout(1500);
+  expect(new URL(page.url()).hash, "opening the finding moved the map off the stretch in view").toContain(
+    "m=16/51.4318/-1.702/",
+  );
+  const before = new URL(page.url()).hash;
+
+  await findingPanel.getByRole("button", { name: "Change the shape" }).click();
+  await page.getByRole("complementary", { name: "Change the shape" }).waitFor();
+  await page.waitForTimeout(1500);
+
+  // The same zoom, and the same stretch. On a phone the sheet rises over the middle of the
+  // map, so the map may slide the road's end up into sight: a few hundred metres at most.
+  const [zoomBefore, latBefore, lonBefore] = viewOf(before);
+  const [zoomAfter, latAfter, lonAfter] = viewOf(new URL(page.url()).hash);
+  expect(zoomAfter, '"Change the shape" zoomed the map').toBe(zoomBefore);
+  expect(Math.abs(latAfter - latBefore), '"Change the shape" took the map off the stretch').toBeLessThan(0.004);
+  expect(Math.abs(lonAfter - lonBefore), '"Change the shape" took the map off the stretch').toBeLessThan(0.004);
+  // The end that was being looked at is still there to work on.
+  await expect(page.locator(".fc-path-handle").last()).toBeInViewport();
+});
 
 /**
  * Every handle, or those of the points named (counting from 1), is on

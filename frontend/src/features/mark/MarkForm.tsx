@@ -25,6 +25,7 @@ import { useSession } from "../account/session.js";
 import { DraftBadge } from "../drafts/DraftBadge.js";
 import type { KindDraft } from "../drafts/savers.js";
 import { discardDraft, restoreDraft, retryDraft } from "../drafts/store.js";
+import { crossesBox } from "../finding/mapView.js";
 import { namedFields, POSITION_IN_TEXT, positionWords } from "../finding/positionInText.js";
 import { BARE_MAP_PATH } from "../shell/navigation.js";
 import { type PanelEnvironment, usePanelEnvironment } from "../shell/panelContext.js";
@@ -33,7 +34,7 @@ import { exactGridRefOf, suggestTitle } from "./describe.js";
 import type { FindingDraft } from "./findingDrafts.js";
 import { isAdding, useMarkPath, useMarkStore } from "./markStore.js";
 import { FINDS_NOTICE, findsRoute, sensitivityNotice } from "./notices.js";
-import { anchorOf, type LngLat } from "./path.js";
+import { anchorOf, type LngLat, placesOf } from "./path.js";
 import { useSaveMark } from "./useSaveMark.js";
 
 /** Classes whose features run along the ground, which a finding of one point is invited to draw as a line. */
@@ -71,17 +72,28 @@ export function uncoveredBox(
   };
 }
 
-/** Move the map, if it must, so the mark is well inside the part of it on show. */
-function keepInView(map: MapLibreMap, point: LngLat, box: ReturnType<typeof uncoveredBox>): void {
-  if (!isMapLive(map)) return;
-  const { x, y } = screenPoint(map, point);
-  const inside =
-    x >= box.left + VIEW_MARGIN &&
-    x <= box.right - VIEW_MARGIN &&
-    y >= box.top + VIEW_MARGIN &&
-    y <= box.bottom - VIEW_MARGIN;
-  if (inside) return;
-  map.panBy([x - (box.left + box.right) / 2, y - (box.top + box.bottom) / 2], { duration: 0 });
+/**
+ * Move the map, if it must, so the mark is well inside the part of it on
+ * show. A line or a shape is in sight when any part of it is: someone who has
+ * drawn along a road to its end is looking at the end, and the map stays
+ * there. When none of it is in sight, the point of it nearest the middle of
+ * what is on show is brought there, which moves the map least.
+ */
+function keepInView(map: MapLibreMap, points: readonly LngLat[], box: ReturnType<typeof uncoveredBox>): void {
+  if (!isMapLive(map) || points.length === 0) return;
+  const onPage = points.map((point) => screenPoint(map, point));
+  const well = {
+    left: box.left + VIEW_MARGIN,
+    top: box.top + VIEW_MARGIN,
+    right: box.right - VIEW_MARGIN,
+    bottom: box.bottom - VIEW_MARGIN,
+  };
+  if (crossesBox(onPage, well)) return;
+  const middle = { x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 };
+  const nearest = onPage.reduce((best, each) =>
+    Math.hypot(each.x - middle.x, each.y - middle.y) < Math.hypot(best.x - middle.x, best.y - middle.y) ? each : best,
+  );
+  map.panBy([nearest.x - middle.x, nearest.y - middle.y], { duration: 0 });
 }
 
 /**
@@ -90,19 +102,18 @@ function keepInView(map: MapLibreMap, point: LngLat, box: ReturnType<typeof unco
  * to tap, then opens half-way for the form once drawing stops, with the map
  * moved if need be so the mark stays in sight above it.
  */
-export function useMarkInView(anchor: LngLat | null, drawing: boolean): void {
+export function useMarkInView(points: readonly LngLat[], drawing: boolean): void {
   const environment = usePanelEnvironment();
   const map = useMainMap();
   const { isPhone, setStop, sheetHeight } = environment;
-  const placed = anchor !== null;
-  const latest = useRef(anchor);
-  latest.current = anchor;
+  const placed = points.length > 0;
+  const latest = useRef(points);
+  latest.current = points;
   // biome-ignore lint/correctness/useExhaustiveDependencies: the first point and stopping drawing are the triggers, not each move
   useEffect(() => {
     if (isPhone) setStop(placed && !drawing ? "half" : "peek");
-    const point = latest.current;
-    if (!placed || !map || !point || (isPhone && drawing)) return;
-    keepInView(map, point, uncoveredBox({ isPhone, sheetHeight }, window.innerWidth, window.innerHeight));
+    if (!placed || !map || (isPhone && drawing)) return;
+    keepInView(map, latest.current, uncoveredBox({ isPhone, sheetHeight }, window.innerWidth, window.innerHeight));
   }, [placed, drawing, isPhone, map]);
 }
 
@@ -277,7 +288,10 @@ export function MarkForm({ meta, draft }: { meta: Meta; draft: KindDraft<Finding
   const first = path.points[0];
   const nation = usePointDetail(first ? { lng: first.lon, lat: first.lat } : null).detail?.nation ?? null;
   const busy = saving || draft?.state === "saving";
-  useMarkInView(anchor, drawing);
+  useMarkInView(
+    useMemo(() => placesOf(path), [path]),
+    drawing,
+  );
 
   const suggestion = anchor ? suggestTitle(meta, featureClass, anchor) : "";
   const where = anchor && path.points.length === 1 ? exactGridRefOf(anchor) : null;

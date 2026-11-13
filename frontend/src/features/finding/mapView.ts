@@ -133,6 +133,109 @@ export interface Edges {
   bottom: number;
 }
 
+interface ScreenPoint {
+  x: number;
+  y: number;
+}
+
+/** Whether the segment from `a` to `b` has any part inside `box` (Liang and Barsky's clipping test). */
+function segmentCrosses(a: ScreenPoint, b: ScreenPoint, box: Edges): boolean {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  let enter = 0;
+  let leave = 1;
+  const sides: Array<[number, number]> = [
+    [-dx, a.x - box.left],
+    [dx, box.right - a.x],
+    [-dy, a.y - box.top],
+    [dy, box.bottom - a.y],
+  ];
+  for (const [step, room] of sides) {
+    if (step === 0) {
+      if (room < 0) return false;
+      continue;
+    }
+    const at = room / step;
+    if (step < 0) enter = Math.max(enter, at);
+    else leave = Math.min(leave, at);
+    if (enter > leave) return false;
+  }
+  return true;
+}
+
+/**
+ * Whether any part of a line drawn through `points` is inside `box`. A long
+ * road can cross the screen with none of its points on it, so each segment
+ * is tested, not each point. One point alone is tested as a spot.
+ */
+export function crossesBox(points: readonly ScreenPoint[], box: Edges): boolean {
+  const [first] = points;
+  if (first === undefined) return false;
+  if (points.length === 1) return segmentCrosses(first, first, box);
+  for (let i = 1; i < points.length; i++) {
+    const from = points[i - 1];
+    const to = points[i];
+    if (from !== undefined && to !== undefined && segmentCrosses(from, to, box)) return true;
+  }
+  return false;
+}
+
+type Position = readonly [number, number];
+type Geometry = { type: string; coordinates?: unknown } | null | undefined;
+
+/** The lines of a shape as the server sends it: a line, an area's rings, or either in several parts. */
+export function linesOf(geometry: Geometry): Position[][] {
+  if (!geometry) return [];
+  switch (geometry.type) {
+    case "LineString":
+      return [geometry.coordinates as Position[]];
+    case "Polygon":
+    case "MultiLineString":
+      return geometry.coordinates as Position[][];
+    case "MultiPolygon":
+      return (geometry.coordinates as Position[][][]).flat();
+    default:
+      return [];
+  }
+}
+
+/** A shape this small on screen, in pixels across, is looked at no better than a spot would be. */
+const TOO_SMALL_TO_SEE_PX = 80;
+
+/**
+ * Whether part of a line or shape is where the person can look at it: on the
+ * part of the map nothing covers, and either close in or large enough on
+ * screen to see. Someone working along a road is looking at one stretch of
+ * it, and the map mustn't leave that stretch to show the road's middle or
+ * the whole of it.
+ */
+export function partInView(lines: ReadonlyArray<readonly Position[]>): boolean {
+  const map = useMainMapStore.getState().map;
+  const stage = stageBox();
+  if (!map || !stage) return false;
+  const canvas = map.getCanvas().getBoundingClientRect();
+  let west = Number.POSITIVE_INFINITY;
+  let east = Number.NEGATIVE_INFINITY;
+  let north = Number.POSITIVE_INFINITY;
+  let south = Number.NEGATIVE_INFINITY;
+  let crossing = false;
+  for (const line of lines) {
+    const onPage = line.map(([lon, lat]) => {
+      const at = map.project([lon, lat]);
+      return { x: canvas.left + at.x, y: canvas.top + at.y };
+    });
+    for (const { x, y } of onPage) {
+      west = Math.min(west, x);
+      east = Math.max(east, x);
+      north = Math.min(north, y);
+      south = Math.max(south, y);
+    }
+    crossing ||= crossesBox(onPage, stage);
+  }
+  if (!crossing) return false;
+  return map.getZoom() >= LOOKING_ZOOM || Math.max(east - west, south - north) >= TOO_SMALL_TO_SEE_PX;
+}
+
 /**
  * The part of `stage` clear of every box floating on it. Each box that
  * still overlaps what is left is cut off along whichever side loses the
@@ -195,11 +298,50 @@ function floatingCover(canvas: DOMRect): MapCover | null {
 const FRAME_MARGIN = 36;
 
 /**
+ * Where a finding's page last put the map, and for which finding. While the
+ * map is still there, the view is the app's choice. Once it isn't, or if the
+ * page never moved the map because the finding was already in sight, the
+ * view is the person's own.
+ */
+let placed: { publicId: string; lng: number; lat: number; zoom: number } | null = null;
+
+/** A whole shape that needs the map this many zoom levels further out is over twice the size of the view. */
+const UNDER_HALF_ZOOMS = 1;
+
+/** A camera this close to another, in degrees and zoom levels, is the same view. */
+const SAME_PLACE = 2e-5;
+const SAME_ZOOM = 0.02;
+
+/**
+ * Whether the person chose the view the map has now: they were already
+ * looking at the finding when its page opened, or they have moved the map
+ * since the page put it there.
+ */
+export function viewIsOwn(publicId: string): boolean {
+  if (placed?.publicId !== publicId) return true;
+  const { camera } = useMapStore.getState();
+  return (
+    Math.abs(camera.lng - placed.lng) > SAME_PLACE ||
+    Math.abs(camera.lat - placed.lat) > SAME_PLACE ||
+    Math.abs(camera.zoom - placed.zoom) > SAME_ZOOM
+  );
+}
+
+/**
  * Move the map so every point is on the part of it nothing covers, clear
  * of the controls floating on it, as close as `maxZoom` and the points
  * allow, keeping the bearing. Fewer than two points leave it be.
+ *
+ * With `keepOwnView`, the map is left alone when the person chose a view
+ * that holds under half of the shape. A road is worked on a stretch at a
+ * time, and showing all of it would take them away from the stretch they
+ * came to change. A shape that fits the view, or nearly, is still framed,
+ * since that only tidies its points clear of the controls.
  */
-export function frameExtent(points: ReadonlyArray<readonly [number, number]>, maxZoom = 18): void {
+export function frameExtent(
+  points: ReadonlyArray<readonly [number, number]>,
+  { maxZoom = 18, keepOwnView }: { maxZoom?: number; keepOwnView?: string } = {},
+): void {
   if (points.length < 2) return;
   const canvas = useMainMapStore.getState().map?.getCanvas().getBoundingClientRect();
   const cover = canvas ? floatingCover(canvas) : null;
@@ -207,7 +349,10 @@ export function frameExtent(points: ReadonlyArray<readonly [number, number]>, ma
   const { camera, requestCamera } = useMapStore.getState();
   const size = { width: canvas.width, height: canvas.height };
   const framing = framePoints(points, size, cover, { margin: FRAME_MARGIN, maxZoom, bearing: camera.bearing });
-  if (framing) requestCamera(framing);
+  if (!framing) return;
+  const farOut = framing.zoom <= camera.zoom - UNDER_HALF_ZOOMS;
+  if (farOut && keepOwnView !== undefined && viewIsOwn(keepOwnView) && partInView([points])) return;
+  requestCamera(framing);
 }
 
 /**
@@ -242,13 +387,18 @@ export function panIntoView(point: [number, number]): void {
   requestCamera({ lng, lat });
 }
 
-/** Go to the finding, keeping a closer zoom the person already has, unless it is already in view. */
+/**
+ * Go to the finding, keeping a closer zoom the person already has, unless it
+ * is already in view: its point, or any part of its line or shape.
+ */
 export function goToFinding(finding: FindingDetail): void {
   const { camera, requestCamera } = useMapStore.getState();
   const { lon, lat, obscured } = finding.location;
-  if (!obscured && inView([lon, lat])) return;
+  placed = null;
+  if (!obscured && (inView([lon, lat]) || partInView(linesOf(finding.location.outline)))) return;
   const zoom = obscured ? SQUARE_ZOOM : Math.max(camera.zoom, FINDING_ZOOM);
   const [lng, centreLat] = centreFor([lon, lat], zoom, camera.bearing, uncoveredOffset());
+  placed = { publicId: finding.public_id, lng, lat: centreLat, zoom };
   requestCamera({ lng, lat: centreLat, zoom });
 }
 

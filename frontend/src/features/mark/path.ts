@@ -48,6 +48,11 @@ export function spotPath([lon, lat]: LngLat): Path {
 }
 
 /** Each point with nothing but its place and kind, as the API and storage take them. */
+/** Where each of the path's points is, in order. */
+export function placesOf(path: Path): LngLat[] {
+  return path.points.map(({ lon, lat }) => [lon, lat]);
+}
+
 export function plainPoints(points: readonly PathPoint[]): PathPoint[] {
   return points.map(({ lon, lat, kind }) => ({ lon, lat, kind }));
 }
