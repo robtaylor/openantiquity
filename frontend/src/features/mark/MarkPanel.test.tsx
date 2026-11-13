@@ -302,13 +302,14 @@ describe("marking by tapping", () => {
     act(() => map.click(400, 300));
     const target = handle(0);
     fireEvent.pointerDown(target, { pointerId: 3, button: 0, pointerType: "touch", clientX: 400, clientY: 300 });
-    // A wobble under the slop is still a press.
-    fireEvent.pointerMove(target, { pointerId: 3, pointerType: "touch", clientX: 402, clientY: 301 });
+    // A finger's wobble under the 8 px slop is still a press.
+    fireEvent.pointerMove(target, { pointerId: 3, pointerType: "touch", clientX: 407, clientY: 300 });
+    expect(map.project(point()).x).toBeCloseTo(400, 6);
     await act(() => new Promise((resolve) => setTimeout(resolve, LONG_PRESS_MS + 50)));
     expect(points()[0]?.kind).toBe("smooth");
     expect(target).toHaveAttribute("data-kind", "smooth");
     expect(vibrate).toHaveBeenCalled();
-    fireEvent.pointerUp(target, { pointerId: 3, pointerType: "touch", clientX: 402, clientY: 301 });
+    fireEvent.pointerUp(target, { pointerId: 3, pointerType: "touch", clientX: 407, clientY: 300 });
     fireEvent.click(target, { detail: 1 });
     expect(useMarkStore.getState().selected).toBeNull();
     // The point stayed where it was.
@@ -321,6 +322,45 @@ describe("marking by tapping", () => {
     expect(points()[0]?.kind).toBe("smooth");
     expect(fireEvent.contextMenu(target)).toBe(false);
     Reflect.deleteProperty(navigator, "vibrate");
+  });
+
+  for (const pointerType of ["touch", "pen"] as const) {
+    it(`drags a point once a ${pointerType} moves past 8 px, and switches nothing`, async () => {
+      const { map } = await openMarking();
+      act(() => map.click(400, 300));
+      const target = handle(0);
+      fireEvent.pointerDown(target, { pointerId: 5, button: 0, pointerType, clientX: 400, clientY: 300 });
+      fireEvent.pointerMove(target, { pointerId: 5, pointerType, clientX: 409, clientY: 300 });
+      await act(() => new Promise((resolve) => setTimeout(resolve, LONG_PRESS_MS + 50)));
+      fireEvent.pointerUp(target, { pointerId: 5, pointerType, clientX: 409, clientY: 300 });
+      expect(points()[0]?.kind).toBe("corner");
+      expect(map.project(point()).x).toBeCloseTo(409, 6);
+    });
+  }
+
+  it("drags a point once a mouse moves past 3 px", async () => {
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    const target = handle(0);
+    fireEvent.pointerDown(target, { pointerId: 6, button: 0, pointerType: "mouse", clientX: 400, clientY: 300 });
+    fireEvent.pointerMove(target, { pointerId: 6, pointerType: "mouse", clientX: 404, clientY: 300 });
+    fireEvent.pointerUp(target, { pointerId: 6, pointerType: "mouse", clientX: 404, clientY: 300 });
+    expect(map.project(point()).x).toBeCloseTo(404, 6);
+  });
+
+  it("closes the shape on a finger's tap on the first point that wobbles up to 8 px, and moves nothing", async () => {
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    act(() => map.click(450, 300));
+    act(() => map.click(450, 350));
+    const target = handle(0);
+    fireEvent.pointerDown(target, { pointerId: 7, button: 0, pointerType: "touch", clientX: 400, clientY: 300 });
+    fireEvent.pointerMove(target, { pointerId: 7, pointerType: "touch", clientX: 406, clientY: 305 });
+    fireEvent.pointerUp(target, { pointerId: 7, pointerType: "touch", clientX: 406, clientY: 305 });
+    fireEvent.click(target, { detail: 1 });
+    expect(useMarkStore.getState().shape.present.closed).toBe(true);
+    expect(map.project(point()).x).toBeCloseTo(400, 6);
+    expect(map.project(point()).y).toBeCloseTo(300, 6);
   });
 
   it("changes the selected point from its bar", async () => {

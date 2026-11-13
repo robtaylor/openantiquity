@@ -6,7 +6,9 @@
  *
  * - A tap or click selects a point. Shift-click switches its kind, and a tap
  *   on the far end of an open path of three points or more closes it.
- * - A drag moves the point, recorded as one change for undo.
+ * - A drag moves the point, recorded as one change for undo. It starts once
+ *   a finger or a pen has moved 8 px, or a mouse 3 px, so a finger's wobble
+ *   is still a tap or a press.
  * - A long press, 500 ms without moving 8 px, switches the point's kind
  *   (Decision 0031), with a short vibration where the device has one.
  * - The arrow keys nudge it, with Shift for bigger steps. `[` and `]` step to
@@ -31,8 +33,15 @@ export const HANDLES_MAX_IN_VIEW = 150;
 export const LONG_PRESS_MS = 500;
 /** A press that moves further than this, in pixels, is not a long press. */
 export const LONG_PRESS_SLOP_PX = 8;
-/** A press that moves further than this, in pixels, is a drag. */
-const DRAG_START_PX = 3;
+/**
+ * A press that moves further than this, in pixels, is a drag: a finger or a
+ * pen wobbles as far as the long press allows, and a mouse hardly at all.
+ */
+export const DRAG_START_PX = { mouse: 3, other: LONG_PRESS_SLOP_PX } as const;
+
+function dragStartPx(pointerType: string): number {
+  return pointerType === "mouse" ? DRAG_START_PX.mouse : DRAG_START_PX.other;
+}
 
 const NUDGES: Record<string, [number, number]> = {
   ArrowLeft: [-1, 0],
@@ -88,6 +97,7 @@ export function visibleHandles(
 
 interface Press {
   pointerId: number;
+  pointerType: string;
   x: number;
   y: number;
   dragging: boolean;
@@ -143,7 +153,14 @@ function Handle({
       useMarkStore.getState().switchPointKind(index);
       navigator.vibrate?.(15);
     }, LONG_PRESS_MS);
-    press.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, dragging: false, timer };
+    press.current = {
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      x: event.clientX,
+      y: event.clientY,
+      dragging: false,
+      timer,
+    };
   }
 
   function onPointerMove(event: PointerEvent<HTMLButtonElement>): void {
@@ -154,7 +171,7 @@ function Handle({
       window.clearTimeout(current.timer);
       current.timer = null;
     }
-    if (!current.dragging && moved <= DRAG_START_PX) return;
+    if (!current.dragging && moved <= dragStartPx(current.pointerType)) return;
     // A press that has already switched the point's kind doesn't then move it.
     if (!current.dragging && swallowClick.current) return;
     const continuing = current.dragging;
