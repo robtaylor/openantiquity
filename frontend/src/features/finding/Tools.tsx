@@ -11,7 +11,7 @@ import { useFocusLater } from "../../ui/useFocusLater.js";
 import { findingPath } from "../findings/selection.js";
 import { type OfferedSensitivity, offeredBeside, type Sensitivity } from "../findings/types.js";
 import { AddToInvestigation } from "../investigations/AddToInvestigation.js";
-import { changeShapePath } from "../mark/ChangeShapePanel.js";
+import { changeShapePath, savedPath } from "../mark/ChangeShapePanel.js";
 import { changeSensitivity, exportUrl, lowerSensitivity, updateFinding, withdrawFinding } from "./api.js";
 import { type ViewerPosition, whoSees } from "./describe.js";
 import { reasonOf, toastFailure } from "./feedback.js";
@@ -408,6 +408,12 @@ export function Tools({ meta, finding, position, onApplied }: ToolsProps) {
               </Button>
             ) : null}
           </div>
+          {position.mayEdit && savedPath(finding) === null ? (
+            <p className="fc-finding__hint">
+              Its shape was drawn before the drawing tool and can't be changed point by point. You can draw a new one to
+              replace it.
+            </p>
+          ) : null}
         </section>
       ) : null}
 

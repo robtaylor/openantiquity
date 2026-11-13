@@ -118,6 +118,46 @@ describe("opening the tool on a saved finding", () => {
     expect(page.queryByRole("button", { name: "Change the shape" })).toBeNull();
   });
 
+  it("says on the finding's page that an old shape of several parts can be replaced but not changed", async () => {
+    const finding = lineFinding({
+      location: {
+        ...lineFinding().location,
+        path: null,
+        outline: {
+          type: "MultiLineString",
+          coordinates: [
+            [
+              [-1.855, 51.428],
+              [-1.854, 51.429],
+            ],
+            [
+              [-1.853, 51.43],
+              [-1.852, 51.431],
+            ],
+          ],
+        },
+      },
+    });
+    serve(finding);
+    renderShell(`/f/${finding.public_id}`);
+    await mapReady();
+    const page = within(await screen.findByRole("complementary", { name: finding.title }));
+    expect(page.getByRole("button", { name: "Change the shape" })).toBeInTheDocument();
+    expect(page.getByText(/can't be changed point by point/)).toHaveTextContent(
+      "Its shape was drawn before the drawing tool and can't be changed point by point. You can draw a new one to replace it.",
+    );
+  });
+
+  it("says nothing of replacing on the page of a shape that can be changed point by point", async () => {
+    const finding = lineFinding();
+    serve(finding);
+    renderShell(`/f/${finding.public_id}`);
+    await mapReady();
+    const page = within(await screen.findByRole("complementary", { name: finding.title }));
+    expect(page.getByRole("button", { name: "Change the shape" })).toBeInTheDocument();
+    expect(page.queryByText(/can't be changed point by point/)).toBeNull();
+  });
+
   it("says so, and draws nothing, at the tool's address for someone who may not change it", async () => {
     const finding = lineFinding({ actions: pageFixture().actions });
     serve(finding, meFixture());
