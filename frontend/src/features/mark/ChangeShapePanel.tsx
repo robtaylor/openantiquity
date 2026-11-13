@@ -46,6 +46,7 @@ import { EMPTY_COLLECTION, type FeatureCollection } from "../records/geojson.js"
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { usePanelEnvironment } from "../shell/panelContext.js";
 import { saveProblem } from "./compose.js";
+import { baseRevision, editingKey } from "./editingKey.js";
 import { DrawingSection, useMarkInView } from "./MarkForm.js";
 import { MARK_PATH_LAYERS } from "./MarkLayer.js";
 import { useMarkPath, useMarkStore } from "./markStore.js";
@@ -62,28 +63,6 @@ export const CHANGED_UNDER_YOU =
 /** The address of the tool for a saved finding. */
 export function changeShapePath(publicId: string): string {
   return `/mark/finding/${encodeURIComponent(publicId)}`;
-}
-
-function editingPrefix(publicId: string): string {
-  return `finding:${publicId}:`;
-}
-
-/**
- * How the tool names the path it was given: the finding and the shape
- * revision the change begins on, so it is taken up once and not over a
- * change in progress.
- */
-function editingKey(finding: FindingDetail): string {
-  return `${editingPrefix(finding.public_id)}${finding.location.shape.revision ?? 0}`;
-}
-
-/** The revision the change in the tool began on, or null when the tool holds no change to this finding. */
-function baseRevision(editing: string | null, publicId: string): number | null {
-  const prefix = editingPrefix(publicId);
-  if (!editing?.startsWith(prefix)) return null;
-  const revision = Number(editing.slice(prefix.length));
-  // A key this panel didn't make holds no change it can save.
-  return Number.isInteger(revision) ? revision : null;
 }
 
 /**

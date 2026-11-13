@@ -1,4 +1,4 @@
-import { focusManager } from "@tanstack/react-query";
+import { focusManager, useQueryClient } from "@tanstack/react-query";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { useLocation } from "react-router";
@@ -7,7 +7,15 @@ import { type ApiRoutes, apiError, routeApi } from "../../test/apiRoutes.js";
 import { FINDER, finderView, pageFixture, suggestionsFixture } from "../../test/fixtures/findingPage.js";
 import { offset } from "../../test/fixtures/findings.js";
 import { meFixture } from "../../test/fixtures/me.js";
-import { json, mapReady, renderShell, setUpShellTests, usePhoneLayout } from "../../test/shellHarness.js";
+import {
+  json,
+  mapReady,
+  renderShell,
+  setUpShellTests,
+  signedOutResponse,
+  usePhoneLayout,
+} from "../../test/shellHarness.js";
+import { signedOut } from "../account/session.js";
 import type { FindingDetail } from "../finding/types.js";
 import { useSelectedFinding } from "../findings/selection.js";
 import { changeBody, LOOKED_AT_LAYER, LOOKED_AT_SOURCE } from "./ChangeShapePanel.js";
@@ -398,6 +406,64 @@ describe("leaving the tool", () => {
   it("says nothing of carrying on when the tool opens on the saved shape", async () => {
     await openChange(lineFinding());
     expect(changePanel().queryByText(/Carrying on from changes/)).toBeNull();
+  });
+});
+
+function SignOutHere() {
+  const client = useQueryClient();
+  return (
+    <button type="button" onClick={() => signedOut(client)}>
+      Sign out for the test
+    </button>
+  );
+}
+
+describe("the exact path and signing out", () => {
+  it("forgets the path being changed when the finder signs out, and draws nothing for the next reader", async () => {
+    const user = userEvent.setup();
+    const finding = lineFinding();
+    const routes = serve(finding);
+    renderShell(
+      `/mark/finding/${finding.public_id}`,
+      <>
+        <Address />
+        <SignOutHere />
+      </>,
+    );
+    await mapReady();
+    await waitFor(() => expect(handles()).toHaveLength(3));
+    routes.on("GET /auth/me", () => signedOutResponse());
+    routes.on(`GET /findings/${finding.public_id}`, () => json(lineFinding({ actions: pageFixture().actions })));
+    await user.click(screen.getByRole("button", { name: "Sign out for the test" }));
+    expect(
+      await changePanel().findByText(/Only the person who marked a finding can change its shape/),
+    ).toBeInTheDocument();
+    expect(useMarkStore.getState().shape.present.points).toHaveLength(0);
+    expect(useMarkStore.getState().editing).toBeNull();
+    expect(handles()).toHaveLength(0);
+    expect(screen.queryByTestId("mark-path")).toBeNull();
+  });
+
+  it("draws no path at the tool's address for a reader who may not change the finding, whatever the tool holds", async () => {
+    const finding = lineFinding({ actions: pageFixture().actions });
+    act(() =>
+      useMarkStore.getState().edit(`finding:${finding.public_id}:3`, {
+        closed: false,
+        points: POINTS.map(({ lon, lat }) => ({ lon, lat, kind: "corner" as const })),
+      }),
+    );
+    serve(finding, meFixture());
+    renderShell(`/mark/finding/${finding.public_id}`);
+    const map = await mapReady();
+    expect(
+      await changePanel().findByText(/Only the person who marked a finding can change its shape/),
+    ).toBeInTheDocument();
+    expect(handles()).toHaveLength(0);
+    expect(screen.queryByTestId("mark-path")).toBeNull();
+    expect(screen.queryByTestId("reticle")).toBeNull();
+    // A tap adds nothing.
+    act(() => map.click(400, 300));
+    expect(useMarkStore.getState().shape.present.points).toHaveLength(3);
   });
 });
 

@@ -53,6 +53,7 @@ export function MarkPanel({ meta }: { meta: Meta }) {
   useDocumentTitle("Mark a finding");
 
   // A new mark starts afresh. A draft is taken up once, so changes made to it here are kept.
+  // The store forgets everything when the person changes, and a draft open here is then taken up again.
   const begun = useRef(false);
   useEffect(() => {
     const mark = useMarkStore.getState();
@@ -63,6 +64,9 @@ export function MarkPanel({ meta }: { meta: Meta }) {
     }
     begun.current = true;
   }, [draftId, draft]);
+  useEffect(() => {
+    if (draftId !== undefined && draft && loaded === null) useMarkStore.getState().load(draftId, draft.data);
+  }, [draftId, draft, loaded]);
 
   function leave(): void {
     const mark = useMarkStore.getState();

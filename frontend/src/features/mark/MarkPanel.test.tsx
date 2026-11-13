@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { useLocation } from "react-router";
@@ -15,6 +16,7 @@ import {
   usePhoneLayout,
 } from "../../test/shellHarness.js";
 import { useAccountUi } from "../account/requireAccount.js";
+import { signedIn } from "../account/session.js";
 import {
   DRAFTS_STORAGE_KEY,
   listDrafts,
@@ -718,6 +720,51 @@ describe("a draft kept before paths", () => {
     expect(body).not.toHaveProperty("location");
     expect(body).not.toHaveProperty("outline");
     await waitFor(() => expect(address()).toBe("/f/ring1"));
+  });
+});
+
+function SignInHere() {
+  const client = useQueryClient();
+  return (
+    <button type="button" onClick={() => signedIn(client, meFixture())}>
+      Sign in for the test
+    </button>
+  );
+}
+
+describe("the person changing", () => {
+  it("forgets a new marking", async () => {
+    const user = userEvent.setup();
+    const routes = routeApi(harness.fetchMock(), { "GET /auth/me": () => signedOutResponse() });
+    renderShell("/mark", <SignInHere />);
+    const map = await mapReady();
+    act(() => map.click(400, 300));
+    act(() => useMarkStore.getState().setTitle("Somebody else's"));
+    routes.on("GET /auth/me", () => json(meFixture()));
+    await user.click(screen.getByRole("button", { name: "Sign in for the test" }));
+    await waitFor(() => expect(points()).toHaveLength(0));
+    expect(useMarkStore.getState().title).toBe("");
+  });
+
+  it("takes up again a draft still open in the panel once the store has forgotten it", async () => {
+    const draft = findingDrafts.put({
+      point: [-1.8542, 51.4286],
+      feature_class: "round_barrow",
+      period: "unknown",
+      title: "Round barrow or mound in SU 10 69",
+      description: "",
+      path: null,
+      view_state: {},
+    });
+    routeApi(harness.fetchMock(), { "GET /auth/me": () => signedOutResponse() });
+    renderShell(`/mark/${draft.id}`);
+    await mapReady();
+    await panel().findByRole("button", { name: "Save finding" });
+    // What the store does when the person changes.
+    act(() => useMarkStore.getState().start());
+    await waitFor(() => expect(useMarkStore.getState().draftId).toBe(draft.id));
+    expect(await panel().findByRole("button", { name: "Save finding" })).toBeInTheDocument();
+    expect(points()).toHaveLength(1);
   });
 });
 

@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CloudOff } from "lucide-react";
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import { useEffect, useMemo, useRef } from "react";
@@ -9,8 +9,10 @@ import { useMapStore } from "../../map/store.js";
 import { lngLatAtClient, screenPoint, useMapFrame } from "../../map/useMapFrame.js";
 import { COLOURS } from "../../ui/tokens.js";
 import { useKindDrafts } from "../drafts/savers.js";
+import { findingQuery } from "../finding/useFinding.js";
 import { findingKeys } from "../findings/keys.js";
 import { EMPTY_COLLECTION, type FeatureCollection } from "../records/geojson.js";
+import { baseRevision, changeShapeId } from "./editingKey.js";
 import { findingDrafts, useSavedDrafts } from "./findingDrafts.js";
 import { useMarkPath, useMarkStore } from "./markStore.js";
 import { PathHandles } from "./PathHandles.js";
@@ -285,6 +287,21 @@ function useRefreshOnSavedDrafts(): void {
 }
 
 /**
+ * At "Change the shape", whether the path in the tool is this finding's and
+ * the reader may change it, as the finding's page last said: nothing is
+ * drawn otherwise, so a reader who may not see the shape exactly never sees
+ * one left in the tool. Null on any other page.
+ */
+function useChangeShapeAllowed(pathname: string): boolean | null {
+  const publicId = changeShapeId(pathname);
+  // The panel asks for the finding. This only reads the answer.
+  const finding = useQuery({ ...findingQuery(publicId ?? ""), enabled: false }).data;
+  const editing = useMarkStore((state) => state.editing);
+  if (publicId === null) return null;
+  return finding?.actions.edit.allowed === true && baseRevision(editing, publicId) !== null;
+}
+
+/**
  * Everything marking draws over the map: the path and its handles while a
  * finding is being marked, drafts, and findings being saved. Mounted once,
  * by the shell, over the main map.
@@ -292,7 +309,8 @@ function useRefreshOnSavedDrafts(): void {
 export function MarkLayer() {
   const map = useMainMap();
   const { pathname } = useLocation();
-  const marking = isMarkPath(pathname);
+  const changing = useChangeShapeAllowed(pathname);
+  const marking = isMarkPath(pathname) && changing !== false;
   const drawn = useKindDrafts(findingDrafts).length + usePendingFindings((state) => state.pending.length);
   // Follow the map only while there is something on it to keep in place.
   useMapFrame(marking || drawn > 0 ? map : null);

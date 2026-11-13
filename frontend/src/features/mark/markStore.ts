@@ -10,11 +10,14 @@
  * a point is moved by dragging its handle.
  *
  * Nothing here is stored. Pressing save turns it into a request, or into a
- * draft when nobody is signed in (`findingDrafts`).
+ * draft when nobody is signed in (`findingDrafts`). It may hold a saved
+ * finding's exact path ("Change the shape"), so it is all forgotten when the
+ * person changes, as every store of exact places is (`onPersonChanged`).
  */
 
 import { create } from "zustand";
 import type { ShapeLimits } from "../../api/meta.js";
+import { onPersonChanged } from "../account/session.js";
 import type { PositionField } from "../finding/positionInText.js";
 import type { MarkProblemField } from "./compose.js";
 import type { FindingDraft } from "./findingDrafts.js";
@@ -254,6 +257,8 @@ export const useMarkStore = create<MarkState>()((set, get) => {
     setSaving: (saving) => set({ saving }),
   };
 });
+
+onPersonChanged(() => useMarkStore.getState().start());
 
 /** True while taps add points: drawing, and the shape not closed. */
 export function isAdding(state: MarkFields): boolean {
