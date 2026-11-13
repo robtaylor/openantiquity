@@ -139,6 +139,22 @@ def test_those_who_see_the_finding_exactly_get_everything_as_it_was_saved(world:
     assert downloaded is (viewer != "member")
 
 
+@pytest.mark.parametrize("fmt", ["geojson", "csv", "html"])
+def test_a_member_s_download_gives_no_more_than_the_square(world: World, fmt: str) -> None:
+    """A member sees the barrow exactly on the page, and still downloads it at its square.
+
+    The title, the summary, the notes, the view, the profile, the area and the
+    reference all go through the download's stricter rule (Decision 0005, rule 8).
+    """
+    path = url(world.notebook, f"/export?format={fmt}")
+    member = world.clients["member"].get(path)
+    assert member.status_code == 200, member.text
+    assert _leaks(member.text) == []
+    # The finder's download holds what was saved, so the check above can fail.
+    finder = world.clients["finder"].get(path)
+    assert _leaks(finder.text) != []
+
+
 def test_the_page_says_what_it_held_back(world: World) -> None:
     client = world.clients["signed_out"]
     page = client.get(url(world.notebook)).json()
