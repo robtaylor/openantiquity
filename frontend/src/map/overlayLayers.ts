@@ -2,6 +2,9 @@ import type { ExpressionSpecification, FilterSpecification, LayerSpecification }
 import type { Meta } from "../api/meta.js";
 import { COLOURS, FALLBACK_TIER_COLOUR, STATE_COLOURS, tierColour } from "../ui/tokens.js";
 
+/** The switches in the map state that hold a layer back until they are on. */
+export type LayerSwitch = "showRuledOut" | "showRecordCounts";
+
 /**
  * A style layer that belongs to an overlay, with the opacity each of its
  * paint properties has when the overlay is at full strength. The overlay's
@@ -10,10 +13,11 @@ import { COLOURS, FALLBACK_TIER_COLOUR, STATE_COLOURS, tierColour } from "../ui/
 export interface OverlayLayer {
   layer: LayerSpecification;
   opacity: Record<string, number | ExpressionSpecification>;
-  /** Drawn only while ruled-out findings are being shown. */
-  ruledOutOnly?: boolean;
-  /** Drawn only while the heritage records' zoomed-out counts are asked for. */
-  countsOnly?: boolean;
+  /**
+   * The switch in the map state this layer waits for: it is drawn only while
+   * that is on, such as ruled-out findings behind `showRuledOut`.
+   */
+  onlyWith?: LayerSwitch;
   /**
    * Drawn above every overlay's other layers, whichever overlay it belongs
    * to: a name is read over the markers that sit on its place.
@@ -58,6 +62,8 @@ const FINDING_RING = COLOURS.text;
  */
 export const FINDING_POINT_LAYERS = {
   points: "findings-points",
+  /** The dark outline round each marker in `points`, a hollow circle just outside its light ring. */
+  casing: "findings-points-casing",
   known: "findings-known",
   ruledOut: "findings-ruled-out",
 } as const;
@@ -126,11 +132,14 @@ export function tierColourExpression(meta: Meta): ExpressionSpecification | stri
   );
 }
 
-/** Marker radius by tier: each step up the ladder adds half a pixel. */
+/** How much each step up the ladder adds to a finding marker's radius. */
+const TIER_STEP = 0.5;
+
+/** Marker radius by tier: each step up the ladder adds `TIER_STEP`. */
 export function tierRadiusExpression(meta: Meta, base: number): ExpressionSpecification | string | number {
   return matchOn(
     "tier",
-    meta.vocab.tiers.map((tier, index) => [tier.id, base + index * 0.5]),
+    meta.vocab.tiers.map((tier, index) => [tier.id, base + index * TIER_STEP]),
     base,
   );
 }
@@ -156,6 +165,8 @@ export function tierRadiusExpression(meta: Meta, base: number): ExpressionSpecif
 export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
   const colour = tierColourExpression(meta);
   const radius = tierRadiusExpression(meta, FINDING_RADIUS);
+  // The fill of the top tier, then its light ring and its dark outline.
+  const largestMarker = FINDING_RADIUS + (meta.vocab.tiers.length - 1) * TIER_STEP + 2 * OUTLINE_WIDTH;
   const ringRadius = tierRadiusExpression(meta, KNOWN_RING_RADIUS);
   const ruledOutColour = STATE_COLOURS.ruled_out as string;
 
@@ -188,7 +199,7 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
     inner: ExpressionSpecification | string | number,
     strokeColour: ExpressionSpecification | string | number,
     strokeWidth: number,
-    ruledOutOnly = false,
+    onlyWith?: LayerSwitch,
   ): OverlayLayer[] {
     const casingRadius =
       typeof inner === "number"
@@ -203,7 +214,7 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
           "circle-stroke-width": strokeWidth + OUTLINE_WIDTH * 2,
         }),
         opacity: { "circle-stroke-opacity": 0.9 },
-        ruledOutOnly,
+        onlyWith,
       },
       {
         layer: circle(id, filter, {
@@ -213,7 +224,7 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
           "circle-stroke-width": strokeWidth,
         }),
         opacity: { "circle-stroke-opacity": 1 },
-        ruledOutOnly,
+        onlyWith,
       },
     ];
   }
@@ -265,7 +276,7 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
         "line-width": 1.5,
       }),
       opacity: { "line-opacity": 0.9 },
-      ruledOutOnly: true,
+      onlyWith: "showRuledOut",
     },
   ];
 
@@ -279,9 +290,9 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
     opacity: { "line-opacity": 0.55 },
   };
   const highlightMarker: OverlayLayer = {
-    // Clear of the largest marker's outline, which reaches 11.5 px.
+    // A pixel clear of the largest marker's outline.
     layer: circle(FINDING_HIGHLIGHT_LAYERS.marker, highlightNothing.marker, {
-      "circle-radius": 12.5,
+      "circle-radius": largestMarker + 1,
       "circle-color": "rgba(0, 0, 0, 0)",
       "circle-stroke-color": COLOURS.text,
       "circle-stroke-width": 2.5,
@@ -313,15 +324,15 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
         "miter",
       ),
       opacity: { "line-opacity": 0.9 },
-      ruledOutOnly: true,
+      onlyWith: "showRuledOut",
     },
-    ...ring(FINDING_POINT_LAYERS.ruledOut, ruledOut, 3, ruledOutColour, 1.5, true),
+    ...ring(FINDING_POINT_LAYERS.ruledOut, ruledOut, 3, ruledOutColour, 1.5, "showRuledOut"),
     ...ring(FINDING_POINT_LAYERS.known, known, ringRadius, colour, 2.5),
     highlightMarker,
     // A marker is three circles' worth: the fill in the tier colour, a light ring as its stroke, and the dark
     // outline as the stroke of a hollow circle just outside it.
     {
-      layer: circle(`${FINDING_POINT_LAYERS.points}-casing`, points, {
+      layer: circle(FINDING_POINT_LAYERS.casing, points, {
         "circle-radius": ["+", radius, OUTLINE_WIDTH],
         "circle-color": "rgba(0, 0, 0, 0)",
         "circle-stroke-color": OUTLINE,
@@ -377,6 +388,17 @@ export const RECORD_LAYERS = {
 /** The GeoJSON source of records a live source sent to this browser (Decision 0007). */
 export function recordsLiveSourceId(source: string): string {
   return `${source}-live`;
+}
+
+/**
+ * The second vector source over the records tiles, holding the counts of a
+ * zoomed-out view: only tiles further out than `RECORD_FEATURES_FROM_ZOOM`.
+ * The overlay's own source holds only tiles from that zoom in, so a tilted
+ * map never loads a far tile's counts into the layers drawn whatever the
+ * switch says, and nothing is fetched further out while counts are off.
+ */
+export function recordsCountsSourceId(source: string): string {
+  return `${source}-counts`;
 }
 
 /** The GeoJSON source of squares for the records in view that are placed only to a square. */
@@ -455,13 +477,13 @@ export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
   const selection = recordsSelectionSourceId(source);
   const imprecise = recordsImpreciseSourceId(source);
 
-  function counts(id: string, zooms: { minzoom?: number; maxzoom?: number }): OverlayLayer {
+  function counts(id: string, from: string, zooms: { minzoom?: number; maxzoom?: number }): OverlayLayer {
     return {
       layer: {
         id,
         type: "symbol",
         ...zooms,
-        source,
+        source: from,
         "source-layer": RECORD_COUNTS_SOURCE_LAYER,
         layout: {
           "icon-image": SQUARE_IMAGE,
@@ -528,8 +550,11 @@ export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
     // Zoomed out, every tile holds counts, and they are drawn only when asked for: by default the
     // view is the terrain and the findings. A busy tile from RECORD_FEATURES_FROM_ZOOM up holds counts in
     // place of its records, and those are drawn whenever the records are.
-    { ...counts(RECORD_LAYERS.counts, { maxzoom: RECORD_FEATURES_FROM_ZOOM }), countsOnly: true },
-    counts(RECORD_LAYERS.busyCounts, { minzoom: RECORD_FEATURES_FROM_ZOOM }),
+    {
+      ...counts(RECORD_LAYERS.counts, recordsCountsSourceId(source), { maxzoom: RECORD_FEATURES_FROM_ZOOM }),
+      onlyWith: "showRecordCounts",
+    },
+    counts(RECORD_LAYERS.busyCounts, source, { minzoom: RECORD_FEATURES_FROM_ZOOM }),
   ];
   layers.push(
     {
@@ -542,7 +567,8 @@ export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
         layout: {
           "icon-image": SQUARE_IMAGE,
           // Smaller than a finding's marker at every zoom, so the findings lead: about 6.5 px across at zoom 14.
-          "icon-size": ["interpolate", ["linear"], ["zoom"], 8, 0.5, 14, 0.8, 18, 1.1],
+          // Single records start at RECORD_FEATURES_FROM_ZOOM, so the sizes start there too.
+          "icon-size": ["interpolate", ["linear"], ["zoom"], RECORD_FEATURES_FROM_ZOOM, 0.7, 14, 0.8, 18, 1.1],
           // Further out than SQUARES_ALL_FROM_ZOOM a village's listed buildings
           // would merge into one block over the earthworks round it, so there
           // squares keep apart, with a gap between them. A square must take

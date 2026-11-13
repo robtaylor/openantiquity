@@ -5,7 +5,16 @@ import { describe, expect, it, vi } from "vitest";
 import type { Meta } from "../api/meta.js";
 import { metaFixture } from "../test/fixtures/meta.js";
 import { COLOURS, TIER_COLOURS } from "../ui/tokens.js";
-import { RECORD_FEATURES_FROM_ZOOM, RECORD_LAYERS, SQUARES_ALL_FROM_ZOOM } from "./overlayLayers.js";
+import {
+  FINDING_HIGHLIGHT_LAYERS,
+  FINDING_POINT_LAYERS,
+  findingsLayers,
+  RECORD_FEATURES_FROM_ZOOM,
+  RECORD_LAYERS,
+  recordsCountsSourceId,
+  recordsLayers,
+  SQUARES_ALL_FROM_ZOOM,
+} from "./overlayLayers.js";
 import { LIMITS } from "./permalink.js";
 import { defaultsFromMeta, overlayTroubleKey } from "./store.js";
 import {
@@ -432,10 +441,86 @@ describe("buildStyle", () => {
     expect(busy.layout).toEqual(counts.layout);
   });
 
+  it("draws single records and busy counts only from tiles of zoom 12 and closer, and zoomed-out counts from their own", () => {
+    const style = buildStyle(metaFixture, stateFor(metaFixture, { showRecordCounts: true }), "composite", OPTIONS);
+    const near = overlaySourceId("records");
+    const far = recordsCountsSourceId(near);
+    const tiles = (metaFixture.layers.overlays.find((o) => o.id === "records") as { tiles: string[] }).tiles;
+    const nearSource = style.sources[near] as { minzoom?: number; maxzoom?: number; tiles?: string[] };
+    const farSource = style.sources[far] as { minzoom?: number; maxzoom?: number; tiles?: string[] };
+    // A tilted map loads tiles from further out towards the horizon: the near source never has any to load.
+    expect(nearSource.minzoom).toBe(RECORD_FEATURES_FROM_ZOOM);
+    expect(nearSource.maxzoom).toBe(14);
+    expect(farSource.maxzoom).toBe(RECORD_FEATURES_FROM_ZOOM - 1);
+    expect(farSource.tiles).toEqual(nearSource.tiles);
+    expect(nearSource.tiles?.[0]).toContain(tiles[0]?.split("?")[0]);
+    const drawnFrom = (source: string) =>
+      style.layers.filter((l) => (l as { source?: string }).source === source).map((l) => l.id);
+    expect(drawnFrom(far)).toEqual([RECORD_LAYERS.counts]);
+    expect(drawnFrom(near)).toEqual(
+      expect.arrayContaining([RECORD_LAYERS.squares, RECORD_LAYERS.busyCounts, RECORD_LAYERS.outlines]),
+    );
+  });
+
+  it("draws nothing from either records source at zoom 9 while counts are off, so no tile is fetched there", () => {
+    const sources = [overlaySourceId("records"), recordsCountsSourceId(overlaySourceId("records"))];
+    const drawableAt = (style: StyleSpecification, zoom: number) =>
+      style.layers
+        .filter((l) => {
+          const spec = l as LooseLayer & { minzoom?: number; maxzoom?: number };
+          if (!spec.source || !sources.includes(spec.source) || !visible(style, l.id)) return false;
+          const source = style.sources[spec.source] as { minzoom?: number };
+          return (spec.minzoom ?? 0) <= zoom && zoom < (spec.maxzoom ?? 24) && (source.minzoom ?? 0) <= zoom;
+        })
+        .map((l) => l.id);
+    expect(drawableAt(buildStyle(metaFixture, stateFor(metaFixture), "composite", OPTIONS), 9)).toEqual([]);
+    const on = buildStyle(metaFixture, stateFor(metaFixture, { showRecordCounts: true }), "composite", OPTIONS);
+    expect(drawableAt(on, 9)).toEqual([RECORD_LAYERS.counts]);
+  });
+
+  it("names the switch each held-back layer waits for in one field", () => {
+    const findings = findingsLayers(metaFixture, "f");
+    const records = recordsLayers(metaFixture, "r");
+    const waiting = [...findings, ...records].filter((entry) => entry.onlyWith !== undefined);
+    expect(waiting.map((entry) => [entry.layer.id, entry.onlyWith]).sort()).toEqual(
+      [
+        ["findings-obscured-ruled-out", "showRuledOut"],
+        ["findings-ruled-out", "showRuledOut"],
+        ["findings-ruled-out-casing", "showRuledOut"],
+        ["findings-shapes-ruled-out", "showRuledOut"],
+        [RECORD_LAYERS.counts, "showRecordCounts"],
+      ].sort(),
+    );
+  });
+
+  it("rings a highlighted marker clear of the largest marker's outline, and names the casing layer", () => {
+    const style = buildStyle(metaFixture, stateFor(metaFixture), "composite", OPTIONS);
+    const radius = layer(style, FINDING_POINT_LAYERS.points).paint["circle-radius"] as unknown[];
+    const largest = Math.max(...metaFixture.vocab.tiers.map((tier) => radius[radius.indexOf(tier.id) + 1] as number));
+    // The fill, the light ring and the dark outline.
+    const outer = largest + 1.5 + 1.5;
+    const highlight = layer(style, FINDING_HIGHLIGHT_LAYERS.marker).paint["circle-radius"] as number;
+    expect(highlight).toBeGreaterThan(outer);
+    expect(highlight).toBeLessThanOrEqual(outer + 1.5);
+    expect(FINDING_POINT_LAYERS.casing).toBe("findings-points-casing");
+    expect(layer(style, FINDING_POINT_LAYERS.casing).type).toBe("circle");
+  });
+
   it("draws record squares smaller and fainter than findings, still with the dark outline", () => {
     const style = buildStyle(metaFixture, stateFor(metaFixture), "composite", OPTIONS);
     const squares = layer(style, RECORD_LAYERS.squares);
-    expect(squares.layout["icon-size"]).toEqual(["interpolate", ["linear"], ["zoom"], 8, 0.5, 14, 0.8, 18, 1.1]);
+    // Single records start at zoom 12, so that is where the sizes start.
+    expect(squares.layout["icon-size"]).toEqual([
+      "interpolate",
+      ["linear"],
+      ["zoom"],
+      RECORD_FEATURES_FROM_ZOOM,
+      0.7,
+      14,
+      0.8,
+      18,
+      1.1,
+    ]);
     expect(squares.paint["icon-opacity"]).toBe(0.85);
     expect(squares.paint["icon-halo-color"]).toBe(COLOURS.bg);
     expect(squares.paint["icon-halo-width"]).toBe(1.5);

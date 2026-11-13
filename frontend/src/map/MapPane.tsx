@@ -4,7 +4,7 @@ import { findOverlay, findView, type Meta } from "../api/meta.js";
 import type { FindingsMapData } from "./findingsData.js";
 import { MapFailure } from "./MapFailure.js";
 import { SDF_IMAGE_OPTIONS, squareSdf } from "./markerImages.js";
-import { SQUARE_IMAGE } from "./overlayLayers.js";
+import { recordsCountsSourceId, SQUARE_IMAGE } from "./overlayLayers.js";
 import { LIMITS } from "./permalink.js";
 import { reloadSource, type SourceDeclaration } from "./reloadSource.js";
 import { changedAny, useMapStore, usePointerStore, useViewAreaStore } from "./store.js";
@@ -82,6 +82,10 @@ function watchedSources(meta: Meta): Record<string, string> {
     // Coverage and findings are drawn from data the app fetches itself, not from tiles.
     if (overlay.type === "coverage" || overlay.type === "findings") continue;
     watched[overlaySourceId(overlay.id)] = overlayTroubleKey(overlay.id);
+    // The records' zoomed-out counts come from a second source over the same tiles, and fail with them.
+    if (overlay.type === "records") {
+      watched[recordsCountsSourceId(overlaySourceId(overlay.id))] = overlayTroubleKey(overlay.id);
+    }
   }
   for (const view of meta.layers.views) {
     if (view.type === "raster") watched[viewSourceId(view.id)] = viewTroubleKey(view.id);

@@ -112,6 +112,29 @@ function near(image: DecodedImage, at: { x: number; y: number }, dx = 0, dy = 0)
   return pixelAt(image, at.x + dx, at.y + dy);
 }
 
+/**
+ * How a marker of `colour` centred near `at` fills the box round it: the
+ * width and height of the run of that colour through its middle, and the
+ * share of the width-by-height box that is that colour. About 1 for a
+ * square, and about 0.79 for a circle.
+ */
+function filledShare(image: DecodedImage, at: { x: number; y: number }, colour: Rgb, tolerance = 24) {
+  const x0 = Math.round(at.x);
+  const y0 = Math.round(at.y);
+  const matches = (x: number, y: number) => colourDistance(pixelAt(image, x, y), colour) <= tolerance;
+  const run = (dx: number, dy: number) => {
+    let n = 0;
+    while (n < 20 && matches(x0 + dx * (n + 1), y0 + dy * (n + 1))) n += 1;
+    return n;
+  };
+  const [left, right, up, down] = [run(-1, 0), run(1, 0), run(0, -1), run(0, 1)];
+  const width = left + right + 1;
+  const height = up + down + 1;
+  let filled = 0;
+  for (let y = y0 - up; y <= y0 + down; y++) for (let x = x0 - left; x <= x0 + right; x++) if (matches(x, y)) filled++;
+  return { width, height, share: filled / (width * height) };
+}
+
 /** A 7 by 7 box around a point. */
 function around(at: { x: number; y: number }, reach = 3) {
   return { x: Math.round(at.x) - reach, y: Math.round(at.y) - reach, width: reach * 2 + 1, height: reach * 2 + 1 };
@@ -129,20 +152,22 @@ test("draws findings by tier and state, and records as squares by category", asy
     // An open finding is a filled circle in its tier's colour, with a dark outline.
     expect(colourDistance(near(image, probable), TIER.probable), "probable finding fill").toBeLessThanOrEqual(10);
     expect(countColour(image, around(probable, 10), OUTLINE, 40), "dark outline pixels").toBeGreaterThan(20);
-    // Its radius is 6.5 px, so it is gone 12 px out.
+    // With its light ring and dark outline it reaches 10.5 px, so it is gone 12 px out.
     expect(colourDistance(near(image, probable, 12, 0), BACKDROP), "beyond the circle").toBeLessThanOrEqual(6);
 
     // A known finding is a hollow ring: backdrop in the middle, tier colour on the ring.
     expect(colourDistance(near(image, known), BACKDROP), "middle of the known ring").toBeLessThanOrEqual(6);
     expect(countColour(image, around(known, 9), TIER.seen, 14), "ring pixels in the tier colour").toBeGreaterThan(30);
 
-    // Records are squares in their category's colour, filled out towards their corners.
+    // Records are squares in their category's colour. A square fills the whole box its width and height
+    // span, where a round marker of the same size would fill about 79% of it.
     expect(colourDistance(near(image, designation), DESIGNATION), "designation record").toBeLessThanOrEqual(10);
     expect(colourDistance(near(image, find), FIND), "find record").toBeLessThanOrEqual(10);
-    expect(colourDistance(near(image, designation, 2, 2), DESIGNATION), "corner of the square").toBeLessThanOrEqual(24);
-    expect(colourDistance(near(image, designation, -2, 2), DESIGNATION), "corner of the square").toBeLessThanOrEqual(
-      24,
-    );
+    const shape = filledShare(image, designation, DESIGNATION);
+    expect(shape.width, "width of the square").toBeGreaterThanOrEqual(5);
+    expect(shape.share, "share of its box the square fills").toBeGreaterThan(0.9);
+    // The same measure tells a round marker apart: the probable finding's fill is a circle.
+    expect(filledShare(image, probable, TIER.probable, 10).share, "share a circle fills").toBeLessThan(0.86);
 
     // Ruled-out findings are hidden until asked for.
     expect(countColour(image, around(ruled, 8), BACKDROP, 6), "nothing where the ruled-out finding is").toBe(17 * 17);

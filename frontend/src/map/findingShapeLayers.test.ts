@@ -47,7 +47,7 @@ describe("findings drawn as lines and areas", () => {
     const width = JSON.stringify(paint(FINDING_SHAPE_LAYERS.lines)["line-width"]);
     expect(width).toContain('"known"');
     const ruledOut = entry(FINDING_SHAPE_LAYERS.ruledOut);
-    expect(ruledOut.ruledOutOnly).toBe(true);
+    expect(ruledOut.onlyWith).toBe("showRuledOut");
     expect(paint(FINDING_SHAPE_LAYERS.ruledOut)["line-color"]).toBe(STATE_COLOURS.ruled_out);
     expect(filterText(FINDING_SHAPE_LAYERS.lines)).toContain('"ruled_out"');
     expect(filterText(FINDING_SHAPE_LAYERS.lines)).toContain('"withdrawn"');

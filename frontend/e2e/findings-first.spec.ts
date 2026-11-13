@@ -125,3 +125,19 @@ test("keeps zoomed-out record counts off until they're switched on, and through 
   await expect(page.getByRole("switch", { name: "Counts when zoomed out" })).toBeChecked();
   await expect(async () => expect(await drawnAtCount(page)).toBeGreaterThan(40)).toPass({ timeout: 15_000 });
 });
+
+test("fetches no records tile while zoomed out with counts off, and only far tiles' counts once they're on", async ({
+  page,
+}) => {
+  const asked: number[] = [];
+  page.on("request", (request) => {
+    const match = /\/tiles\/records\/(\d+)\//.exec(request.url());
+    if (match) asked.push(Number(match[1]));
+  });
+  await openMap(page, `/?panel=layers#m=9/${CENTRE.lat}/${CENTRE.lon}/0/0&v=composite&o=osm:80:h,records:100`);
+  await page.locator('.fc-map__pane--main[data-map-idle="true"]').waitFor();
+  expect(asked, "records tiles fetched with counts off").toEqual([]);
+  await page.getByRole("switch", { name: "Counts when zoomed out" }).click();
+  await expect.poll(() => asked.length).toBeGreaterThan(0);
+  expect(Math.max(...asked)).toBeLessThan(12);
+});

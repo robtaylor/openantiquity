@@ -94,7 +94,9 @@ describe("an overlay whose tiles fail", () => {
     expect(within(panel).queryByText(/Historic England/)).toBeNull();
 
     fireEvent.click(within(notice).getByRole("button", { name: "Try again" }));
-    expect(map.refreshTiles).toHaveBeenCalledTimes(2);
+    // Both of the records' sources read the same tiles, and both are asked again.
+    expect(map.refreshTiles).toHaveBeenCalledTimes(3);
+    expect(map.refreshTiles).toHaveBeenCalledWith("overlay-records-counts");
     expect(map.isVisible("records-squares")).toBe(true);
     expect(screen.queryByRole("alert")).toBeNull();
     expect(within(row).queryByText(/isn't loading/)).toBeNull();
@@ -105,7 +107,7 @@ describe("an overlay whose tiles fail", () => {
     wait(SETTLE_MS);
     expect(map.isVisible("records-squares")).toBe(false);
     expect(screen.getByRole("alert")).toHaveTextContent("Heritage records");
-    expect(map.refreshTiles).toHaveBeenCalledTimes(2);
+    expect(map.refreshTiles).toHaveBeenCalledTimes(3);
   });
 
   it("can be tried again from its row in the layer panel, which also clears the notice", async () => {
@@ -115,7 +117,8 @@ describe("an overlay whose tiles fail", () => {
     const row = document.querySelector('[data-overlay="records"]') as HTMLElement;
     fireEvent.click(within(row).getByRole("button", { name: "Try again" }));
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(map.refreshTiles).toHaveBeenLastCalledWith("overlay-records");
+    expect(map.refreshTiles).toHaveBeenCalledWith("overlay-records");
+    expect(map.refreshTiles).toHaveBeenCalledWith("overlay-records-counts");
     expect(map.isVisible("records-squares")).toBe(true);
   });
 

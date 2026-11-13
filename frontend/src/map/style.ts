@@ -21,6 +21,8 @@ import {
   coverageLayers,
   findingsLayers,
   type OverlayLayer,
+  RECORD_FEATURES_FROM_ZOOM,
+  recordsCountsSourceId,
   recordsImpreciseSourceId,
   recordsLayers,
   recordsLiveSourceId,
@@ -258,10 +260,19 @@ function overlayParts(meta: Meta, overlay: Overlay, origin: string): OverlayPart
     case "records":
       return {
         sources: {
+          // Single records, and the counts a busy tile carries in their place, from tiles of
+          // RECORD_FEATURES_FROM_ZOOM and closer only. A tilted map asks for nothing further out.
           [source]: {
             type: "vector",
             tiles: overlay.tiles.map((url) => absoluteUrl(url, origin)),
+            minzoom: RECORD_FEATURES_FROM_ZOOM,
             maxzoom: MARKER_TILE_MAXZOOM,
+          },
+          // The counts of a zoomed-out view, from the same tiles further out, drawn only while asked for.
+          [recordsCountsSourceId(source)]: {
+            type: "vector",
+            tiles: overlay.tiles.map((url) => absoluteUrl(url, origin)),
+            maxzoom: RECORD_FEATURES_FROM_ZOOM - 1,
           },
           // Filled by the records feature: what live sources sent this browser, the open record,
           // and the squares of records in view that are placed only to a square.
@@ -407,10 +418,7 @@ export function dynamicProperties(
 
   for (const entry of catalogueFor(meta, resolveOrigin(options)).overlayLayers) {
     const overlay = state.overlays[entry.overlayId];
-    const shown =
-      overlayShown(state, entry.overlayId) &&
-      (!entry.ruledOutOnly || state.showRuledOut) &&
-      (!entry.countsOnly || state.showRecordCounts);
+    const shown = overlayShown(state, entry.overlayId) && (entry.onlyWith === undefined || state[entry.onlyWith]);
     props.push({ layer: entry.layer.id, kind: "layout", name: "visibility", value: visibility(shown) });
     for (const [name, base] of Object.entries(entry.opacity)) {
       props.push({ layer: entry.layer.id, kind: "paint", name, value: scaleOpacity(base, overlay?.opacity ?? 1) });

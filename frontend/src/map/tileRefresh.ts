@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import type { Meta } from "../api/meta.js";
 import { fetchMeta } from "../api/useMeta.js";
 import { isMapLive } from "./MapPane.js";
+import { recordsCountsSourceId } from "./overlayLayers.js";
 import { DEM_SOURCE, DEM_TERRAIN_SOURCE, overlaySourceId, tileUrl, viewSourceId } from "./style.js";
 
 /**
@@ -29,7 +30,10 @@ export function tileAddresses(meta: Meta): Map<string, readonly string[]> {
   found.set(DEM_TERRAIN_SOURCE, meta.layers.dem.tiles);
   // The records tiles' token changes when an ingest run finishes, so a page left open sees the new records.
   for (const overlay of meta.layers.overlays) {
-    if (overlay.type === "records") found.set(overlaySourceId(overlay.id), overlay.tiles);
+    if (overlay.type !== "records") continue;
+    // Its two sources read the same tiles: single records close in, and the counts further out.
+    found.set(overlaySourceId(overlay.id), overlay.tiles);
+    found.set(recordsCountsSourceId(overlaySourceId(overlay.id)), overlay.tiles);
   }
   return found;
 }

@@ -319,19 +319,25 @@ describe("records on the map", () => {
     act(() => map.fire("click", { point: { x: 10, y: 10 }, lngLat: { lng: -1.85, lat: 51.43 } }));
     expect(await screen.findByRole("complementary", { name: AVENUE_RECORD.name })).toBeInTheDocument();
 
-    // Counts are drawn when zoomed out only once they're asked for.
+    // Counts are drawn when zoomed out only once they're asked for, and only zoomed out.
     act(() => useMapStore.getState().setShowRecordCounts(true));
-    const before = useMapStore.getState().camera.zoom;
-    map.rendered = [
+    const count = [
       { properties: { count: 12, category: "find", sources: "pas" }, layer: { id: RECORD_LAYERS.counts } },
     ];
+    map.rendered = count;
+    const close = useMapStore.getState().camera;
     act(() => map.fire("click", { point: { x: 10, y: 10 }, lngLat: { lng: -1.9, lat: 51.4 } }));
-    expect(useMapStore.getState().camera).toMatchObject({ lng: -1.9, lat: 51.4, zoom: before + 2 });
+    expect(useMapStore.getState().camera).toEqual(close);
+
+    act(() => map.userMove({ zoom: 10 }));
+    act(() => map.fire("click", { point: { x: 10, y: 10 }, lngLat: { lng: -1.9, lat: 51.4 } }));
+    expect(useMapStore.getState().camera).toMatchObject({ lng: -1.9, lat: 51.4, zoom: 12 });
   });
 
   it("does nothing a count would do where one would be while counts are off, and zooms into a busy tile's count", async () => {
     renderShell();
     const map = await mapReady();
+    act(() => map.userMove({ zoom: 10 }));
     const before = useMapStore.getState().camera;
     map.rendered = [
       { properties: { count: 12, category: "find", sources: "pas" }, layer: { id: RECORD_LAYERS.counts } },
@@ -340,11 +346,12 @@ describe("records on the map", () => {
     expect(useMapStore.getState().camera).toEqual(before);
     expect(screen.queryByRole("complementary", { name: /record/i })).toBeNull();
 
+    act(() => map.userMove({ zoom: 14 }));
     map.rendered = [
       { properties: { count: 900, category: "find", sources: "pas" }, layer: { id: RECORD_LAYERS.busyCounts } },
     ];
     act(() => map.fire("click", { point: { x: 10, y: 10 }, lngLat: { lng: -1.9, lat: 51.4 } }));
-    expect(useMapStore.getState().camera).toMatchObject({ lng: -1.9, lat: 51.4, zoom: before.zoom + 2 });
+    expect(useMapStore.getState().camera).toMatchObject({ lng: -1.9, lat: 51.4, zoom: 16 });
   });
 
   it("credits only the sources drawn on screen once the map has said which", async () => {

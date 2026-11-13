@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Meta, RasterView } from "../api/meta.js";
 import { metaFixture } from "../test/fixtures/meta.js";
+import { recordsCountsSourceId } from "./overlayLayers.js";
 import { DEM_SOURCE, DEM_TERRAIN_SOURCE, overlaySourceId, viewSourceId } from "./style.js";
 import { applyTileChanges, changedTiles, tileAddresses } from "./tileRefresh.js";
 
@@ -30,6 +31,9 @@ describe("tileAddresses", () => {
     expect(addresses.get(viewSourceId("composite"))).toBe(composite.tiles);
     expect(addresses.get(DEM_SOURCE)).toBe(metaFixture.layers.dem.tiles);
     expect(addresses.get(DEM_TERRAIN_SOURCE)).toBe(metaFixture.layers.dem.tiles);
+    // Both sources of the records overlay read the same tiles, so both take a new token.
+    const records = overlaySourceId("records");
+    expect(addresses.get(recordsCountsSourceId(records))).toEqual(addresses.get(records));
     // The raking view is drawn from the elevation, so it has no tiles of its own.
     expect(addresses.has(viewSourceId("raking"))).toBe(false);
   });
@@ -55,7 +59,10 @@ describe("changedTiles", () => {
 
   it("finds the heritage records' tiles when their token changes", () => {
     const changes = changedTiles(metaFixture, withNewRecordsToken(metaFixture, "after-ingest"));
-    expect([...changes.keys()]).toEqual([overlaySourceId("records")]);
+    expect([...changes.keys()]).toEqual([
+      overlaySourceId("records"),
+      recordsCountsSourceId(overlaySourceId("records")),
+    ]);
     expect(changes.get(overlaySourceId("records"))?.[0]).toMatch(/\.mvt\?v=after-ingest$/);
   });
 

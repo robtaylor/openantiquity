@@ -43,7 +43,12 @@ export type FindingPick =
   | { kind: "one"; candidate: FindingCandidate }
   | { kind: "choose"; candidates: FindingCandidate[] };
 
-const MARKER_LAYERS: readonly string[] = Object.values(FINDING_POINT_LAYERS);
+/** The markers themselves. The casing under each is drawn with the same filter and adds nothing to pick. */
+const MARKER_LAYERS: readonly string[] = [
+  FINDING_POINT_LAYERS.points,
+  FINDING_POINT_LAYERS.known,
+  FINDING_POINT_LAYERS.ruledOut,
+];
 const SHAPE_LAYERS: readonly string[] = [
   FINDING_SHAPE_LAYERS.lines,
   FINDING_SHAPE_LAYERS.areaEdges,
