@@ -41,6 +41,7 @@ import {
   type PointKind,
   redo,
   replace,
+  spotPath,
   switchKind,
   undo,
 } from "./path.js";
@@ -151,7 +152,7 @@ export const EMPTY_MARK: MarkFields = {
 /** The path a draft holds: its line or shape, or its one point. */
 function pathFrom(draft: FindingDraft): Path {
   if (draft.path) return { closed: draft.path.closed, points: draft.path.points };
-  return { closed: false, points: [{ lon: draft.point[0], lat: draft.point[1], kind: "corner" }] };
+  return spotPath(draft.point);
 }
 
 /** The selection kept by a change, or none when the point it names has gone. */

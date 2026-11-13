@@ -18,13 +18,7 @@ import { defineDraftKind } from "../drafts/savers.js";
 import { DRAFT_KINDS } from "../drafts/store.js";
 import { createFinding } from "../findings/api.js";
 import type { FeatureClassId, FindingCreate, FindingDetail, PeriodId } from "../findings/types.js";
-import { apiPath, type LngLat, type PathPoint, pathFromOutline } from "./path.js";
-
-/** A draft's line or shape: two points or more, in the API's form. */
-export interface DraftPath {
-  closed: boolean;
-  points: PathPoint[];
-}
+import { apiPath, type LngLat, type Path, type PathPoint, pathFromOutline, plainPoints } from "./path.js";
 
 /**
  * What a finding draft holds: the request body, in the API's names. `point`
@@ -33,7 +27,8 @@ export interface DraftPath {
  */
 export interface FindingDraft {
   point: LngLat;
-  path: DraftPath | null;
+  /** The line or shape, two points or more, or null for a spot. */
+  path: Path | null;
   feature_class: string;
   period: string;
   title: string;
@@ -55,11 +50,11 @@ function isPathPoint(value: unknown): value is PathPoint {
 }
 
 /** A stored path, if it can be read: two points or more, three when closed. */
-function readPath(value: unknown): DraftPath | null {
+function readPath(value: unknown): Path | null {
   if (!isRecord(value) || typeof value.closed !== "boolean" || !Array.isArray(value.points)) return null;
   const { closed, points } = value;
   if (!points.every(isPathPoint) || points.length < (closed ? 3 : 2)) return null;
-  return { closed, points: points.map(({ lon, lat, kind }) => ({ lon, lat, kind })) };
+  return { closed, points: plainPoints(points) };
 }
 
 /**
@@ -67,13 +62,12 @@ function readPath(value: unknown): DraftPath | null {
  * `outline` instead: a LineString or a one-ring Polygon is read as the
  * all-corner path that draws it, and anything else is dropped.
  */
-function draftPath(value: Record<string, unknown>): DraftPath | null {
+function draftPath(value: Record<string, unknown>): Path | null {
   const path = readPath(value.path);
   if (path || !isRecord(value.outline)) return path;
   const { type, coordinates } = value.outline;
   if (typeof type !== "string") return null;
-  const old = pathFromOutline({ type, coordinates });
-  return old ? { closed: old.closed, points: [...old.points] } : null;
+  return pathFromOutline({ type, coordinates });
 }
 
 /**

@@ -34,6 +34,8 @@ import { useMarkPath, useMarkStore } from "./markStore.js";
 import { pointName, visibleHandles } from "./PathHandles.js";
 import {
   canClose,
+  canRedo,
+  canUndo,
   endDirection,
   endIndex,
   endWord,
@@ -213,17 +215,17 @@ export function DrawingBar({ map, isPhone }: { map: MapLibreMap | null; isPhone:
   const path = useMarkPath();
   const drawing = useMarkStore((state) => state.drawing);
   const nextKind = useMarkStore((state) => state.nextKind);
-  const canUndo = useMarkStore((state) => state.shape.past.length > 0);
-  const canRedo = useMarkStore((state) => state.shape.future.length > 0);
+  const undoable = useMarkStore((state) => canUndo(state.shape));
+  const redoable = useMarkStore((state) => canRedo(state.shape));
   const store = useMarkStore.getState();
   const adding = drawing && !path.closed;
   return (
     <section className="fc-mark__drawing" aria-label="Drawing">
       <div className="fc-mark__row">
-        <Button size="sm" icon={<Undo2 size={14} aria-hidden />} disabled={!canUndo} onClick={() => store.undo()}>
+        <Button size="sm" icon={<Undo2 size={14} aria-hidden />} disabled={!undoable} onClick={() => store.undo()}>
           Undo
         </Button>
-        <Button size="sm" icon={<Redo2 size={14} aria-hidden />} disabled={!canRedo} onClick={() => store.redo()}>
+        <Button size="sm" icon={<Redo2 size={14} aria-hidden />} disabled={!redoable} onClick={() => store.redo()}>
           Redo
         </Button>
         <Button

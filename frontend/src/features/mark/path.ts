@@ -15,6 +15,7 @@
 import type { ShapeLimits } from "../../api/meta.js";
 import {
   type CurveGeometry,
+  type CurvePath,
   derive,
   MIN_CLOSED_POINTS,
   MIN_OPEN_POINTS,
@@ -29,10 +30,8 @@ export type { PathPoint, PointKind } from "./curve.js";
 
 export type LngLat = [number, number];
 
-export interface Path {
-  closed: boolean;
-  points: readonly PathPoint[];
-}
+/** The tapped points in order, and whether the shape closes: the same as the curve takes. */
+export type Path = CurvePath;
 
 /** Which end of an open path a tap adds to. */
 export type PathEnd = "start" | "end";
@@ -41,6 +40,16 @@ export const EMPTY_PATH: Path = { closed: false, points: [] };
 
 /** A tap this close to the far end of an open path, in pixels, closes the shape. */
 export const CLOSE_TOLERANCE_PX = 14;
+
+/** A path of one point, a corner: a finding at a spot. */
+export function spotPath([lon, lat]: LngLat): Path {
+  return { closed: false, points: [{ lon, lat, kind: "corner" }] };
+}
+
+/** Each point with nothing but its place and kind, as the API and storage take them. */
+export function plainPoints(points: readonly PathPoint[]): PathPoint[] {
+  return points.map(({ lon, lat, kind }) => ({ lon, lat, kind }));
+}
 
 function pointAt(path: Path, index: number): PathPoint {
   const point = path.points[index];
@@ -453,7 +462,7 @@ export function pathFromOutline(geometry: { type: string; coordinates?: unknown 
 
 /** The path as `POST` and `PATCH /findings` take it. The server writes the curve's name. */
 export function apiPath(path: Path): { closed: boolean; points: PathPoint[] } {
-  return { closed: path.closed, points: path.points.map(({ lon, lat, kind }) => ({ lon, lat, kind })) };
+  return { closed: path.closed, points: plainPoints(path.points) };
 }
 
 // --------------------------------------------------------------------------

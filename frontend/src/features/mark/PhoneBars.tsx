@@ -29,7 +29,7 @@ import { ADD_AT_CROSS, focusFirstControlAfter } from "./focus.js";
 import { addAtReticle } from "./MarkLayer.js";
 import { useMarkPath, useMarkStore } from "./markStore.js";
 import { pointName } from "./PathHandles.js";
-import { canClose, endWord, lengthM, otherEnd, type Path, type PathEnd } from "./path.js";
+import { canClose, canRedo, canUndo, endWord, lengthM, otherEnd, type Path, type PathEnd } from "./path.js";
 
 /**
  * What a tap does now, in one line, and once there are points how many and
@@ -77,17 +77,17 @@ function PhoneStatus({ map }: { map: MapLibreMap | null }) {
 export function PhoneDrawingBar({ map }: { map: MapLibreMap | null }) {
   const path = useMarkPath();
   const nextKind = useMarkStore((state) => state.nextKind);
-  const canUndo = useMarkStore((state) => state.shape.past.length > 0);
-  const canRedo = useMarkStore((state) => state.shape.future.length > 0);
+  const undoable = useMarkStore((state) => canUndo(state.shape));
+  const redoable = useMarkStore((state) => canRedo(state.shape));
   const store = useMarkStore.getState();
   const straight = nextKind === "corner";
   return (
     <section className="fc-mark-float__bar" aria-label="Drawing">
       <div className="fc-mark-float__row">
-        <BarButton label="Undo" disabled={!canUndo} onClick={() => store.undo()}>
+        <BarButton label="Undo" disabled={!undoable} onClick={() => store.undo()}>
           <Undo2 size={20} aria-hidden />
         </BarButton>
-        <BarButton label="Redo" disabled={!canRedo} onClick={() => store.redo()}>
+        <BarButton label="Redo" disabled={!redoable} onClick={() => store.redo()}>
           <Redo2 size={20} aria-hidden />
         </BarButton>
         <BarButton label={ADD_AT_CROSS} onClick={() => addAtReticle(map)}>

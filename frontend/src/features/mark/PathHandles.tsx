@@ -39,7 +39,7 @@ export const LONG_PRESS_SLOP_PX = 8;
  * A press that moves further than this, in pixels, is a drag: a finger or a
  * pen wobbles as far as the long press allows, and a mouse hardly at all.
  */
-export const DRAG_START_PX = { mouse: 3, other: LONG_PRESS_SLOP_PX } as const;
+const DRAG_START_PX = { mouse: 3, other: LONG_PRESS_SLOP_PX } as const;
 
 function dragStartPx(pointerType: string): number {
   return pointerType === "mouse" ? DRAG_START_PX.mouse : DRAG_START_PX.other;
@@ -53,7 +53,7 @@ const NUDGES: Record<string, [number, number]> = {
 };
 
 /** "straight" or "curved", the words the tool uses for a corner and a smooth point. */
-export function kindWord(point: PathPoint): string {
+function kindWord(point: PathPoint): string {
   return point.kind === "corner" ? "straight" : "curved";
 }
 

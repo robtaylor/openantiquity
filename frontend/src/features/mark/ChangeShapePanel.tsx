@@ -49,7 +49,7 @@ import { baseRevision, changeShapePath, editingKey } from "./editingKey.js";
 import { DrawingSection, useMarkInView } from "./MarkForm.js";
 import { MARK_PATH_LAYERS } from "./MarkLayer.js";
 import { useMarkPath, useMarkStore } from "./markStore.js";
-import { anchorOf, apiPath, type Path } from "./path.js";
+import { anchorOf, apiPath, type Path, plainPoints, spotPath } from "./path.js";
 import { useLeaveOnEscape } from "./useLeaveOnEscape.js";
 import "./mark.css";
 
@@ -68,9 +68,9 @@ export const CHANGED_UNDER_YOU =
  */
 export function savedPath(finding: FindingDetail): Path | null {
   const { path, outline, lon, lat } = finding.location;
-  if (path) return { closed: path.closed, points: path.points.map(({ lon, lat, kind }) => ({ lon, lat, kind })) };
+  if (path) return { closed: path.closed, points: plainPoints(path.points) };
   if (outline) return null;
-  return { closed: false, points: [{ lon, lat, kind: "corner" }] };
+  return spotPath([lon, lat]);
 }
 
 /**
@@ -165,8 +165,7 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
   });
 
   const takeUpSaved = useCallback((): void => {
-    const anchor: Path = { closed: false, points: [{ lon, lat, kind: "corner" }] };
-    useMarkStore.getState().edit(key, saved ?? anchor);
+    useMarkStore.getState().edit(key, saved ?? spotPath([lon, lat]));
   }, [key, saved, lon, lat]);
 
   // The saved path is taken up once per revision, so a change in progress survives the panel going and coming back.
