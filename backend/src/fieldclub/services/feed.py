@@ -69,6 +69,12 @@ from fieldclub.vocab import ActivityKind, FindingState, Visibility
 # The user who did something, as distinct from the viewer.
 Actor = aliased(User, name="actor")
 
+# The kinds this version has a name for. A newer version serving beside this
+# one during a deploy, or one this version was gone back from, can have stored
+# a kind it added. Such a row is never listed, so nothing here has to read it
+# (Decision 0033).
+_KNOWN_KINDS = tuple(kind.value for kind in ActivityKind)
+
 # The kinds whose row names the thing they were about in `data`, and what it is.
 _COMMENT_KINDS = (ActivityKind.COMMENT_ADDED.value,)
 _EVIDENCE_KINDS = (ActivityKind.EVIDENCE_ADDED.value, ActivityKind.FOLLOWUP_LOGGED.value)
@@ -142,6 +148,7 @@ def _listed[*Row](
     """
     query = query.outerjoin(Finding, Finding.id == finding_id).outerjoin(Actor, Actor.id == actor_id)
     conditions: list[ColumnElement[bool]] = [
+        kind.in_(_KNOWN_KINDS),
         or_(finding_id.is_(None), finding_listed_clause(viewer)),
         or_(actor_id.is_(None), Actor.banned_at.is_(None)),
         not_(_content_gone(kind, data, viewer)),

@@ -129,7 +129,7 @@ import math
 import types
 import typing
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import MISSING, dataclass, fields, is_dataclass
 from enum import StrEnum
 from functools import cache
@@ -633,7 +633,8 @@ class Assessment:
             raise InvalidInputsError(
                 f"assessment version {data.get('version')!r} is not {ASSESSMENT_VERSION}"
             )
-        decoded = _decode(cls, {key: value for key, value in data.items() if key != "version"})
+        stored = {key: value for key, value in data.items() if key != "version"}
+        decoded = _decode(cls, {**stored, "next_steps": _known_steps(stored["next_steps"])})
         assert isinstance(decoded, cls)
         return decoded
 
@@ -649,9 +650,20 @@ def load_next_steps(data: Mapping[str, Any]) -> tuple[NextStep, ...]:
     """Only the next steps of a stored assessment, without decoding the rest of it."""
     if data.get("version") != ASSESSMENT_VERSION:
         raise InvalidInputsError(f"assessment version {data.get('version')!r} is not {ASSESSMENT_VERSION}")
-    steps = _decode(tuple[NextStep, ...], data["next_steps"])
+    steps = _decode(tuple[NextStep, ...], _known_steps(data["next_steps"]))
     assert isinstance(steps, tuple)
     return steps
+
+
+def _known_steps(stored: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """The stored next steps this version has a name for.
+
+    A newer version serving beside this one during a deploy, or one this
+    version was gone back from, can have stored a step it added. That step is
+    left out before any of its fields is read: nothing here could ask for it,
+    and the rest of the assessment reads as it was written (Decision 0033).
+    """
+    return [step for step in stored if step["code"] in NextStepCode]
 
 
 # --------------------------------------------------------------------------
