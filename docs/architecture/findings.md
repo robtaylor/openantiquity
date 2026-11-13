@@ -104,7 +104,7 @@ Only the finder changes, extends or removes a shape. `PATCH /findings/{public_id
 - `outline` is still read, as an all-corner path. Any other geometry is 422 `outline_not_a_path`, and `outline` with `path` is 422 `outline_and_path`.
 - `services/shape_edits.change_shape` holds the new shape to the limits and the British Isles, places the anchor, checks the ground looked at, writes the change row and raises the revision, all under the finding's row lock.
 - The change is classed for the timeline (`shapes.classify_change`). It is `extended` when the old open path appears whole and in order inside a longer new open path. Otherwise it is `drawn` (no shape before), `removed`, `closed`, `opened` or `reshaped`.
-- An extension, or a reshape that leaves the shape at least 200 m longer, records the activity kind `shape_extended`, which tells the finding's followers. The feed lists it only to someone who sees the finding exactly.
+- An extension, or a reshape of an open line that leaves it an open line at least 200 m longer, records the activity kind `shape_extended`, which tells the finding's followers. A closed shape never records it. The length before an old outline's first change is measured from its geometry when the backfill hasn't stored it (`shape_edits.stored_length`). The feed lists it only to someone who sees the finding exactly.
 
 ### Second looks and the ground they cover
 

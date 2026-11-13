@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from fieldclub.errors import ValidationFailedError
 from fieldclub.models import Activity, Finding, Notification, Observation, User
+from fieldclub.models.common import to_db_geometry
 from fieldclub.services import findings, looked_at, review, shape_edits, shapes
 from fieldclub.vocab import Visible
 from tests.findings.support import (
@@ -371,6 +372,79 @@ def test_a_reshape_that_makes_the_line_much_longer_tells_the_followers_too(
     assert (extended.finding_id, extended.actor_id) == (finding.id, finder.id)
     told = db.scalars(select(Notification.user_id).where(Notification.kind == "shape_extended")).all()
     assert told == [helper.id]
+
+
+def extended_activity(db: Session, finding: Finding) -> list[Activity]:
+    return list(
+        db.scalars(
+            select(Activity).where(Activity.kind == "shape_extended", Activity.finding_id == finding.id)
+        )
+    )
+
+
+def old_outline(db: Session, finder: User, geometry: BaseGeometry) -> Finding:
+    """A finding with an outline saved before paths, which the backfill hasn't measured yet."""
+    finding = findings.create_finding(db, finder, location=Point(LON, LAT), feature_class="enclosure")
+    finding.outline = to_db_geometry(geometry)
+    db.commit()
+    assert (finding.path, finding.shape_length_m) == (None, None)
+    return finding
+
+
+def test_a_nudge_to_an_old_unmeasured_line_tells_nobody_it_grew(db: Session, make_user: MakeUser) -> None:
+    """An outline the backfill hasn't measured had a length all the same."""
+    finder = make_user()
+    old = LineString([(LON, LAT), (LON, LAT + 0.01)])
+    finding = old_outline(db, finder, old)
+    edit(db, finding, finder, path=path((LON, LAT), (east(20), LAT + 0.01)), path_revision=0)
+
+    (change,) = changes_of(db, finding)
+    assert change.kind == "reshaped"
+    assert change.length_before_m == pytest.approx(shapes.length_m(old))
+    assert extended_activity(db, finding) == []
+
+
+def test_an_old_unmeasured_line_reshaped_much_longer_tells_the_followers(
+    db: Session, make_user: MakeUser
+) -> None:
+    finder = make_user()
+    finding = old_outline(db, finder, LineString([(LON, LAT), (LON, LAT + 0.01)]))
+    edit(
+        db, finding, finder, path=path((east(20), LAT), (LON, LAT + 0.01), (LON, LAT + 0.02)), path_revision=0
+    )
+    (change,) = changes_of(db, finding)
+    assert change.kind == "reshaped"
+    assert len(extended_activity(db, finding)) == 1
+
+
+def test_a_nudge_to_an_old_unmeasured_enclosure_tells_nobody_it_grew(
+    db: Session, make_user: MakeUser
+) -> None:
+    finder = make_user()
+    ring = [(LON, LAT), (east(80), LAT), (east(80), LAT + 0.0007), (LON, LAT + 0.0007)]
+    finding = old_outline(db, finder, shapely.Polygon(ring))
+    nudged = [*ring[:2], (east(85), LAT + 0.0007), ring[3]]
+    edit(db, finding, finder, path=path(*nudged, closed=True), path_revision=0)
+    assert changes_of(db, finding)[0].kind == "reshaped"
+    assert extended_activity(db, finding) == []
+
+
+def test_a_closed_shape_reshaped_much_bigger_tells_nobody_a_line_was_carried_on(
+    db: Session, make_user: MakeUser
+) -> None:
+    """`shape_extended` says a line was carried on. An enclosure's longer edge isn't that."""
+    finder = make_user()
+    ring = [(LON, LAT), (east(100), LAT), (east(100), LAT + 0.001), (LON, LAT + 0.001)]
+    finding = drawn(db, finder, path(*ring, closed=True))
+    grown = [*ring[:2], (east(400), LAT + 0.003), (LON, LAT + 0.003)]
+    edit(db, finding, finder, path=path(*grown, closed=True), path_revision=0)
+
+    assert finding.shape_length_m is not None
+    (change,) = changes_of(db, finding)
+    assert change.kind == "reshaped"
+    assert change.length_before_m is not None
+    assert finding.shape_length_m - change.length_before_m > 500
+    assert extended_activity(db, finding) == []
 
 
 def test_an_extension_tells_the_followers_and_nothing_else_does(db: Session, make_user: MakeUser) -> None:

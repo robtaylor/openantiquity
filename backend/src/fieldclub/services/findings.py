@@ -117,6 +117,7 @@ from fieldclub.vocab import (
     Role,
     Sensitivity,
     ShapeChangeKind,
+    ShapeKind,
     Stance,
     Tier,
     tier_rank,
@@ -720,9 +721,11 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
     `shape_edits.change_shape`, with the finder as the one who made the
     change. When that moves the length lying beyond what was looked at, the
     finding is reassessed, which can only change its open steps. An
-    extension, or a reshape that leaves the shape at least
-    `confidence.NEW_PART_LOOK_M` longer, records `shape_extended`, which
-    tells the followers.
+    extension, or a reshape of an open line that leaves it an open line at
+    least `confidence.NEW_PART_LOOK_M` longer, records `shape_extended`,
+    which tells the followers. The length before is
+    `shape_edits.stored_length`, which measures an old outline the backfill
+    hasn't reached.
     """
     check_finder(finding, actor)
     unknown = set(changes) - _EDITABLE
@@ -737,7 +740,9 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
     changed_shape = False
     if "path" in changes or "outline" in changes:
         added_before = (finding.added_since_looked_m, finding.added_view)
-        length_before = finding.shape_length_m or 0.0
+        line_before = (
+            shape_edits.stored_length(finding) if shape_edits.stored_kind(finding) is ShapeKind.LINE else None
+        )
         kind = shape_edits.change_shape(
             db,
             finding,
@@ -760,8 +765,15 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
                 )
         # A point nudged and 20 km added is a reshape to the classifier and an
         # extension to everyone else, so the followers are told of that too.
-        grew = (finding.shape_length_m or 0.0) - length_before
-        if kind is ShapeChangeKind.EXTENDED or (kind is ShapeChangeKind.RESHAPED and grew >= NEW_PART_LOOK_M):
+        # Only a line is carried on: an area's longer edge isn't news of that.
+        carried_on = (
+            kind is ShapeChangeKind.RESHAPED
+            and line_before is not None
+            and finding.shape_kind == ShapeKind.LINE
+            and finding.shape_length_m is not None
+            and finding.shape_length_m - line_before >= NEW_PART_LOOK_M
+        )
+        if kind is ShapeChangeKind.EXTENDED or carried_on:
             activity.record(db, ActivityKind.SHAPE_EXTENDED, actor, finding)
     if placed and not changed_shape:
         if finding.outline is not None:

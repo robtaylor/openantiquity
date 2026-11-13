@@ -32,7 +32,7 @@ from fieldclub.errors import ConflictError, ValidationFailedError
 from fieldclub.models import Finding, FindingShapeChange, User
 from fieldclub.models.common import point_lon_lat, to_db_geometry
 from fieldclub.services import geo, looked_at, sensitivity, shapes
-from fieldclub.vocab import ShapeChangeKind
+from fieldclub.vocab import ShapeChangeKind, ShapeKind
 
 # --------------------------------------------------------------------------
 # Errors
@@ -92,6 +92,31 @@ def shape_columns(shape: shapes.Shape | None) -> dict[str, Any]:
     }
 
 
+def stored_length(finding: Finding) -> float | None:
+    """The length of the finding's shape as it is stored, or None without a shape.
+
+    An outline saved before paths that the backfill hasn't measured yet is
+    measured from its geometry.
+    """
+    if finding.shape_length_m is not None:
+        return finding.shape_length_m
+    if finding.outline is None:
+        return None
+    return shapes.length_m(to_shape(finding.outline))
+
+
+def stored_kind(finding: Finding) -> ShapeKind | None:
+    """Whether the finding's shape as it is stored is a line or an area, or None without a shape.
+
+    An outline the backfill hasn't classed yet is classed from its geometry.
+    """
+    if finding.shape_kind is not None:
+        return ShapeKind(finding.shape_kind)
+    if finding.outline is None:
+        return None
+    return shapes.kind_of(to_shape(finding.outline))
+
+
 def _check_revision(finding: Finding, revision: int | None) -> None:
     """Refuse a change to the shape that didn't start from the shape as it is now. Hold the lock."""
     if revision is None:
@@ -137,10 +162,7 @@ def _record_shape_change(
     new: shapes.Shape | None,
 ) -> FindingShapeChange:
     """Write the change row for the revision this change makes. Call it before storing the new shape."""
-    length_before = finding.shape_length_m
-    if length_before is None and finding.outline is not None:
-        # An outline saved before paths was never measured.
-        length_before = shapes.length_m(to_shape(finding.outline))
+    length_before = stored_length(finding)
     added_length: float | None = None
     added_view: dict[str, float] | None = None
     if kind is ShapeChangeKind.EXTENDED:
