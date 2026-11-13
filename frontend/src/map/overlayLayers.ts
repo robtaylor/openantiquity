@@ -38,6 +38,18 @@ export const RECORDS_SOURCE_LAYER = "records";
 
 const OUTLINE = COLOURS.bg;
 const OUTLINE_WIDTH = 1.5;
+/**
+ * A finding's fill radius at the bottom of the ladder, "Spotted". Each step
+ * up adds half a pixel. Outside the fill are a light ring and the dark
+ * outline, each `OUTLINE_WIDTH`, so a spotted marker is 18 px across.
+ */
+const FINDING_RADIUS = 6;
+/** How strongly a record's square is drawn at full overlay opacity: a little faint, so the findings lead. */
+export const RECORD_SQUARE_OPACITY = 0.85;
+/** The radius along the middle of a known finding's hollow ring, at the bottom of the ladder. */
+const KNOWN_RING_RADIUS = 5.5;
+/** Light, so a finding stands off grey and coloured ground alike, and the dark outline outside it off light ground. */
+const FINDING_RING = COLOURS.text;
 
 /**
  * The circle layers that draw a finding at its exact position, which a tap
@@ -143,8 +155,8 @@ export function tierRadiusExpression(meta: Meta, base: number): ExpressionSpecif
  */
 export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
   const colour = tierColourExpression(meta);
-  const radius = tierRadiusExpression(meta, 5);
-  const ringRadius = tierRadiusExpression(meta, 4.5);
+  const radius = tierRadiusExpression(meta, FINDING_RADIUS);
+  const ringRadius = tierRadiusExpression(meta, KNOWN_RING_RADIUS);
   const ruledOutColour = STATE_COLOURS.ruled_out as string;
 
   const points: FilterSpecification = ["all", IS_POINT, ["!", ["in", STATE, ["literal", SPECIAL_STATES]]]];
@@ -267,8 +279,9 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
     opacity: { "line-opacity": 0.55 },
   };
   const highlightMarker: OverlayLayer = {
+    // Clear of the largest marker's outline, which reaches 11.5 px.
     layer: circle(FINDING_HIGHLIGHT_LAYERS.marker, highlightNothing.marker, {
-      "circle-radius": 11,
+      "circle-radius": 12.5,
       "circle-color": "rgba(0, 0, 0, 0)",
       "circle-stroke-color": COLOURS.text,
       "circle-stroke-width": 2.5,
@@ -305,11 +318,22 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
     ...ring(FINDING_POINT_LAYERS.ruledOut, ruledOut, 3, ruledOutColour, 1.5, true),
     ...ring(FINDING_POINT_LAYERS.known, known, ringRadius, colour, 2.5),
     highlightMarker,
+    // A marker is three circles' worth: the fill in the tier colour, a light ring as its stroke, and the dark
+    // outline as the stroke of a hollow circle just outside it.
+    {
+      layer: circle(`${FINDING_POINT_LAYERS.points}-casing`, points, {
+        "circle-radius": ["+", radius, OUTLINE_WIDTH],
+        "circle-color": "rgba(0, 0, 0, 0)",
+        "circle-stroke-color": OUTLINE,
+        "circle-stroke-width": OUTLINE_WIDTH,
+      }),
+      opacity: { "circle-stroke-opacity": 1 },
+    },
     {
       layer: circle(FINDING_POINT_LAYERS.points, points, {
         "circle-radius": radius,
         "circle-color": colour,
-        "circle-stroke-color": OUTLINE,
+        "circle-stroke-color": FINDING_RING,
         "circle-stroke-width": OUTLINE_WIDTH,
       }),
       opacity: { "circle-opacity": 1, "circle-stroke-opacity": 1 },
@@ -517,7 +541,8 @@ export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
         filter: RECORD_BASE_FILTERS[RECORD_LAYERS.squares],
         layout: {
           "icon-image": SQUARE_IMAGE,
-          "icon-size": ["interpolate", ["linear"], ["zoom"], 8, 0.6, 14, 1, 18, 1.3],
+          // Smaller than a finding's marker at every zoom, so the findings lead: about 6.5 px across at zoom 14.
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 8, 0.5, 14, 0.8, 18, 1.1],
           // Further out than SQUARES_ALL_FROM_ZOOM a village's listed buildings
           // would merge into one block over the earthworks round it, so there
           // squares keep apart, with a gap between them. A square must take
@@ -533,7 +558,7 @@ export function recordsLayers(meta: Meta, source: string): OverlayLayer[] {
           "icon-halo-width": OUTLINE_WIDTH,
         },
       } as LayerSpecification,
-      opacity: { "icon-opacity": 1 },
+      opacity: { "icon-opacity": RECORD_SQUARE_OPACITY },
     },
     {
       // The faintest fill, so a square can be clicked anywhere inside it.

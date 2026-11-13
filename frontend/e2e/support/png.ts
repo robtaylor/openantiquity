@@ -168,3 +168,9 @@ export function countColour(
   }
   return count;
 }
+
+/** `top` drawn at `opacity` over `under`, as the map composites a faint layer. */
+export function blend(top: Rgb, under: Rgb, opacity: number): Rgb {
+  const mix = (i: 0 | 1 | 2): number => Math.round(top[i] * opacity + under[i] * (1 - opacity));
+  return [mix(0), mix(1), mix(2)];
+}

@@ -139,7 +139,7 @@ Investigations hold back what is drawn within 1.5 km of a finding the reader doe
 
 ### Drawing findings on the map
 
-`map/findingsData.ts` turns each feature's `shape` into a line or area feature with its kind and its size (a line's length, an area's extent), beside the anchor marker every finding keeps. `map/overlayLayers.ts` draws them under the markers, in the tier colour:
+`map/findingsData.ts` turns each feature's `shape` into a line or area feature with its kind and its size (a line's length, an area's extent), beside the anchor marker every finding keeps. The marker is a fill in the tier colour inside a light ring and a dark outline (`findings-points` over `findings-points-casing`), as `docs/UI.md` sets out under "Markers". `map/overlayLayers.ts` draws the shapes under the markers, in the tier colour, at every zoom:
 
 - A line is 2.5 px wide on a casing 1.5 px wider on each side in `--bg`, with round joins and caps. A known finding's line is 1.5 px.
 - An area is its edge, 2 px on the same casing, over a fill at 4% opacity, so the terrain inside stays readable. A known finding's edge is 1.25 px.

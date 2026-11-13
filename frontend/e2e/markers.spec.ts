@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { kmSquareAt } from "../src/map/gridref.js";
+import { RECORD_SQUARE_OPACITY } from "../src/map/overlayLayers.js";
 import { findingCollection } from "../src/test/fixtures/findings.js";
 import { metaFixture } from "../src/test/fixtures/meta.js";
 import { COLOURS, STATE_COLOURS, TIER_COLOURS } from "../src/ui/tokens.js";
@@ -7,6 +8,7 @@ import { openMap, SLOW_MAP } from "./support/app.js";
 import { expect, test } from "./support/fixtures.js";
 import { CENTRE, type MarkerPoint, offset, serveFindings, serveRecordTiles } from "./support/markerTiles.js";
 import {
+  blend,
   colourDistance,
   countColour,
   type DecodedImage,
@@ -49,8 +51,12 @@ const TIER = {
   probable: token(TIER_COLOURS, "probable"),
 };
 const RULED_OUT = token(STATE_COLOURS, "ruled_out");
-const DESIGNATION = categoryColour("designation");
-const FIND = categoryColour("find");
+/** Record squares are drawn a little faint, so over the backdrop they are their colour mixed with it. */
+const DESIGNATION = blend(categoryColour("designation"), BACKDROP, RECORD_SQUARE_OPACITY);
+const FIND = blend(categoryColour("find"), BACKDROP, RECORD_SQUARE_OPACITY);
+/** The stubbed street-map tiles' colour (`MAP_TILE` in support/network.ts), and a designation's square over them. */
+const MAP_BACKDROP: Rgb = [222, 214, 196];
+const DESIGNATION_ON_MAP = blend(categoryColour("designation"), MAP_BACKDROP, RECORD_SQUARE_OPACITY);
 
 /** Where a longitude and latitude fall on screen, with the map centred on `CENTRE`, north up. */
 function project(lon: number, lat: number): { x: number; y: number } {
@@ -130,11 +136,11 @@ test("draws findings by tier and state, and records as squares by category", asy
     expect(colourDistance(near(image, known), BACKDROP), "middle of the known ring").toBeLessThanOrEqual(6);
     expect(countColour(image, around(known, 9), TIER.seen, 14), "ring pixels in the tier colour").toBeGreaterThan(30);
 
-    // Records are squares in their category's colour. A square fills its corners, which a circle would not.
+    // Records are squares in their category's colour, filled out towards their corners.
     expect(colourDistance(near(image, designation), DESIGNATION), "designation record").toBeLessThanOrEqual(10);
     expect(colourDistance(near(image, find), FIND), "find record").toBeLessThanOrEqual(10);
-    expect(colourDistance(near(image, designation, 3, 3), DESIGNATION), "corner of the square").toBeLessThanOrEqual(24);
-    expect(colourDistance(near(image, designation, -3, 3), DESIGNATION), "corner of the square").toBeLessThanOrEqual(
+    expect(colourDistance(near(image, designation, 2, 2), DESIGNATION), "corner of the square").toBeLessThanOrEqual(24);
+    expect(colourDistance(near(image, designation, -2, 2), DESIGNATION), "corner of the square").toBeLessThanOrEqual(
       24,
     );
 
@@ -268,12 +274,8 @@ test("hides an overlay when it is switched off", async ({ page }) => {
   await panel.locator('[data-overlay="records"]').getByRole("slider", { name: "Opacity" }).fill("50");
   await expectDrawn(page, (image) => {
     const drawn = near(image, designation);
-    const blend: Rgb = [
-      (DESIGNATION[0] + BACKDROP[0]) / 2,
-      (DESIGNATION[1] + BACKDROP[1]) / 2,
-      (DESIGNATION[2] + BACKDROP[2]) / 2,
-    ];
-    expect(colourDistance(drawn, blend), "record at half opacity").toBeLessThanOrEqual(14);
+    const half = blend(categoryColour("designation"), BACKDROP, RECORD_SQUARE_OPACITY / 2);
+    expect(colourDistance(drawn, half), "record at half opacity").toBeLessThanOrEqual(14);
   });
 });
 
@@ -335,7 +337,7 @@ for (const terrain of ["flat", "3D"] as const) {
       await expect(async () => {
         const image = decodePng(await page.screenshot());
         const l = centreOf(image, halves.left, DESIGNATION);
-        const r = centreOf(image, halves.right, DESIGNATION);
+        const r = centreOf(image, halves.right, DESIGNATION_ON_MAP);
         expect(l, "record left of the divide").not.toBeNull();
         expect(r, "record right of the divide").not.toBeNull();
         found = { left: l as { x: number; y: number }, right: r as { x: number; y: number } };

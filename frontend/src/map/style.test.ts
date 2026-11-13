@@ -4,7 +4,7 @@ import type { LayerSpecification, StyleSpecification, TerrainSpecification } fro
 import { describe, expect, it, vi } from "vitest";
 import type { Meta } from "../api/meta.js";
 import { metaFixture } from "../test/fixtures/meta.js";
-import { TIER_COLOURS } from "../ui/tokens.js";
+import { COLOURS, TIER_COLOURS } from "../ui/tokens.js";
 import { RECORD_FEATURES_FROM_ZOOM, RECORD_LAYERS, SQUARES_ALL_FROM_ZOOM } from "./overlayLayers.js";
 import { LIMITS } from "./permalink.js";
 import { defaultsFromMeta, overlayTroubleKey } from "./store.js";
@@ -375,6 +375,18 @@ describe("buildStyle", () => {
     expect(JSON.stringify(points.filter)).toContain('["==",["geometry-type"],"Point"]');
     expect(JSON.stringify(points.filter)).toContain('"known"');
 
+    // A light ring between the fill and the dark outline stands a grey marker off grey and coloured ground alike.
+    expect(points.paint["circle-stroke-color"]).toBe(COLOURS.text);
+    expect(radii[0]).toBe(6);
+    const ids = style.layers.map((l) => l.id);
+    expect(ids.indexOf("findings-points-casing")).toBe(ids.indexOf("findings-points") - 1);
+    const casing = layer(style, "findings-points-casing");
+    expect(casing.filter).toEqual(points.filter);
+    expect(casing.paint["circle-color"]).toBe("rgba(0, 0, 0, 0)");
+    expect(casing.paint["circle-stroke-color"]).toBe(COLOURS.bg);
+    expect(casing.paint["circle-stroke-width"]).toBe(1.5);
+    expect(casing.paint["circle-radius"]).toEqual(["+", points.paint["circle-radius"], 1.5]);
+
     const known = layer(style, "findings-known");
     expect(known.paint["circle-color"]).toBe("rgba(0, 0, 0, 0)");
     expect(known.paint["circle-stroke-width"]).toBeGreaterThan(0);
@@ -418,6 +430,15 @@ describe("buildStyle", () => {
     expect(busy.minzoom).toBe(RECORD_FEATURES_FROM_ZOOM);
     expect(busy["source-layer"]).toBe("record_counts");
     expect(busy.layout).toEqual(counts.layout);
+  });
+
+  it("draws record squares smaller and fainter than findings, still with the dark outline", () => {
+    const style = buildStyle(metaFixture, stateFor(metaFixture), "composite", OPTIONS);
+    const squares = layer(style, RECORD_LAYERS.squares);
+    expect(squares.layout["icon-size"]).toEqual(["interpolate", ["linear"], ["zoom"], 8, 0.5, 14, 0.8, 18, 1.1]);
+    expect(squares.paint["icon-opacity"]).toBe(0.85);
+    expect(squares.paint["icon-halo-color"]).toBe(COLOURS.bg);
+    expect(squares.paint["icon-halo-width"]).toBe(1.5);
   });
 
   it("draws records as squares coloured by category from the vocabulary", () => {

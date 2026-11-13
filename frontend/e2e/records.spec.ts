@@ -1,4 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
+import { RECORD_SQUARE_OPACITY } from "../src/map/overlayLayers.js";
 import {
   ADS_LIVE,
   AVENUE_RECORD,
@@ -12,7 +13,7 @@ import {
 import { openMap } from "./support/app.js";
 import { expect, test } from "./support/fixtures.js";
 import { CENTRE, type MarkerPoint, offset, serveRecordTiles } from "./support/markerTiles.js";
-import { colourDistance, decodePng, hexToRgb, pixelAt } from "./support/png.js";
+import { blend, colourDistance, decodePng, hexToRgb, pixelAt, type Rgb } from "./support/png.js";
 import { type RecordsLog, serveLiveHosts, serveRecordsApi } from "./support/records.js";
 
 /**
@@ -22,8 +23,9 @@ import { type RecordsLog, serveLiveHosts, serveRecordsApi } from "./support/reco
  */
 
 const ZOOM = 15;
-const DESIGNATION = hexToRgb("#d9544d");
-const BACKDROP = [128, 128, 128] as const;
+const BACKDROP: Rgb = [128, 128, 128];
+/** A designation's square, drawn a little faint over the backdrop. */
+const DESIGNATION = blend(hexToRgb("#d9544d"), BACKDROP, RECORD_SQUARE_OPACITY);
 const VIEW_HASH = `#m=${ZOOM}/${CENTRE.lat}/${CENTRE.lon}/0/0&v=composite&s=315/25&x=2&t=0/1.5&o=osm:80:h,records:100,findings:100`;
 
 const RECORD_AT = offset(0, -120);
