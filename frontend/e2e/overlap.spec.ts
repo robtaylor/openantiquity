@@ -165,6 +165,65 @@ test("a finger's tap beside a line opens it where a mouse's click at the same sp
   }
 });
 
+/**
+ * Two alike ways side by side, 18 m apart: about 12 px. A tap on the first
+ * reaches the second with a finger's 16 px and not with a mouse's 6 px.
+ */
+const SIDE_BY_SIDE = [
+  finding(
+    "f-west-way",
+    "West way",
+    [-120, 150],
+    line([
+      [-120, -150],
+      [-120, 150],
+    ]),
+    "trackway",
+  ),
+  finding(
+    "f-east-way",
+    "East way",
+    [-102, -150],
+    line([
+      [-102, -150],
+      [-102, 150],
+    ]),
+    "trackway",
+  ),
+];
+
+test("a finger's tap between two close ways opens the chooser where a mouse's click there opens one", async ({
+  page,
+  browser,
+}) => {
+  await openOverlapping(page, SIDE_BY_SIDE);
+  const { x, y } = onScreen(page, [-120, 0]);
+  await page.mouse.click(x, y);
+  await expectOpened(page, "f-west-way");
+
+  const tap = async (touch: Page): Promise<void> => {
+    await touch.touchscreen.tap(x, y);
+    const chooser = touch.getByRole("dialog", { name: "2 findings here" });
+    await expect(chooser.getByRole("button", { name: /^West way,/ })).toBeVisible();
+    await expect(chooser.getByRole("button", { name: /^East way,/ })).toBeVisible();
+  };
+  if (isPhone(page)) {
+    await openOverlapping(page, SIDE_BY_SIDE);
+    await tap(page);
+    return;
+  }
+  const context = await browser.newContext({ viewport: page.viewportSize(), hasTouch: true, locale: "en-GB" });
+  try {
+    const touch = await context.newPage();
+    const { stubNetwork } = await import("./support/network.js");
+    await stubNetwork(touch);
+    await openOverlapping(touch, SIDE_BY_SIDE);
+    await tap(touch);
+  } finally {
+    await context.close();
+  }
+});
+
 test("a click that doesn't say its pointer takes the reach of the last pointer to go down", async ({ page }) => {
   await openOverlapping(page);
   const { x, y } = onScreen(page, BESIDE_THE_WAY);
