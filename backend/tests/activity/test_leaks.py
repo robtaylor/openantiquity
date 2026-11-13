@@ -275,6 +275,10 @@ def test_the_stream_tells_a_visitor_of_a_hidden_line_by_its_id_alone(
         assert stream.status_code == 200
         lines = stream.iter_lines()
         assert read_event(lines) == {"comment": "connected", "retry": "3000"}
+        # The stream says it is connected before the hub's LISTEN may be, and an event before that is lost.
+        hub = events._hub
+        assert hub is not None
+        asyncio.run_coroutine_threadsafe(hub.connected.wait(), hub.loop).result(TIMEOUT_S)
         comment(db, line, world.people["member"], "Faint on the ground.")
         heard = next_activity(lines)
     assert (heard["kind"], heard["finding"]) == ("comment_added", line.public_id)
