@@ -260,7 +260,9 @@ def check(db: Session, finding: Finding, target: BaseGeometry) -> None:
     Call it before the edit is applied, under the lock. Every looked-at
     point, and at least `LOOKED_AT_MIN_KEPT` of the length of the looked-at
     lines, must lie within `LOOKED_AT_MAX_MOVE_M` of `target`. An area
-    counts as all of its inside. Nothing is checked while no second look
+    counts as all of its inside. Once `looked_at` is set it binds every
+    later change, even after every answer is taken back, because it never
+    shrinks. Nothing is checked while `looked_at` is null and no second look
     stands. A finding answered before `looked_at` existed is seeded first
     (`seed`), so its answers hold it too.
     """

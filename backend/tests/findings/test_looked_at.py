@@ -539,6 +539,23 @@ def test_a_finding_nobody_looked_at_changes_freely(db: Session, make_user: MakeU
     assert finding.shape_revision == 2
 
 
+def test_taking_back_every_answer_leaves_the_shape_held_to_what_was_looked_at(
+    db: Session, make_user: MakeUser
+) -> None:
+    """`looked_at` binds every later change once it is set, whether or not an answer stands."""
+    finder = make_user()
+    finding = drawn(db, finder, meridian(0, 0.02))
+    (helper,) = answered(db, make_user, finding)
+    review.delete_observation(db, finding, helper)
+    db.commit()
+    assert not looked_at.has_standing_look(db, finding)
+    assert finding.looked_at is not None
+    assert refused(db, finding, finder, path=meridian(0, 0.02, lon=east(3000)), path_revision=0) == (
+        "looked_at_moved"
+    )
+    assert refused(db, finding, finder, path=None, path_revision=0) == "looked_at_moved"
+
+
 def test_the_check_is_made_where_a_suggestion_would_be_applied(db: Session, make_user: MakeUser) -> None:
     """`change_shape` holds an accepted suggestion to the same rule as the finder's own edit."""
     finder, suggester = make_user(), make_user()
