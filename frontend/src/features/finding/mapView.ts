@@ -117,6 +117,36 @@ function onUncoveredMap(point: [number, number]): boolean {
   return x >= stage.left && x <= stage.right && y >= stage.top && y <= stage.bottom;
 }
 
+/** Space kept round a framed shape, in pixels. */
+const FRAME_MARGIN = 72;
+
+/**
+ * Move the map so every point is on the part of it nothing covers, as close
+ * as `maxZoom` and the points allow. Fewer than two points leave it be.
+ */
+export function frameExtent(points: ReadonlyArray<readonly [number, number]>, maxZoom = 18): void {
+  if (points.length < 2) return;
+  const stage = document.querySelector(".fc-stage")?.getBoundingClientRect();
+  if (!stage || stage.width === 0 || stage.height === 0) return;
+  const lons = points.map(([lon]) => lon);
+  const lats = points.map(([, lat]) => lat);
+  const [west, east, south, north] = [Math.min(...lons), Math.max(...lons), Math.min(...lats), Math.max(...lats)];
+  // Web Mercator, as the map draws it, in parts of the world's width.
+  const x = (lon: number): number => (lon + 180) / 360;
+  const y = (lat: number): number => {
+    const sin = Math.sin((lat * Math.PI) / 180);
+    return 0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI);
+  };
+  const width = Math.max(1, stage.width - FRAME_MARGIN * 2);
+  const height = Math.max(1, stage.height - FRAME_MARGIN * 2);
+  const across = Math.max(1e-12, (x(east) - x(west)) * WORLD_PX);
+  const down = Math.max(1e-12, (y(south) - y(north)) * WORLD_PX);
+  const zoom = Math.min(maxZoom, Math.log2(width / across), Math.log2(height / down));
+  const { camera, requestCamera } = useMapStore.getState();
+  const [lng, lat] = centreFor([(west + east) / 2, (south + north) / 2], zoom, camera.bearing, uncoveredOffset());
+  requestCamera({ lng, lat, zoom });
+}
+
 /**
  * Bring the point back onto the uncovered map if a panel or the sheet now
  * covers it, keeping the zoom, bearing and tilt the person has. Left alone

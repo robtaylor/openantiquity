@@ -227,10 +227,16 @@ function PathProblem({ map, path }: { map: MapLibreMap; path: Path }) {
   const last = path.points.at(-1);
   if (!problem || !last) return null;
   const { x, y } = screenPoint(map, [last.lon, last.lat]);
+  const { width, height } = map.getContainer().getBoundingClientRect();
+  // It goes on the side of the point towards the middle of the map, so it stays on screen.
+  const left = width > 0 && x > width / 2;
+  const up = height > 0 && y > height / 2;
+  const shiftX = left ? `calc(${x}px - 100% - 28px)` : `${x}px`;
+  const shiftY = up ? `calc(${y}px - 100% - 28px)` : `${y}px`;
   return (
     <p
       className="fc-path-problem"
-      style={{ transform: `translate(${x}px, ${y}px)` }}
+      style={{ transform: `translate(${shiftX}, ${shiftY})` }}
       aria-hidden="true"
       data-testid="path-problem"
     >

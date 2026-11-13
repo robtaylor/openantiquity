@@ -247,25 +247,26 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
 
   const nothing: FilterSpecification = ["==", ["get", "public_id"], ""];
   const highlightShape: OverlayLayer = {
+    // Light, so it stands apart from every tier's colour, ochre included, and laid under the shapes' own lines.
     layer: shapeLayer(FINDING_HIGHLIGHT_LAYERS.shape, "line", ["all", ["has", "shape"], nothing], {
-      "line-color": COLOURS.accentStrong,
-      "line-width": 5,
+      "line-color": COLOURS.text,
+      "line-width": 9,
     }),
-    opacity: { "line-opacity": 0.9 },
+    opacity: { "line-opacity": 0.55 },
   };
   const highlightMarker: OverlayLayer = {
     layer: circle(FINDING_HIGHLIGHT_LAYERS.marker, ["all", IS_POINT, nothing], {
       "circle-radius": 11,
       "circle-color": "rgba(0, 0, 0, 0)",
-      "circle-stroke-color": COLOURS.accentStrong,
+      "circle-stroke-color": COLOURS.text,
       "circle-stroke-width": 2.5,
     }),
     opacity: { "circle-stroke-opacity": 1 },
   };
 
   return [
-    ...shapes,
     highlightShape,
+    ...shapes,
     {
       layer: squareLine("findings-obscured-casing", liveSquare, { "line-color": OUTLINE, "line-width": 5 }),
       opacity: { "line-opacity": 0.75 },

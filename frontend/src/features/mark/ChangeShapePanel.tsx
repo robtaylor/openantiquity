@@ -30,6 +30,7 @@ import { COLOURS } from "../../ui/tokens.js";
 import { useAccountUi } from "../account/requireAccount.js";
 import { isShapeChanged, updateFinding } from "../finding/api.js";
 import { findingPageKeys } from "../finding/keys.js";
+import { frameExtent, whenStageSettled } from "../finding/mapView.js";
 import type { FindingDetail, FindingUpdate } from "../finding/types.js";
 import { findingQuery, refreshFindingLists, useFinding } from "../finding/useFinding.js";
 import { findingPath } from "../findings/selection.js";
@@ -144,6 +145,7 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
   const ready = editing === key;
 
   // The saved path is taken up once per revision, so a change in progress survives the panel going and coming back.
+  // It is framed on the map as it is taken up, once the panel or the sheet has settled.
   useEffect(() => {
     if (useMarkStore.getState().editing === key) return;
     const anchor: Path = {
@@ -152,6 +154,15 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
     };
     useMarkStore.getState().edit(key, saved ?? anchor);
   }, [key, saved, finding.location.lon, finding.location.lat]);
+  const framed = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ready || framed.current === key) return;
+    return whenStageSettled(() => {
+      framed.current = key;
+      const { points } = useMarkStore.getState().shape.present;
+      frameExtent(points.map(({ lon, lat }) => [lon, lat] as const));
+    });
+  }, [ready, key]);
 
   const lookedAt = finding.location.shape.looked_at;
   useLookedAtOnMap(ready ? map : null, lookedAt);
@@ -194,8 +205,13 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
         return;
       }
       const problem = saveProblem(error);
-      if (problem.field) useMarkStore.getState().setProblem({ field: "path", message: problem.message });
-      else toast(`The shape couldn't be saved. ${problem.message}`, { kind: "error" });
+      if (problem.field) {
+        useMarkStore.getState().setProblem({ field: "path", message: problem.message });
+        // On a phone the sheet may have the reason below its fold: it is brought into sight.
+        requestAnimationFrame(() =>
+          document.querySelector(".fc-mark .fc-mark__problem")?.scrollIntoView?.({ block: "nearest" }),
+        );
+      } else toast(`The shape couldn't be saved. ${problem.message}`, { kind: "error" });
     } finally {
       setSaving(false);
     }
