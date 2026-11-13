@@ -903,3 +903,110 @@ describe("saving, signed out", () => {
     expect(await screen.findByText(/Kept in this browser as a draft until you sign in/)).toBeInTheDocument();
   });
 });
+
+describe("the midpoint dots", () => {
+  function dots(): HTMLElement[] {
+    return screen.queryAllByTestId("midpoint-dot");
+  }
+
+  function at(index: number): { x: number; y: number } {
+    const each = points()[index];
+    return map().project([each?.lon ?? 0, each?.lat ?? 0]);
+  }
+
+  let current: Awaited<ReturnType<typeof openMarking>>["map"] | null = null;
+  function map() {
+    if (!current) throw new Error("No map");
+    return current;
+  }
+
+  async function line(): Promise<void> {
+    current = (await openMarking()).map;
+    act(() => map().click(300, 300));
+    act(() => map().click(500, 300));
+  }
+
+  it("puts a faint dot half way along a segment, hidden from screen readers and out of the tab order", async () => {
+    await line();
+    expect(dots()).toHaveLength(1);
+    const [dot] = dots();
+    expect(dot?.getAttribute("style")).toMatch(/translate\(400(\.\d+)?px, 300(\.\d+)?px\)/);
+    expect(dot?.closest("[aria-hidden='true']")).not.toBeNull();
+    expect(dot?.tabIndex).toBe(-1);
+    expect(dot?.hasAttribute("tabindex")).toBe(false);
+    expect(screen.getByRole("group", { name: "The points of your marking" })).not.toContainElement(dot ?? null);
+  });
+
+  it("shows none on a segment too short to keep clear of its points' handles", async () => {
+    current = (await openMarking()).map;
+    act(() => map().click(300, 300));
+    act(() => map().click(370, 300));
+    expect(dots()).toHaveLength(0);
+    act(() => map().click(470, 300));
+    expect(dots()).toHaveLength(1);
+    expect(dots()[0]).toHaveAttribute("data-segment", "1");
+  });
+
+  for (const [pointerType, under, past] of [
+    ["mouse", 3, 4],
+    ["touch", 8, 9],
+  ] as const) {
+    it(`inserts a point once a ${pointerType} drags a dot past ${under} px, and carries on as that point's drag, one step to undo`, async () => {
+      const user = userEvent.setup();
+      await line();
+      const [dot] = dots();
+      if (!dot) throw new Error("No dot");
+      fireEvent.pointerDown(dot, { pointerId: 11, button: 0, pointerType, clientX: 400, clientY: 300 });
+      fireEvent.pointerMove(dot, { pointerId: 11, pointerType, clientX: 400 + under, clientY: 300 });
+      expect(points()).toHaveLength(2);
+      fireEvent.pointerMove(dot, { pointerId: 11, pointerType, clientX: 400 + past, clientY: 300 });
+      expect(points()).toHaveLength(3);
+      fireEvent.pointerMove(window, { pointerId: 11, pointerType, clientX: 410, clientY: 360 });
+      fireEvent.pointerUp(window, { pointerId: 11, pointerType, clientX: 410, clientY: 360 });
+      expect(points()).toHaveLength(3);
+      expect(at(1).x).toBeCloseTo(410, 6);
+      expect(at(1).y).toBeCloseTo(360, 6);
+      expect(at(0).x).toBeCloseTo(300, 6);
+      expect(at(2).x).toBeCloseTo(500, 6);
+      expect(useMarkStore.getState().selected).toBeNull();
+      // Lifted, a move does nothing.
+      fireEvent.pointerMove(window, { pointerId: 11, pointerType, clientX: 10, clientY: 10 });
+      expect(at(1).x).toBeCloseTo(410, 6);
+
+      await user.click(panel().getByRole("button", { name: "Undo" }));
+      expect(points()).toHaveLength(2);
+    });
+  }
+
+  it("inserts a point and selects it on a click without a drag", async () => {
+    await line();
+    const [dot] = dots();
+    if (!dot) throw new Error("No dot");
+    fireEvent.pointerDown(dot, { pointerId: 12, button: 0, pointerType: "mouse", clientX: 400, clientY: 300 });
+    fireEvent.pointerMove(dot, { pointerId: 12, pointerType: "mouse", clientX: 401, clientY: 301 });
+    fireEvent.pointerUp(dot, { pointerId: 12, pointerType: "mouse", clientX: 401, clientY: 301 });
+    expect(points()).toHaveLength(3);
+    expect(at(1).x).toBeCloseTo(400, 6);
+    expect(useMarkStore.getState().selected).toBe(1);
+    expect(panel().getByText(/^Point 2 of 3, straight, SU \d{4} \d{4}$/)).toBeInTheDocument();
+  });
+
+  it("does nothing on a long press by a finger", async () => {
+    await line();
+    const [dot] = dots();
+    if (!dot) throw new Error("No dot");
+    fireEvent.pointerDown(dot, { pointerId: 13, button: 0, pointerType: "touch", clientX: 400, clientY: 300 });
+    await act(() => new Promise((resolve) => setTimeout(resolve, LONG_PRESS_MS + 50)));
+    fireEvent.pointerUp(dot, { pointerId: 13, pointerType: "touch", clientX: 400, clientY: 300 });
+    expect(points()).toHaveLength(2);
+    expect(useMarkStore.getState().selected).toBeNull();
+  });
+
+  it("shows none for a path at its point limit", async () => {
+    await line();
+    const meta = useMapStore.getState().meta;
+    if (!meta) throw new Error("No meta");
+    act(() => useMapStore.setState({ meta: { ...meta, shapes: { ...meta.shapes, path_max_points: 2 } } }));
+    expect(dots()).toHaveLength(0);
+  });
+});

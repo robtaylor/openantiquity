@@ -99,7 +99,7 @@ function tooClose(a: PathPoint, b: PathPoint): boolean {
  * joins, so a double tap on one spot adds one point.
  */
 export function addPoint(path: Path, point: PathPoint, end: PathEnd, limits: ShapeLimits): Path {
-  if (path.closed || path.points.length >= limits.path_max_points) return path;
+  if (path.closed || !hasRoomForPoint(path, limits)) return path;
   const neighbour = path.points[endIndex(path, end)];
   if (neighbour && tooClose(neighbour, point)) return path;
   return { closed: false, points: end === "start" ? [point, ...path.points] : [...path.points, point] };
@@ -141,6 +141,42 @@ function segmentCount(path: Path): number {
   return path.closed ? path.points.length : path.points.length - 1;
 }
 
+/** Each path's segment middles, worked out once. */
+const middles = new WeakMap<Path, readonly LngLat[]>();
+
+/**
+ * The point half way along each segment, on the curve as drawn, in order: a
+ * segment is named by the index of the point it starts from. Nothing for a
+ * spot or an empty path.
+ */
+export function segmentMiddles(path: Path): readonly LngLat[] {
+  const known = middles.get(path);
+  if (known) return known;
+  const out: LngLat[] = [];
+  const total = segmentCount(path);
+  if (total > 0) {
+    const counts = segmentVertexCounts(path);
+    const vertices = geometryVertices(drawnGeometry(path));
+    let start = 0;
+    for (let index = 0; index < total; index++) {
+      const steps = counts[index] ?? 1;
+      const a = pointAt(path, index);
+      const b = pointAt(path, (index + 1) % path.points.length);
+      if (steps === 1) {
+        out.push([(a.lon + b.lon) / 2, (a.lat + b.lat) / 2]);
+      } else {
+        const low = vertices[start + Math.floor(steps / 2)];
+        const high = vertices[start + Math.ceil(steps / 2)];
+        if (!low || !high) throw new RangeError(`Segment ${index} has no middle`);
+        out.push([(low[0] + high[0]) / 2, (low[1] + high[1]) / 2]);
+      }
+      start += steps;
+    }
+  }
+  middles.set(path, out);
+  return out;
+}
+
 /**
  * Insert a point half way along the segment after point `index`, on the
  * curve as drawn. It is smooth when either end of the segment is. An open
@@ -148,26 +184,28 @@ function segmentCount(path: Path): number {
  */
 export function insertAfter(path: Path, index: number): Path {
   pointAt(path, index);
-  if (index >= segmentCount(path)) return path;
-  const counts = segmentVertexCounts(path);
-  const vertices = geometryVertices(drawnGeometry(path));
-  const start = counts.slice(0, index).reduce((sum, count) => sum + count, 0);
-  const steps = counts[index] ?? 1;
+  const middle = segmentMiddles(path)[index];
+  if (!middle) return path;
   const a = pointAt(path, index);
   const b = pointAt(path, (index + 1) % path.points.length);
-  let middle: LngLat;
-  if (steps === 1) {
-    middle = [(a.lon + b.lon) / 2, (a.lat + b.lat) / 2];
-  } else {
-    const low = vertices[start + Math.floor(steps / 2)];
-    const high = vertices[start + Math.ceil(steps / 2)];
-    if (!low || !high) throw new RangeError(`Segment ${index} has no middle`);
-    middle = [(low[0] + high[0]) / 2, (low[1] + high[1]) / 2];
-  }
   const kind: PointKind = a.kind === "smooth" || b.kind === "smooth" ? "smooth" : "corner";
   const points = [...path.points];
   points.splice(index + 1, 0, { lon: middle[0], lat: middle[1], kind });
   return { closed: path.closed, points };
+}
+
+/** True while the path has room for one more point under the limit `/meta` sets. */
+export function hasRoomForPoint(path: Path, limits: ShapeLimits): boolean {
+  return path.points.length < limits.path_max_points;
+}
+
+/**
+ * `insertAfter`, held to the point limit as a tap is: a path already at the
+ * most points `/meta` allows is returned unchanged. The midpoint dots insert
+ * this way.
+ */
+export function insertMidpoint(path: Path, index: number, limits: ShapeLimits): Path {
+  return hasRoomForPoint(path, limits) ? insertAfter(path, index) : path;
 }
 
 /** Insert a point at a place, after point `index`: for an Alt-click on the segment that starts there. */

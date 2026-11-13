@@ -14,6 +14,7 @@ import { findingKeys } from "../findings/keys.js";
 import { EMPTY_COLLECTION, type FeatureCollection } from "../records/geojson.js";
 import { baseRevision, changeShapeId } from "./editingKey.js";
 import { findingDrafts, useSavedDrafts } from "./findingDrafts.js";
+import { MidpointDots } from "./MidpointDots.js";
 import { hasUnkeptLine, useMarkPath, useMarkStore } from "./markStore.js";
 import { PathHandles } from "./PathHandles.js";
 import { closesAt, geometryVertices, type LngLat, type Path, pathGeometry, segmentNear } from "./path.js";
@@ -337,7 +338,7 @@ function useChangeShapeAllowed(pathname: string): boolean | null {
 }
 
 /**
- * Everything marking draws over the map: the path and its handles while a
+ * Everything marking draws over the map: the path, its midpoint dots and its handles while a
  * finding is being marked, drafts, and findings being saved. Mounted once,
  * by the shell, over the main map.
  */
@@ -367,6 +368,7 @@ export function MarkLayer() {
       ) : null}
       <DraftMarks map={map} openDraft={marking ? draftId : null} />
       <PendingMarks map={map} />
+      {marking && path.points.length > 1 ? <MidpointDots map={map} path={path} /> : null}
       {marking && path.points.length > 0 ? <PathHandles map={map} path={path} /> : null}
       {marking ? <PathProblem map={map} path={path} /> : null}
       {marking && drawing && !path.closed ? <Reticle /> : null}

@@ -41,7 +41,7 @@ export const LONG_PRESS_SLOP_PX = 8;
  */
 const DRAG_START_PX = { mouse: 3, other: LONG_PRESS_SLOP_PX } as const;
 
-function dragStartPx(pointerType: string): number {
+export function dragStartPx(pointerType: string): number {
   return pointerType === "mouse" ? DRAG_START_PX.mouse : DRAG_START_PX.other;
 }
 
@@ -65,7 +65,7 @@ export function pointName(path: Path, index: number): string {
   return `Point ${index + 1} of ${path.points.length}, ${kindWord(point)}${where ? `, ${where}` : ""}`;
 }
 
-function mapSize(map: MapLibreMap): { width: number; height: number } {
+export function mapSize(map: MapLibreMap): { width: number; height: number } {
   const container = map.getContainer();
   return {
     width: container.clientWidth || window.innerWidth,

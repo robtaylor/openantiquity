@@ -67,3 +67,23 @@ export async function sendDraftsFromBeforeSignIn(page: Page, count = 1): Promise
   await bar.getByRole("button", { name: "Check" }).click();
   await bar.getByRole("button", { name: count === 1 ? "Send it" : "Send all", exact: true }).click();
 }
+
+/** Drag with a finger on a phone and the mouse on a desktop, in small steps as a hand would. */
+export async function drag(page: Page, from: { x: number; y: number }, to: { x: number; y: number }): Promise<void> {
+  const steps = 8;
+  if ((page.viewportSize()?.width ?? 0) >= 720) {
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(to.x, to.y, { steps });
+    await page.mouse.up();
+    return;
+  }
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [from] });
+  for (let i = 1; i <= steps; i++) {
+    const point = { x: from.x + ((to.x - from.x) * i) / steps, y: from.y + ((to.y - from.y) * i) / steps };
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [point] });
+  }
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await cdp.detach();
+}

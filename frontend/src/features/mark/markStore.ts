@@ -33,6 +33,7 @@ import {
   history,
   insertAfter,
   insertAt,
+  insertMidpoint,
   type LngLat,
   movePoint,
   oppositeKind,
@@ -113,6 +114,13 @@ export interface MarkState extends MarkFields {
   remove: (index: number) => void;
   switchPointKind: (index: number) => void;
   insertAfterPoint: (index: number) => void;
+  /**
+   * A midpoint dot: insert a point half way along the segment after point
+   * `index`, held to the limits, and select it when `select`. A drag carries
+   * on with `move(index + 1, …, true)`, so the insert and the drag are one
+   * step to undo. False when nothing was inserted.
+   */
+  insertMidpoint: (index: number, limits: ShapeLimits, select: boolean) => boolean;
   setNextKind: (kind: PointKind) => void;
   select: (index: number | null) => void;
   closeShape: () => void;
@@ -231,6 +239,14 @@ export const useMarkStore = create<MarkState>()((set, get) => {
       const before = get().shape.present;
       const after = insertAfter(before, index);
       if (after !== before) change(() => after, { selected: index + 1 });
+    },
+    insertMidpoint: (index, limits, select) => {
+      const before = get().shape.present;
+      if (index < 0 || index >= before.points.length) return false;
+      const after = insertMidpoint(before, index, limits);
+      if (after === before) return false;
+      change(() => after, select ? { selected: index + 1 } : { selected: null });
+      return true;
     },
     setNextKind: (nextKind) => {
       // The first tap comes before its finder has said which kind they want,

@@ -145,3 +145,36 @@ describe("the first point and the kind chosen for the next", () => {
     expect(hasUnkeptLine(useMarkStore.getState())).toBe(false);
   });
 });
+
+describe("a point inserted at a segment's middle", () => {
+  it("is selected after a tap, and one step to undo", () => {
+    const mark = useMarkStore.getState();
+    expect(mark.insertMidpoint(0, metaFixture.shapes, true)).toBe(true);
+    const state = useMarkStore.getState();
+    expect(state.shape.present.points).toHaveLength(4);
+    expect(state.selected).toBe(1);
+    state.undo();
+    expect(useMarkStore.getState().shape.present).toBe(LINE);
+  });
+
+  it("carried on as a drag of that point, is still one step to undo, and selects nothing", () => {
+    const mark = useMarkStore.getState();
+    expect(mark.insertMidpoint(1, metaFixture.shapes, false)).toBe(true);
+    mark.move(2, [-1.835, 51.42], true);
+    mark.move(2, [-1.836, 51.43], true);
+    const state = useMarkStore.getState();
+    expect(state.selected).toBeNull();
+    expect(state.shape.present.points[2]).toEqual({ lon: -1.836, lat: 51.43, kind: "corner" });
+    expect(state.shape.past).toHaveLength(1);
+    state.undo();
+    expect(useMarkStore.getState().shape.present).toBe(LINE);
+  });
+
+  it("is refused at the point limit, and after an open path's last point", () => {
+    const mark = useMarkStore.getState();
+    expect(mark.insertMidpoint(0, { ...metaFixture.shapes, path_max_points: 3 }, true)).toBe(false);
+    expect(mark.insertMidpoint(2, metaFixture.shapes, true)).toBe(false);
+    expect(useMarkStore.getState().shape.present).toBe(LINE);
+    expect(useMarkStore.getState().shape.past).toHaveLength(0);
+  });
+});

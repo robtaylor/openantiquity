@@ -1,7 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import { DRAFTS_STORAGE_KEY } from "../src/features/drafts/store.js";
 import { fakeSession, meWith } from "./support/account.js";
-import { boxOf, openMap, overlaps, sendDraftsFromBeforeSignIn } from "./support/app.js";
+import { boxOf, drag, openMap, overlaps, sendDraftsFromBeforeSignIn } from "./support/app.js";
 import { fakeFindings } from "./support/findings.js";
 import { expect, test } from "./support/fixtures.js";
 import { apiRoute } from "./support/network.js";
@@ -45,26 +45,6 @@ async function markCentre(page: Page): Promise<{ x: number; y: number }> {
 async function tapMap(page: Page, x: number, y: number): Promise<void> {
   if (isPhone(page)) await page.touchscreen.tap(x, y);
   else await page.mouse.click(x, y);
-}
-
-/** Drag with a finger on a phone and the mouse on a desktop, in small steps as a hand would. */
-async function drag(page: Page, from: { x: number; y: number }, to: { x: number; y: number }): Promise<void> {
-  const steps = 8;
-  if (!isPhone(page)) {
-    await page.mouse.move(from.x, from.y);
-    await page.mouse.down();
-    await page.mouse.move(to.x, to.y, { steps });
-    await page.mouse.up();
-    return;
-  }
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [from] });
-  for (let i = 1; i <= steps; i++) {
-    const point = { x: from.x + ((to.x - from.x) * i) / steps, y: from.y + ((to.y - from.y) * i) / steps };
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [point] });
-  }
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-  await cdp.detach();
 }
 
 /** The part of the map nobody's panel or sheet covers. */

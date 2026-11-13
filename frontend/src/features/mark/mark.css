@@ -99,6 +99,49 @@
   box-shadow: var(--focus-gap);
 }
 
+/* A midpoint dot: 8 px in a 32 px target half way along a segment. Under the handles, smaller, filled
+   and faint, so it is never taken for a point. Dragging it inserts a point there. */
+.fc-midpoints {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.fc-midpoint {
+  position: absolute;
+  top: -16px;
+  left: -16px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  pointer-events: auto;
+}
+
+.fc-midpoint:active {
+  cursor: grabbing;
+}
+
+.fc-midpoint__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-strong);
+  box-shadow: 0 0 0 1.5px var(--bg);
+  opacity: 0.55;
+  transition: opacity var(--duration) var(--ease);
+}
+
+.fc-midpoint:hover .fc-midpoint__dot {
+  opacity: 1;
+}
+
 /* A draft: a dashed hollow ring with a "not saved" sign, never a filled marker. */
 .fc-draft-mark {
   position: absolute;

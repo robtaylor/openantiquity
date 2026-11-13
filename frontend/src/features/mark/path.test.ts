@@ -18,6 +18,7 @@ import {
   history,
   insertAfter,
   insertAt,
+  insertMidpoint,
   lengthM,
   movePoint,
   openPath,
@@ -26,6 +27,7 @@ import {
   pathProblem,
   redo,
   replace,
+  segmentMiddles,
   segmentNear,
   setKind,
   switchKind,
@@ -292,6 +294,41 @@ describe("inserting where the line is", () => {
   it("inserts a point at a place, after a segment's start", () => {
     const inserted = insertAt(drawn(A, B), 0, [-1.854, 51.4281]);
     expect(inserted.points).toEqual([A, { lon: -1.854, lat: 51.4281, kind: "corner" }, B]);
+  });
+});
+
+describe("the middle of each segment", () => {
+  it("is half way along each segment of the curve as drawn, closing segment included", () => {
+    const open = drawn(A, B, C);
+    const middles = segmentMiddles(open);
+    expect(middles).toHaveLength(2);
+    // The straight first segment's middle is half way between its ends.
+    expect(middles[0]?.[0]).toBeCloseTo(-1.854, 9);
+    expect(middles[0]?.[1]).toBeCloseTo(51.428, 9);
+    // Each is where "Insert a point after" puts its point.
+    expect(middles[1]).toEqual([insertAfter(open, 1).points[2]?.lon, insertAfter(open, 1).points[2]?.lat]);
+    const closed = closePath(drawn(A, B, C, D));
+    expect(segmentMiddles(closed)).toHaveLength(4);
+    expect(segmentMiddles(closed)[3]).toEqual([
+      insertAfter(closed, 3).points[4]?.lon,
+      insertAfter(closed, 3).points[4]?.lat,
+    ]);
+    // A spot, or nothing, has no segments.
+    expect(segmentMiddles(drawn(A))).toEqual([]);
+    expect(segmentMiddles(EMPTY_PATH)).toEqual([]);
+  });
+
+  it("is worked out once for each path", () => {
+    const path = drawn(A, B, C);
+    expect(segmentMiddles(path)).toBe(segmentMiddles(path));
+  });
+
+  it("takes a point inserted there, held to the point limit like any other", () => {
+    const path = drawn(A, B, C);
+    expect(insertMidpoint(path, 0, limits)).toEqual(insertAfter(path, 0));
+    expect(insertMidpoint(path, 1, limits).points[2]?.kind).toBe("smooth");
+    expect(insertMidpoint(path, 0, { ...limits, path_max_points: 3 })).toBe(path);
+    expect(insertMidpoint(path, 2, limits)).toBe(path);
   });
 });
 
