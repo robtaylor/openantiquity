@@ -41,6 +41,7 @@ import {
   type PointKind,
   redo,
   replace,
+  setKind,
   spotPath,
   switchKind,
   undo,
@@ -68,7 +69,7 @@ export interface MarkFields {
   kept: Path | null;
   /** Which end of an open path a tap adds to. */
   end: PathEnd;
-  /** The kind of point a tap adds, as set on the drawing bar. */
+  /** The kind of point a tap adds, as set on the drawing bar. A first point placed alone takes it too. */
   nextKind: PointKind;
   /** The point whose bar is showing, or null. */
   selected: number | null;
@@ -231,7 +232,14 @@ export const useMarkStore = create<MarkState>()((set, get) => {
       const after = insertAfter(before, index);
       if (after !== before) change(() => after, { selected: index + 1 });
     },
-    setNextKind: (nextKind) => set({ nextKind }),
+    setNextKind: (nextKind) => {
+      // The first tap comes before its finder has said which kind they want,
+      // and a lone point's kind shows only once a shape closes on it. So
+      // while it is the only point it follows the choice, and undo has
+      // nothing more to step through for it.
+      const alone = get().shape.present.points.length === 1;
+      change((path) => (alone ? setKind(path, 0, nextKind) : path), { nextKind }, true);
+    },
     select: (selected) => set({ selected }),
     closeShape: () => change(closePath, { drawing: false, selected: null }),
     finish: () => set({ drawing: false }),

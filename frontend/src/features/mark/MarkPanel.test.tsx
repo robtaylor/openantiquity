@@ -258,24 +258,40 @@ describe("marking by tapping", () => {
     expect(panel().getByRole("button", { name: "Add a point at the cross" })).toBe(add);
     expect(add).toHaveFocus();
     act(() => map.userMove({ lng: map.getCenter().lng + 0.002 }));
+    await user.keyboard("{Enter}");
+    act(() => map.userMove({ lat: map.getCenter().lat + 0.002 }));
     // The next point is curved: the arrow keys move along the chips.
     panel().getByRole("radio", { name: "Straight" }).focus();
     await user.keyboard("{ArrowRight}");
     expect(panel().getByRole("radio", { name: "Curved" })).toHaveAttribute("aria-checked", "true");
     add.focus();
     await user.keyboard("{Enter}");
-    act(() => map.userMove({ lat: map.getCenter().lat + 0.002 }));
+    expect(points().map((each) => each.kind)).toEqual(["corner", "corner", "smooth"]);
+    expect(add).toHaveFocus();
     panel().getByRole("radio", { name: "Curved" }).focus();
     await user.keyboard("{ArrowLeft}");
-    add.focus();
-    await user.keyboard("{Enter}");
-    expect(points().map((each) => each.kind)).toEqual(["corner", "smooth", "corner"]);
-    expect(add).toHaveFocus();
+    expect(panel().getByRole("radio", { name: "Straight" })).toHaveAttribute("aria-checked", "true");
 
     panel().getByRole("button", { name: "Close the shape" }).focus();
     await user.keyboard("{Enter}");
     expect(useMarkStore.getState().shape.present.closed).toBe(true);
     expect(panel().getByRole("button", { name: "Add a point at the cross" })).toBeDisabled();
+  });
+
+  it("makes the first point curved too when Curved is chosen before the second, so a ring closes smoothly", async () => {
+    const user = userEvent.setup();
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    expect(points().map((each) => each.kind)).toEqual(["corner"]);
+
+    await user.click(panel().getByRole("radio", { name: "Curved" }));
+    expect(points().map((each) => each.kind)).toEqual(["smooth"]);
+    act(() => map.click(450, 340));
+    act(() => map.click(400, 380));
+    await user.click(panel().getByRole("button", { name: "Close the shape" }));
+
+    expect(useMarkStore.getState().shape.present.closed).toBe(true);
+    expect(points().map((each) => each.kind)).toEqual(["smooth", "smooth", "smooth"]);
   });
 
   it("finishes with Enter on the map, then carries on from the start", async () => {
