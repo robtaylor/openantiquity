@@ -129,8 +129,8 @@ test.describe("the drawing guide", () => {
     const hash = new URL(page.url()).hash;
     await tapAt(page, { x: card.x + 220, y: card.y + card.height + 200 });
     await expect(point(page, 2, 2)).toBeVisible();
-    await guide(page).getByRole("button", { name: /gestures/i }).click();
-    await guide(page).getByRole("button", { name: /gestures/i }).click();
+    await guide(page).getByRole("button", { name: "Gestures", exact: true }).click();
+    await guide(page).getByRole("button", { name: "Gestures", exact: true }).click();
     await page.waitForTimeout(500);
     expect(new URL(page.url()).hash).toBe(hash);
   });
@@ -138,7 +138,7 @@ test.describe("the drawing guide", () => {
   test("folds to its header, and stays folded next time", async ({ page }) => {
     await openMap(page, `/mark${VIEW}`);
     const open = await boxOf(guide(page));
-    await guide(page).getByRole("button", { name: "Hide the gestures" }).click();
+    await guide(page).getByRole("button", { name: "Gestures", exact: true }).click();
     await expect(guide(page).getByRole("list")).toBeHidden();
     const folded = await boxOf(guide(page));
     expect(folded.height).toBeLessThan(60);
@@ -147,7 +147,7 @@ test.describe("the drawing guide", () => {
     await page.reload();
     await expect(guide(page)).toBeVisible();
     await expect(guide(page).getByRole("list")).toBeHidden();
-    await guide(page).getByRole("button", { name: "Show the gestures" }).click();
+    await guide(page).getByRole("button", { name: "Gestures", exact: true }).click();
     await expect(guide(page).getByRole("list")).toBeVisible();
   });
 

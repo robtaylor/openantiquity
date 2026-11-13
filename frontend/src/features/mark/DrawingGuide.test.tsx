@@ -186,20 +186,21 @@ describe("folding the guide", () => {
   it("folds to its header and back, and remembers the choice in the browser", async () => {
     const user = userEvent.setup();
     await openAt("/mark");
-    const fold = within(guide()).getByRole("button", { name: "Hide the gestures" });
+    const fold = within(guide()).getByRole("button", { name: "Gestures" });
     expect(fold).toHaveAttribute("aria-expanded", "true");
     await user.click(fold);
     expect(within(guide()).queryByRole("list")).toBeNull();
     expect(within(guide()).getByRole("heading", { name: "How to draw" })).toBeInTheDocument();
-    const unfold = within(guide()).getByRole("button", { name: "Show the gestures" });
-    expect(unfold).toHaveAttribute("aria-expanded", "false");
+    // One name, folded or not: aria-expanded carries the state.
+    expect(fold).toHaveAttribute("aria-expanded", "false");
+    expect(fold).toHaveAccessibleName("Gestures");
     expect(window.localStorage.getItem(GUIDE_FOLDED_KEY)).toBe("folded");
 
     // Opened again later, it is still folded.
     act(() => go?.("/"));
     act(() => go?.("/mark"));
     expect(within(guide()).queryByRole("list")).toBeNull();
-    await user.click(within(guide()).getByRole("button", { name: "Show the gestures" }));
+    await user.click(within(guide()).getByRole("button", { name: "Gestures" }));
     expect(within(guide()).getByRole("list")).toBeInTheDocument();
     expect(window.localStorage.getItem(GUIDE_FOLDED_KEY)).toBe("open");
   });
@@ -214,7 +215,7 @@ describe("folding the guide", () => {
     });
     await openAt("/mark");
     expect(within(guide()).getByRole("list")).toBeInTheDocument();
-    await user.click(within(guide()).getByRole("button", { name: "Hide the gestures" }));
+    await user.click(within(guide()).getByRole("button", { name: "Gestures" }));
     expect(within(guide()).queryByRole("list")).toBeNull();
   });
 });

@@ -84,9 +84,9 @@ test("the guide folded, and the swap to search", async ({ page }) => {
   await tapAt(page, at.x - 80, at.y);
   await tapAt(page, at.x + 80, at.y);
   await page.getByRole("button", { name: /^Point 2 of 2/ }).waitFor();
-  await guide.getByRole("button", { name: "Hide the gestures" }).click();
+  await guide.getByRole("button", { name: "Gestures", exact: true }).click();
   await shoot(page, "10-folded");
-  await guide.getByRole("button", { name: "Show the gestures" }).click();
+  await guide.getByRole("button", { name: "Gestures", exact: true }).click();
 
   await guide.getByRole("button", { name: "Search for a place" }).click();
   await page.getByRole("combobox", { name: /Search for a place/ }).waitFor();

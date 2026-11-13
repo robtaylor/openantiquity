@@ -150,7 +150,8 @@ export function DrawingGuide({ onSearch, focusSearch = false }: { onSearch: () =
         </IconButton>
         <IconButton
           size="sm"
-          label={folded ? "Show the gestures" : "Hide the gestures"}
+          label="Gestures"
+          title={folded ? "Show the gestures" : "Hide the gestures"}
           aria-expanded={!folded}
           aria-controls={listId}
           onClick={toggle}
