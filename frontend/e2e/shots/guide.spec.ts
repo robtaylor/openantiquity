@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { type Page, test } from "@playwright/test";
+import { DRAFTS_STORAGE_KEY, DRAFTS_VERSION } from "../../src/features/drafts/store.js";
 import { fakeSession, meWith } from "../support/account.js";
 import { openMap } from "../support/app.js";
 import { fakeFindings } from "../support/findings.js";
@@ -114,4 +115,31 @@ test("a curved line with its dots, close in", async ({ page }) => {
   }
   await page.getByRole("button", { name: /^Point 4 of 4/ }).waitFor();
   await shoot(page, "20-curve-dots");
+});
+
+test("a waiting draft's bar under the guide, unfolded and folded", async ({ page }) => {
+  // On a computer the bar goes under the guide once the stage is under 820 px wide.
+  if (!isPhone(page)) await page.setViewportSize({ width: 1000, height: 800 });
+  const now = new Date().toISOString();
+  const draft = {
+    id: "seed-waiting",
+    kind: "fixture_probe",
+    data: { note: "waiting" },
+    owner: { signedOut: "an-earlier-visit" },
+    createdAt: now,
+    updatedAt: now,
+    state: "waiting",
+  };
+  await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
+    DRAFTS_STORAGE_KEY,
+    JSON.stringify({ version: DRAFTS_VERSION, drafts: [draft] }),
+  ] as const);
+  await openMap(page, `/mark${VIEW}`);
+  await page.getByRole("region", { name: "Drafts" }).waitFor();
+  await shoot(page, "30-drafts-unfolded");
+  await page
+    .getByRole("region", { name: "How to draw" })
+    .getByRole("button", { name: "Gestures", exact: true })
+    .click();
+  await shoot(page, "31-drafts-folded");
 });

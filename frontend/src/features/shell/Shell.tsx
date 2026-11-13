@@ -74,6 +74,7 @@ import { PanelFrame } from "./PanelFrame.js";
 import { type PanelEnvironment, PanelEnvironmentProvider } from "./panelContext.js";
 import { TabBar } from "./TabBar.js";
 import { useIsPhone, useIsShort, useWindowHeight } from "./useIsPhone.js";
+import { useSearchSlotHeight } from "./useSearchSlotHeight.js";
 import "./shell.css";
 
 /** The component gallery is a development aid, so it is left out of production builds. */
@@ -155,6 +156,8 @@ function ReadyShell({ meta }: { meta: Meta }) {
   const terrainOn = useMapStore((state) => state.terrain.enabled);
   const setTerrainEnabled = useMapStore((state) => state.setTerrainEnabled);
   const layersButton = useRef<HTMLButtonElement>(null);
+  const searchSlot = useRef<HTMLDivElement>(null);
+  const searchSlotHeight = useSearchSlotHeight(searchSlot);
 
   // The layer panel is a query parameter, so it can open over any mode and
   // the URL still says what is on screen. So is the bare map: `/` is Explore,
@@ -288,8 +291,15 @@ function ReadyShell({ meta }: { meta: Meta }) {
         <ReviewLayer meta={meta} />
         <ScanLayer />
 
-        <div className="fc-stage">
-          <div className="fc-stage__search">
+        <div
+          className="fc-stage"
+          style={
+            searchSlotHeight === null
+              ? undefined
+              : ({ "--search-slot-height": `${searchSlotHeight}px` } as CSSProperties)
+          }
+        >
+          <div className="fc-stage__search" ref={searchSlot}>
             <SearchOrGuide />
           </div>
           <div className="fc-stage__controls" inert={sheetFull}>

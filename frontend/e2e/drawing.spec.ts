@@ -1,5 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
-import { boxOf, drag, openMap } from "./support/app.js";
+import { DRAFTS_STORAGE_KEY, DRAFTS_VERSION } from "../src/features/drafts/store.js";
+import { boxOf, drag, openMap, overlaps } from "./support/app.js";
 import { expect, test } from "./support/fixtures.js";
 
 /**
@@ -182,3 +183,47 @@ async function tallestRow(page: Page): Promise<number> {
       ),
     );
 }
+
+/** One signed-out draft waiting in this tab, of the stand-in kind fixture mode registers. */
+async function seedDraft(page: Page): Promise<void> {
+  const now = new Date().toISOString();
+  const draft = {
+    id: "seed-waiting",
+    kind: "fixture_probe",
+    data: { note: "waiting" },
+    owner: { signedOut: "seeded-visit" },
+    createdAt: now,
+    updatedAt: now,
+    state: "waiting",
+  };
+  await page.addInitScript(
+    ([key, value]) => {
+      localStorage.setItem(key, value);
+      sessionStorage.setItem("fieldclub.drafts.visit", "seeded-visit");
+    },
+    [DRAFTS_STORAGE_KEY, JSON.stringify({ version: DRAFTS_VERSION, drafts: [draft] })] as const,
+  );
+}
+
+test.describe("the drafts bar beside the guide", () => {
+  test("sits below the guide, unfolded and folded, where there is no room beside it", async ({ page }) => {
+    // A computer's stage under 820 px puts the bar under the search slot, as a phone does.
+    if (!isPhone(page)) await page.setViewportSize({ width: 1000, height: 800 });
+    await seedDraft(page);
+    await openMap(page, `/mark${VIEW}`);
+    const drafts = page.getByRole("region", { name: "Drafts" });
+    await expect(drafts).toBeVisible();
+    for (const state of ["unfolded", "folded"] as const) {
+      if (state === "folded") {
+        await guide(page).getByRole("button", { name: "Gestures", exact: true }).click();
+        await expect(guide(page).getByRole("list")).toBeHidden();
+      }
+      await page.waitForTimeout(300);
+      const card = await boxOf(guide(page));
+      const bar = await boxOf(drafts);
+      expect(overlaps(card, bar), `the drafts bar overlaps the ${state} guide`).toBe(false);
+      expect(bar.y, `the drafts bar is below the ${state} guide`).toBeGreaterThanOrEqual(card.y + card.height);
+      expect(bar.y - (card.y + card.height)).toBeLessThan(20);
+    }
+  });
+});
