@@ -1,23 +1,26 @@
-import { CircleDot, MapPinPlus } from "lucide-react";
+import { MapPinPlus } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
 import { useMainMap } from "../../map/mainMap.js";
 import { Button } from "../../ui/Button.js";
-import { isMarkPath, placeAtReticle } from "./MarkLayer.js";
+import { DrawingBar, SelectedPointBar } from "./DrawingTool.js";
+import { isMarkPath } from "./MarkLayer.js";
 import { MARK_PATH } from "./MarkPanel.js";
 import { useMarkStore } from "./markStore.js";
 
 /**
- * The primary action at the foot of the map. Usually "Mark a finding",
- * which opens the marking panel over the same view. While the mark is being
- * placed it is "Place it here", which puts the mark under the cross in the
- * middle of the map: the way to place it by keyboard, and on a phone the
- * way to place it exactly. Once the mark is down the panel has the buttons.
+ * The primary action at the foot of the map: "Mark a finding", which opens
+ * the marking panel over the same view with the map taking taps at once.
+ *
+ * While marking on a phone, the drawing bar takes its place, or the
+ * selected-point bar while a point is selected, so they sit above the
+ * sheet's peek stop and the map stays free to tap. On a computer both bars
+ * are in the panel.
  */
-export function MarkButton() {
+export function MarkButton({ isPhone }: { isPhone: boolean }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const map = useMainMap();
-  const placed = useMarkStore((state) => state.point !== null);
+  const selected = useMarkStore((state) => state.selected !== null);
 
   if (!isMarkPath(pathname)) {
     return (
@@ -31,10 +34,8 @@ export function MarkButton() {
       </Button>
     );
   }
-  if (placed) return null;
+  if (!isPhone) return null;
   return (
-    <Button variant="primary" size="lg" icon={<CircleDot size={20} aria-hidden />} onClick={() => placeAtReticle(map)}>
-      Place it here
-    </Button>
+    <div className="fc-mark-float">{selected ? <SelectedPointBar map={map} /> : <DrawingBar map={map} isPhone />}</div>
   );
 }

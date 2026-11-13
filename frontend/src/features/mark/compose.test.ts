@@ -11,14 +11,19 @@ import { gridRefOf, suggestTitle, viewStateFrom } from "./describe.js";
 import { createBody, findingDrafts, parseFindingDraft } from "./findingDrafts.js";
 import { EMPTY_MARK, type MarkFields } from "./markStore.js";
 import { FINDS_NOTICE, findsRoute, sensitivityNotice } from "./notices.js";
-import { closeShape, type LngLat } from "./outline.js";
+import { history, type LngLat, type Path } from "./path.js";
 
 const meta = parseMeta(metaFixture);
 const AVEBURY: LngLat = [-1.8542, 51.4286];
 const map = { ...defaultsFromMeta(meta), meta };
 
+function drawn(points: LngLat[], closed = false): MarkFields["shape"] {
+  const path: Path = { closed, points: points.map(([lon, lat]) => ({ lon, lat, kind: "corner" })) };
+  return history(path);
+}
+
 function fields(overrides: Partial<MarkFields> = {}): MarkFields {
-  return { ...EMPTY_MARK, point: AVEBURY, featureClass: "enclosure", ...overrides };
+  return { ...EMPTY_MARK, shape: drawn([AVEBURY]), featureClass: "enclosure", ...overrides };
 }
 
 describe("viewStateFrom", () => {
@@ -112,18 +117,31 @@ describe("notices", () => {
 });
 
 describe("composeFinding", () => {
-  it("needs only the point and the class, and fills in the rest", () => {
+  it("needs only a point and the class, and fills in the rest", () => {
     const composed = composeFinding(fields(), meta, map);
     if (!composed.ok) throw new Error(composed.message);
     expect(composed.draft).toEqual({
       point: AVEBURY,
+      path: null,
       feature_class: "enclosure",
       period: "unknown",
       title: suggestTitle(meta, "enclosure", AVEBURY),
       description: null,
-      outline: null,
       view_state: viewStateFrom(map),
     });
+  });
+
+  it("keeps two points or more as a path, and the point near where the server will anchor it", () => {
+    const composed = composeFinding(fields({ shape: drawn([AVEBURY, [-1.8522, 51.4286]]) }), meta, map);
+    if (!composed.ok) throw new Error(composed.message);
+    expect(composed.draft.path).toEqual({
+      closed: false,
+      points: [
+        { lon: AVEBURY[0], lat: AVEBURY[1], kind: "corner" },
+        { lon: -1.8522, lat: 51.4286, kind: "corner" },
+      ],
+    });
+    expect(composed.draft.point[0]).toBeCloseTo(-1.8532, 6);
   });
 
   it("keeps what the finder typed, trimmed", () => {
@@ -140,25 +158,35 @@ describe("composeFinding", () => {
   });
 
   it("says what is missing, and where", () => {
-    expect(composeFinding(fields({ point: null }), meta, map)).toMatchObject({ ok: false, field: "point" });
+    expect(composeFinding(fields({ shape: drawn([]) }), meta, map)).toMatchObject({ ok: false, field: "point" });
     expect(composeFinding(fields({ featureClass: null }), meta, map)).toMatchObject({
       ok: false,
       field: "featureClass",
       message: "Choose what it looks like.",
     });
-    expect(composeFinding(fields({ point: [20, 50] }), meta, map)).toMatchObject({
+    expect(composeFinding(fields({ shape: drawn([[20, 50]]) }), meta, map)).toMatchObject({
       field: "point",
       message: OUTSIDE_MESSAGE,
     });
-    const far = closeShape({
-      points: [
-        [-1.7, 51.4],
-        [-1.69, 51.4],
-        [-1.69, 51.41],
-      ],
-      shape: "drawing",
+    // Any point off the land covered, not only the anchor.
+    expect(composeFinding(fields({ shape: drawn([AVEBURY, [20, 50]]) }), meta, map)).toMatchObject({
+      field: "point",
+      message: OUTSIDE_MESSAGE,
     });
-    expect(composeFinding(fields({ outline: far }), meta, map)).toMatchObject({ ok: false, field: "outline" });
+    // Held to the limits /meta gives: a closed shape more than 25 km across.
+    const wide = drawn(
+      [
+        [-1.9, 51.4],
+        [-1.4, 51.4],
+        [-1.4, 51.5],
+      ],
+      true,
+    );
+    expect(composeFinding(fields({ shape: wide }), meta, map)).toMatchObject({
+      ok: false,
+      field: "path",
+      message: "A closed shape can be at most 25 km across.",
+    });
   });
 
   it("explains a refusal by the field it is about", () => {
@@ -167,8 +195,12 @@ describe("composeFinding", () => {
       message: OUTSIDE_MESSAGE,
     });
     expect(saveProblem(new ApiError(422, "outline_too_far", "Draw it round the point."))).toEqual({
-      field: "outline",
+      field: "path",
       message: "Draw it round the point.",
+    });
+    expect(saveProblem(new ApiError(422, "looked_at_moved", "Only half would be left."))).toEqual({
+      field: "path",
+      message: "Only half would be left.",
     });
     expect(saveProblem(new ApiError(500, "internal", "Broken."))).toEqual({ field: null, message: "Broken." });
     expect(saveProblem(new Error("?")).field).toBeNull();
@@ -179,14 +211,14 @@ describe("finding drafts", () => {
   const composed = composeFinding(
     fields({
       note: "Faint.",
-      outline: closeShape({
-        points: [
+      shape: drawn(
+        [
           [-1.855, 51.428],
           [-1.853, 51.428],
           [-1.853, 51.43],
         ],
-        shape: "drawing",
-      }),
+        true,
+      ),
     }),
     meta,
     map,
@@ -198,7 +230,8 @@ describe("finding drafts", () => {
     expect(parseFindingDraft(JSON.parse(JSON.stringify(draft)))).toEqual(draft);
     expect(parseFindingDraft({ ...draft, point: ["a", 1] })).toBeNull();
     expect(parseFindingDraft({ ...draft, feature_class: "" })).toBeNull();
-    expect(parseFindingDraft({ ...draft, outline: { type: "Polygon" } })).toBeNull();
+    // A path that can't be read is dropped, and the rest of the draft kept.
+    expect(parseFindingDraft({ ...draft, path: { closed: true, points: [] } })).toEqual({ ...draft, path: null });
     expect(parseFindingDraft(null)).toBeNull();
   });
 
@@ -220,16 +253,24 @@ describe("finding drafts", () => {
     expect(JSON.parse(String(init?.body))).toMatchObject({ client_ref: "draft-7", feature_class: "enclosure" });
   });
 
-  it("becomes the body of POST /findings, with the point as GeoJSON and the reference that makes a resend harmless", () => {
+  it("becomes the body of POST /findings, with a shape as its path alone and the reference that makes a resend harmless", () => {
     expect(createBody(draft, "draft-1")).toEqual({
       client_ref: "draft-1",
-      location: { type: "Point", coordinates: AVEBURY },
+      path: draft.path,
       feature_class: "enclosure",
       period: "unknown",
       title: draft.title,
       description: "Faint.",
-      outline: draft.outline,
       view_state: draft.view_state,
     });
+  });
+
+  it("sends a spot as its location alone", () => {
+    const spot = composeFinding(fields(), meta, map);
+    if (!spot.ok) throw new Error(spot.message);
+    const body = createBody(spot.draft, "draft-2");
+    expect(body.location).toEqual({ type: "Point", coordinates: AVEBURY });
+    expect(body).not.toHaveProperty("path");
+    expect(body).not.toHaveProperty("outline");
   });
 });

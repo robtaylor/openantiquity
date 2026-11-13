@@ -6,7 +6,14 @@ import { useMapStore } from "../../map/store.js";
 import { apiError, routeApi } from "../../test/apiRoutes.js";
 import { createdFinding } from "../../test/fixtures/findings.js";
 import { meFixture } from "../../test/fixtures/me.js";
-import { json, mapReady, renderShell, setUpShellTests, signedOutResponse } from "../../test/shellHarness.js";
+import {
+  json,
+  mapReady,
+  renderShell,
+  setUpShellTests,
+  signedOutResponse,
+  usePhoneLayout,
+} from "../../test/shellHarness.js";
 import { useAccountUi } from "../account/requireAccount.js";
 import {
   DRAFTS_STORAGE_KEY,
@@ -17,8 +24,10 @@ import {
 } from "../drafts/store.js";
 import type { FindingCreate } from "../findings/types.js";
 import { findingDrafts } from "./findingDrafts.js";
-import { NUDGE_FAST_PX, NUDGE_PX } from "./MarkLayer.js";
+import { MARK_PATH_SOURCE, SVG_MAX_POINTS } from "./MarkLayer.js";
 import { useMarkStore } from "./markStore.js";
+import { HANDLES_MAX_IN_VIEW, LONG_PRESS_MS, NUDGE_FAST_PX, NUDGE_PX } from "./PathHandles.js";
+import { history, type Path } from "./path.js";
 import { usePendingFindings } from "./pending.js";
 
 vi.mock("maplibre-gl", async () => {
@@ -53,10 +62,27 @@ function panel() {
   return within(screen.getByRole("complementary", { name: "Mark a finding" }));
 }
 
+/** The first point of the marking, as a pair. */
 function point(): [number, number] {
-  const at = useMarkStore.getState().point;
-  if (!at) throw new Error("No mark has been placed");
-  return at;
+  const [first] = useMarkStore.getState().shape.present.points;
+  if (!first) throw new Error("No mark has been placed");
+  return [first.lon, first.lat];
+}
+
+function points() {
+  return useMarkStore.getState().shape.present.points;
+}
+
+function handles(): HTMLElement[] {
+  return screen.queryAllByTestId("path-handle");
+}
+
+function handle(index: number): HTMLElement {
+  return screen.getByRole("button", { name: new RegExp(`^Point ${index + 1} of \\d+`) });
+}
+
+function guidance() {
+  return panel().getByRole("region", { name: "How to mark it" });
 }
 
 async function openMarking(signedIn = true) {
@@ -68,83 +94,316 @@ async function openMarking(signedIn = true) {
   return { map, routes };
 }
 
-describe("placing the mark", () => {
-  it("puts the map in placing mode, and a click places the mark and a later one moves it", async () => {
+describe("marking by tapping", () => {
+  it("takes taps at once: the first places a point, and a second adds one and leaves the first where it was", async () => {
     const { map } = await openMarking();
     expect(map.getCanvas()).toHaveClass("fc-canvas--placing");
     expect(screen.getByTestId("reticle")).toBeInTheDocument();
-    expect(panel().getByText("Click the map where you see it.")).toBeInTheDocument();
+    expect(guidance()).toHaveTextContent("Click the map where the feature is. One click marks a spot.");
+    expect(panel().getByRole("status")).toHaveTextContent("Nothing placed yet.");
 
     act(() => map.click(300, 200));
     const first = point();
     expect(first[0]).toBeCloseTo(map.unproject([300, 200]).lng, 9);
-    expect(screen.queryByTestId("reticle")).toBeNull();
-    expect(screen.getByRole("button", { name: /^Your mark at SU/ })).toBeInTheDocument();
+    expect(handle(0)).toHaveAccessibleName(/^Point 1 of 1, straight, SU \d{4} \d{4}\./);
     expect(panel().getByText(/^SU \d{4} \d{4}$/)).toBeInTheDocument();
+    expect(guidance()).toHaveTextContent(/This is a spot\. Click again to draw a line from it, or drag the point/);
 
     act(() => map.click(320, 260));
-    expect(point()).not.toEqual(first);
+    expect(points()).toHaveLength(2);
+    expect(point()).toEqual(first);
+    expect(handles()).toHaveLength(2);
+    expect(guidance()).toHaveTextContent(
+      /Click to carry the line on, or click the first point to close it into a shape/,
+    );
+    expect(panel().getByRole("status")).toHaveTextContent(
+      /^2 points, \d+ m\. Click the map to add the next one at the south end\./,
+    );
   });
 
-  it("places the mark under the cross with the primary action, so a keyboard can do it", async () => {
-    const user = userEvent.setup();
-    await openMarking();
-    await user.click(screen.getByRole("button", { name: "Place it here" }));
-    expect(useMarkStore.getState().point).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Place it here" })).toBeNull();
-    // The button has gone, so focus goes on to the question that comes next, not to the foot of the page.
-    expect(panel().getByRole("heading", { name: "What does it look like?" })).toHaveFocus();
-  });
-
-  it("offers the same in the panel, straight after its heading, and focus goes on from there too", async () => {
-    const user = userEvent.setup();
-    await openMarking();
-    await user.click(panel().getByRole("button", { name: "Place it under the cross" }));
-    expect(useMarkStore.getState().point).not.toBeNull();
-    expect(panel().getByRole("heading", { name: "What does it look like?" })).toHaveFocus();
-  });
-
-  it("leaves focus where it is when the mark is placed on the map", async () => {
+  it("turns off double-click and box zoom while marking, so a double click is one point, and turns them back on after", async () => {
     const { map } = await openMarking();
-    act(() => map.click(400, 300));
-    expect(panel().getByRole("heading", { name: "What does it look like?" })).not.toHaveFocus();
-  });
+    expect(map.doubleClickZoom.isEnabled()).toBe(false);
+    expect(map.boxZoom.isEnabled()).toBe(false);
+    act(() => map.click(300, 200));
+    act(() => map.click(300, 200));
+    expect(points()).toHaveLength(1);
 
-  it("nudges the mark with the arrow keys, further with Shift", async () => {
-    const user = userEvent.setup();
-    const { map } = await openMarking();
-    act(() => map.click(400, 300));
-    const handle = screen.getByRole("button", { name: /^Your mark/ });
-    handle.focus();
-    await user.keyboard("{ArrowRight}");
-    expect(map.project(point()).x).toBeCloseTo(400 + NUDGE_PX, 6);
-    await user.keyboard("{Shift>}{ArrowUp}{/Shift}");
-    expect(map.project(point()).y).toBeCloseTo(300 - NUDGE_FAST_PX, 6);
-    expect(handle).toHaveFocus();
-  });
-
-  it("drags the mark with a pointer, without moving the map", async () => {
-    const { map } = await openMarking();
-    act(() => map.click(400, 300));
-    const handle = screen.getByRole("button", { name: /^Your mark/ });
-    fireEvent.pointerDown(handle, { pointerId: 1, button: 0, pointerType: "touch", clientX: 400, clientY: 300 });
-    fireEvent.pointerMove(handle, { pointerId: 1, pointerType: "touch", clientX: 450, clientY: 330 });
-    fireEvent.pointerUp(handle, { pointerId: 1, pointerType: "touch", clientX: 450, clientY: 330 });
-    // The fake map's container sits at the top left of the page, so client and map pixels agree.
-    expect(map.project(point()).x).toBeCloseTo(450, 6);
-    expect(map.project(point()).y).toBeCloseTo(330, 6);
-    // A move after the pointer is lifted does nothing.
-    fireEvent.pointerMove(handle, { pointerId: 1, pointerType: "touch", clientX: 10, clientY: 10 });
-    expect(map.project(point()).x).toBeCloseTo(450, 6);
-  });
-
-  it("leaves with Escape, from the map as from the panel", async () => {
-    const { map } = await openMarking();
-    act(() => map.click(400, 300));
-    fireEvent.keyDown(screen.getByRole("button", { name: /^Your mark/ }), { key: "Escape" });
+    // Escape stops drawing, keeping the point. A second leaves.
+    fireEvent.keyDown(handle(0), { key: "Escape" });
+    expect(useMarkStore.getState().drawing).toBe(false);
+    expect(points()).toHaveLength(1);
+    expect(address()).toBe("/mark");
+    fireEvent.keyDown(handle(0), { key: "Escape" });
     await waitFor(() => expect(address()).toBe("/"));
-    expect(screen.queryByRole("complementary", { name: "Mark a finding" })).toBeNull();
+    expect(map.doubleClickZoom.isEnabled()).toBe(true);
+    expect(map.boxZoom.isEnabled()).toBe(true);
     expect(map.getCanvas()).not.toHaveClass("fc-canvas--placing");
+  });
+
+  it("drags a point with a pointer, without moving the map, as one step to undo", async () => {
+    const user = userEvent.setup();
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    act(() => map.click(450, 300));
+    const target = handle(1);
+    fireEvent.pointerDown(target, { pointerId: 1, button: 0, pointerType: "touch", clientX: 450, clientY: 300 });
+    fireEvent.pointerMove(target, { pointerId: 1, pointerType: "touch", clientX: 460, clientY: 320 });
+    fireEvent.pointerMove(target, { pointerId: 1, pointerType: "touch", clientX: 470, clientY: 330 });
+    fireEvent.pointerUp(target, { pointerId: 1, pointerType: "touch", clientX: 470, clientY: 330 });
+    fireEvent.click(target, { detail: 1 });
+    // The fake map's container sits at the top left of the page, so client and map pixels agree.
+    const moved = points()[1];
+    expect(map.project([moved?.lon ?? 0, moved?.lat ?? 0]).x).toBeCloseTo(470, 6);
+    expect(map.project([moved?.lon ?? 0, moved?.lat ?? 0]).y).toBeCloseTo(330, 6);
+    expect(map.project(point()).x).toBeCloseTo(400, 6);
+    expect(points()).toHaveLength(2);
+    // A move after the pointer is lifted does nothing.
+    fireEvent.pointerMove(target, { pointerId: 1, pointerType: "touch", clientX: 10, clientY: 10 });
+    expect(map.project([points()[1]?.lon ?? 0, points()[1]?.lat ?? 0]).x).toBeCloseTo(470, 6);
+
+    await user.click(panel().getByRole("button", { name: "Undo" }));
+    expect(map.project([points()[1]?.lon ?? 0, points()[1]?.lat ?? 0]).x).toBeCloseTo(450, 6);
+    await user.click(panel().getByRole("button", { name: "Redo" }));
+    expect(map.project([points()[1]?.lon ?? 0, points()[1]?.lat ?? 0]).x).toBeCloseTo(470, 6);
+  });
+
+  it("nudges a point with the arrow keys, further with Shift, and steps along the path with [ and ]", async () => {
+    const user = userEvent.setup();
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    act(() => map.click(450, 300));
+    // The path is one tab stop, on the active end.
+    expect(handle(1)).toHaveAttribute("tabindex", "0");
+    expect(handle(0)).toHaveAttribute("tabindex", "-1");
+    handle(1).focus();
+    await user.keyboard("{ArrowRight}");
+    const nudged = () => map.project([points()[1]?.lon ?? 0, points()[1]?.lat ?? 0]);
+    expect(nudged().x).toBeCloseTo(450 + NUDGE_PX, 6);
+    await user.keyboard("{Shift>}{ArrowUp}{/Shift}");
+    expect(nudged().y).toBeCloseTo(300 - NUDGE_FAST_PX, 6);
+    expect(useMarkStore.getState().selected).toBe(1);
+    await user.keyboard("[[");
+    expect(useMarkStore.getState().selected).toBe(0);
+    expect(handle(0)).toHaveFocus();
+    expect(handle(0)).toHaveAttribute("tabindex", "0");
+    await user.keyboard("{Delete}");
+    expect(points()).toHaveLength(1);
+    expect(map.project(point()).x).toBeCloseTo(450 + NUDGE_PX, 6);
+  });
+
+  it("closes the shape with a tap on the first point, or on its handle, or with the button", async () => {
+    const user = userEvent.setup();
+    const { map } = await openMarking();
+    act(() => map.click(380, 280));
+    act(() => map.click(420, 280));
+    expect(panel().getByRole("button", { name: "Close the shape" })).toBeDisabled();
+    act(() => map.click(440, 330));
+    // A tap within reach of the first point closes it.
+    act(() => map.click(389, 289));
+    expect(useMarkStore.getState().shape.present.closed).toBe(true);
+    expect(points()).toHaveLength(3);
+    expect(panel().getByRole("status")).toHaveTextContent(/^A closed shape of 3 points, \d+ m round\.$/);
+    expect(guidance()).toHaveTextContent("Drag a point to move it, and select one to change or delete it.");
+    expect(screen.getByTestId("mark-path")).toHaveAttribute("data-shape", "polygon");
+    // Closed, a tap adds nothing.
+    act(() => map.click(500, 500));
+    expect(points()).toHaveLength(3);
+
+    // Undo opens it again; a tap on the first point's handle closes it.
+    await user.click(panel().getByRole("button", { name: "Undo" }));
+    expect(useMarkStore.getState().shape.present.closed).toBe(false);
+    await user.click(handle(0));
+    expect(useMarkStore.getState().shape.present.closed).toBe(true);
+
+    await user.click(panel().getByRole("button", { name: "Undo" }));
+    await user.click(panel().getByRole("button", { name: "Close the shape" }));
+    expect(useMarkStore.getState().shape.present.closed).toBe(true);
+  });
+
+  it("draws a mixed path and closes it by keyboard alone", async () => {
+    const user = userEvent.setup();
+    const { map } = await openMarking();
+    const add = panel().getByRole("button", { name: "Add a point at the cross" });
+    add.focus();
+    await user.keyboard("{Enter}");
+    // The button stays put as the first point goes down, so focus stays on it.
+    expect(panel().getByRole("button", { name: "Add a point at the cross" })).toBe(add);
+    expect(add).toHaveFocus();
+    act(() => map.userMove({ lng: map.getCenter().lng + 0.002 }));
+    // The next point is curved: the arrow keys move along the chips.
+    panel().getByRole("radio", { name: "Straight" }).focus();
+    await user.keyboard("{ArrowRight}");
+    expect(panel().getByRole("radio", { name: "Curved" })).toHaveAttribute("aria-checked", "true");
+    add.focus();
+    await user.keyboard("{Enter}");
+    act(() => map.userMove({ lat: map.getCenter().lat + 0.002 }));
+    panel().getByRole("radio", { name: "Curved" }).focus();
+    await user.keyboard("{ArrowLeft}");
+    add.focus();
+    await user.keyboard("{Enter}");
+    expect(points().map((each) => each.kind)).toEqual(["corner", "smooth", "corner"]);
+    expect(add).toHaveFocus();
+
+    panel().getByRole("button", { name: "Close the shape" }).focus();
+    await user.keyboard("{Enter}");
+    expect(useMarkStore.getState().shape.present.closed).toBe(true);
+    expect(panel().getByRole("button", { name: "Add a point at the cross" })).toBeDisabled();
+  });
+
+  it("finishes with Enter on the map, then carries on from the start", async () => {
+    const user = userEvent.setup();
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    act(() => map.click(450, 300));
+    fireEvent.keyDown(map.getCanvas(), { key: "Enter" });
+    expect(useMarkStore.getState().drawing).toBe(false);
+    act(() => map.click(500, 300));
+    expect(points()).toHaveLength(2);
+    expect(guidance()).toHaveTextContent(/Select an end point and press “Continue from this end”/);
+
+    await user.click(handle(0));
+    expect(panel().getByText(/^Point 1 of 2, straight, SU \d{4} \d{4}$/)).toBeInTheDocument();
+    await user.click(panel().getByRole("button", { name: "Continue from this end" }));
+    // The map moves to that end, so carrying on from where you stopped is one press.
+    expect(map.easeTo).toHaveBeenCalledWith({ center: [points()[0]?.lon, points()[0]?.lat] });
+    expect(panel().getByRole("status")).toHaveTextContent(/at the west end\.$/);
+    act(() => map.click(300, 300));
+    expect(points()).toHaveLength(3);
+    expect(map.project([points()[0]?.lon ?? 0, points()[0]?.lat ?? 0]).x).toBeCloseTo(300, 6);
+  });
+
+  it("adds the other kind with Shift-click, switches a point's kind with Shift-click on it, and inserts with Alt-click", async () => {
+    const user = userEvent.setup();
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    act(() => map.click(450, 300, { shiftKey: true }));
+    act(() => map.click(500, 300));
+    expect(points().map((each) => each.kind)).toEqual(["corner", "smooth", "corner"]);
+    await user.keyboard("{Shift>}");
+    await user.click(handle(0));
+    await user.keyboard("{/Shift}");
+    expect(points()[0]?.kind).toBe("smooth");
+    expect(useMarkStore.getState().selected).toBeNull();
+
+    // An Alt-click near the line, between the first two points, puts a point there.
+    act(() => map.click(425, 303, { altKey: true }));
+    expect(points()).toHaveLength(4);
+    expect(map.project([points()[1]?.lon ?? 0, points()[1]?.lat ?? 0]).x).toBeCloseTo(425, 6);
+    // Away from the line it does nothing.
+    act(() => map.click(425, 400, { altKey: true }));
+    expect(points()).toHaveLength(4);
+  });
+
+  it("switches a point's kind with a long press on its handle, and the press doesn't then select it", async () => {
+    const vibrate = vi.fn();
+    Object.defineProperty(navigator, "vibrate", { value: vibrate, configurable: true });
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    const target = handle(0);
+    fireEvent.pointerDown(target, { pointerId: 3, button: 0, pointerType: "touch", clientX: 400, clientY: 300 });
+    // A wobble under the slop is still a press.
+    fireEvent.pointerMove(target, { pointerId: 3, pointerType: "touch", clientX: 402, clientY: 301 });
+    await act(() => new Promise((resolve) => setTimeout(resolve, LONG_PRESS_MS + 50)));
+    expect(points()[0]?.kind).toBe("smooth");
+    expect(target).toHaveAttribute("data-kind", "smooth");
+    expect(vibrate).toHaveBeenCalled();
+    fireEvent.pointerUp(target, { pointerId: 3, pointerType: "touch", clientX: 402, clientY: 301 });
+    fireEvent.click(target, { detail: 1 });
+    expect(useMarkStore.getState().selected).toBeNull();
+    // The point stayed where it was.
+    expect(map.project(point()).x).toBeCloseTo(400, 6);
+    // A press that moves is a drag, and switches nothing.
+    fireEvent.pointerDown(target, { pointerId: 4, button: 0, pointerType: "touch", clientX: 400, clientY: 300 });
+    fireEvent.pointerMove(target, { pointerId: 4, pointerType: "touch", clientX: 420, clientY: 300 });
+    await act(() => new Promise((resolve) => setTimeout(resolve, LONG_PRESS_MS + 50)));
+    fireEvent.pointerUp(target, { pointerId: 4, pointerType: "touch", clientX: 420, clientY: 300 });
+    expect(points()[0]?.kind).toBe("smooth");
+    expect(fireEvent.contextMenu(target)).toBe(false);
+    Reflect.deleteProperty(navigator, "vibrate");
+  });
+
+  it("changes the selected point from its bar", async () => {
+    const user = userEvent.setup();
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    act(() => map.click(450, 300));
+    act(() => map.click(500, 300));
+    await user.click(handle(1));
+    const bar = within(panel().getByRole("region", { name: "Selected point" }));
+    await user.click(bar.getByRole("button", { name: "Make it curved" }));
+    expect(points()[1]?.kind).toBe("smooth");
+    expect(bar.getByText(/^Point 2 of 3, curved/)).toBeInTheDocument();
+    await user.click(bar.getByRole("button", { name: "Insert a point after" }));
+    expect(points()).toHaveLength(4);
+    expect(map.project([points()[2]?.lon ?? 0, points()[2]?.lat ?? 0]).x).toBeCloseTo(475, 0);
+    expect(useMarkStore.getState().selected).toBe(2);
+    await user.click(bar.getByRole("button", { name: "Next point" }));
+    expect(useMarkStore.getState().selected).toBe(3);
+    expect(bar.getByRole("button", { name: "Next point" })).toBeDisabled();
+    expect(bar.getByRole("button", { name: "Insert a point after" })).toBeDisabled();
+    await user.click(bar.getByRole("button", { name: "Previous point" }));
+    await user.click(bar.getByRole("button", { name: "Delete point" }));
+    expect(points()).toHaveLength(3);
+    await user.click(bar.getByRole("button", { name: "Done" }));
+    expect(panel().queryByRole("region", { name: "Selected point" })).toBeNull();
+  });
+
+  it("draws a long path with the map, not SVG, and keeps handles only for the ends and the selected point when many are in view", async () => {
+    const { map } = await openMarking();
+    const many: Path = {
+      closed: false,
+      points: Array.from({ length: SVG_MAX_POINTS + 1 }, (_, i) => {
+        const at = map.unproject([100 + i * 4, 300 + (i % 2) * 4]);
+        return { lon: at.lng, lat: at.lat, kind: "corner" as const };
+      }),
+    };
+    act(() => useMarkStore.setState({ shape: history(many) }));
+    expect(screen.queryByTestId("mark-path")).toBeNull();
+    const data = map.sourceData(MARK_PATH_SOURCE) as { features: Array<{ geometry: { type: string } }> };
+    expect(data.features).toHaveLength(1);
+    expect(data.features[0]?.geometry.type).toBe("LineString");
+    expect(SVG_MAX_POINTS + 1).toBeGreaterThan(HANDLES_MAX_IN_VIEW);
+    expect(handles()).toHaveLength(2);
+    expect(panel().getByRole("status")).toHaveTextContent(/Zoom in to change points\.$/);
+  });
+});
+
+describe("the guidance", () => {
+  it("names the keys once the map has keyboard focus", async () => {
+    const user = userEvent.setup();
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    expect(guidance()).toHaveTextContent(/Shift-click adds the other kind of point/);
+    handle(0).focus();
+    await user.keyboard("{ArrowRight}");
+    expect(guidance()).toHaveTextContent(/On a point, the arrow keys move it, Shift moves it further, \[ and \] step/);
+  });
+
+  it("says tap on a phone, and names the long press", async () => {
+    usePhoneLayout();
+    const { map } = await openMarking();
+    expect(guidance()).toHaveTextContent("Tap the map where the feature is. One tap marks a spot.");
+    expect(guidance()).toHaveTextContent("Press and hold a point to switch it between straight and curved.");
+    // The drawing bar floats above the sheet's peek stop, outside the sheet.
+    const floating = screen.getByRole("region", { name: "Drawing" });
+    expect(panel().queryByRole("region", { name: "Drawing" })).toBeNull();
+    act(() => map.click(400, 300));
+    expect(within(floating).getByRole("status")).toHaveTextContent("1 point. Tap the map to add the next one.");
+    expect(guidance()).toHaveTextContent(/This is a spot\. Tap again/);
+  });
+
+  it("invites a spot of a linear class to carry on into a line", async () => {
+    const user = userEvent.setup();
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    fireEvent.keyDown(handle(0), { key: "Escape" });
+    await user.click(panel().getByRole("radio", { name: /^Road/ }));
+    await user.click(panel().getByRole("button", { name: "Draw it as a line" }));
+    expect(useMarkStore.getState().drawing).toBe(true);
+    act(() => map.click(450, 300));
+    expect(points()).toHaveLength(2);
+    expect(panel().queryByText(/A feature like this runs along the ground/)).toBeNull();
   });
 });
 
@@ -168,29 +427,6 @@ describe("the form", () => {
       "placeholder",
       expect.stringMatching(/^Enclosure in SU \d{2} \d{2}$/),
     );
-  });
-
-  it("draws an outline: corners by tapping, undo, and closing on the first corner", async () => {
-    const user = userEvent.setup();
-    const { map } = await openMarking();
-    act(() => map.click(400, 300));
-    await user.click(panel().getByRole("button", { name: "Draw an outline" }));
-    expect(screen.getByTestId("reticle")).toBeInTheDocument();
-    act(() => map.click(380, 280));
-    act(() => map.click(420, 280));
-    act(() => map.click(440, 330));
-    act(() => map.click(500, 500));
-    expect(useMarkStore.getState().point).toEqual(point());
-    expect(useMarkStore.getState().outline?.points).toHaveLength(4);
-    await user.click(panel().getByRole("button", { name: "Undo corner" }));
-    expect(useMarkStore.getState().outline?.points).toHaveLength(3);
-    // A tap on the first corner closes the shape.
-    act(() => map.click(381, 281));
-    expect(useMarkStore.getState().outline?.shape).toBe("polygon");
-    expect(panel().getByText("A closed shape with 3 corners.")).toBeInTheDocument();
-    // Taps move the mark again once the shape is done.
-    act(() => map.click(410, 300));
-    expect(map.project(point()).x).toBeCloseTo(410, 6);
   });
 });
 
@@ -232,6 +468,44 @@ describe("saving, signed in", () => {
     await waitFor(() => expect(address()).toBe("/f/abc123"));
     await waitFor(() => expect(usePendingFindings.getState().pending).toEqual([]));
     expect(routes.callsTo("POST /findings")).toHaveLength(1);
+  });
+
+  it("sends two points or more as a path with no location, and the server chooses the anchor", async () => {
+    const user = userEvent.setup();
+    const { map, routes } = await openMarking();
+    routes.on("POST /findings", (call) => json(createdFinding(call.body as FindingCreate, "bank1"), 201));
+    act(() => map.click(400, 300));
+    act(() => map.click(450, 300, { shiftKey: true }));
+    act(() => map.click(500, 320));
+    await user.click(panel().getByRole("radio", { name: "Linear bank or ditch" }));
+    const drawn = points();
+    await user.click(panel().getByRole("button", { name: "Save finding" }));
+    await waitFor(() => expect(address()).toBe("/f/bank1"));
+    const body = routes.callsTo("POST /findings")[0]?.body as FindingCreate;
+    expect(body).not.toHaveProperty("location");
+    expect(body).not.toHaveProperty("outline");
+    expect(body.path).toEqual({ closed: false, points: drawn });
+    expect(body.path?.points.map((each) => each.kind)).toEqual(["corner", "smooth", "corner"]);
+    expect(body.title).toMatch(/^Linear bank or ditch in SU \d{2} \d{2}$/);
+  });
+
+  it("says beside the drawing tool when the server refuses the shape", async () => {
+    const user = userEvent.setup();
+    const { map, routes } = await openMarking();
+    routes.on("POST /findings", () =>
+      apiError(422, "shape_crosses_itself", "A closed shape's edge can't cross itself."),
+    );
+    act(() => map.click(400, 300));
+    act(() => map.click(450, 350));
+    act(() => map.click(450, 300));
+    act(() => map.click(400, 350));
+    await user.click(panel().getByRole("button", { name: "Close the shape" }));
+    await user.click(panel().getByRole("radio", { name: "Enclosure" }));
+    await user.click(panel().getByRole("button", { name: "Save finding" }));
+    expect(await panel().findByRole("alert")).toHaveTextContent("A closed shape's edge can't cross itself.");
+    // Moving a point is a change to the shape, which clears it.
+    act(() => useMarkStore.getState().move(3, [points()[3]?.lon ?? 0, (points()[3]?.lat ?? 0) + 0.001]));
+    expect(panel().queryByRole("alert")).toBeNull();
   });
 
   it("takes the mark back when the server refuses the place, says why and what to do, and keeps the form", async () => {
@@ -295,7 +569,7 @@ describe("saving, signed in", () => {
       period: "unknown",
       title: "Round barrow or mound in SU 10 69",
       description: "Clearest at SU 1025 6996",
-      outline: null,
+      path: null,
       view_state: {},
     });
     updateDrafts((drafts) =>
@@ -345,7 +619,7 @@ describe("saving, signed out", () => {
       period: "unknown",
       title: "Round barrow or mound in SU 10 69",
       description: "",
-      outline: null,
+      path: null,
       view_state: {},
     });
     // Made before a provider's sign-in from this tab, which sends the person back here.

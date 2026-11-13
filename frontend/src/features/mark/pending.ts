@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { LngLat } from "./outline.js";
+import type { LngLat } from "./path.js";
 
 /**
  * Findings being saved right now, drawn on the map and listed in Explore at

@@ -4,6 +4,7 @@ import { metaFixture } from "../../test/fixtures/meta.js";
 import type { PathPoint } from "./curve.js";
 import {
   addPoint,
+  anchorOf,
   apiPath,
   canClose,
   closePath,
@@ -11,10 +12,12 @@ import {
   commit,
   deletePoint,
   EMPTY_PATH,
+  endDirection,
   endIndex,
   HISTORY_LIMIT,
   history,
   insertAfter,
+  insertAt,
   lengthM,
   movePoint,
   openPath,
@@ -23,6 +26,7 @@ import {
   pathProblem,
   redo,
   replace,
+  segmentNear,
   setKind,
   switchKind,
   undo,
@@ -264,5 +268,53 @@ describe("old outlines", () => {
 describe("apiPath", () => {
   it("is the path as the API takes it", () => {
     expect(apiPath(closePath(drawn(A, B, C)))).toEqual({ closed: true, points: [A, B, C] });
+  });
+});
+
+describe("inserting where the line is", () => {
+  const project = ([lon, lat]: [number, number]) => ({ x: (lon + 2) * 100_000, y: (52 - lat) * 100_000 });
+
+  it("finds the segment under a tap, within reach", () => {
+    const path = drawn(A, B, { ...C, kind: "corner" });
+    // Half way between A and B on screen, a few pixels off the line.
+    const a = project([A.lon, A.lat]);
+    const b = project([B.lon, B.lat]);
+    const middle = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 + 4 };
+    expect(segmentNear(path, middle, project, 8)).toBe(0);
+    expect(segmentNear(path, { x: middle.x, y: middle.y + 20 }, project, 8)).toBeNull();
+    // Closed, the closing segment counts too.
+    const c = project([C.lon, C.lat]);
+    const closing = { x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 };
+    expect(segmentNear(path, closing, project, 8)).toBeNull();
+    expect(segmentNear(closePath(path), closing, project, 8)).toBe(2);
+  });
+
+  it("inserts a point at a place, after a segment's start", () => {
+    const inserted = insertAt(drawn(A, B), 0, [-1.854, 51.4281]);
+    expect(inserted.points).toEqual([A, { lon: -1.854, lat: 51.4281, kind: "corner" }, B]);
+  });
+});
+
+describe("anchorOf", () => {
+  it("is the spot itself, a line's half way point, and somewhere inside a shape", () => {
+    expect(anchorOf(EMPTY_PATH)).toBeNull();
+    expect(anchorOf(drawn(A))).toEqual([A.lon, A.lat]);
+    const half = anchorOf(drawn(A, B));
+    expect(half?.[0]).toBeCloseTo(-1.854, 6);
+    expect(half?.[1]).toBeCloseTo(51.428, 6);
+    const inside = anchorOf(closePath(drawn(A, B, { ...C, kind: "corner" }, D)));
+    expect(inside?.[0]).toBeCloseTo(-1.854, 6);
+    expect(inside?.[1]).toBeCloseTo(51.429, 6);
+  });
+});
+
+describe("endDirection", () => {
+  it("names the active end by the compass, from the other end", () => {
+    expect(endDirection(drawn(A, B), "end")).toBe("east");
+    expect(endDirection(drawn(A, B), "start")).toBe("west");
+    expect(endDirection(drawn(B, C), "end")).toBe("north");
+    expect(endDirection(drawn(A, C), "end")).toBe("north-east");
+    expect(endDirection(drawn(A), "end")).toBeNull();
+    expect(endDirection(closePath(drawn(A, B, C)), "end")).toBeNull();
   });
 });

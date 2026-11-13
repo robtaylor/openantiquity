@@ -9,7 +9,7 @@ import { LIMITS } from "../../map/permalink.js";
 import type { MapState } from "../../map/store.js";
 import { squareWords } from "../findings/square.js";
 import type { ViewState } from "../findings/types.js";
-import type { LngLat } from "./outline.js";
+import type { LngLat } from "./path.js";
 
 /** The server takes a layer id made of these characters only. */
 const LAYER_ID = /^[a-z0-9_-]{1,40}$/;

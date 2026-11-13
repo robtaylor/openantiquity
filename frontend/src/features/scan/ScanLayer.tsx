@@ -104,15 +104,15 @@ function useReframeAfterMarking(stage: Stage, square: Square | null): void {
  * Going from the scan to marking a finding, and back, keeps the ground in
  * the middle of the map where it was. On a phone the sheet drops from half-way
  * to peek for marking, which moves the middle of what shows, and with it the
- * cross that "Place it here" puts the mark under, down and out of the square
+ * cross that "Add a point at the cross" puts a point under, down and out of the square
  * the person was looking at.
  *
  * The ground in the middle is taken as the stage changes, in the render
  * before the shell tells the map what its chrome covers. From then on, every
  * change of cover brings that ground back to the middle, at once, until the
- * person moves the map, places the mark, or leaves. Nothing waits on a timer,
- * so it holds however late the cover arrives. "Place it here" pressed while
- * the map is still on its way puts the mark on that ground, which is where
+ * person moves the map, places the first point, or leaves. Nothing waits on a timer,
+ * so it holds however late the cover arrives. "Add a point at the cross"
+ * pressed while the map is still on its way puts the first point on that ground, which is where
  * the cross is headed.
  */
 function useKeepMiddle(stage: Stage): void {
@@ -144,10 +144,10 @@ function useKeepMiddle(stage: Stage): void {
     });
     const offMark = useMarkStore.subscribe((next, previous) => {
       const middle = kept.current;
-      if (!middle || next.point === previous.point || previous.point !== null || next.point === null) return;
+      if (!middle || previous.shape.present.points.length !== 0 || next.shape.present.points.length === 0) return;
       kept.current = null;
-      // Placed by the button, under the cross: the cross's place once the map has caught up.
-      if (next.focusForm) useMarkStore.setState({ point: [middle.lng, middle.lat] });
+      // The first point added by the button, under the cross: the cross's place once the map has caught up.
+      if (next.crossAdded) next.move(0, [middle.lng, middle.lat], true);
     });
     return () => {
       offCover();

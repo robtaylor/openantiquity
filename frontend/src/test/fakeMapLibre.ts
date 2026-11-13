@@ -146,6 +146,17 @@ export class FakeMap {
     }),
     isEnabled: () => this.doubleClickZoom.enabled,
   };
+  /** Shift-drag box zoom, which the marking tool turns off so Shift-click is a point. */
+  readonly boxZoom = {
+    enabled: true,
+    enable: vi.fn(() => {
+      this.boxZoom.enabled = true;
+    }),
+    disable: vi.fn(() => {
+      this.boxZoom.enabled = false;
+    }),
+    isEnabled: () => this.boxZoom.enabled,
+  };
   /** Called by MapLibre when the style asks for an image the map does not have. */
   missingImageResolver: ((id: string) => void | Promise<void>) | null = null;
   setMissingStyleImageResolver = vi.fn((resolver: ((id: string) => void | Promise<void>) | null) => {
@@ -424,10 +435,10 @@ export class FakeMap {
     return this.options.container as HTMLElement;
   }
 
-  /** Click the map at a point on the canvas, as MapLibre reports a click that was not a drag. */
-  click(x: number, y: number): void {
+  /** Click the map at a point on the canvas, as MapLibre reports a click that was not a drag, with any keys held. */
+  click(x: number, y: number, keys: { shiftKey?: boolean; altKey?: boolean } = {}): void {
     const lngLat = this.unproject([x, y]);
-    this.fire("click", { point: { x, y }, lngLat, originalEvent: {} });
+    this.fire("click", { point: { x, y }, lngLat, originalEvent: { ...keys } });
   }
 
   /** What the app last put into a GeoJSON source, or undefined if it never has. */

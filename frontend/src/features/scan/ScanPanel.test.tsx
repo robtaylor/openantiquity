@@ -7,6 +7,7 @@ import { useMapCover, visibleCentre } from "../../map/visibleArea.js";
 import { type ApiRoutes, apiError, routeApi } from "../../test/apiRoutes.js";
 import { createdFinding, findingCollection, findingPage } from "../../test/fixtures/findings.js";
 import { meFixture } from "../../test/fixtures/me.js";
+import { metaFixture } from "../../test/fixtures/meta.js";
 import { coverageOf, SQUARE_SPOT, squareAt, squareEastOf } from "../../test/fixtures/squares.js";
 import { json, mapReady, renderShell, setUpShellTests, signedOutResponse } from "../../test/shellHarness.js";
 import { useToastStore } from "../../ui/toastStore.js";
@@ -160,9 +161,11 @@ describe("coming back to the square from marking", () => {
     expect(now.lng).toBeCloseTo(middle.lng, 6);
     expect(now.lat).toBeCloseTo(middle.lat, 6);
 
-    // "Place it here" pressed while the map is still on its way puts the mark on that ground.
-    act(() => useMarkStore.getState().placeFromButton([middle.lng, middle.lat - 0.01]));
-    expect(useMarkStore.getState().point).toEqual([middle.lng, middle.lat]);
+    // "Add a point at the cross" pressed while the map is still on its way puts the point on that ground.
+    act(() => useMarkStore.getState().addAtCross([middle.lng, middle.lat - 0.01], metaFixture.shapes));
+    expect(useMarkStore.getState().shape.present.points).toEqual([
+      { lon: middle.lng, lat: middle.lat, kind: "corner" },
+    ]);
   });
 
   it("goes back to the square, not to the finding's page, once a finding marked from it is saved", async () => {
@@ -237,7 +240,7 @@ describe("ending a square signed out", () => {
       period: "unknown",
       title: "Enclosure in the square",
       description: null,
-      outline: null,
+      path: null,
       view_state: { layer: "composite", zoom: 15 },
     });
     expect(await panel.findByText("You've marked 1 finding in this square.")).toBeInTheDocument();

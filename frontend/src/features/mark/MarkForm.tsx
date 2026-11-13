@@ -1,11 +1,11 @@
 /**
- * The marking form: where the mark is, what it looks like, the optional
- * details and outline, the two notices, and saving. `MarkPanel` shows it.
+ * The marking form: the guidance and the drawing tool, what it looks like,
+ * the optional details, the two notices, and saving. `MarkPanel` shows it.
  */
 
-import { CircleDot, Crosshair, PenLine, Trash2, Undo2 } from "lucide-react";
+import { Trash2, Waypoints } from "lucide-react";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { type ReactNode, useEffect, useId, useRef } from "react";
+import { useEffect, useId, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { safeHref } from "../../map/attribution.js";
@@ -28,13 +28,16 @@ import { discardDraft, restoreDraft, retryDraft } from "../drafts/store.js";
 import { namedFields, POSITION_IN_TEXT, positionWords } from "../finding/positionInText.js";
 import { BARE_MAP_PATH } from "../shell/navigation.js";
 import { type PanelEnvironment, usePanelEnvironment } from "../shell/panelContext.js";
+import { DrawingBar, Guidance, SelectedPointBar } from "./DrawingTool.js";
 import { exactGridRefOf, suggestTitle } from "./describe.js";
 import type { FindingDraft } from "./findingDrafts.js";
-import { placeAtReticle, reticlePlace } from "./MarkLayer.js";
-import { useMarkStore } from "./markStore.js";
+import { useMarkPath, useMarkStore } from "./markStore.js";
 import { FINDS_NOTICE, findsRoute, sensitivityNotice } from "./notices.js";
-import { canClose, canFinishLine } from "./outline.js";
+import { anchorOf, type LngLat } from "./path.js";
 import { useSaveMark } from "./useSaveMark.js";
+
+/** Classes whose features run along the ground, which a finding of one point is invited to draw as a line. */
+export const LINEAR_CLASSES: ReadonlySet<string> = new Set(["linear", "trackway", "road"]);
 
 /** Space kept round the mark when the map is moved to show it, in pixels. */
 const VIEW_MARGIN = 48;
@@ -69,7 +72,7 @@ export function uncoveredBox(
 }
 
 /** Move the map, if it must, so the mark is well inside the part of it on show. */
-function keepInView(map: MapLibreMap, point: [number, number], box: ReturnType<typeof uncoveredBox>): void {
+function keepInView(map: MapLibreMap, point: LngLat, box: ReturnType<typeof uncoveredBox>): void {
   if (!isMapLive(map)) return;
   const { x, y } = screenPoint(map, point);
   const inside =
@@ -83,43 +86,39 @@ function keepInView(map: MapLibreMap, point: [number, number], box: ReturnType<t
 
 /**
  * Keep the panel and the mark where both can be seen. On a phone the sheet
- * rests at its peek stop until the mark is placed, so the map is free to
- * tap, then opens half-way for the form, with the map moved if need be so
- * the mark stays in sight above it.
+ * rests at its peek stop while points are being added, so the map is free
+ * to tap, then opens half-way for the form once drawing stops, with the map
+ * moved if need be so the mark stays in sight above it.
  */
-function useMarkInView(placed: boolean): void {
+function useMarkInView(anchor: LngLat | null, drawing: boolean): void {
   const environment = usePanelEnvironment();
   const map = useMainMap();
   const { isPhone, setStop, sheetHeight } = environment;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: placing the mark is the trigger, not each move of it
+  const placed = anchor !== null;
+  const latest = useRef(anchor);
+  latest.current = anchor;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: placing the mark and stopping drawing are the triggers, not each move
   useEffect(() => {
-    if (isPhone) setStop(placed ? "half" : "peek");
-    const point = useMarkStore.getState().point;
-    if (!placed || !map || !point) return;
+    if (isPhone) setStop(placed && !drawing ? "half" : "peek");
+    const point = latest.current;
+    if (!placed || !map || !point || (isPhone && drawing)) return;
     keepInView(map, point, uncoveredBox({ isPhone, sheetHeight }, window.innerWidth, window.innerHeight));
-  }, [placed, isPhone, map]);
+  }, [placed, drawing, isPhone, map]);
 }
 
 function ClassChooser({ meta }: { meta: Meta }) {
   const featureClass = useMarkStore((state) => state.featureClass);
   const setFeatureClass = useMarkStore((state) => state.setFeatureClass);
   const problem = useMarkStore((state) => (state.problem?.field === "featureClass" ? state.problem.message : null));
+  const spot = useMarkStore((state) => state.shape.present.points.length === 1);
+  const drawing = useMarkStore((state) => state.drawing);
   const hint = meta.vocab.feature_classes.find((candidate) => candidate.id === featureClass)?.hint;
   const notice = sensitivityNotice(meta, featureClass);
   const headingId = useId();
-  const heading = useRef<HTMLHeadingElement>(null);
-  const focusForm = useMarkStore((state) => state.focusForm);
-  const { isPhone, stop } = usePanelEnvironment();
-  // Placed from "Place it here", which has gone: the question comes next, once the sheet has
-  // risen from peek, where its body takes no focus.
-  useEffect(() => {
-    if (!focusForm || (isPhone && stop === "peek")) return;
-    heading.current?.focus();
-    useMarkStore.getState().formFocused();
-  }, [focusForm, isPhone, stop]);
+  const linear = spot && featureClass !== null && LINEAR_CLASSES.has(featureClass);
   return (
     <section className="fc-mark__step" aria-labelledby={headingId}>
-      <h3 className="fc-field__label" id={headingId} ref={heading} tabIndex={-1}>
+      <h3 className="fc-field__label" id={headingId} tabIndex={-1}>
         What does it look like?
       </h3>
       <ChipGroup
@@ -138,99 +137,48 @@ function ClassChooser({ meta }: { meta: Meta }) {
           {problem}
         </p>
       ) : null}
+      {linear ? (
+        <div className="fc-mark__notice">
+          <p>
+            A feature like this runs along the ground. You can carry on from your point and draw it as a line, or keep
+            it as a spot.
+          </p>
+          {drawing ? null : (
+            <div className="fc-mark__row">
+              <Button
+                size="sm"
+                icon={<Waypoints size={14} aria-hidden />}
+                onClick={() => useMarkStore.getState().continueFrom("end")}
+              >
+                Draw it as a line
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : null}
       {notice ? <p className="fc-mark__notice">{notice}</p> : null}
     </section>
   );
 }
 
-function OutlineTool({ map, isPhone }: { map: MapLibreMap | null; isPhone: boolean }) {
-  const outline = useMarkStore((state) => state.outline);
-  const drawing = useMarkStore((state) => state.drawing);
-  const problem = useMarkStore((state) => (state.problem?.field === "outline" ? state.problem.message : null));
-  const store = useMarkStore.getState();
-  const count = outline?.points.length ?? 0;
-  const tap = isPhone ? "Tap" : "Click";
-
-  let body: ReactNode;
-  if (drawing && outline) {
-    body = (
-      <>
-        <p className="fc-mark__hint" role="status">
-          {count === 0
-            ? `${tap} the map at each corner of the feature, in order round it.`
-            : `${count} ${count === 1 ? "corner" : "corners"}. ${tap} the first corner, or press "Close the shape", to finish.`}
-        </p>
-        <div className="fc-mark__row">
-          <Button
-            size="sm"
-            icon={<Crosshair size={14} aria-hidden />}
-            onClick={() => {
-              const place = map ? reticlePlace(map) : null;
-              if (place) store.addOutlinePoint(place);
-            }}
-          >
-            Add a corner at the cross
-          </Button>
-          <Button
-            size="sm"
-            icon={<Undo2 size={14} aria-hidden />}
-            disabled={count === 0}
-            onClick={store.undoOutlinePoint}
-          >
-            Undo corner
-          </Button>
-          <Button size="sm" disabled={!canClose(outline)} onClick={store.closeOutline}>
-            Close the shape
-          </Button>
-          <Button size="sm" disabled={!canFinishLine(outline)} onClick={store.finishOutlineLine}>
-            Finish as a line
-          </Button>
-          <Button size="sm" variant="ghost" onClick={store.removeOutline}>
-            Cancel outline
-          </Button>
-        </div>
-      </>
-    );
-  } else if (outline) {
-    body = (
-      <>
-        <p className="fc-mark__hint">
-          {outline.shape === "polygon" ? `A closed shape with ${count} corners.` : `A line through ${count} points.`}
-        </p>
-        <div className="fc-mark__row">
-          <Button size="sm" icon={<PenLine size={14} aria-hidden />} onClick={store.startOutline}>
-            Change the outline
-          </Button>
-          <Button size="sm" variant="ghost" icon={<Trash2 size={14} aria-hidden />} onClick={store.removeOutline}>
-            Remove it
-          </Button>
-        </div>
-      </>
-    );
-  } else {
-    body = (
-      <>
-        <div className="fc-mark__row">
-          <Button size="sm" icon={<PenLine size={14} aria-hidden />} onClick={store.startOutline}>
-            Draw an outline
-          </Button>
-        </div>
-        <p className="fc-mark__hint">The shape of the bank, ditch or mound, if you can see it.</p>
-      </>
-    );
-  }
+/** The guidance and, on a computer, the drawing bars, with what the server or the limits said of the shape. */
+function DrawingSection({ map, isPhone }: { map: MapLibreMap | null; isPhone: boolean }) {
+  const problem = useMarkStore((state) => (state.problem?.field === "path" ? state.problem.message : null));
   return (
-    <section className="fc-mark__step" aria-label="Outline">
-      <h3 className="fc-field__label">
-        Outline <span className="fc-mark__optional">(optional)</span>
-      </h3>
-      {body}
+    <div className="fc-mark__step">
+      <Guidance map={map} isPhone={isPhone} />
+      {isPhone ? null : (
+        <>
+          <DrawingBar map={map} isPhone={false} />
+          <SelectedPointBar map={map} />
+        </>
+      )}
       {problem ? (
         <p className="fc-mark__problem" role="alert">
           {problem}
         </p>
       ) : null}
-    </section>
+    </div>
   );
 }
 
@@ -294,7 +242,8 @@ export function MarkForm({ meta, draft }: { meta: Meta; draft: KindDraft<Finding
   const map = useMainMap();
   const navigate = useNavigate();
   const save = useSaveMark(meta);
-  const point = useMarkStore((state) => state.point);
+  const path = useMarkPath();
+  const drawing = useMarkStore((state) => state.drawing);
   const featureClass = useMarkStore((state) => state.featureClass);
   const period = useMarkStore((state) => state.period);
   const title = useMarkStore((state) => state.title);
@@ -317,31 +266,15 @@ export function MarkForm({ meta, draft }: { meta: Meta; draft: KindDraft<Finding
     field?.closest(".fc-field")?.scrollIntoView?.({ block: "start", behavior: scrollBehaviour() });
   }, [refused]);
   const store = useMarkStore.getState();
-  const nation = usePointDetail(point ? { lng: point[0], lat: point[1] } : null).detail?.nation ?? null;
+  const anchor = useMemo(() => anchorOf(path), [path]);
+  // The nation, for the finds notice, by the first point: a nation's border isn't moved by a few metres of line.
+  const first = path.points[0];
+  const nation = usePointDetail(first ? { lng: first.lon, lat: first.lat } : null).detail?.nation ?? null;
   const busy = saving || draft?.state === "saving";
-  useMarkInView(point !== null);
+  useMarkInView(anchor, drawing);
 
-  if (point === null) {
-    return (
-      <div className="fc-mark">
-        <div className="fc-mark__step">
-          <p className="fc-mark__lead">{environment.isPhone ? "Tap" : "Click"} the map where you see it.</p>
-          <p className="fc-mark__hint">
-            Or move the map until the cross in the middle is over it, and press “Place it here” at the foot of the map,
-            or this button.
-          </p>
-          <div>
-            <Button icon={<CircleDot size={16} aria-hidden />} onClick={() => placeAtReticle(map)}>
-              Place it under the cross
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const suggestion = suggestTitle(meta, featureClass, point);
-  const where = exactGridRefOf(point);
+  const suggestion = anchor ? suggestTitle(meta, featureClass, anchor) : "";
+  const where = anchor && path.points.length === 1 ? exactGridRefOf(anchor) : null;
 
   function discard(): void {
     if (!draft) return;
@@ -361,85 +294,93 @@ export function MarkForm({ meta, draft }: { meta: Meta; draft: KindDraft<Finding
     >
       {draft ? <DraftStatus draft={draft} /> : null}
 
-      <section className="fc-mark__step" aria-label="Where it is">
-        <div className="fc-mark__where">
-          <span className="fc-field__label">Where</span>
-          {where ? <span className="fc-mark__gridref">{where}</span> : null}
-        </div>
-        <p className="fc-mark__hint">Drag the mark to move it, or select it and use the arrow keys.</p>
-        {pointProblem ? (
-          <p className="fc-mark__problem" role="alert">
-            {pointProblem}
-          </p>
-        ) : null}
-      </section>
+      <DrawingSection map={map} isPhone={environment.isPhone} />
 
-      <ClassChooser meta={meta} />
+      {/* The drawing tool stays where it is as the first point goes down, so focus on its buttons isn't lost. */}
+      {anchor === null ? null : (
+        <>
+          {where || pointProblem ? (
+            <section className="fc-mark__step" aria-label="Where it is">
+              {where ? (
+                <div className="fc-mark__where">
+                  <span className="fc-field__label">Where</span>
+                  <span className="fc-mark__gridref">{where}</span>
+                </div>
+              ) : null}
+              {pointProblem ? (
+                <p className="fc-mark__problem" role="alert">
+                  {pointProblem}
+                </p>
+              ) : null}
+            </section>
+          ) : null}
 
-      <Field label="Period" hint="Your best guess. Leave it as not known if you can't tell.">
-        {(control) => (
-          <select
-            {...control}
-            className="fc-input"
-            value={period}
-            onChange={(event) => store.setPeriod(event.target.value)}
+          <ClassChooser meta={meta} />
+
+          <Field label="Period" hint="Your best guess. Leave it as not known if you can't tell.">
+            {(control) => (
+              <select
+                {...control}
+                className="fc-input"
+                value={period}
+                onChange={(event) => store.setPeriod(event.target.value)}
+              >
+                {meta.vocab.periods.map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {candidate.label}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+
+          <Field
+            label="Title"
+            hint={`Leave it blank and it's called “${suggestion}”.`}
+            error={placed.includes("title") ? positionWords("title") : undefined}
           >
-            {meta.vocab.periods.map((candidate) => (
-              <option key={candidate.id} value={candidate.id}>
-                {candidate.label}
-              </option>
-            ))}
-          </select>
-        )}
-      </Field>
+            {(control) => (
+              <input
+                {...control}
+                className="fc-input"
+                value={title}
+                placeholder={suggestion}
+                maxLength={120}
+                onChange={(event) => store.setTitle(event.target.value)}
+              />
+            )}
+          </Field>
 
-      <Field
-        label="Title"
-        hint={`Leave it blank and it's called “${suggestion}”.`}
-        error={placed.includes("title") ? positionWords("title") : undefined}
-      >
-        {(control) => (
-          <input
-            {...control}
-            className="fc-input"
-            value={title}
-            placeholder={suggestion}
-            maxLength={120}
-            onChange={(event) => store.setTitle(event.target.value)}
-          />
-        )}
-      </Field>
+          <Field
+            label="Note (optional)"
+            hint="What you can see, and on which layer it shows best."
+            error={placed.includes("description") ? positionWords("description") : undefined}
+          >
+            {(control) => (
+              <textarea
+                {...control}
+                className="fc-input"
+                value={note}
+                maxLength={5000}
+                onChange={(event) => store.setNote(event.target.value)}
+              />
+            )}
+          </Field>
 
-      <Field
-        label="Note (optional)"
-        hint="What you can see, and on which layer it shows best."
-        error={placed.includes("description") ? positionWords("description") : undefined}
-      >
-        {(control) => (
-          <textarea
-            {...control}
-            className="fc-input"
-            value={note}
-            maxLength={5000}
-            onChange={(event) => store.setNote(event.target.value)}
-          />
-        )}
-      </Field>
+          <FindsNotice meta={meta} nation={nation} />
 
-      <OutlineTool map={map} isPhone={environment.isPhone} />
-
-      <FindsNotice meta={meta} nation={nation} />
-
-      <div className="fc-mark__actions">
-        <Button type="submit" variant="primary" disabled={busy}>
-          {busy ? "Saving…" : "Save finding"}
-        </Button>
-        {draft ? (
-          <Button variant="ghost" icon={<Trash2 size={16} aria-hidden />} onClick={discard} disabled={busy}>
-            Discard draft
-          </Button>
-        ) : null}
-      </div>
+          <div className="fc-mark__actions">
+            <Button type="submit" variant="primary" disabled={busy}>
+              {busy ? "Saving…" : "Save finding"}
+            </Button>
+            {draft ? (
+              <Button variant="ghost" icon={<Trash2 size={16} aria-hidden />} onClick={discard} disabled={busy}>
+                Discard draft
+              </Button>
+            ) : null}
+          </div>
+        </>
+      )}
     </form>
   );
 }

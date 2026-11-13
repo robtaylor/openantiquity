@@ -5,9 +5,9 @@ import type { MapState } from "../../map/store.js";
 import { suggestTitle, viewStateFrom } from "./describe.js";
 import type { FindingDraft } from "./findingDrafts.js";
 import type { MarkFields } from "./markStore.js";
-import { outlineGeometry, outlineProblem } from "./outline.js";
+import { anchorOf, apiPath, pathProblem } from "./path.js";
 
-export type MarkProblemField = "point" | "featureClass" | "outline";
+export type MarkProblemField = "point" | "featureClass" | "path";
 
 export type Composed = { ok: true; draft: FindingDraft } | { ok: false; field: MarkProblemField; message: string };
 
@@ -16,31 +16,37 @@ export const OUTSIDE_MESSAGE =
   "OpenAntiquity covers the land of Great Britain, Ireland and their islands. Move the mark onto it.";
 
 /**
- * Turn the form into what is sent, or say what is missing. Only the point
- * and the class are required. An empty title becomes the suggested one, and
- * the view comes from the map as it is now.
+ * Turn the form into what is sent, or say what is missing. Only a point on
+ * the map and the class are required. One point is a spot; two or more are
+ * a line or shape. An empty title becomes the suggested one, and the view
+ * comes from the map as it is now. The limits on a line or shape come from
+ * `/meta`.
  */
 export function composeFinding(
   fields: MarkFields,
   meta: Meta,
   map: Pick<MapState, "meta" | "mainView" | "camera" | "sun" | "terrain" | "hillshadeExaggeration">,
 ): Composed {
-  const { point, featureClass } = fields;
+  const { featureClass } = fields;
+  const path = fields.shape.present;
+  const point = anchorOf(path);
   if (point === null) return { ok: false, field: "point", message: "Put the mark on the map first." };
-  if (kmSquareAt(point[0], point[1]) === null) return { ok: false, field: "point", message: OUTSIDE_MESSAGE };
+  if (path.points.some(({ lon, lat }) => kmSquareAt(lon, lat) === null)) {
+    return { ok: false, field: "point", message: OUTSIDE_MESSAGE };
+  }
   if (featureClass === null) return { ok: false, field: "featureClass", message: "Choose what it looks like." };
-  const outlineMessage = outlineProblem(fields.outline, point);
-  if (outlineMessage) return { ok: false, field: "outline", message: outlineMessage };
+  const shapeMessage = pathProblem(path, meta.shapes);
+  if (shapeMessage) return { ok: false, field: "path", message: shapeMessage };
   const note = fields.note.trim();
   return {
     ok: true,
     draft: {
       point,
+      path: path.points.length > 1 ? apiPath(path) : null,
       feature_class: featureClass,
       period: fields.period,
       title: fields.title.trim() || suggestTitle(meta, featureClass, point),
       description: note === "" ? null : note,
-      outline: outlineGeometry(fields.outline),
       view_state: viewStateFrom(map),
     },
   };
@@ -48,13 +54,25 @@ export function composeFinding(
 
 /** Error codes that are about where the mark is, so the message goes by the point. */
 const PLACE_CODES = new Set(["outside_british_isles"]);
-const OUTLINE_CODES = new Set(["outline_too_big", "outline_too_far"]);
+/** Error codes about the line or shape. The server's message says what to change. */
+const SHAPE_CODES = new Set([
+  "location_required",
+  "outline_too_far",
+  "points_too_close",
+  "path_too_many_points",
+  "shape_too_complex",
+  "shape_too_big",
+  "line_too_long",
+  "shape_crosses_itself",
+  "unknown_curve",
+  "looked_at_moved",
+]);
 
 /** What a refused save means, in plain words, and which part of the form it is about. */
 export function saveProblem(error: unknown): { field: MarkProblemField | null; message: string } {
   if (error instanceof ApiError) {
     if (PLACE_CODES.has(error.code)) return { field: "point", message: OUTSIDE_MESSAGE };
-    if (OUTLINE_CODES.has(error.code)) return { field: "outline", message: error.message };
+    if (SHAPE_CODES.has(error.code)) return { field: "path", message: error.message };
     return { field: null, message: error.message };
   }
   return { field: null, message: "Something went wrong while saving it." };

@@ -37,19 +37,14 @@
   fill: rgb(224 164 58 / 0.14);
 }
 
-.fc-mark-outline circle {
-  fill: var(--bg);
-  stroke: var(--accent-strong);
-  stroke-width: 2;
+/* A point of the path: a 12 px dot in a 44 px target, square when straight and round when curved. */
+.fc-path-handles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
-.fc-mark-outline .fc-mark-outline__first {
-  fill: var(--accent-strong);
-  stroke: var(--bg);
-}
-
-/* The mark: a 44 px target round an ochre ring with a dot at its centre. */
-.fc-mark-handle {
+.fc-path-handle {
   position: absolute;
   top: -22px;
   left: -22px;
@@ -63,26 +58,40 @@
   background: transparent;
   cursor: grab;
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   pointer-events: auto;
 }
 
-.fc-mark-handle:active {
+.fc-path-handle:active {
   cursor: grabbing;
 }
 
-.fc-mark-handle__ring {
-  width: 24px;
-  height: 24px;
-  border: 3px solid var(--accent-strong);
+.fc-path-handle__dot {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--accent-strong);
+  border-radius: 2px;
+  background: var(--bg);
+  box-shadow: 0 0 0 1.5px var(--bg);
+}
+
+.fc-path-handle[data-kind="smooth"] .fc-path-handle__dot {
   border-radius: 50%;
-  background: radial-gradient(circle, var(--accent-strong) 0 2.5px, transparent 3px);
+}
+
+.fc-path-handle[data-selected="true"] .fc-path-handle__dot {
+  width: 16px;
+  height: 16px;
+  background: var(--accent-strong);
+  border-color: var(--bg);
   box-shadow:
-    0 0 0 2px var(--bg),
-    inset 0 0 0 2px var(--bg),
+    0 0 0 2px var(--accent-strong),
     var(--shadow);
 }
 
-.fc-mark-handle:focus-visible {
+.fc-path-handle:focus-visible {
   outline: 2px solid var(--focus-colour);
   outline-offset: 0;
   box-shadow: var(--focus-gap);
@@ -302,4 +311,61 @@ textarea.fc-input {
 /* The way back to the mode marking was opened from, such as a scan. */
 .fc-mark-back {
   margin-top: 16px;
+}
+
+/* The guidance block at the top of the panel, which changes as the marking grows. */
+.fc-mark__guidance {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--raised);
+  font-size: 14px;
+}
+
+.fc-mark__drawing,
+.fc-mark__selected {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fc-mark__selected {
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.fc-mark__selected-name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.fc-mark__kind {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.fc-mark__kind-label {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.fc-mark__status {
+  font-size: 13px;
+}
+
+/* On a phone the bars float above the sheet's peek stop, where the primary action sits. */
+.fc-mark-float {
+  width: min(92vw, 420px);
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgb(29 32 38 / 0.92);
+  box-shadow: var(--shadow);
 }

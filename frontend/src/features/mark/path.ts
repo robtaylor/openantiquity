@@ -138,6 +138,59 @@ export function insertAfter(path: Path, index: number): Path {
   return { closed: path.closed, points };
 }
 
+/** Insert a point at a place, after point `index`: for an Alt-click on the segment that starts there. */
+export function insertAt(path: Path, index: number, [lon, lat]: LngLat, kind: PointKind = "corner"): Path {
+  pointAt(path, index);
+  if (index >= segmentCount(path)) return path;
+  const points = [...path.points];
+  points.splice(index + 1, 0, { lon, lat, kind });
+  return { closed: path.closed, points };
+}
+
+type Project = (point: LngLat) => { x: number; y: number };
+
+function distanceToSegmentPx(p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lengthSquared = dx * dx + dy * dy;
+  const t = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSquared));
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+/**
+ * Which segment of the path, as drawn, passes within `reachPx` of a tap,
+ * the nearest if several do, or null. A segment is named by the index of
+ * the point it starts from.
+ */
+export function segmentNear(
+  path: Path,
+  tap: { x: number; y: number },
+  project: Project,
+  reachPx: number,
+): number | null {
+  const geometry = pathGeometry(path);
+  if (!geometry) return null;
+  const screen = geometryVertices(geometry).map(project);
+  const counts = segmentVertexCounts(path);
+  let best: number | null = null;
+  let bestDistance = reachPx;
+  let start = 0;
+  counts.forEach((count, segment) => {
+    for (let i = start; i < start + count; i++) {
+      const a = screen[i];
+      const b = screen[i + 1];
+      if (!a || !b) continue;
+      const distance = distanceToSegmentPx(tap, a, b);
+      if (distance <= bestDistance) {
+        bestDistance = distance;
+        best = segment;
+      }
+    }
+    start += count;
+  });
+  return best;
+}
+
 export function canClose(path: Path): boolean {
   return !path.closed && path.points.length >= MIN_CLOSED_POINTS;
 }
@@ -238,7 +291,7 @@ export function groundDistanceM([lon1, lat1]: LngLat, [lon2, lat2]: LngLat): num
 
 function geometryVertices(geometry: CurveGeometry): LngLat[] {
   const list = geometry.type === "Polygon" ? (geometry.coordinates[0] ?? []) : geometry.coordinates;
-  return list.map(([lon, lat]) => [lon ?? Number.NaN, lat ?? Number.NaN]);
+  return list;
 }
 
 /** The drawn geometry, or null for a spot or nothing. */
@@ -361,4 +414,101 @@ export function pathFromOutline(geometry: { type: string; coordinates?: unknown 
 /** The path as `POST` and `PATCH /findings` take it. The server writes the curve's name. */
 export function apiPath(path: Path): { closed: boolean; points: PathPoint[] } {
   return { closed: path.closed, points: path.points.map(({ lon, lat, kind }) => ({ lon, lat, kind })) };
+}
+
+// --------------------------------------------------------------------------
+// Where a path is
+// --------------------------------------------------------------------------
+
+function halfWayAlong(vertices: readonly LngLat[]): LngLat | null {
+  const total = measure(vertices);
+  let along = 0;
+  for (let i = 1; i < vertices.length; i++) {
+    const a = vertices[i - 1];
+    const b = vertices[i];
+    if (!a || !b) continue;
+    const piece = groundDistanceM(a, b);
+    if (piece > 0 && along + piece >= total / 2) {
+      const t = (total / 2 - along) / piece;
+      return [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
+    }
+    along += piece;
+  }
+  return vertices[0] ?? null;
+}
+
+function insideRing([x, y]: LngLat, ring: readonly LngLat[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i] ?? [0, 0];
+    const [xj, yj] = ring[j] ?? [0, 0];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** A ring's centroid when it lies inside, otherwise the middle of the widest stretch across it at that latitude. */
+function insidePoint(ring: readonly LngLat[]): LngLat | null {
+  let area = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const [x0, y0] = ring[i] ?? [0, 0];
+    const [x1, y1] = ring[i + 1] ?? [0, 0];
+    const cross = x0 * y1 - x1 * y0;
+    area += cross;
+    cx += (x0 + x1) * cross;
+    cy += (y0 + y1) * cross;
+  }
+  if (area === 0) return ring[0] ?? null;
+  const centroid: LngLat = [cx / (3 * area), cy / (3 * area)];
+  if (insideRing(centroid, ring)) return centroid;
+  const crossings: number[] = [];
+  for (let i = 0; i < ring.length - 1; i++) {
+    const [x0, y0] = ring[i] ?? [0, 0];
+    const [x1, y1] = ring[i + 1] ?? [0, 0];
+    if (y0 > centroid[1] !== y1 > centroid[1]) crossings.push(x0 + ((centroid[1] - y0) * (x1 - x0)) / (y1 - y0));
+  }
+  crossings.sort((a, b) => a - b);
+  let widest: LngLat | null = null;
+  let width = -1;
+  for (let i = 0; i + 1 < crossings.length; i += 2) {
+    const west = crossings[i] ?? 0;
+    const east = crossings[i + 1] ?? 0;
+    if (east - west > width) {
+      width = east - west;
+      widest = [(west + east) / 2, centroid[1]];
+    }
+  }
+  return widest ?? ring[0] ?? null;
+}
+
+/**
+ * Near where the server will put the finding's anchor: the spot itself, the
+ * point half way along a line, or a point inside a shape. The server
+ * chooses the real one. This is for the suggested title and the readout
+ * before saving.
+ */
+export function anchorOf(path: Path): LngLat | null {
+  const [first] = path.points;
+  if (!first) return null;
+  const geometry = pathGeometry(path);
+  if (!geometry) return [first.lon, first.lat];
+  const vertices = geometryVertices(geometry);
+  return path.closed ? insidePoint(vertices) : halfWayAlong(vertices);
+}
+
+const COMPASS = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"] as const;
+
+/** Which way the active end of an open line lies from its other end, as a point of the compass, or null. */
+export function endDirection(path: Path, active: PathEnd): string | null {
+  if (path.closed || path.points.length < MIN_OPEN_POINTS) return null;
+  const here = pointAt(path, endIndex(path, active));
+  const there = pointAt(path, endIndex(path, active === "end" ? "start" : "end"));
+  const k = Math.cos(radians((here.lat + there.lat) / 2));
+  const east = (here.lon - there.lon) * k;
+  const north = here.lat - there.lat;
+  if (east === 0 && north === 0) return null;
+  const bearing = (Math.atan2(east, north) * 180) / Math.PI;
+  return COMPASS[Math.round(((bearing + 360) % 360) / 45) % 8] ?? null;
 }

@@ -28,8 +28,8 @@ export interface CurvePath {
 }
 
 export type CurveGeometry =
-  | { type: "LineString"; coordinates: number[][] }
-  | { type: "Polygon"; coordinates: number[][][] };
+  | { type: "LineString"; coordinates: [number, number][] }
+  | { type: "Polygon"; coordinates: [number, number][][] };
 
 /** An open path needs two points to draw, a closed one three. */
 export const MIN_OPEN_POINTS = 2;

@@ -277,9 +277,9 @@ describe("Shell", () => {
     renderShell();
     await mapReady();
     await user.click(screen.getByRole("button", { name: "Mark a finding" }));
-    expect(screen.getByRole("complementary", { name: "Mark a finding" })).toBeInTheDocument();
-    // While the mark is being placed, the primary action places it.
-    expect(screen.getByRole("button", { name: "Place it here" })).toBeInTheDocument();
+    const panel = screen.getByRole("complementary", { name: "Mark a finding" });
+    // While marking, the primary action gives way to the drawing bar, which on a computer is in the panel.
+    expect(within(panel).getByRole("button", { name: "Add a point at the cross" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mark a finding" })).toBeNull();
   });
 

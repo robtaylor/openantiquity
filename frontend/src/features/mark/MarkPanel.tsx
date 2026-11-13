@@ -33,13 +33,14 @@ function useOpenSavedDraft(draftId: string | undefined): boolean {
 }
 
 /**
- * "Mark a finding": the map takes a tap or click for the mark, then this
- * short form fills the panel (the sheet on a phone). At `/mark` it is a new
- * mark, and at `/mark/:draftId` a draft kept in this browser, which is where
- * a sign-in comes back to.
+ * "Mark a finding": the map takes taps at once, the first placing a point
+ * and each further one adding to it, and this short form fills the panel
+ * (the sheet on a phone) beside the guidance and the drawing bar. At
+ * `/mark` it is a new mark, and at `/mark/:draftId` a draft kept in this
+ * browser, which is where a sign-in comes back to.
  *
- * Escape, or closing the panel, leaves. While the outline tool is on it
- * stops the outline instead, keeping what was drawn.
+ * Escape, or closing the panel, leaves. While points are being added it
+ * stops adding them instead, keeping what was drawn.
  */
 export function MarkPanel({ meta }: { meta: Meta }) {
   const { draftId } = useParams();
@@ -65,8 +66,8 @@ export function MarkPanel({ meta }: { meta: Meta }) {
 
   function leave(): void {
     const mark = useMarkStore.getState();
-    if (mark.drawing) {
-      mark.stopDrawing();
+    if (mark.drawing && mark.shape.present.points.length > 0) {
+      mark.finish();
       return;
     }
     // Marking opened over a mode, such as a scan, closes back to it.
@@ -88,7 +89,7 @@ export function MarkPanel({ meta }: { meta: Meta }) {
   }, []);
 
   const missingDraft = draftId !== undefined && draft === null && !opening;
-  const placed = useMarkStore((state) => state.point !== null);
+  const placed = useMarkStore((state) => state.shape.present.points.length > 0);
   const subtitle = missingDraft
     ? undefined
     : !placed
