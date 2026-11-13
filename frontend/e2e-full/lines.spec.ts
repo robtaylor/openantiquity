@@ -161,12 +161,13 @@ test("a closed shape drawn on a phone with taps, a long press and the bar is kep
   const handle = `Shaper${Date.now() % 1_000_000}`;
   await openMap(page, `/mark${view(at)}`);
 
-  // Four taps, then a tap on the first point closes it.
+  // Four taps, then a tap on the first point closes it. They go below the drawing guide, which takes the search
+  // box's place and grows to six rows as the line does, and above the phone's drawing bar.
   for (const [x, y] of [
-    [90, 180],
-    [280, 180],
-    [280, 360],
-    [90, 360],
+    [90, 330],
+    [280, 330],
+    [280, 510],
+    [90, 510],
   ] as const) {
     await page.touchscreen.tap(x, y);
   }
