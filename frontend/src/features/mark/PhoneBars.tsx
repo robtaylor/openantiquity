@@ -27,6 +27,7 @@ import { isMapLive } from "../../map/MapPane.js";
 import { useMapFrame } from "../../map/useMapFrame.js";
 import { IconButton } from "../../ui/IconButton.js";
 import { lengthWords, usePathLength, useSelectedPointActions } from "./DrawingTool.js";
+import { ADD_AT_CROSS, focusFirstControlAfter } from "./focus.js";
 import { addAtReticle } from "./MarkLayer.js";
 import { useMarkPath, useMarkStore } from "./markStore.js";
 import { pointName, visibleHandles } from "./PathHandles.js";
@@ -97,7 +98,7 @@ export function PhoneDrawingBar({ map }: { map: MapLibreMap | null }) {
         <BarButton label="Redo" disabled={!canRedo} onClick={() => store.redo()}>
           <Redo2 size={20} aria-hidden />
         </BarButton>
-        <BarButton label="Add a point at the cross" onClick={() => addAtReticle(map)}>
+        <BarButton label={ADD_AT_CROSS} onClick={() => addAtReticle(map)}>
           <Crosshair size={20} aria-hidden />
         </BarButton>
         <IconButton
@@ -112,7 +113,16 @@ export function PhoneDrawingBar({ map }: { map: MapLibreMap | null }) {
         <BarButton label="Close the shape" disabled={!canClose(path)} onClick={() => store.closeShape()}>
           <SquareDashed size={20} aria-hidden />
         </BarButton>
-        <BarButton label="Finish" disabled={path.points.length === 0} onClick={() => store.finish()}>
+        <BarButton
+          label="Finish"
+          disabled={path.points.length === 0}
+          onClick={() => {
+            const pressed = document.activeElement;
+            store.finish();
+            // The floating bar goes as the sheet rises with the full bars.
+            focusFirstControlAfter(pressed, ".fc-mark .fc-mark__drawing");
+          }}
+        >
           <Check size={20} aria-hidden />
         </BarButton>
       </div>

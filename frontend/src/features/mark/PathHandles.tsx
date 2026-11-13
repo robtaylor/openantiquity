@@ -23,6 +23,7 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import { type KeyboardEvent, type MouseEvent, type PointerEvent, useEffect, useRef } from "react";
 import { lngLatAtClient, screenPoint } from "../../map/useMapFrame.js";
 import { exactGridRefOf } from "./describe.js";
+import { focusAddAtCrossAfter, focusHandleIfLost } from "./focus.js";
 import { useMarkStore } from "./markStore.js";
 import { canClose, endIndex, type Path, type PathPoint } from "./path.js";
 
@@ -226,7 +227,12 @@ function Handle({
     }
     if (event.key === "Delete" || event.key === "Backspace") {
       event.preventDefault();
+      const pressed = event.currentTarget;
       mark.remove(index);
+      const left = useMarkStore.getState().shape.present.points.length;
+      // Focus goes to the neighbouring handle: the one that took this one's place, or the one before it.
+      if (left === 0) focusAddAtCrossAfter(pressed);
+      else requestAnimationFrame(() => focusHandleIfLost(pressed, Math.min(index, left - 1)));
     }
   }
 
@@ -237,6 +243,7 @@ function Handle({
       type="button"
       className="fc-path-handle"
       data-kind={point.kind}
+      data-index={index}
       data-selected={selected}
       style={{ transform: `translate(${x}px, ${y}px)` }}
       tabIndex={tabbable ? 0 : -1}

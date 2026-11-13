@@ -194,6 +194,31 @@ describe("marking by tapping", () => {
     expect(map.project(point()).x).toBeCloseTo(450 + NUDGE_PX, 6);
   });
 
+  it("puts focus on the neighbouring handle when the focused one is deleted, and on the cross's button when none is left", async () => {
+    const user = userEvent.setup();
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    act(() => map.click(450, 300));
+    act(() => map.click(500, 300));
+    act(() => useMarkStore.getState().finish());
+    // The last point: focus goes back to the one before it.
+    handle(2).focus();
+    await user.keyboard("{Delete}");
+    expect(points()).toHaveLength(2);
+    await waitFor(() => expect(handle(1)).toHaveFocus());
+    // The first: focus goes to the one that took its place.
+    handle(0).focus();
+    await user.keyboard("{Delete}");
+    expect(points()).toHaveLength(1);
+    await waitFor(() => expect(handle(0)).toHaveFocus());
+    // The only one: there are no handles left, and a point can be put down again at once.
+    await user.keyboard("{Delete}");
+    expect(points()).toHaveLength(0);
+    const add = panel().getByRole("button", { name: "Add a point at the cross" });
+    await waitFor(() => expect(add).toHaveFocus());
+    expect(add).toBeEnabled();
+  });
+
   it("closes the shape with a tap on the first point, or on its handle, or with the button", async () => {
     const user = userEvent.setup();
     const { map } = await openMarking();

@@ -28,6 +28,7 @@ import { isMapLive } from "../../map/MapPane.js";
 import { useMapFrame } from "../../map/useMapFrame.js";
 import { Button } from "../../ui/Button.js";
 import { ChipGroup } from "../../ui/Chip.js";
+import { ADD_AT_CROSS, focusFirstControlAfter } from "./focus.js";
 import { addAtReticle } from "./MarkLayer.js";
 import { useMarkPath, useMarkStore } from "./markStore.js";
 import { pointName, visibleHandles } from "./PathHandles.js";
@@ -209,7 +210,7 @@ export function DrawingBar({ map, isPhone }: { map: MapLibreMap | null; isPhone:
           disabled={!adding}
           onClick={() => addAtReticle(map)}
         >
-          Add a point at the cross
+          {ADD_AT_CROSS}
         </Button>
       </div>
       <div className="fc-mark__kind">
@@ -269,7 +270,10 @@ export function useSelectedPointActions(map: MapLibreMap | null) {
     remove: () => store.remove(selected),
     insertAfter: () => store.insertAfterPoint(selected),
     continueFrom: (from: PathEnd) => {
+      const pressed = document.activeElement;
       store.continueFrom(from);
+      // On a phone the sheet's bar goes as the floating one comes up.
+      focusFirstControlAfter(pressed, ".fc-mark-float");
       const at = path.points[endIndex(path, from)];
       if (at && map && isMapLive(map)) map.easeTo({ center: [at.lon, at.lat] });
     },

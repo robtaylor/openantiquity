@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useMapStore } from "../../map/store.js";
@@ -112,6 +112,29 @@ describe("the phone's drawing bar", () => {
     fireEvent.click(floatingBar().getByRole("button", { name: "Finish" }));
     const sheet = within(screen.getByRole("complementary", { name: "Mark a finding" }));
     expect(sheet.getByRole("radiogroup", { name: "Next point" })).toBeInTheDocument();
+  });
+});
+
+describe("focus as the phone's bars and the sheet swap", () => {
+  it("goes to the first control of the sheet's drawing bar after Finish, and of the floating bar after Continue", async () => {
+    const user = userEvent.setup();
+    usePhoneLayout();
+    const map = await openMarking();
+    act(() => map.click(300, 300));
+    act(() => map.click(340, 300));
+    floatingBar().getByRole("button", { name: "Finish" }).focus();
+    await user.keyboard("{Enter}");
+    const sheet = within(screen.getByRole("complementary", { name: "Mark a finding" }));
+    const drawing = within(sheet.getByRole("region", { name: "Drawing" }));
+    await waitFor(() => expect(drawing.getByRole("button", { name: "Undo" })).toHaveFocus());
+
+    await user.click(screen.getByRole("button", { name: /^Point 2 of 2/ }));
+    const selected = within(sheet.getByRole("region", { name: "Selected point" }));
+    selected.getByRole("button", { name: "Continue from this end" }).focus();
+    await user.keyboard("{Enter}");
+    const floating = await screen.findByRole("region", { name: "Selected point" });
+    expect(floating.closest(".fc-mark-float")).not.toBeNull();
+    await waitFor(() => expect(within(floating).getByRole("button", { name: "Make it curved" })).toHaveFocus());
   });
 });
 

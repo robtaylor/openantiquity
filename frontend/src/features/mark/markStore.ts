@@ -213,7 +213,9 @@ export const useMarkStore = create<MarkState>()((set, get) => {
     remove: (index) => {
       const after = deletePoint(get().shape.present, index);
       const selected = after.points.length === 0 ? null : Math.min(index, after.points.length - 1);
-      change(() => after, { selected: after.points.length > 1 ? selected : null });
+      // With nothing left, taps add a point again, as when marking starts.
+      const emptied = after.points.length === 0 ? { drawing: true, end: "end" as const } : {};
+      change(() => after, { selected: after.points.length > 1 ? selected : null, ...emptied });
     },
     setPointKind: (index, kind) => change((path) => setKind(path, index, kind)),
     switchPointKind: (index) => change((path) => switchKind(path, index)),
