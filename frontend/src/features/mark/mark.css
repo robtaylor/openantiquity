@@ -456,7 +456,7 @@ textarea.fc-input {
 
 /* The drawing guide: a card on the map in the search box's place while the tool is open. It has its own
    background, as the search box has, so its text reads over any terrain. */
-.fc-guide {
+.fc-draw-guide {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-floating);
@@ -464,7 +464,7 @@ textarea.fc-input {
   color: var(--text);
 }
 
-.fc-guide__header {
+.fc-draw-guide__header {
   display: flex;
   align-items: center;
   gap: 2px;
@@ -472,7 +472,7 @@ textarea.fc-input {
   padding: 4px 6px 4px 14px;
 }
 
-.fc-guide__title {
+.fc-draw-guide__title {
   flex: 1;
   margin: 0;
   font-family: var(--font-ui);
@@ -480,7 +480,7 @@ textarea.fc-input {
   font-weight: 600;
 }
 
-.fc-guide__list {
+.fc-draw-guide__list {
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -490,12 +490,12 @@ textarea.fc-input {
   list-style: none;
 }
 
-.fc-guide__list[hidden] {
+.fc-draw-guide__list[hidden] {
   display: none;
 }
 
 /* Icon, gesture, what it does: the gestures line up in one column, so the eye runs down them. */
-.fc-guide__row {
+.fc-draw-guide__row {
   display: grid;
   grid-template-columns: 16px minmax(0, 8em) minmax(0, 1fr);
   align-items: start;
@@ -504,20 +504,20 @@ textarea.fc-input {
   line-height: 1.35;
 }
 
-.fc-guide__icon {
+.fc-draw-guide__icon {
   margin-top: 1px;
   color: var(--accent-strong);
 }
 
-.fc-guide__gesture {
+.fc-draw-guide__gesture {
   font-weight: 600;
 }
 
-.fc-guide__effect {
+.fc-draw-guide__effect {
   color: var(--text-muted);
 }
 
-.fc-guide kbd {
+.fc-draw-guide kbd {
   padding: 0 4px;
   border: 1px solid var(--border);
   border-bottom-width: 2px;
@@ -532,6 +532,12 @@ textarea.fc-input {
 
 /* On a phone the search box runs the full width above the map's buttons. The guide is taller, so it
    leaves their column free. */
-.fc-shell[data-layout="phone"] .fc-stage__search:has(.fc-guide) {
+.fc-shell[data-layout="phone"] .fc-stage__search:has(.fc-draw-guide) {
   right: calc(var(--gap) * 2 + var(--control-height));
+}
+
+/* The fold button keeps its plain look either way: an unfolded guide isn't a setting switched on. */
+.fc-draw-guide__header .fc-icon-button[aria-expanded="true"] {
+  color: var(--text);
+  border-color: transparent;
 }

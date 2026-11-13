@@ -119,9 +119,9 @@ function useGuideRows(): GuideRow[] {
 function Row({ row }: { row: GuideRow }) {
   const Icon = ICONS[row.icon];
   return (
-    <li className="fc-guide__row" data-row={row.id}>
-      <Icon className="fc-guide__icon" size={16} aria-hidden />
-      <span className="fc-guide__gesture">
+    <li className="fc-draw-guide__row" data-row={row.id}>
+      <Icon className="fc-draw-guide__icon" size={16} aria-hidden />
+      <span className="fc-draw-guide__gesture">
         {row.gesture.map((part, index) =>
           typeof part === "string" ? (
             // biome-ignore lint/suspicious/noArrayIndexKey: a gesture's parts are fixed in order
@@ -133,7 +133,7 @@ function Row({ row }: { row: GuideRow }) {
         )}
       </span>
       <span className="fc-visually-hidden">: </span>
-      <span className="fc-guide__effect">{row.effect}</span>
+      <span className="fc-draw-guide__effect">{row.effect}</span>
     </li>
   );
 }
@@ -164,9 +164,9 @@ export function DrawingGuide({ onSearch, focusSearch = false }: { onSearch: () =
   }
 
   return (
-    <section className="fc-guide" aria-labelledby={headingId} data-folded={folded} ref={card}>
-      <div className="fc-guide__header">
-        <h2 className="fc-guide__title" id={headingId}>
+    <section className="fc-draw-guide" aria-labelledby={headingId} data-folded={folded} ref={card}>
+      <div className="fc-draw-guide__header">
+        <h2 className="fc-draw-guide__title" id={headingId}>
           How to draw
         </h2>
         <IconButton size="sm" label="Search for a place" onClick={onSearch} ref={searchButton}>
@@ -182,7 +182,7 @@ export function DrawingGuide({ onSearch, focusSearch = false }: { onSearch: () =
           {folded ? <ChevronDown size={16} aria-hidden /> : <ChevronUp size={16} aria-hidden />}
         </IconButton>
       </div>
-      <ul className="fc-guide__list" id={listId} hidden={folded}>
+      <ul className="fc-draw-guide__list" id={listId} hidden={folded}>
         {rows.map((row) => (
           <Row key={row.id} row={row} />
         ))}
