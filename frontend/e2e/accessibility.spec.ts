@@ -81,7 +81,7 @@ test.describe("desktop", () => {
     await page.keyboard.press("Tab");
     await expect(panel.getByRole("button", { name: "Close panel" })).toBeFocused();
     await page.keyboard.press("Tab");
-    await expect(panel.getByRole("switch", { name: "Compare two layers" })).toBeFocused();
+    await expect(panel.getByRole("switch", { name: "OpenStreetMap" })).toBeFocused();
 
     // Escape closes from anywhere inside, and focus goes back to the button that opened it.
     await page.keyboard.press("Escape");

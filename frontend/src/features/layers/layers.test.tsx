@@ -109,7 +109,7 @@ describe("the layer panel", () => {
     const panel = screen.getByRole("complementary", { name: "Layers" });
     const credits = () => panel.querySelectorAll(".fc-layer-credit");
     // Composite is on, and so is the OpenStreetMap overlay, with its links.
-    expect(credits()[0]).toHaveTextContent(/Environment Agency/);
+    expect([...credits()].some((credit) => /Environment Agency/.test(credit.textContent ?? ""))).toBe(true);
     expect(within(panel).getAllByRole("link", { name: "OpenStreetMap" }).length).toBeGreaterThan(0);
 
     await user.click(within(panel).getByRole("radio", { name: "OpenStreetMap" }));
@@ -138,7 +138,10 @@ describe("the layer panel", () => {
     api.on("GET /meta", () => metaResponse({ ...metaFixture, layers: { ...metaFixture.layers, views } }));
     open("/?panel=layers");
     await mapReady();
-    const credit = screen.getByRole("complementary", { name: "Layers" }).querySelector(".fc-layer-credit");
+    const panel = screen.getByRole("complementary", { name: "Layers" });
+    const credit = [...panel.querySelectorAll(".fc-layer-credit")].find((each) =>
+      each.textContent?.includes("Environment Agency"),
+    );
     expect(within(credit as HTMLElement).getAllByRole("link", { name: "Open Government Licence v3.0" })).toHaveLength(
       1,
     );
@@ -384,6 +387,17 @@ describe("coverage", () => {
     expect(summary).not.toHaveTextContent(/isn't loading/);
     act(() => useMapStore.getState().setSourceFailing(viewTroubleKey("composite"), true));
     expect(summary).toHaveTextContent(/The terrain isn't loading here at the moment/);
+  });
+
+  it("puts the switch for the map drawn over the terrain first, and says what it is for", async () => {
+    open("/?panel=layers");
+    await mapReady();
+    const panel = screen.getByRole("complementary", { name: "Layers" });
+    const switches = within(panel).getAllByRole("switch");
+    expect(switches[0]).toHaveAccessibleName("OpenStreetMap");
+    expect(switches[0]).toHaveAccessibleDescription(/Switch it off to see the terrain alone/);
+    // Once, at the top, and not again among the other overlays.
+    expect(within(panel).getAllByRole("switch", { name: "OpenStreetMap" })).toHaveLength(1);
   });
 
   it("says what the scan coverage overlay shows, as it is a different coverage", async () => {

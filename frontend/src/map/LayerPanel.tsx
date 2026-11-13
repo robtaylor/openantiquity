@@ -54,6 +54,7 @@ export function orderedViews(views: readonly View[]): View[] {
  * overlay, so the words are here, by kind, never by id.
  */
 const OVERLAY_HINTS: Partial<Record<Overlay["type"], string>> = {
+  openmaptiles: "Roads, paths and names drawn over the terrain. Switch it off to see the terrain alone.",
   coverage:
     "Shades each one-kilometre square by how many people have looked it over in “Scan a square”. It says nothing about where there is LIDAR.",
 };
@@ -272,8 +273,20 @@ export const LayerPanel = memo(function LayerPanel({ meta }: { meta: Meta }) {
     </div>
   );
 
+  // The map drawn over the terrain is the overlay people most often want off, so its switch comes first.
+  const drawnOver = meta.layers.overlays.filter((overlay) => overlay.type === "openmaptiles");
+  const otherOverlays = meta.layers.overlays.filter((overlay) => overlay.type !== "openmaptiles");
+
   return (
     <div className="fc-layers">
+      {drawnOver.length > 0 ? (
+        <section className="fc-layers__section">
+          {drawnOver.map((overlay) => (
+            <OverlayRow key={overlay.id} meta={meta} overlay={overlay} />
+          ))}
+        </section>
+      ) : null}
+
       <section className="fc-layers__section">
         <Switch
           label="Compare two layers"
@@ -356,7 +369,7 @@ export const LayerPanel = memo(function LayerPanel({ meta }: { meta: Meta }) {
 
       <section className="fc-layers__section">
         <h3 className="fc-layers__heading">Overlays</h3>
-        {meta.layers.overlays.map((overlay) => (
+        {otherOverlays.map((overlay) => (
           <OverlayRow key={overlay.id} meta={meta} overlay={overlay} />
         ))}
       </section>
