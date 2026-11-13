@@ -5,7 +5,6 @@ import { useNavigate, useParams } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { Button } from "../../ui/Button.js";
 import { EmptyState } from "../../ui/EmptyState.js";
-import { useAccountUi } from "../account/requireAccount.js";
 import { useKindDrafts } from "../drafts/savers.js";
 import { useDocumentTitle } from "../placeholders.js";
 import { BARE_MAP_PATH } from "../shell/navigation.js";
@@ -14,6 +13,7 @@ import { findingDrafts, useSavedDrafts } from "./findingDrafts.js";
 import { MarkForm } from "./MarkForm.js";
 import { useMarkReturn } from "./markReturn.js";
 import { useMarkStore } from "./markStore.js";
+import { useLeaveOnEscape } from "./useLeaveOnEscape.js";
 import { openSavedFinding } from "./useSaveMark.js";
 import "./mark.css";
 
@@ -68,29 +68,8 @@ export function MarkPanel({ meta }: { meta: Meta }) {
     if (draftId !== undefined && draft && loaded === null) useMarkStore.getState().load(draftId, draft.data);
   }, [draftId, draft, loaded]);
 
-  function leave(): void {
-    const mark = useMarkStore.getState();
-    if (mark.drawing && mark.shape.present.points.length > 0) {
-      mark.finish();
-      return;
-    }
-    // Marking opened over a mode, such as a scan, closes back to it.
-    navigate(useMarkReturn.getState().to?.path ?? BARE_MAP_PATH);
-  }
-  const leaveRef = useRef(leave);
-  leaveRef.current = leave;
-
-  // Escape leaves from anywhere, the map and the mark included, unless something else on screen took it.
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent): void {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
-      if (useAccountUi.getState().sheet !== null) return;
-      if (event.target instanceof Element && event.target.closest('[role="dialog"], .fc-panel')) return;
-      leaveRef.current();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  // Marking opened over a mode, such as a scan, closes back to it.
+  const leave = useLeaveOnEscape(() => navigate(useMarkReturn.getState().to?.path ?? BARE_MAP_PATH));
 
   const missingDraft = draftId !== undefined && draft === null && !opening;
   const placed = useMarkStore((state) => state.shape.present.points.length > 0);

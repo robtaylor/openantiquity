@@ -33,7 +33,6 @@ import { Button } from "../../ui/Button.js";
 import { EmptyState } from "../../ui/EmptyState.js";
 import { toast } from "../../ui/toastStore.js";
 import { COLOURS } from "../../ui/tokens.js";
-import { useAccountUi } from "../account/requireAccount.js";
 import { isShapeChanged, updateFinding } from "../finding/api.js";
 import { findingPageKeys } from "../finding/keys.js";
 import { frameExtent, whenStageSettled } from "../finding/mapView.js";
@@ -51,6 +50,7 @@ import { DrawingSection, useMarkInView } from "./MarkForm.js";
 import { MARK_PATH_LAYERS } from "./MarkLayer.js";
 import { useMarkPath, useMarkStore } from "./markStore.js";
 import { anchorOf, apiPath, type Path } from "./path.js";
+import { useLeaveOnEscape } from "./useLeaveOnEscape.js";
 import "./mark.css";
 
 export const LOOKED_AT_SOURCE = "mark-looked-at";
@@ -320,27 +320,7 @@ export function ChangeShapePanel({ meta }: { meta: Meta }) {
   const finding = query.data;
   useDocumentTitle("Change the shape");
 
-  function leave(): void {
-    const mark = useMarkStore.getState();
-    if (mark.drawing && mark.shape.present.points.length > 0) {
-      mark.finish();
-      return;
-    }
-    discardAndLeave(navigate, publicId);
-  }
-  const leaveRef = useRef(leave);
-  leaveRef.current = leave;
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent): void {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
-      if (useAccountUi.getState().sheet !== null) return;
-      if (event.target instanceof Element && event.target.closest('[role="dialog"], .fc-panel')) return;
-      leaveRef.current();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  const leave = useLeaveOnEscape(() => discardAndLeave(navigate, publicId));
 
   return (
     <PanelFrame panelKey={changeShapePath(publicId)} title="Change the shape" subtitle={finding?.title} onClose={leave}>
