@@ -221,6 +221,19 @@ _DROPPED_VALUES: tuple[_DroppedValue, ...] = (
 )
 
 
+def _stored_checks(conn: Connection) -> dict[tuple[str, str], str]:
+    """Each check in the database as it stands, by table and name."""
+    return {
+        (table, name): definition
+        for table, name, definition in conn.execute(
+            text(
+                "SELECT conrelid::regclass::text, conname, pg_get_constraintdef(oid) FROM pg_constraint "
+                "WHERE contype = 'c' AND connamespace = current_schema()::regnamespace"
+            )
+        )
+    }
+
+
 def _move_dropped_values(conn: Connection) -> None:
     """Give every row that holds a dropped value the value that replaced it.
 
@@ -228,11 +241,19 @@ def _move_dropped_values(conn: Connection) -> None:
     made again without the dropped value is never validated against a row
     that holds it. The version before may still be serving: no request it
     takes can store the dropped value, and it reads the new one as it always
-    did. Once no row holds it, the update finds nothing and locks no row.
+    did.
+
+    The rows are looked through only while the stored check still admits the
+    value. Once the check has been made again without it no row can hold it,
+    and a deploy doesn't read the whole table while this transaction keeps
+    writes to it waiting.
     """
-    checked = {(check.table, check.name) for check in _enum_checks()}
+    stored = _stored_checks(conn)
     for value in _DROPPED_VALUES:
-        assert (value.table, f"ck_{value.table}_{value.column}_valid") in checked, value
+        definition = stored.get((value.table, f"ck_{value.table}_{value.column}_valid"))
+        assert definition is not None, f"{value.table}.{value.column} has no vocabulary check"
+        if value.dropped not in _QUOTED.findall(definition):
+            continue
         moved = conn.execute(
             text(f'UPDATE "{value.table}" SET "{value.column}" = :becomes WHERE "{value.column}" = :dropped'),
             {"becomes": value.becomes, "dropped": value.dropped},
@@ -249,15 +270,7 @@ def _sync_enum_checks(conn: Connection) -> None:
     which needs no scan of the table, and `_validate_checks` checks the rows
     after this transaction has let go of its locks.
     """
-    stored = {
-        (table, name): definition
-        for table, name, definition in conn.execute(
-            text(
-                "SELECT conrelid::regclass::text, conname, pg_get_constraintdef(oid) FROM pg_constraint "
-                "WHERE contype = 'c' AND connamespace = current_schema()::regnamespace"
-            )
-        )
-    }
+    stored = _stored_checks(conn)
     for check in _enum_checks():
         definition = stored.get((check.table, check.name))
         assert definition is not None, f"{check.table} has no check {check.name}"

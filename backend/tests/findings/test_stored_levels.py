@@ -186,3 +186,43 @@ def test_going_back_to_the_earlier_version_s_schema_keeps_every_finding(
     assert f"'{DROPPED}'" in definition
     assert validated
     monkeypatch.undo()
+
+
+def _statements_of_a_schema_step(database: Engine) -> list[str]:
+    from sqlalchemy import event
+
+    seen: list[str] = []
+
+    def note(_conn: object, _cursor: object, statement: str, *_: object) -> None:
+        seen.append(statement)
+
+    event.listen(database, "before_cursor_execute", note)
+    try:
+        create_schema(database)
+    finally:
+        event.remove(database, "before_cursor_execute", note)
+    return seen
+
+
+def _moves(statements: list[str]) -> list[str]:
+    return [statement for statement in statements if statement.lstrip().upper().startswith("UPDATE")]
+
+
+@pytest.mark.usefixtures("earlier_schema")
+def test_the_schema_step_looks_for_the_dropped_level_only_while_the_check_admits_it(
+    database: Engine,
+) -> None:
+    """Every deploy runs the step while the version before still serves.
+
+    It holds a lock on `findings` that keeps writes waiting, so it reads the
+    whole table for the dropped level only when a row could hold it. Once the
+    check has been made again without the level, none can.
+    """
+    assert f"'{DROPPED}'" in _check(database)[0]
+
+    first = _statements_of_a_schema_step(database)
+    later = _statements_of_a_schema_step(database)
+
+    assert len(_moves(first)) == 1, _moves(first)
+    assert f"'{DROPPED}'" not in _check(database)[0]
+    assert _moves(later) == [], "a deploy with nothing to move still read the whole table"
