@@ -17,8 +17,8 @@ import { FINDING_POINT_LAYERS, FINDING_SHAPE_LAYERS } from "./overlayLayers.js";
  * handles a tap inside one. Findings win over records.
  */
 
-/** How far from the tap, in pixels, a candidate is still in reach. */
-export const REACH_PX = { mouse: 6, pen: 6, touch: 16 } as const;
+/** How far from the tap, in pixels, a candidate is still in reach. A pen has a mouse's reach (`reachFor`). */
+export const REACH_PX = { mouse: 6, touch: 16 } as const;
 
 /** The smaller of two alike wins only below this share of the other's size. */
 export const CLEARLY_SMALLER = 0.5;
