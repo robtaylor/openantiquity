@@ -1,0 +1,72 @@
+/* The chooser: a popover beside the pointer, or a short sheet on a phone. */
+.fc-chooser {
+  /* Opened from layers over the map that let taps through, it takes its own. */
+  pointer-events: auto;
+  position: fixed;
+  inset: auto;
+  width: min(340px, calc(100vw - 24px));
+  margin: 0;
+}
+
+.fc-chooser::backdrop {
+  background: transparent;
+}
+
+.fc-chooser--sheet {
+  left: 0;
+  right: 0;
+  width: 100%;
+  max-width: none;
+  border-radius: 0;
+}
+
+.fc-chooser[data-place="sheet-bottom"] {
+  bottom: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.fc-chooser[data-place="sheet-top"] {
+  top: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+.fc-chooser .fc-dialog__header {
+  padding: 10px 8px 0 16px;
+}
+
+.fc-chooser .fc-dialog__title {
+  font-size: 16px;
+}
+
+.fc-chooser .fc-dialog__body {
+  padding: 4px 8px 12px;
+}
+
+.fc-chooser__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fc-chooser__entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.fc-chooser__entry:hover,
+.fc-chooser__entry:focus-visible {
+  background: var(--raised);
+  border-color: var(--border);
+}

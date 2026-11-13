@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
+import { create } from "zustand";
 import { findOverlay, type Meta } from "../api/meta.js";
+import type { FindingProperties } from "../features/findings/types.js";
 import { useFindingsInBox } from "../features/findings/useFindingsInBox.js";
 import { type FindingsMapData, findingsMapData } from "./findingsData.js";
 import { useFindingsHidden } from "./hiddenFindings.js";
@@ -14,6 +16,14 @@ import { overlayTroubleKey } from "./trouble.js";
  * drag.
  */
 export const FINDINGS_MIN_ZOOM = 9;
+
+/**
+ * What the map has drawn of each finding, by public id, so the chooser
+ * between overlapping findings can name each one without asking again.
+ */
+export const useDrawnFindings = create<{ byId: ReadonlyMap<string, FindingProperties> }>()(() => ({
+  byId: new Map(),
+}));
 
 /**
  * The findings to draw: whatever `GET /findings` returns for the area the
@@ -46,6 +56,12 @@ export function useFindingsOverlay(meta: Meta): FindingsMapData {
     console.warn(`[map] Findings could not be loaded: ${error?.message ?? "unknown error"}`);
     useMapStore.getState().setSourceFailing(key, true);
   }, [key, error, errorAt]);
+
+  useEffect(() => {
+    useDrawnFindings.setState({
+      byId: new Map(findings.features.map((feature) => [feature.properties.public_id, feature.properties])),
+    });
+  }, [findings]);
 
   return useMemo(() => findingsMapData(findings), [findings]);
 }

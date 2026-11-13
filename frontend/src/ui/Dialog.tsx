@@ -1,5 +1,13 @@
 import { X } from "lucide-react";
-import { type KeyboardEvent, type ReactNode, useEffect, useId, useLayoutEffect, useRef } from "react";
+import {
+  type CSSProperties,
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import { IconButton } from "./IconButton.js";
 import { closeOnEscape } from "./Panel.js";
 import "./Dialog.css";
@@ -13,6 +21,10 @@ export interface DialogProps {
   actions?: ReactNode;
   /** Extra classes, for a dialog with a layout of its own. */
   className?: string;
+  /** Inline style, for a dialog placed beside something, such as a popover by the pointer. */
+  style?: CSSProperties;
+  /** Where it is placed, as the element's `data-place`, for its styles and tests. */
+  place?: string;
 }
 
 const FOCUSABLE =
@@ -48,7 +60,7 @@ function wrapTab(event: KeyboardEvent<HTMLElement>): void {
  * it came from, whether it is closed with `open` or taken out of the page
  * while open.
  */
-export function Dialog({ open, onClose, title, children, actions, className }: DialogProps) {
+export function Dialog({ open, onClose, title, children, actions, className, style, place }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const titleId = useId();
@@ -103,6 +115,8 @@ export function Dialog({ open, onClose, title, children, actions, className }: D
     <dialog
       ref={ref}
       className={className ? `fc-dialog ${className}` : "fc-dialog"}
+      style={style}
+      data-place={place}
       aria-labelledby={titleId}
       onClose={() => {
         // The browser sends "close" a moment after the dialog shuts. If it has

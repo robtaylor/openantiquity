@@ -55,6 +55,12 @@ export const FINDING_SHAPE_LAYERS = {
   ruledOut: "findings-shapes-ruled-out",
 } as const;
 
+/** The layers that draw the highlight on one finding (`findingHighlight.ts`), which match nothing until it names one. */
+export const FINDING_HIGHLIGHT_LAYERS = {
+  shape: "findings-highlight-shape",
+  marker: "findings-highlight-marker",
+} as const;
+
 /** States that are not drawn as ordinary filled circles. */
 const SPECIAL_STATES = ["known", "ruled_out", "withdrawn"];
 
@@ -239,8 +245,27 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
     },
   ];
 
+  const nothing: FilterSpecification = ["==", ["get", "public_id"], ""];
+  const highlightShape: OverlayLayer = {
+    layer: shapeLayer(FINDING_HIGHLIGHT_LAYERS.shape, "line", ["all", ["has", "shape"], nothing], {
+      "line-color": COLOURS.accentStrong,
+      "line-width": 5,
+    }),
+    opacity: { "line-opacity": 0.9 },
+  };
+  const highlightMarker: OverlayLayer = {
+    layer: circle(FINDING_HIGHLIGHT_LAYERS.marker, ["all", IS_POINT, nothing], {
+      "circle-radius": 11,
+      "circle-color": "rgba(0, 0, 0, 0)",
+      "circle-stroke-color": COLOURS.accentStrong,
+      "circle-stroke-width": 2.5,
+    }),
+    opacity: { "circle-stroke-opacity": 1 },
+  };
+
   return [
     ...shapes,
+    highlightShape,
     {
       layer: squareLine("findings-obscured-casing", liveSquare, { "line-color": OUTLINE, "line-width": 5 }),
       opacity: { "line-opacity": 0.75 },
@@ -264,6 +289,7 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
     },
     ...ring(FINDING_POINT_LAYERS.ruledOut, ruledOut, 3, ruledOutColour, 1.5, true),
     ...ring(FINDING_POINT_LAYERS.known, known, ringRadius, colour, 2.5),
+    highlightMarker,
     {
       layer: circle(FINDING_POINT_LAYERS.points, points, {
         "circle-radius": radius,

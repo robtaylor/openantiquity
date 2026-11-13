@@ -2,6 +2,7 @@ import { MapPinPlus, SearchX, SlidersHorizontal, Unplug, ZoomIn } from "lucide-r
 import { type ReactNode, useId, useState } from "react";
 import { useNavigate } from "react-router";
 import type { Meta } from "../../api/meta.js";
+import { useFindingHighlight } from "../../map/findingHighlight.js";
 import { useMapStore } from "../../map/store.js";
 import { Button } from "../../ui/Button.js";
 import { ChipGroup } from "../../ui/Chip.js";
@@ -50,6 +51,12 @@ export function FindingLink({ meta, finding, detail }: { meta: Meta; finding: Fi
     <a
       className="fc-explore__row"
       href={findingPath(finding.public_id)}
+      // The row's finding is highlighted on the map while the row has focus or the pointer, so the list is a way
+      // to tell overlapping findings apart.
+      onFocus={() => useFindingHighlight.getState().set(finding.public_id)}
+      onBlur={() => useFindingHighlight.getState().clear(finding.public_id)}
+      onMouseEnter={() => useFindingHighlight.getState().set(finding.public_id)}
+      onMouseLeave={() => useFindingHighlight.getState().clear(finding.public_id)}
       onClick={(event) => {
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
         event.preventDefault();

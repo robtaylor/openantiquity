@@ -40,6 +40,20 @@ export interface FakeSource {
   setTiles: ReturnType<typeof vi.fn>;
 }
 
+/** A query's point or box as [left, top, right, bottom]. A point is a box of no size. */
+function boxOf(geometry: unknown): [number, number, number, number] {
+  const point = (value: unknown): [number, number] =>
+    Array.isArray(value)
+      ? [Number(value[0]), Number(value[1])]
+      : [Number((value as { x: number }).x), Number((value as { y: number }).y)];
+  if (Array.isArray(geometry) && (Array.isArray(geometry[0]) || typeof geometry[0] === "object")) {
+    const [a, b] = [point(geometry[0]), point(geometry[1])];
+    return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
+  }
+  const [x, y] = point(geometry);
+  return [x, y, x, y];
+}
+
 export class FakeMap {
   /** Every map made since the last `FakeMap.reset()`, oldest first. */
   static instances: FakeMap[] = [];
@@ -335,20 +349,30 @@ export class FakeMap {
 
   /**
    * What the map has drawn, for `queryRenderedFeatures` to answer from. It
-   * filters by the layers asked for and ignores the point. A test sets it.
+   * filters by the layers asked for. A feature with `at`, the screen point
+   * nearest the query, is found only by a query whose point or box reaches
+   * it; one without is found wherever the query is. A test sets it.
    */
   rendered: Array<{
     id?: string | number;
     properties: Record<string, unknown>;
     layer: { id: string };
     geometry?: { type: string; coordinates: unknown };
+    at?: { x: number; y: number };
   }> = [];
   queryRenderedFeatures = vi.fn((first?: unknown, second?: unknown) => {
     this.requireStyle();
-    // Called as (options) for the whole screen, or (point, options) for one spot.
-    const isPoint = Array.isArray(first) || (typeof first === "object" && first !== null && "x" in first);
-    const options = (isPoint ? second : first) as { layers?: string[] } | undefined;
-    return this.rendered.filter((feature) => !options?.layers || options.layers.includes(feature.layer.id));
+    // Called as (options) for the whole screen, (point, options) for one spot, or ([corner, corner], options) for a box.
+    const isGeometry = Array.isArray(first) || (typeof first === "object" && first !== null && "x" in first);
+    const options = (isGeometry ? second : first) as { layers?: string[] } | undefined;
+    const reaches = (at: { x: number; y: number } | undefined): boolean => {
+      if (!at || !isGeometry) return true;
+      const box = boxOf(first);
+      return at.x >= box[0] && at.x <= box[2] && at.y >= box[1] && at.y <= box[3];
+    };
+    return this.rendered.filter(
+      (feature) => (!options?.layers || options.layers.includes(feature.layer.id)) && reaches(feature.at),
+    );
   });
 
   getTerrain(): { source: string; exaggeration?: number } | null {
@@ -436,7 +460,7 @@ export class FakeMap {
   }
 
   /** Click the map at a point on the canvas, as MapLibre reports a click that was not a drag, with any keys held. */
-  click(x: number, y: number, keys: { shiftKey?: boolean; altKey?: boolean } = {}): void {
+  click(x: number, y: number, keys: { shiftKey?: boolean; altKey?: boolean; pointerType?: string } = {}): void {
     const lngLat = this.unproject([x, y]);
     this.fire("click", { point: { x, y }, lngLat, originalEvent: { ...keys } });
   }

@@ -9,7 +9,7 @@ import type {
 import { useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { findOverlay, type Meta } from "../../api/meta.js";
-import { findingPointAt } from "../../map/findingHits.js";
+import { findingInReach } from "../../map/findingHits.js";
 import { isMapLive } from "../../map/MapPane.js";
 import {
   RECORD_LAYERS,
@@ -177,8 +177,8 @@ export function useRecordsOnMap(meta: Meta, main: MapLibreMap | null, compare: M
       const onClick = (event: MapMouseEvent): void => {
         // A tool such as the height profile has the clicks while it is open, and marking a finding has them too.
         if (!isMapLive(map) || mapToolActive() || isMarkPath(latest.current.location.pathname)) return;
-        // Findings sit above records, so a click on a finding's marker is Explore's.
-        if (findingPointAt(map, event)) return;
+        // Findings sit above records, so a click with a finding in reach is Explore's.
+        if (findingInReach(map, event)) return;
         const target = recordTarget(query(map, CLICKABLE, event.point), event.lngLat);
         if (target === null) return;
         const { navigate: go, location: here } = latest.current;
