@@ -33,6 +33,8 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterator
+from dataclasses import dataclass
+from functools import cached_property
 
 import numpy as np
 import shapely
@@ -103,11 +105,17 @@ def _edge(shape: BaseGeometry) -> BaseGeometry:
     return shape.boundary if shape.geom_type in ("Polygon", "MultiPolygon") else shape
 
 
-def ground(finding: Finding) -> BaseGeometry:
-    """What a second look given now is given on: the shape, an area as its edge, or the point."""
-    if finding.outline is None:
-        return to_shape(finding.location)
-    return _edge(to_shape(finding.outline))
+def _shape(finding: Finding) -> BaseGeometry | None:
+    """The finding's shape as stored, or None without one."""
+    return to_shape(finding.outline) if finding.outline is not None else None
+
+
+def ground(finding: Finding, shape: BaseGeometry | None) -> BaseGeometry:
+    """What a second look given now is given on: the shape, an area as its edge, or the point.
+
+    `shape` is the finding's shape, as `_shape` reads it.
+    """
+    return to_shape(finding.location) if shape is None else _edge(shape)
 
 
 def _simplified(geometry: BaseGeometry, metres: float) -> BaseGeometry:
@@ -170,11 +178,13 @@ def grow(db: Session, finding: Finding, observation: Observation) -> None:
     )
     if finding.outline is not None and finding.looked_at is not None and seen_before:
         return
-    now = ground(finding)
+    shape = _shape(finding)
+    now = ground(finding, shape)
     assert not now.is_empty, f"finding {finding.public_id} has an empty shape"
     before = to_shape(finding.looked_at) if finding.looked_at is not None else None
-    finding.looked_at = to_db_geometry(grown(before, now))
-    refresh_added(finding)
+    whole = grown(before, now)
+    finding.looked_at = to_db_geometry(whole)
+    refresh_added(finding, shape, Looked(whole))
 
 
 def has_standing_look(db: Session, finding: Finding) -> bool:
@@ -190,23 +200,25 @@ def has_standing_look(db: Session, finding: Finding) -> bool:
     )
 
 
-def seed(db: Session, finding: Finding) -> bool:
-    """Fill `looked_at` for a finding answered before it existed, and say whether it is set. Hold the lock.
+def seed(db: Session, finding: Finding, shape: BaseGeometry | None) -> Looked | None:
+    """Fill `looked_at` for a finding answered before it existed, and give it, or None. Hold the lock.
 
     A second look given before the deploy that brought `looked_at`, or on a
     machine still running the old version during it, left it NULL. Its
     ground is the finding's shape as stored now, before any edit, or its
     point when it has no shape: the best record there is of what was seen.
     A finding whose every second look was taken back has nothing to keep.
+    `shape` is the finding's shape as stored now, as `_shape` reads it.
     """
     if finding.looked_at is not None:
-        return True
+        return Looked(to_shape(finding.looked_at))
     if not has_standing_look(db, finding):
-        return False
-    now = ground(finding)
+        return None
+    now = ground(finding, shape)
     assert not now.is_empty, f"finding {finding.public_id} has an empty shape"
-    finding.looked_at = to_db_geometry(grown(None, now))
-    return True
+    whole = grown(None, now)
+    finding.looked_at = to_db_geometry(whole)
+    return Looked(whole)
 
 
 # Findings seeded at a time, each batch in its own transaction.
@@ -239,9 +251,12 @@ def backfill(db: Session, *, batch: int = BACKFILL_BATCH) -> int:
                 .with_for_update()
                 .execution_options(populate_existing=True)
             ).one()
-            if finding.looked_at is None and seed(db, finding):
-                refresh_added(finding)
-                seeded += 1
+            if finding.looked_at is None:
+                shape = _shape(finding)
+                looked = seed(db, finding, shape)
+                if looked is not None:
+                    refresh_added(finding, shape, looked)
+                    seeded += 1
         db.commit()
         after = ids[-1]
     return seeded
@@ -255,7 +270,38 @@ def _on_grid(geometry: BaseGeometry, to_grid: Transformer) -> BaseGeometry:
     return shapely.transform(geometry, project)
 
 
-def check(db: Session, finding: Finding, target: BaseGeometry) -> None:
+@dataclass(frozen=True)
+class Looked:
+    """A finding's `looked_at`, read once, and the grid under it that distances to it are measured on.
+
+    An edit checks against it and then measures what lies beyond it, and an
+    answer grows it and measures again, so each reads and projects it once.
+    """
+
+    geometry: BaseGeometry
+
+    def __post_init__(self) -> None:
+        assert not self.geometry.is_empty, "what was looked at is never empty"
+
+    @cached_property
+    def _system(self) -> gridref.GridSystem:
+        return gridref.grid_system(*self.geometry.representative_point().coords[0])
+
+    def to_grid(self, geometry: BaseGeometry) -> BaseGeometry:
+        """`geometry` on the grid under what was looked at, in metres."""
+        return _on_grid(geometry, gridref.transformer(4326, gridref.EPSG[self._system]))
+
+    def from_grid(self, geometry: BaseGeometry) -> BaseGeometry:
+        """A geometry on that grid back in longitude and latitude."""
+        return _on_grid(geometry, gridref.transformer(gridref.EPSG[self._system], 4326))
+
+    @cached_property
+    def on_grid(self) -> BaseGeometry:
+        """What was looked at, on the grid under it."""
+        return self.to_grid(self.geometry)
+
+
+def check(db: Session, finding: Finding, target: BaseGeometry) -> Looked | None:
     """Refuse an edit whose shape, or point when it has none, is `target`, if too little of `looked_at` stays.
 
     Call it before the edit is applied, under the lock. Every looked-at
@@ -266,63 +312,60 @@ def check(db: Session, finding: Finding, target: BaseGeometry) -> None:
     shrinks. Nothing is checked while `looked_at` is null and no second look
     stands. A finding answered before `looked_at` existed is seeded first
     (`seed`), so its answers hold it too.
+
+    Gives what was looked at, for `refresh_added` once the edit is applied,
+    or None when nothing was.
     """
-    if not seed(db, finding):
-        return
+    looked = seed(db, finding, _shape(finding))
+    if looked is None:
+        return None
     assert finding.looked_at is not None, "a seeded finding has looked-at ground"
-    looked_at = to_shape(finding.looked_at)
-    assert not looked_at.is_empty, f"finding {finding.public_id} has looked at nothing"
     assert not target.is_empty, "an edit leaves a shape or a point"
-    system = gridref.grid_system(*looked_at.representative_point().coords[0])
-    to_grid = gridref.transformer(4326, gridref.EPSG[system])
-    reach = _on_grid(target, to_grid).simplify(_COMPARE_TOLERANCE_M)
-    parts = list(_parts(_on_grid(looked_at, to_grid)))
+    reach = looked.to_grid(target).simplify(_COMPARE_TOLERANCE_M)
+    parts = list(_parts(looked.on_grid))
     if any(reach.distance(part) > LOOKED_AT_MAX_MOVE_M for part in parts if isinstance(part, Point)):
         raise _moved(None)
     lines = MultiLineString([part for part in parts if isinstance(part, LineString)])
     if lines.is_empty:
-        return
+        return looked
     lines = lines.simplify(_COMPARE_TOLERANCE_M)
     assert lines.length > 0, "a looked-at line has length"
     near = reach.buffer(LOOKED_AT_MAX_MOVE_M, quad_segs=_BUFFER_QUAD_SEGS)
     kept = lines.intersection(near).length / lines.length
     if kept < LOOKED_AT_MIN_KEPT:
         raise _moved(kept)
+    return looked
 
 
 # Less than this beyond the looked-at ground is the buffer's polygon edge, not ground anyone added.
 _ADDED_MIN_M = 2 * _COMPARE_TOLERANCE_M
 
 
-def _beyond(finding: Finding) -> tuple[float, tuple[float, float, float, float]] | None:
-    """The length and bounds of the shape lying further than `LOOKED_AT_MAX_MOVE_M` from `looked_at`.
+def _beyond(shape: BaseGeometry, looked: Looked) -> tuple[float, tuple[float, float, float, float]] | None:
+    """The length and bounds of `shape` lying further than `LOOKED_AT_MAX_MOVE_M` from what was looked at.
 
-    The shape is a line, or an area's edge. None when nothing lies beyond.
+    A line is measured, or an area's edge. None when nothing lies beyond.
     """
-    if finding.looked_at is None or finding.outline is None:
-        return None
-    looked_at = to_shape(finding.looked_at)
-    shape = to_shape(finding.outline)
-    assert not looked_at.is_empty, f"finding {finding.public_id} has looked at nothing"
-    assert not shape.is_empty, f"finding {finding.public_id} has an empty shape"
+    assert not shape.is_empty, "a shape is never empty"
     edge = _edge(shape)
-    system = gridref.grid_system(*looked_at.representative_point().coords[0])
-    to_grid = gridref.transformer(4326, gridref.EPSG[system])
-    reach = _on_grid(looked_at, to_grid).buffer(LOOKED_AT_MAX_MOVE_M, quad_segs=_BUFFER_QUAD_SEGS)
-    beyond = _on_grid(edge, to_grid).simplify(_COMPARE_TOLERANCE_M).difference(reach)
+    reach = looked.on_grid.buffer(LOOKED_AT_MAX_MOVE_M, quad_segs=_BUFFER_QUAD_SEGS)
+    beyond = looked.to_grid(edge).simplify(_COMPARE_TOLERANCE_M).difference(reach)
     if beyond.is_empty or beyond.length < _ADDED_MIN_M:
         return None
-    back = _on_grid(beyond, gridref.transformer(gridref.EPSG[system], 4326))
-    return float(beyond.length), back.bounds
+    return float(beyond.length), looked.from_grid(beyond).bounds
 
 
-def refresh_added(finding: Finding) -> bool:
+def refresh_added(finding: Finding, shape: BaseGeometry | None, looked: Looked | None) -> bool:
     """Store `added_since_looked_m` and `added_view` from the shape and `looked_at`, and say if they changed.
 
     Call it whenever either changes: after a change of shape and after a
-    second look grows `looked_at`.
+    second look grows `looked_at`. The caller passes what it holds already,
+    so neither is read again: `shape`, the finding's shape, or None without
+    one, and `looked`, its `looked_at`, or None when nothing was looked at.
     """
-    found = _beyond(finding)
+    assert (shape is None) == (finding.outline is None), "the shape is the finding's"
+    assert (looked is None) == (finding.looked_at is None), "what was looked at is the finding's"
+    found = None if shape is None or looked is None else _beyond(shape, looked)
     length, view = (None, None) if found is None else (round(found[0], 1), shapes.view_of(found[1]))
     changed = (length, view) != (finding.added_since_looked_m, finding.added_view)
     finding.added_since_looked_m = length

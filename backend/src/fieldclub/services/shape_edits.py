@@ -243,7 +243,7 @@ def change_shape(
     anchor = _anchor_for(finding, new_shape, placed or current, placed=placed is not None)
     if new_shape is not None:
         geo.check_in_british_isles(new_shape.geometry)
-    looked_at.check(db, finding, new_shape.geometry if new_shape is not None else anchor)
+    looked = looked_at.check(db, finding, new_shape.geometry if new_shape is not None else anchor)
     _record_shape_change(db, finding, by, kind, old_path, new_shape)
     for name, value in shape_columns(new_shape).items():
         setattr(finding, name, value)
@@ -252,7 +252,7 @@ def change_shape(
         finding.location_derived = False
     if point_parts(anchor) != point_parts(current):
         move_anchor(db, finding, anchor)
-    looked_at.refresh_added(finding)
+    looked_at.refresh_added(finding, new_shape.geometry if new_shape is not None else None, looked)
     return kind
 
 
