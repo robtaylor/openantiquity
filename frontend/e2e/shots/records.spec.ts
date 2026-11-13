@@ -135,7 +135,7 @@ test("open elsewhere", async ({ page }) => {
   await serveRecordsApi(page);
   await page.goto(`/elsewhere?lon=${CENTRE.lon}&lat=${CENTRE.lat}${VIEW}`);
   await settle(page);
-  await page.getByRole("heading", { name: "England" }).waitFor();
+  await page.getByRole("heading", { name: "Old maps" }).waitFor();
   await shoot(page, "14-elsewhere");
 });
 
@@ -146,10 +146,10 @@ test("live sources, on and failed", async ({ page }) => {
   await settle(page);
   await page.getByText("Live sources", { exact: true }).click();
   await page.getByRole("switch", { name: /Wiltshire/ }).check();
-  await page.getByRole("switch", { name: /ADS Data Catalogue/ }).check();
+  await page.getByRole("switch", { name: /Wolverhampton and Walsall HER/ }).check();
   await page.getByText(/records in view/).waitFor();
   await page.getByText(/didn't answer this browser/).waitFor();
-  await page.locator(".fc-live").scrollIntoViewIfNeeded();
+  await page.locator("details.fc-live[open]").scrollIntoViewIfNeeded();
   await page.waitForTimeout(700);
   await shoot(page, "15-live");
 });

@@ -375,7 +375,7 @@ The contract above is what the workstreams build against. WS-A comes first, beca
 
 ### WS-B — Frontend
 
-**Status:** In progress. Steps 1 to 5 landed on 2026-11-13 (`42e7947` to `f616f08`): the curve, the path model, the generated types, the one-flow drawing tool and drafts. Steps 6 to 8 are next, with the phone's drawing bar made compact.
+**Status:** Built on the branch, not yet on `main`. Steps 1 to 5 landed on 2026-11-13 (`42e7947` to `f616f08`): the curve, the path model, the generated types, the one-flow drawing tool and drafts. Steps 6 to 8 landed the same day (`192afcc` to `88ab10f`), with the phone's drawing bar made one row of buttons and one line: changing a saved finding, second looks naming their shape revision, saved lines and areas on the map, and the chooser between overlapping findings. The chooser is built on `Dialog` alone, styled as a short sheet on a phone. WS-C is next.
 
 **Steps, in order, each test first:**
 

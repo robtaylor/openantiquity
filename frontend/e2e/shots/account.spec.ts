@@ -149,7 +149,7 @@ test("emailed link page", async ({ page }) => {
   });
   const shown = {
     slow: "Checking your link…",
-    confirm: "Sign in as a***@example.org?",
+    confirm: "Which email address is this link for?",
     invalid: "This link can't be used",
     down: "We couldn't check your link",
   } as const;

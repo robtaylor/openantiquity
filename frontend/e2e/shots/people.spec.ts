@@ -274,7 +274,7 @@ test("finding page as a moderator", async ({ page }) => {
   await panel.getByRole("heading", { name: "Moderation" }).scrollIntoViewIfNeeded();
   await shoot(page, "finding-moderation");
   await panel.getByRole("button", { name: "Change its level" }).click();
-  await page.getByRole("dialog", { name: "Change its level" }).getByRole("radio", { name: "Restricted" }).click();
+  await page.getByRole("dialog", { name: "Change its level" }).getByRole("radio", { name: "Protected" }).click();
   await shoot(page, "finding-level");
 });
 
