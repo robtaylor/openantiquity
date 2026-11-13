@@ -90,7 +90,7 @@ export function MarkButton({ isPhone }: { isPhone: boolean }) {
   }
   if (!floating) return null;
   return (
-    <div className="fc-mark-float" ref={float}>
+    <div className="fc-mark-float" ref={float} data-floats-on-map="">
       {selected ? <PhoneSelectedPointBar map={map} /> : <PhoneDrawingBar map={map} />}
     </div>
   );

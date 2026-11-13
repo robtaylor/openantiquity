@@ -53,11 +53,17 @@ export function centreFor(
   return [lng - (east * metresPerPx) / (METRES_PER_DEGREE * cos), lat + (south * metresPerPx) / METRES_PER_DEGREE];
 }
 
+/** The part of the map nothing covers (`.fc-stage`), in page pixels, or null before the page is laid out. */
+function stageBox(): DOMRect | null {
+  const stage = document.querySelector(".fc-stage")?.getBoundingClientRect();
+  return stage && stage.width > 0 && stage.height > 0 ? stage : null;
+}
+
 /** Where the uncovered part of the map is, from the map's centre, measured from the page. */
 export function uncoveredOffset(): ScreenOffset {
   const canvas = useMainMapStore.getState().map?.getCanvas().getBoundingClientRect();
-  const stage = document.querySelector(".fc-stage")?.getBoundingClientRect();
-  if (!canvas || !stage || stage.width === 0 || stage.height === 0) return { x: 0, y: 0 };
+  const stage = stageBox();
+  if (!canvas || !stage) return { x: 0, y: 0 };
   return {
     x: stage.left + stage.width / 2 - (canvas.left + canvas.width / 2),
     y: stage.top + stage.height / 2 - (canvas.top + canvas.height / 2),
@@ -109,8 +115,8 @@ export function inView(point: [number, number]): boolean {
 /** Whether the point is on the part of the map nothing covers, at any zoom. */
 function onUncoveredMap(point: [number, number]): boolean {
   const map = useMainMapStore.getState().map;
-  const stage = document.querySelector(".fc-stage")?.getBoundingClientRect();
-  if (!map || !stage || stage.width === 0) return false;
+  const stage = stageBox();
+  if (!map || !stage) return false;
   const canvas = map.getCanvas().getBoundingClientRect();
   const at = map.project(point);
   const x = canvas.left + at.x;
@@ -158,8 +164,12 @@ export function clearOf(stage: Edges, covers: readonly Edges[]): Edges {
   return clear;
 }
 
-/** What floats on the map and would cover a handle: the search box, the map's buttons, the drawing bar and the rest. */
-const FLOATING = ".fc-stage > *, .fc-mark-float";
+/**
+ * What floats on the map and would cover a handle: the search box, the map's
+ * buttons and the rest of the stage, and whatever else says it floats on the
+ * map with `data-floats-on-map`, such as the phone's drawing bar.
+ */
+const FLOATING = ".fc-stage > *, [data-floats-on-map]";
 
 /**
  * How much of each edge of the map is covered by the shell's chrome or by
@@ -168,8 +178,8 @@ const FLOATING = ".fc-stage > *, .fc-mark-float";
  * page is laid out.
  */
 function floatingCover(canvas: DOMRect): MapCover | null {
-  const stage = document.querySelector(".fc-stage")?.getBoundingClientRect();
-  if (!stage || stage.width === 0 || stage.height === 0) return null;
+  const stage = stageBox();
+  if (!stage) return null;
   const covers = [...document.querySelectorAll(FLOATING)].map((element) => element.getBoundingClientRect());
   const clear = clearOf(stage, covers);
   return {
