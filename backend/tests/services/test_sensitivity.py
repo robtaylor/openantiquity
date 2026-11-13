@@ -421,9 +421,9 @@ def test_a_new_finding_with_no_level_gets_its_class_default(
     assert finding.location_public is not None
 
 
-def test_default_sensitivity_refuses_an_unknown_class() -> None:
-    with pytest.raises(ValueError, match="castle_in_the_air"):
-        default_sensitivity("castle_in_the_air")
+def test_default_sensitivity_of_a_class_this_version_has_no_name_for_is_not_sure_s() -> None:
+    # A later version can have stored a class it added (Decision 0035).
+    assert default_sensitivity("castle_in_the_air") is default_sensitivity(FeatureClass.UNKNOWN)
 
 
 # --------------------------------------------------------------------------
