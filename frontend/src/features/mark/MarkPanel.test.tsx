@@ -116,6 +116,8 @@ describe("a marking that hasn't been saved", () => {
     expect(points()).toEqual(drawn);
     expect(panel().getByRole("radio", { name: "Road" })).toBeChecked();
     expect(handles()).toHaveLength(3);
+    // Looking at the layers isn't closing the tool, so nothing is said about carrying on.
+    expect(panel().queryByText("Carrying on with the marking you hadn't saved.")).toBeNull();
   });
 
   it("is carried on with when the tool is closed and opened again, and says so", async () => {

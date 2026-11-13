@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from "react-router";
 import type { Mock } from "vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RECORD_BASE_FILTERS, RECORD_LAYERS } from "../../map/overlayLayers.js";
-import { useMapStore } from "../../map/store.js";
+import { useMapStore, useViewAreaStore } from "../../map/store.js";
 import { overlaySourceId } from "../../map/style.js";
 import { type ApiRoutes, apiError, routeApi } from "../../test/apiRoutes.js";
 import type { FakeMap } from "../../test/fakeMapLibre.js";
@@ -242,6 +242,28 @@ describe("records on the map", () => {
     await waitFor(() => expect(selection(map)?.features.length).toBeGreaterThan(0));
 
     expect(useMapStore.getState().camera).toMatchObject({ lng: before.lng, lat: before.lat, zoom: before.zoom });
+  });
+
+  it("doesn't go back to a record when the Layers panel is opened over its page and closed", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/#m=12/53/-2/0/0");
+    renderShell(`/r/${AVENUE_RECORD.id}`);
+    await mapReady();
+    await screen.findByRole("complementary", { name: AVENUE_RECORD.name });
+    await waitFor(() =>
+      expect(useMapStore.getState().camera).toMatchObject({ lng: AVENUE_RECORD.lon, lat: AVENUE_RECORD.lat }),
+    );
+    // The person moves away to look at something else, with the record's page still open.
+    act(() => useMapStore.getState().requestCamera({ lng: -2.4, lat: 53.3, zoom: 15 }));
+    act(() => useViewAreaStore.getState().setArea([-2.45, 53.27, -2.35, 53.33], 15));
+
+    await user.click(screen.getByRole("button", { name: "Layers" }));
+    const layers = await screen.findByRole("complementary", { name: "Layers" });
+    await user.click(within(layers).getByRole("button", { name: "Close panel" }));
+    await screen.findByRole("complementary", { name: AVENUE_RECORD.name });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(useMapStore.getState().camera).toMatchObject({ lng: -2.4, lat: 53.3, zoom: 15 });
   });
 
   it("goes to a record whose middle is out of sight when its page is opened any other way", async () => {

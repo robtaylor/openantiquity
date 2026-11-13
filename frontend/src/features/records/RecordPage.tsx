@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, Landmark, MapPinned, Unplug } from "lucide-react";
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useEffect } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { ApiError, isTransient } from "../../api/client.js";
 import type { Meta } from "../../api/meta.js";
@@ -13,6 +13,7 @@ import { EmptyState } from "../../ui/EmptyState.js";
 import { Skeleton } from "../../ui/Skeleton.js";
 import { AddToInvestigation } from "../investigations/AddToInvestigation.js";
 import { useDocumentTitle } from "../placeholders.js";
+import { firstArrival } from "../shell/arrival.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { fetchRecord, parseRecordId, type RecordOut, recordKeys } from "./api.js";
 import { CategoryMark } from "./CategoryMark.js";
@@ -159,18 +160,17 @@ export function RecordPage() {
   // The open record is drawn on the map, and the map goes to it if it is out of sight, unless a
   // click on the map opened it: the person is then looking at the part of it they clicked.
   const openedFromMap = wasOpenedFromMap(arrivedWith);
-  const flown = useRef<number | null>(null);
+  // It goes once for a visit to the page, and not again when the Layers panel has been over it.
   useEffect(() => {
     if (!record) return;
     const shape = recordShape(record);
     useRecordSelection.getState().setShape(shape.collection);
-    if (flown.current !== record.id) {
-      flown.current = record.id;
+    if (firstArrival(pathname, "go to the record")) {
       const outOfSight = !inside(useViewAreaStore.getState().bounds, record.lon, record.lat);
       if (outOfSight && !openedFromMap) showOnMap(record, shape.imprecise);
     }
     return () => useRecordSelection.getState().setShape(null);
-  }, [record, openedFromMap]);
+  }, [record, openedFromMap, pathname]);
 
   const notFound =
     id === null || (query.error instanceof ApiError && (query.error.status === 404 || query.error.status === 422));

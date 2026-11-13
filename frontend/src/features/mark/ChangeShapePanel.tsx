@@ -25,7 +25,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { MapPinned } from "lucide-react";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { useMainMap } from "../../map/mainMap.js";
 import { Button } from "../../ui/Button.js";
@@ -41,6 +41,7 @@ import { findingPath } from "../findings/selection.js";
 import type { GeoJSONGeometry } from "../findings/types.js";
 import { useDocumentTitle } from "../placeholders.js";
 import { EMPTY_COLLECTION, type FeatureCollection } from "../records/geojson.js";
+import { firstArrival } from "../shell/arrival.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { usePanelEnvironment } from "../shell/panelContext.js";
 import { saveProblem } from "./compose.js";
@@ -133,6 +134,7 @@ function NotYours({ finding }: { finding: FindingDetail }) {
 }
 
 function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) {
+  const { pathname } = useLocation();
   const environment = usePanelEnvironment();
   const map = useMainMap();
   const client = useQueryClient();
@@ -174,13 +176,15 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
     if (!ready || framed.current === editing) return;
     return whenStageSettled(() => {
       framed.current = editing;
+      // Once for each taking up of the shape, and not again when the Layers panel has been over it.
+      if (!firstArrival(pathname, `frame ${editing}`)) return;
       const { points } = useMarkStore.getState().shape.present;
       frameExtent(
         points.map(({ lon, lat }) => [lon, lat] as const),
         { keepOwnView: finding.public_id },
       );
     });
-  }, [ready, editing, finding.public_id]);
+  }, [ready, editing, finding.public_id, pathname]);
 
   const lookedAt = finding.location.shape.looked_at;
   useLookedAtOnMap(ready ? map : null, lookedAt);

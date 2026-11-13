@@ -1,6 +1,6 @@
 import { EyeOff, NotebookText, Pencil, Unplug } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useLocation, useParams } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { useViewAreaStore } from "../../map/store.js";
 import { Button } from "../../ui/Button.js";
@@ -12,6 +12,7 @@ import { useSession } from "../account/session.js";
 import { whenStageSettled } from "../finding/mapView.js";
 import { useDocumentTitle } from "../placeholders.js";
 import { ReportButton } from "../reports/ReportButton.js";
+import { firstArrival } from "../shell/arrival.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { AddItems } from "./AddItems.js";
 import {
@@ -117,6 +118,7 @@ function EditDialog({
 const LONG_TITLE = 28;
 
 function NotebookBody({ meta, detail }: { meta: Meta; detail: InvestigationDetail }) {
+  const { pathname } = useLocation();
   const session = useSession();
   const powers = powersOf(detail);
   const publicId = detail.public_id;
@@ -140,6 +142,8 @@ function NotebookBody({ meta, detail }: { meta: Meta; detail: InvestigationDetai
     // A refresh before the panel has settled starts the wait again, so the area is framed once, after it.
     return whenStageSettled(() => {
       framed.current = publicId;
+      // Once for a visit to the page, and not again when the Layers panel has been over it.
+      if (!firstArrival(pathname, "show the area")) return;
       const shape = areaShape(detail.area);
       if (!shape) return;
       const [west, south, east, north] = boundsOf(shape);
@@ -147,7 +151,7 @@ function NotebookBody({ meta, detail }: { meta: Meta; detail: InvestigationDetai
       if (view && west < view[2] && east > view[0] && south < view[3] && north > view[1]) return;
       showArea(detail);
     });
-  }, [publicId, detail]);
+  }, [publicId, detail, pathname]);
 
   let itemsBody: ReactNode;
   if (items.isError) {

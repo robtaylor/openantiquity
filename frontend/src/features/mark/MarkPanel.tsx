@@ -1,12 +1,13 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { Button } from "../../ui/Button.js";
 import { EmptyState } from "../../ui/EmptyState.js";
 import { useKindDrafts } from "../drafts/savers.js";
 import { useDocumentTitle } from "../placeholders.js";
+import { firstArrival } from "../shell/arrival.js";
 import { BARE_MAP_PATH } from "../shell/navigation.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { findingDrafts, useSavedDrafts } from "./findingDrafts.js";
@@ -43,6 +44,7 @@ function useOpenSavedDraft(draftId: string | undefined): boolean {
  * stops adding them instead, keeping what was drawn.
  */
 export function MarkPanel({ meta }: { meta: Meta }) {
+  const { pathname } = useLocation();
   const { draftId } = useParams();
   const navigate = useNavigate();
   const drafts = useKindDrafts(findingDrafts);
@@ -60,14 +62,19 @@ export function MarkPanel({ meta }: { meta: Meta }) {
   const [carriedOn, setCarriedOn] = useState(false);
   useEffect(() => {
     const mark = useMarkStore.getState();
+    // The Layers panel opens over this one and closes back onto it. That isn't opening the tool.
+    const arriving = firstArrival(pathname, "open the marking tool");
     if (draftId === undefined) {
-      if (!begun.current && isUnsavedNewMark(mark)) setCarriedOn(true);
+      const ownToTool = mark.editing === null && mark.draftId === null;
+      if (!begun.current && !arriving && ownToTool) {
+        // Back from under the Layers panel: everything is as it was left.
+      } else if (!begun.current && isUnsavedNewMark(mark)) setCarriedOn(true);
       else if (!begun.current || mark.draftId !== null) mark.start();
     } else if (draft && mark.draftId !== draftId) {
       mark.load(draftId, draft.data);
     }
     begun.current = true;
-  }, [draftId, draft]);
+  }, [draftId, draft, pathname]);
   useEffect(() => {
     if (draftId !== undefined && draft && loaded === null) useMarkStore.getState().load(draftId, draft.data);
   }, [draftId, draft, loaded]);

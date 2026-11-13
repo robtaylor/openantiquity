@@ -15,7 +15,7 @@ The map fills the window at all times. Controls sit on top of it in fixed region
 | Status bar | Bottom edge: grid reference, coordinates, height, zoom, attribution | Grid reference and attribution only |
 | Primary action | "Mark a finding", bottom centre, always reachable | Same, above the tab bar |
 
-Only one panel is open at a time. Opening a finding replaces the layer panel. Closing a panel returns to the bare map, except for the layer panel. Closing the layer panel returns to the mode it was opened over, so changing layer during a second look or a scan doesn't end it. The URL always describes what's open, so back and forward work.
+Only one panel is open at a time. Opening a finding replaces the layer panel. Closing a panel returns to the bare map, except for the layer panel. Closing the layer panel returns to the mode it was opened over, so changing layer during a second look or a scan doesn't end it. The URL always describes what's open, so back and forward work. The layer panel opens over whatever page is showing, and closing it comes back to that page as it was left: what a page does on arriving, such as moving the map to a record or a finding, framing an investigation's area or a shape being changed, or saying that an unsaved marking was carried on, is done once for a visit to its address and not again for having looked at the layers (`features/shell/arrival.ts`).
 
 ## Look
 

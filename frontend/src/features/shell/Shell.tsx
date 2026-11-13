@@ -68,6 +68,7 @@ import { ReviewPanel } from "../review/ReviewPanel.js";
 import { SCAN_PATH } from "../scan/api.js";
 import { ScanLayer } from "../scan/ScanLayer.js";
 import { ScanPanel } from "../scan/ScanPanel.js";
+import { beginVisits, leftFor } from "./arrival.js";
 import { BrandMark, ModeRail } from "./ModeRail.js";
 import { BARE_MAP_PARAM, searchWithPanel } from "./navigation.js";
 import { PanelFrame } from "./PanelFrame.js";
@@ -259,6 +260,17 @@ function ReadyShell({ meta }: { meta: Meta }) {
   useEffect(() => {
     layersWanted.current = layersOpen;
   }, [layersOpen, location.key]);
+  // What a page does on arriving is done once for each visit to an address, not each time the
+  // Layers panel has been over it (`arrival.ts`). A shell just made has been nowhere yet, and
+  // says so before any page inside it arrives.
+  const visiting = useRef(false);
+  if (!visiting.current) {
+    visiting.current = true;
+    beginVisits();
+  }
+  useEffect(() => {
+    leftFor(location.pathname);
+  }, [location.pathname]);
   const toggleLayers = useCallback(() => {
     const open = layersWanted.current;
     layersWanted.current = !open;

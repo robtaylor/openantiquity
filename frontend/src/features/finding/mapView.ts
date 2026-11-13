@@ -8,6 +8,7 @@
 
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { useEffect, useRef } from "react";
+import { useLocation } from "react-router";
 import { findView, type Meta } from "../../api/meta.js";
 import { useMainMapStore } from "../../map/mainMap.js";
 import { LIMITS } from "../../map/permalink.js";
@@ -16,6 +17,7 @@ import { centreForVisible, framePoints, type MapCover } from "../../map/visibleA
 import { clamp } from "../../ui/math.js";
 import { useSelectedFinding } from "../findings/selection.js";
 import type { FindingDetail, ViewState } from "../findings/types.js";
+import { firstArrival } from "../shell/arrival.js";
 
 /** How close the map comes to a finding seen exactly, unless it is already closer. */
 export const FINDING_ZOOM = 16;
@@ -443,6 +445,7 @@ export function seeViewAt(meta: Meta, point: [number, number], view: ViewState):
  */
 export function useFindingOnMap(finding: FindingDetail): void {
   const moved = useRef<string | null>(null);
+  const { pathname } = useLocation();
   const { public_id: publicId } = finding;
   const { lon, lat, obscured } = finding.location;
   useEffect(() => {
@@ -452,7 +455,8 @@ export function useFindingOnMap(finding: FindingDetail): void {
     if (moved.current === publicId) return;
     return whenStageSettled(() => {
       moved.current = publicId;
-      goToFinding(finding);
+      // Once for a visit to the page, and not again when the Layers panel has been over it.
+      if (firstArrival(pathname, "go to the finding")) goToFinding(finding);
     });
-  }, [publicId, finding]);
+  }, [publicId, finding, pathname]);
 }
