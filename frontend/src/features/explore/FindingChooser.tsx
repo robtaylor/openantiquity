@@ -1,6 +1,6 @@
 /**
  * The chooser between overlapping findings (Decision 0031): "3 findings
- * here", each with its step, class and title, in the order the picking
+ * here", each with its title, step and class, in the order the picking
  * rules rank them, at most 8 and then "Show all in Explore". Hovering or
  * focusing an entry highlights its shape on the map. Escape closes it and
  * puts focus back on the map.

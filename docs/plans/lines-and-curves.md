@@ -4,7 +4,7 @@
 
 ## Goal
 
-A finder can mark a finding as a line or a closed shape made of straight and smooth points, the way Illustrator's pen and curvature tools work, on a computer and on a phone. A line can be as long as a Roman road, and the finder can add to either end later. A protected or restricted finding's shape never reaches anyone who sees it only as its 1 km square. This plan builds on Decisions 0005, 0008, 0019, 0021, 0022, 0023 and 0024, and needs the new records listed under "Decisions to write".
+A finder can mark a finding as a line or a closed shape made of straight and smooth points, the way Illustrator's pen and curvature tools work, on a computer and on a phone. A line can be as long as a Roman road, and the finder can add to either end later. A protected finding's shape never reaches anyone who sees it only as its 1 km square. This plan builds on Decisions 0005, 0008, 0019, 0021, 0022, 0023 and 0024, and needs the new records listed under "Decisions to write".
 
 ## Prerequisites
 
@@ -117,7 +117,7 @@ The owner asked why a size limit is needed. Without one, these break or can be a
 
 - **Map views.** Every map view sends a `bbox`, and a shape matches every box it crosses. A finding covering a county would be fetched and drawn in every view of that county, and would take one of the 1,000 places a GeoJSON page holds (`GEOJSON_MAX_LIMIT`).
 - **"What's here" queries.** Explore, the nearby lists and the record matching treat a finding as being where its shape is. An area of 2,000 km² is "here" everywhere inside it, so every list in that area leads with it.
-- **The privacy guard.** Decision 0023 holds back every investigation view and profile within 1.5 km of a finding the reader doesn't see exactly. Measured from the whole shape, a restricted scribble across a county would hold back every view there. That is a denial of service on other people's investigations.
+- **The privacy guard.** Decision 0023 holds back every investigation view and profile within 1.5 km of a finding the reader doesn't see exactly. Measured from the whole shape, a protected scribble across a county would hold back every view there. That is a denial of service on other people's investigations.
 - **Cost.** Every derived vertex is stored, simplified and sent. 50,000 vertices is about 800 KB of WKB per finding.
 - **What a second look means.** A reviewer answers "can you see a feature here" from one view. A 100 km enclosure can't be seen in any view, so an answer about it means nothing.
 
@@ -144,7 +144,7 @@ A finding keeps its required point, now called its anchor in the docs. Everythin
 - **When the line comes first.** A `POST /findings` with a `path` and no `location` gets an anchor from the server: for a line, the point half way along the derived line, its length measured on the ellipsoid, so a straight line of two points is anchored at its middle and not at an end; for an area, its centroid when that lies inside, otherwise shapely's `point_on_surface`. `location_derived` is set.
 - **When the shape changes.** A derived anchor stays where it is while the new shape passes within 25 m of it. Extending a line at its ends never moves it, because the middle of the line doesn't change. When an edit moves the line away from it, the anchor moves to the point on the new shape nearest to where it was, not to the new middle. A placed anchor never moves by itself: the edit is refused with `outline_too_far` and the finder moves the point.
 
-Re-deriving the middle on every extension was the first idea and was rejected. Each new middle can fall in a new 1 km square, so someone who sees a restricted line only as a square would see a trail of squares along it, one per extension. Keeping the anchor where it was shows them one square for the finding's whole life, as a point finding does.
+Re-deriving the middle on every extension was the first idea and was rejected. Each new middle can fall in a new 1 km square, so someone who sees a protected line only as a square would see a trail of squares along it, one per extension. Keeping the anchor where it was shows them one square for the finding's whole life, as a point finding does.
 
 When the anchor moves, `grid_ref`, `nation`, `location_public`, a suggested title and the activity rows follow, as they do today when the finder moves a point.
 
@@ -253,11 +253,11 @@ The rule stays Decision 0005's: a viewer who doesn't see a finding exactly gets 
 | `finding_shape_changes` | Never served whole. `path_before` goes to moderators only |
 | Drafts | Kept in the browser, owned by the tab, as now |
 
-**Near a protected finding.** Decision 0023 judges a drawing by its distance from the finding. For a line that must mean its whole shape: a height profile 1.4 km from a restricted road's middle is beside the road even when the anchor is 30 km away. `hidden_near` tests `ST_DWithin` against `location` or `outline`, using the new index, and `PositionGuard.near` measures to the exact shape. More views along protected lines are held back as a result. The default level for `road`, `trackway` and `linear` is open, so this touches few findings.
+**Near a protected finding.** Decision 0023 judges a drawing by its distance from the finding. For a line that must mean its whole shape: a height profile 1.4 km from a protected road's middle is beside the road even when the anchor is 30 km away. `hidden_near` tests `ST_DWithin` against `location` or `outline`, using the new index, and `PositionGuard.near` measures to the exact shape. More views along protected lines are held back as a result. The default level for `road`, `trackway` and `linear` is open, so this touches few findings.
 
 **An open line passing a protected finding.** An open road drawn past somebody else's protected barrow shows the road, not the barrow. Nothing in the line says the barrow is there unless the line was drawn to point at it, and a member could already do that today with an open point finding on the barrow, which nothing refuses. Generalising every open line near a protected finding would hide most Roman roads from signed-out visitors, since barrows line them. The plan doesn't generalise them, and records this as an accepted limit with a walk-back, as the owner decided.
 
-**The leak test.** `tests/test_routes.py` names a leak test for every route. Each test in `tests/findings/test_leaks.py` gains a line finding and an area finding at every level, and checks that the path, the outline, the extent, `shape_kind`, the length and `added_view` never reach a viewer who sees the square, and that a `bbox` placed on the line's far end doesn't return a restricted line to them. `tests/test_routes.py` proves at run time that each route's leak test built one of those lines and read it through the route: `tests/leak_record.py` notes each line `draw_line` builds and every request, response and checked text that names one.
+**The leak test.** `tests/test_routes.py` names a leak test for every route. Each test in `tests/findings/test_leaks.py` gains a line finding and an area finding at every level, and checks that the path, the outline, the extent, `shape_kind`, the length and `added_view` never reach a viewer who sees the square, and that a `bbox` placed on the line's far end doesn't return the line to them. `tests/test_routes.py` proves at run time that each route's leak test built one of those lines and read it through the route: `tests/leak_record.py` notes each line `draw_line` builds and every request, response and checked text that names one.
 
 ### Drawing findings on the map
 
@@ -386,7 +386,7 @@ The contract above is what the workstreams build against. WS-A comes first, beca
 5. **Drafts.** `findingDrafts.ts` carries `path`. Tests that an old draft with an outline opens as an all-corner path and saves.
 6. **Changing a saved finding.** "Change the shape" in `Tools.tsx`, `/mark/finding/:publicId`, the 409 reload. The finding page's "added since the last second look" line, the timeline entries and the button to `added_view`.
 7. **Drawing findings.** Line and area layers in `overlayLayers.ts`, `findingsData.ts` building them from `properties.shape`, `zoom` sent with the box. Tests in `findingsData.test.ts` that an obscured finding never yields a line.
-8. **Picking.** `findingHits.ts` gains the reach box by pointer type, the candidate order and the "clearly smaller" test. A chooser component in `src/ui/` built on `Dialog` and `Sheet`, with hover highlighting. Tests for the one-candidate, many-candidate and record cases, and for focus returning to the map.
+8. **Picking.** `findingHits.ts` gains the reach box by pointer type, the candidate order and the "clearly smaller" test. A chooser component in `src/ui/` built on `Dialog`, with hover highlighting. Tests for the one-candidate, many-candidate and record cases, and for focus returning to the map.
 
 **Exit criteria:**
 
@@ -414,7 +414,7 @@ The contract above is what the workstreams build against. WS-A comes first, beca
 
 They were written on 2026-11-12 as four records, Proposed, and are checked against the code when it lands.
 
-- **Decision 0028 — A finding's shape is its tapped points under one fixed curve, within size caps, around an anchor that stays put.** The path model and `catmull-rom-centripetal-1`, the 25 km, 600 km, 5,000-point and 50,000-vertex caps and what each guards, and the anchor that doesn't trail squares along a restricted line.
+- **Decision 0028 — A finding's shape is its tapped points under one fixed curve, within size caps, around an anchor that stays put.** The path model and `catmull-rom-centripetal-1`, the 25 km, 600 km, 5,000-point and 50,000-vertex caps and what each guards, and the anchor that doesn't trail squares along a protected line.
 - **Decision 0029 — Only the finder changes a shape, a change keeps the second looks, and most of what was looked at stays.** The owner's choices on who changes a shape and what extensions and reshapes keep, the accepted leak of a date, and the `looked_at` rule of 250 m and three-quarters.
 - **Decision 0030 — The privacy guard measures to a protected finding's whole shape, and open shapes near one aren't generalised.** Replaces the first point of Decision 0023, and records the accepted limit for open lines.
 - **Decision 0031 — A point's kind is switched by a control or a long press on its handle, and overlapping findings are picked by their edges.** Why neither pressure nor a long press on the map is used, the reach for mouse and finger, and the "clearly smaller" test that opens the chooser.
@@ -423,7 +423,7 @@ They were written on 2026-11-12 as four records, Proposed, and are checked again
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| A protected or restricted shape reaches someone who sees the square | High | One function picks the fields, summaries carry no outline at all, and every route's leak test includes a line finding |
+| A protected shape reaches someone who sees the square | High | One function picks the fields, summaries carry no outline at all, and every route's leak test includes a line finding |
 | The two curve implementations drift | Medium | The server's geometry is stored and served, so a drift only changes the preview. Shared vectors run in both suites |
 | A long line holds back many investigation views near it when protected | Medium | Linear classes default to open. Moderators can hide a scribble. The walk-back is to judge views against `outline_low` only |
 | A dense scribble inside the length cap | Medium | Rate limits, the report button and moderators' hide. Watch for it and add a density rule if it happens |

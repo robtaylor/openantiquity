@@ -280,7 +280,7 @@ class Observation(Base):
 
 
 class FindingShapeChange(Base):
-    """One change to a finding's shape. Never served whole: `path_before` goes to moderators only."""
+    """One change to a finding's shape. Never served whole: no route sends `path_before`."""
 
     __tablename__ = "finding_shape_changes"
     __table_args__ = (

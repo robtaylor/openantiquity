@@ -8,7 +8,7 @@ service, so entries are dated, not versioned.
 
 ### What this means for you
 
-Nothing is live yet. When the first version opens, this is what it does for you.
+OpenAntiquity has been live at openantiquity.org since 12 November 2026. This is what it does for you.
 
 - The code is open. It is published at github.com/robtaylor/openantiquity under the GNU Affero General Public License, version 3, so anyone may read it, change it and run their own copy, and whoever runs a changed copy has to share its source.
 - It is called OpenAntiquity, at openantiquity.org. While it was being built it was called Field Club, and two early letters to record holders carry that name.

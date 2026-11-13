@@ -18,9 +18,9 @@ An open road drawn past somebody else's protected barrow shows the road, not the
 
 ## Decision
 
-1. A saved view's centre, a height profile's line and an investigation's area are judged by their distance to a protected or restricted finding's anchor or to its whole line or area, whichever is nearer. `hidden_near` tests `ST_DWithin` against `location` or `outline`, using the spatial index on `outline`, and `PositionGuard.near` measures to the exact shape. The distance stays 1.5 km. A finding a moderator has hidden takes no part (Decision 0032, point 5).
+1. A saved view's centre, a height profile's line and an investigation's area are judged by their distance to the anchor, or to the whole line or area, of a finding the reader doesn't see exactly, whichever is nearer. `hidden_near` tests `ST_DWithin` against `location` or `outline`, using the spatial index on `outline`, and `PositionGuard.near` measures to the exact shape. The distance stays 1.5 km. A finding a moderator has hidden takes no part (Decision 0032, point 5).
 2. This replaces point 1 of Decision 0023 in that one respect, what the distance is measured to. Points 2 to 8 of Decision 0023 stand as they were.
-3. An open finding's line or area is shown by the finding's own level, to everyone who may see it exactly, whatever protected or restricted findings it passes near. This is an accepted limit, the same one that already applies to an open point finding placed on a protected site.
+3. An open finding's line or area is shown by the finding's own level, to everyone who may see it exactly, whatever protected findings it passes near. This is an accepted limit, the same one that already applies to an open point finding placed on a protected site.
 
 ## Alternatives considered
 
@@ -29,9 +29,9 @@ An open road drawn past somebody else's protected barrow shows the road, not the
 
 ## Consequences
 
-- No view or profile beside any part of a protected or restricted shape reaches a reader who sees that finding only as its square.
+- No view or profile beside any part of a shape reaches a reader who sees that finding only as its square.
 - More views and profiles are held back along protected lines. Because linear classes default to open, this touches few findings.
-- A long restricted line holds back views all along it. Moderators can hide a scribble made to do that, and closed shapes stop at 25 km across (Decision 0028).
+- A long line holds back views all along it from every reader who sees it only as its square. Moderators can hide a scribble made to do that, and closed shapes stop at 25 km across (Decision 0028).
 - The guard's spatial test now runs against shapes as well as points, which needs the new index on `outline`.
 - Open roads, trackways and boundaries are drawn in full for signed-out visitors.
 - A line drawn on purpose to point at someone else's protected finding says where it is to anyone who may see the line, until someone notices it.
@@ -41,7 +41,7 @@ An open road drawn past somebody else's protected barrow shows the road, not the
 
 - **If the test against full shapes is slow** — judge views against the simplified `outline_low` alone, which is accurate to about 35 to 55 m.
 - **If readers miss the held-back views** — show them at the zoom of the 1 km square, centred on the square, as Decision 0023 already names as its walk-back.
-- **If open lines are used to point at protected sites** — moderators raise such a finding to protected or restricted, as Decision 0005 lets them. From then on, anyone who sees it only as its 1 km square gets no line.
+- **If open lines are used to point at protected sites** — moderators raise such a finding to protected, as Decision 0005 lets them. From then on, anyone who sees it only as its 1 km square gets no line.
 - **If that happens often** — generalise an open line within 1.5 km of a protected finding, and accept the guard on every finding read and the roads it hides.
 
 ## Links
