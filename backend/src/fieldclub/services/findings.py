@@ -89,6 +89,7 @@ from fieldclub.services import (
     text_positions,
 )
 from fieldclub.services.confidence import (
+    NEW_PART_LOOK_M,
     SECOND_LOOK_CODES,
     VERIFIER_ROLES,
     Assessment,
@@ -718,8 +719,10 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
     A `path` (or an `outline`, read as one) with its `path_revision` goes to
     `shape_edits.change_shape`, with the finder as the one who made the
     change. When that moves the length lying beyond what was looked at, the
-    finding is reassessed, which can only change its open steps, and an
-    extension records `shape_extended`, which tells the followers.
+    finding is reassessed, which can only change its open steps. An
+    extension, or a reshape that leaves the shape at least
+    `confidence.NEW_PART_LOOK_M` longer, records `shape_extended`, which
+    tells the followers.
     """
     check_finder(finding, actor)
     unknown = set(changes) - _EDITABLE
@@ -734,6 +737,7 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
     changed_shape = False
     if "path" in changes or "outline" in changes:
         added_before = (finding.added_since_looked_m, finding.added_view)
+        length_before = finding.shape_length_m or 0.0
         kind = shape_edits.change_shape(
             db,
             finding,
@@ -754,7 +758,10 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
                 logger.warning(
                     "Finding %s moved from %s on a change of shape", finding.public_id, result.tier_before
                 )
-        if kind is ShapeChangeKind.EXTENDED:
+        # A point nudged and 20 km added is a reshape to the classifier and an
+        # extension to everyone else, so the followers are told of that too.
+        grew = (finding.shape_length_m or 0.0) - length_before
+        if kind is ShapeChangeKind.EXTENDED or (kind is ShapeChangeKind.RESHAPED and grew >= NEW_PART_LOOK_M):
             activity.record(db, ActivityKind.SHAPE_EXTENDED, actor, finding)
     if placed and not changed_shape:
         if finding.outline is not None:

@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 import shapely
 import shapely.affinity
+from fastapi.testclient import TestClient
 from geoalchemy2.shape import to_shape
 from shapely.geometry import LineString, MultiPoint, Point
 from shapely.geometry.base import BaseGeometry
@@ -355,12 +356,30 @@ def test_an_answer_taken_back_leaves_the_ground_it_was_given_on(db: Session, mak
     assert added(finding) is None
 
 
+def test_a_reshape_that_makes_the_line_much_longer_tells_the_followers_too(
+    db: Session, make_user: MakeUser
+) -> None:
+    """A point nudged and 20 km added is a reshape to the classifier and an extension to everyone else."""
+    finder = make_user()
+    finding = drawn(db, finder, meridian(0, 0.01))
+    (helper,) = answered(db, make_user, finding)
+    edit(db, finding, finder, path=meridian(0, 0.01, 0.2, lon=east(1)), path_revision=0)
+
+    (change,) = changes_of(db, finding)[-1:]
+    assert change.kind == "reshaped"
+    (extended,) = db.scalars(select(Activity).where(Activity.kind == "shape_extended")).all()
+    assert (extended.finding_id, extended.actor_id) == (finding.id, finder.id)
+    told = db.scalars(select(Notification.user_id).where(Notification.kind == "shape_extended")).all()
+    assert told == [helper.id]
+
+
 def test_an_extension_tells_the_followers_and_nothing_else_does(db: Session, make_user: MakeUser) -> None:
     finder = make_user()
     finding = drawn(db, finder, meridian(0, 0.01))
     (helper,) = answered(db, make_user, finding)
-    edit(db, finding, finder, path=meridian(0, 0.012, lon=east(100)), path_revision=0)
-    edit(db, finding, finder, path=meridian(0, 0.012, 0.02, lon=east(100)), path_revision=1)
+    # Moved a little and no longer: that tells nobody.
+    edit(db, finding, finder, path=meridian(0, 0.01, lon=east(100)), path_revision=0)
+    edit(db, finding, finder, path=meridian(0, 0.01, 0.02, lon=east(100)), path_revision=1)
 
     (extended,) = db.scalars(select(Activity).where(Activity.kind == "shape_extended")).all()
     assert (extended.finding_id, extended.actor_id, extended.data) == (finding.id, finder.id, None)
@@ -571,10 +590,10 @@ def _extend(client_as: ClientAs, finder: User, public_id: str, revision: int, *o
 
 
 def test_the_page_says_what_was_added_since_the_last_look_to_exact_viewers_only(
-    db: Session, client_as: ClientAs, make_user: MakeUser
+    db: Session, client: TestClient, client_as: ClientAs, make_user: MakeUser
 ) -> None:
     finder = make_user()
-    public_id = _line(client_as, finder, sensitivity="restricted")
+    public_id = _line(client_as, finder, sensitivity="protected")
     finding = findings.get_finding(db, public_id, finder)
     answered(db, make_user, finding, role="trusted")
     assert _extend(client_as, finder, public_id, 0, 0, 0.01, 0.03).status_code == 200
@@ -584,8 +603,8 @@ def test_the_page_says_what_was_added_since_the_last_look_to_exact_viewers_only(
     assert own["location"]["shape"]["added_view"] is not None
     assert NEW_PART in [step["code"] for step in own["assessment"]["next_steps"]]
 
-    # A member sees a restricted finding only as its square.
-    square = client_as(make_user()).get(f"{API}/findings/{public_id}").json()
+    # A signed-out visitor sees a protected finding only as its square.
+    square = client.get(f"{API}/findings/{public_id}").json()
     assert square["location"]["shape"]["added_since_looked_m"] is None
     assert square["location"]["shape"]["added_view"] is None
     assert square["location"]["shape"]["looked_at"] is None

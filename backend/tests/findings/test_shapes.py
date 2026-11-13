@@ -173,10 +173,16 @@ def test_a_reshape_that_moves_the_line_moves_a_derived_anchor_to_the_nearest_poi
     assert finding.grid_ref == gridref.to_gridref(moved_lon, LAT + 0.006)
     assert finding.title == findings.suggested_title("linear", moved_lon, LAT + 0.006)
     assert [change.kind for change in changes_of(db, finding)] == ["reshaped"]
-    # Its activity moves to the new square with it.
-    (created,) = db.scalars(select(Activity.location).where(Activity.finding_id == finding.id)).all()
-    assert created is not None
-    assert lon_lat(created) == sensitivity.square_centre(finding)
+    # Its activity moves to the new square with it: its making, and its being made much longer.
+    rows = db.execute(
+        select(Activity.kind, Activity.location)
+        .where(Activity.finding_id == finding.id)
+        .order_by(Activity.id)
+    ).all()
+    assert [kind for kind, _ in rows] == ["finding_created", "shape_extended"]
+    for _, location in rows:
+        assert location is not None
+        assert lon_lat(location) == sensitivity.square_centre(finding)
     assert (
         sensitivity.square_centre(finding) != gridref.square_1km(LON, LAT + 0.006).polygon.centroid.coords[0]
     )
