@@ -57,6 +57,51 @@ describe("snapBbox", () => {
   it("stays on the globe", () => {
     expect(snapBbox([-180, -90, 180, 90])).toEqual([-180, -90, 180, 90]);
   });
+
+  it("snaps to a thousandth of a degree from zoom 12 in, and to a step twice as coarse for each zoom further out", () => {
+    const onStep = (value: number, step: number) => Math.abs(value / step - Math.round(value / step)) < 1e-6;
+    for (const [zoom, step] of [
+      [15, 0.001],
+      [12, 0.001],
+      [11, 0.002],
+      [6, 0.064],
+      [3.4, 0.512],
+    ] as const) {
+      const box = snapBbox(AVEBURY, zoom);
+      for (const value of box) expect(onStep(value, step), `${value} at zoom ${zoom}`).toBe(true);
+      // Always outwards, so the box still covers the view and the half-kilometre round it.
+      expect(box[0]).toBeLessThanOrEqual(AVEBURY[0] - 0.0072);
+      expect(box[1]).toBeLessThanOrEqual(AVEBURY[1] - 0.0045);
+      expect(box[2]).toBeGreaterThanOrEqual(AVEBURY[2] + 0.0072);
+      expect(box[3]).toBeGreaterThanOrEqual(AVEBURY[3] + 0.0045);
+    }
+    // At country scale a short pan asks for the same box again.
+    const country: Bbox = [-6, 50, 2, 55.78];
+    expect(snapBbox([-5.98, 50.01, 2.02, 55.79], 6)).toEqual(snapBbox(country, 6));
+    expect(snapBbox(AVEBURY)).toEqual(snapBbox(AVEBURY, 14));
+  });
+
+  it("wraps a view lying wholly past 180 degrees back onto the globe", () => {
+    const east = snapBbox([185, 50, 190, 52], 6);
+    expect(east[0]).toBeLessThanOrEqual(-175);
+    expect(east[0]).toBeGreaterThan(-176);
+    expect(east[2]).toBeGreaterThanOrEqual(-170);
+    expect(east[2]).toBeLessThan(-169);
+    const west = snapBbox([-190, 50, -185, 52], 6);
+    expect(west[0]).toBeLessThanOrEqual(170);
+    expect(west[0]).toBeGreaterThan(169);
+    expect(west[2]).toBeGreaterThanOrEqual(175);
+    expect(west[2]).toBeLessThan(176);
+    // Far round the world too.
+    expect(snapBbox([545, 50, 550, 52], 6)).toEqual(east);
+  });
+
+  it("asks for the whole width for a view that crosses the line or spans more than the world", () => {
+    const crossing = snapBbox([175, 50, 185, 52], 6);
+    expect([crossing[0], crossing[2]]).toEqual([-180, 180]);
+    const wide = snapBbox([-300, -60, 300, 60], 1);
+    expect([wide[0], wide[2]]).toEqual([-180, 180]);
+  });
 });
 
 describe("useFindingsInBox", () => {

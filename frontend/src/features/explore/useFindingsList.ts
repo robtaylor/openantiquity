@@ -39,7 +39,9 @@ export interface FindingsList {
  */
 export function useFindingsList(): FindingsList {
   const bounds = useViewAreaStore((state) => state.bounds);
-  const settled = useDebounced(bounds === null ? null : bboxParam(snapBbox(bounds)), FINDINGS_DEBOUNCE_MS);
+  // The map's markers snap their box by the zoom, so the list does the same and asks for the same box.
+  const zoom = useViewAreaStore((state) => state.zoom);
+  const settled = useDebounced(bounds === null ? null : bboxParam(snapBbox(bounds, zoom)), FINDINGS_DEBOUNCE_MS);
   const filters = useEffectiveFilters();
 
   const query = useInfiniteQuery({

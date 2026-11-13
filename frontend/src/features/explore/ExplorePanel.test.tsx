@@ -7,7 +7,7 @@ import { overlayTroubleKey, useMapStore, useViewAreaStore } from "../../map/stor
 import { apiError, routeApi } from "../../test/apiRoutes.js";
 import { findingCollection, findingPage, findingSummary, findingsData, offset } from "../../test/fixtures/findings.js";
 import { json, mapReady, renderShell, setUpShellTests } from "../../test/shellHarness.js";
-import { FINDINGS_PAGE_SIZE } from "../findings/api.js";
+import { bboxParam, FINDINGS_PAGE_SIZE, snapBbox } from "../findings/api.js";
 import { useFindingFilters } from "../findings/filters.js";
 import { useSelectedFinding } from "../findings/selection.js";
 import type { FindingSummary } from "../findings/types.js";
@@ -270,8 +270,17 @@ describe("the Explore panel", () => {
     // Zoomed out to a county or more, the list still asks for what is in view.
     const asked = harness.requestsTo("/findings");
     act(() => useViewAreaStore.getState().setArea(bounds, 7));
-    await waitFor(() => expect(harness.requestsTo("/findings")).toBeGreaterThan(asked));
+    await waitFor(() => expect(harness.requestsTo("/findings")).toBeGreaterThan(asked + 1));
     expect(await explore().findByRole("heading", { name: "No findings here yet" })).toBeInTheDocument();
+    // The list and the map ask for the same box, snapped as coarsely as the zoom allows.
+    const boxes = harness
+      .fetchMock()
+      .mock.calls.map(([input]) => new URL(String(input), "http://localhost"))
+      .filter((url) => url.pathname === "/api/v1/findings");
+    const forMap = boxes.filter((url) => url.searchParams.get("format") === "geojson").at(-1);
+    const forList = boxes.filter((url) => url.searchParams.get("format") !== "geojson").at(-1);
+    expect(forList?.searchParams.get("bbox")).toBe(forMap?.searchParams.get("bbox"));
+    expect(forMap?.searchParams.get("bbox")).toBe(bboxParam(snapBbox(bounds, 7)));
     expect(explore().queryByText(/Zoom in/)).toBeNull();
   });
 

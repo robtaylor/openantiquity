@@ -167,6 +167,25 @@ describe("the findings overlay", () => {
     await waitFor(() => expect(screen.queryByText(/Not every finding in view is drawn/)).toBeNull());
   });
 
+  it("asks for a view flung past 180 degrees on the globe, and keeps the overlay on", async () => {
+    renderShell("/?panel=none");
+    const map = await mapReady();
+    await waitFor(() => expect(harness.requestsTo("/findings")).toBe(1));
+    act(() => map.userMove({ lng: 200, lat: 50, zoom: 4 }));
+    await waitFor(() => expect(harness.requestsTo("/findings")).toBe(2));
+    const last = harness
+      .fetchMock()
+      .mock.calls.map(([input]) => new URL(String(input), "http://localhost"))
+      .filter((url) => url.pathname === "/api/v1/findings")
+      .at(-1);
+    const [west, , east] = (last?.searchParams.get("bbox") ?? "").split(",").map(Number);
+    expect(west).toBeGreaterThanOrEqual(-180);
+    expect(east).toBeLessThanOrEqual(180);
+    expect(west).toBeLessThan(east as number);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(useMapStore.getState().failing[overlayTroubleKey("findings")]).toBeFalsy();
+  });
+
   it("says nothing of findings left out while the findings overlay is off", async () => {
     answerFindings(() => json({ ...findingsData, next_cursor: "more" }));
     renderShell("/?panel=none");

@@ -47,7 +47,8 @@ export interface FindingsInBox {
  */
 export function useFindingsInBox(bbox: Bbox | null, attempt = 0, zoom: number | null = null): FindingsInBox {
   // Debounced as text, because a caller hands over a new array on every render. The zoom goes with the box.
-  const asked = bbox === null ? null : `${bboxParam(snapBbox(bbox))}${zoom === null ? "" : `@${shapeZoom(zoom)}`}`;
+  const asked =
+    bbox === null ? null : `${bboxParam(snapBbox(bbox, zoom))}${zoom === null ? "" : `@${shapeZoom(zoom)}`}`;
   const settled = useDebounced(asked, FINDINGS_DEBOUNCE_MS);
   const filters = useEffectiveFilters({ forMap: true });
   const asking = settled !== null && !filters.empty;

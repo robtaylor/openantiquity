@@ -61,7 +61,8 @@ export function useActivityFeed(): ActivityFeed {
   const inView = where === "view";
   // Only "in the map's view" follows the map, so the feed doesn't redraw as it moves otherwise.
   const bounds = useViewAreaStore((state) => (inView ? state.bounds : null));
-  const box = useDebounced(bounds === null ? null : bboxParam(snapBbox(bounds)), FINDINGS_DEBOUNCE_MS);
+  const zoom = useViewAreaStore((state) => state.zoom);
+  const box = useDebounced(bounds === null ? null : bboxParam(snapBbox(bounds, zoom)), FINDINGS_DEBOUNCE_MS);
   const bbox = inView ? box : null;
   const kinds = kindsFor(groups);
 

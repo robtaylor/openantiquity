@@ -22,25 +22,59 @@ export const FINDINGS_PATH = "/findings";
 const HALF_SQUARE_M = 500;
 const METRES_PER_DEGREE_LAT = 111_320;
 
+/** From this zoom in, the box is snapped to a thousandth of a degree, about 100 m. */
+const FINEST_SNAP_ZOOM = 12;
+/** Thousandths of a degree, so steps are whole numbers until the end and the box never shows more decimals. */
+const THOUSANDTHS = 1000;
+
 /**
- * The box sent to the server. It is the view widened by half a grid square on
- * each side, so that a square whose centre is off screen but whose body
- * covers the view is still fetched. It is then widened to whole thousandths
- * of a degree (about 100 m). Small drags then ask for the same box, which the
- * query cache already holds, and the server never sees more decimals than it
- * needs.
+ * The step a box is snapped to at `zoom`: a thousandth of a degree from
+ * `FINEST_SNAP_ZOOM` in, doubling for each whole zoom further out. A map
+ * zoomed out to the country then asks again only when it has moved a fair
+ * part of its own width. With no zoom, the finest step.
  */
-export function snapBbox([west, south, east, north]: Bbox): Bbox {
-  const step = 1000;
+export function snapStep(zoom: number | null = null): number {
+  const out = zoom === null ? 0 : Math.max(0, FINEST_SNAP_ZOOM - Math.floor(zoom));
+  return 2 ** out / THOUSANDTHS;
+}
+
+/**
+ * The view's longitudes on the globe. A map flung round the world reports a
+ * view past 180 degrees, which is the same place a whole turn round. A view
+ * that crosses the line, or is wider than the world, is the whole width.
+ */
+function wrapLongitudes(west: number, east: number): [number, number] {
+  if (east - west >= 360) return [-180, 180];
+  const turns = Math.floor((west + 180) / 360);
+  const [w, e] = [west - turns * 360, east - turns * 360];
+  return e > 180 ? [-180, 180] : [w, e];
+}
+
+/**
+ * The box sent to the server. It is the view, its longitudes wrapped onto
+ * the globe, widened by half a grid square on each side, so that a square
+ * whose centre is off screen but whose body covers the view is still
+ * fetched. It is then widened outwards to whole steps of `snapStep(zoom)`.
+ * Small drags then ask for the same box, which the query cache already
+ * holds, and the server never sees more decimals than it needs. The map's
+ * markers and the Explore list pass the same zoom, so they ask alike.
+ */
+export function snapBbox(bbox: Bbox, zoom: number | null = null): Bbox {
+  const [south, north] = [bbox[1], bbox[3]];
+  const [west, east] = wrapLongitudes(bbox[0], bbox[2]);
+  // In thousandths of a degree: a whole number.
+  const step = Math.round(snapStep(zoom) * THOUSANDTHS);
+  const down = (value: number): number => (Math.floor((value * THOUSANDTHS) / step) * step) / THOUSANDTHS;
+  const up = (value: number): number => (Math.ceil((value * THOUSANDTHS) / step) * step) / THOUSANDTHS;
   const padLat = HALF_SQUARE_M / METRES_PER_DEGREE_LAT;
   // A degree of longitude is shorter further from the equator, so pad for the edge furthest from it.
   const cosLat = Math.max(0.2, Math.cos((Math.max(Math.abs(south), Math.abs(north)) * Math.PI) / 180));
   const padLon = padLat / cosLat;
   return [
-    Math.max(-180, Math.floor((west - padLon) * step) / step),
-    Math.max(-90, Math.floor((south - padLat) * step) / step),
-    Math.min(180, Math.ceil((east + padLon) * step) / step),
-    Math.min(90, Math.ceil((north + padLat) * step) / step),
+    Math.max(-180, down(west - padLon)),
+    Math.max(-90, down(south - padLat)),
+    Math.min(180, up(east + padLon)),
+    Math.min(90, up(north + padLat)),
   ];
 }
 
