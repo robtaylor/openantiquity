@@ -10,13 +10,15 @@ stream, a finding's page or the help-wanted list here.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, delete, select
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
-from sqlalchemy.schema import AddConstraint, DropConstraint
+from sqlalchemy.schema import AddConstraint, CreateTable, DropConstraint
 
 from fieldclub.db import Base
 from fieldclub.models import Activity, Finding, Notification
@@ -42,9 +44,14 @@ assert LATER_KIND not in set(ActivityKind), "the kind has to be one this version
 assert LATER_STEP["code"] not in set(NextStepCode), "the step has to be one this version has no name for"
 
 
-@pytest.fixture
-def later_schema(db: Session, database: Engine) -> Iterator[None]:
-    """The check on `activity.kind` lifted, as a later version's schema would have widened it."""
+@contextmanager
+def kind_check_lifted(db: Session, database: Engine) -> Iterator[None]:
+    """Lift the check on `activity.kind` in this database, and put it back on the way out.
+
+    Adding it back is told not to set the check apart from its table. Left
+    to its default, that statement marks the check as made on its own, and
+    every schema built later in the run would be made without it.
+    """
     table = Base.metadata.tables[Activity.__tablename__]
     (check,) = (c for c in table.constraints if c.name == "ck_activity_kind_valid")
     with database.begin() as conn:
@@ -55,7 +62,23 @@ def later_schema(db: Session, database: Engine) -> Iterator[None]:
         db.rollback()
         with database.begin() as conn:
             conn.execute(delete(Activity).where(Activity.kind == LATER_KIND))
-            conn.execute(AddConstraint(check))
+            conn.execute(AddConstraint(check, isolate_from_table=False))
+
+
+@pytest.fixture
+def later_schema(db: Session, database: Engine) -> Iterator[None]:
+    """The check on `activity.kind` lifted, as a later version's schema would have widened it."""
+    with kind_check_lifted(db, database):
+        yield
+
+
+def test_lifting_the_check_leaves_it_in_every_schema_built_afterwards(db: Session, database: Engine) -> None:
+    table = Base.metadata.tables[Activity.__tablename__]
+
+    with kind_check_lifted(db, database):
+        pass
+
+    assert "ck_activity_kind_valid" in str(CreateTable(table).compile(dialect=postgresql.dialect()))
 
 
 def later_activity(db: Session, finding: Finding) -> int:
