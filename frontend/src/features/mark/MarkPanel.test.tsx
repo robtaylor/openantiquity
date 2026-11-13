@@ -610,6 +610,58 @@ describe("saving, signed in", () => {
   });
 });
 
+describe("a draft kept before paths", () => {
+  it("opens with its outline as an all-corner path, and saves it as a path", async () => {
+    const user = userEvent.setup();
+    const ring = [
+      [-1.855, 51.428],
+      [-1.853, 51.428],
+      [-1.853, 51.43],
+      [-1.855, 51.428],
+    ];
+    // Stored by the outline tool: a placed point and an outline, and no path.
+    const kept = findingDrafts.put({
+      point: [-1.8542, 51.4286],
+      path: null,
+      feature_class: "enclosure",
+      period: "unknown",
+      title: "Enclosure in SU 10 69",
+      description: null,
+      view_state: {},
+    });
+    updateDrafts((drafts) =>
+      drafts.map((each) => {
+        const { path: _path, ...old } = each.data as Record<string, unknown>;
+        return { ...each, data: { ...old, outline: { type: "Polygon", coordinates: [ring] } } };
+      }),
+    );
+    // Made before a provider's sign-in from this tab, so it waits for Save (Decision 0024).
+    noteSignInStarted("provider");
+    const routes = routeApi(harness.fetchMock(), {
+      "GET /auth/me": () => json(meFixture()),
+      "POST /findings": (call) => json(createdFinding(call.body as FindingCreate, "ring1"), 201),
+    });
+    renderShell(`/mark/${kept.id}`, <Address />);
+    await mapReady();
+    await panel().findByRole("button", { name: "Save finding" });
+    expect(useMarkStore.getState().shape.present).toEqual({
+      closed: true,
+      points: ring.slice(0, -1).map(([lon, lat]) => ({ lon, lat, kind: "corner" })),
+    });
+    expect(handles()).toHaveLength(3);
+    expect(panel().getByRole("status")).toHaveTextContent(/^A closed shape of 3 points/);
+
+    await user.click(panel().getByRole("button", { name: "Save finding" }));
+    await waitFor(() => expect(routes.callsTo("POST /findings")).toHaveLength(1));
+    const body = routes.callsTo("POST /findings")[0]?.body as FindingCreate;
+    expect(body.path?.closed).toBe(true);
+    expect(body.path?.points).toHaveLength(3);
+    expect(body).not.toHaveProperty("location");
+    expect(body).not.toHaveProperty("outline");
+    await waitFor(() => expect(address()).toBe("/f/ring1"));
+  });
+});
+
 describe("saving, signed out", () => {
   it("sends a draft taken over at sign-in when Save is pressed on its own form", async () => {
     const user = userEvent.setup();

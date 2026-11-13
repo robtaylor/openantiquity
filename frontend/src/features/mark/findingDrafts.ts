@@ -18,7 +18,7 @@ import { defineDraftKind } from "../drafts/savers.js";
 import { DRAFT_KINDS } from "../drafts/store.js";
 import { createFinding } from "../findings/api.js";
 import type { FeatureClassId, FindingCreate, FindingDetail, PeriodId } from "../findings/types.js";
-import { apiPath, type LngLat, type PathPoint } from "./path.js";
+import { apiPath, type LngLat, type PathPoint, pathFromOutline } from "./path.js";
 
 /** A draft's line or shape: two points or more, in the API's form. */
 export interface DraftPath {
@@ -62,7 +62,24 @@ function readPath(value: unknown): DraftPath | null {
   return { closed, points: points.map(({ lon, lat, kind }) => ({ lon, lat, kind })) };
 }
 
-/** The draft's data, if it can be read back: storage may hold an old or damaged copy. */
+/**
+ * A draft's path. One kept by the outline tool, before paths, has an
+ * `outline` instead: a LineString or a one-ring Polygon is read as the
+ * all-corner path that draws it, and anything else is dropped.
+ */
+function draftPath(value: Record<string, unknown>): DraftPath | null {
+  const path = readPath(value.path);
+  if (path || !isRecord(value.outline)) return path;
+  const { type, coordinates } = value.outline;
+  if (typeof type !== "string") return null;
+  const old = pathFromOutline({ type, coordinates });
+  return old ? { closed: old.closed, points: [...old.points] } : null;
+}
+
+/**
+ * The draft's data, if it can be read back: storage may hold an old or
+ * damaged copy. A path that can't be read is dropped, keeping the rest.
+ */
 export function parseFindingDraft(value: unknown): FindingDraft | null {
   if (!isRecord(value)) return null;
   const { point, feature_class: featureClass, period, title, description, view_state: viewState } = value;
@@ -72,7 +89,7 @@ export function parseFindingDraft(value: unknown): FindingDraft | null {
   if (!isRecord(viewState)) return null;
   return {
     point: [point[0], point[1]],
-    path: readPath(value.path),
+    path: draftPath(value),
     feature_class: featureClass,
     period,
     title,
