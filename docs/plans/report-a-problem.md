@@ -79,14 +79,19 @@ Issue text comes from strangers and would be read by a model, on a public reposi
 
 ## Open questions
 
-These need the owner or a check before the workstream that depends on them starts.
+Three are the owner's, each with a recommendation. Three more were checked on 2026-11-13 and are settled below.
 
-- **Where logs are kept, and for how long.** A request id is only as useful as the log it points into. Fly's buffer is short, and a longer store has a cost and holds people's addresses and actions. WS1 can ship the id first, but its first exit criterion needs an answer.
-- **The address for email reports.** It would be public in the interface. The owner hasn't chosen one for this.
-- **Whether reports should ever be stored in the app.** A table of reports would serve people with no GitHub account better than email, and would keep reports about protected places off a public tracker. It also adds moderation and personal data to look after. Left out until email reports show the need.
-- **What GitHub already does about duplicates.** Not checked on 2026-11-12. If its own suggestions are good enough, WS3 isn't needed.
-- **GitHub's limit on a prefilled address.** Believed to be about 8,000 characters and not checked. It sets how many failures a report can carry.
-- **How the build learns its commit.** Fly is believed to give each machine its image's reference in `FLY_IMAGE_REF`, which the deploy labels with the commit. Not checked. A build argument would do the same.
+**For the owner:**
+
+- **Where logs are kept, and for how long.** Recommended: Fly's own log search and nothing else for now. Fly's documentation says it keeps an app's logs for 7 days, searchable in its Grafana, free while the feature is in beta, and names no set-up ([Search logs](https://docs.fly.io/monitoring/search-logs)). That wasn't tried on this account. Seven days is enough to follow a request id from a report made the same week, and the privacy notice would say so. If it proves too short, or the beta ends, the next step is Fly's log shipper writing to a Tigris bucket that expires objects after 30 days, which needs one small machine running all the time.
+- **The address for email reports.** Recommended: one role address on the project's domain that forwards to the owner, used for reports, for the privacy notice's contact and for complaints, so that no personal address is published. Security reports are a separate route: GitHub's private vulnerability reporting, switched on in the repository's settings, with a `SECURITY.md` that points to it.
+- **Whether reports should ever be stored in the app.** Recommended: no. A prefilled issue and a copy-and-email route cover the need, and a table of reports adds moderation and personal data to look after. Revisit if emailed reports become regular, or if reports about protected places need somewhere private.
+
+**Checked on 2026-11-13:**
+
+- **What GitHub does about duplicates.** Since June 2026, in public preview, GitHub's new-issue form shows up to three possible matches among the repository's issues while it is being filled in ([changelog](https://github.blog/changelog/2026-06-18-duplicate-detection-and-issue-fields-mcp-support-for-github-issues)). The announcement doesn't say which plans or repositories have it, and it wasn't tried on this one. If it is on here, WS3 isn't needed.
+- **GitHub's limit on a prefilled address.** Measured signed out, with an unencoded body: 6,500 characters were accepted, 7,000 got an error page, and from about 8,150 the answer was 414. WS2 keeps the whole encoded address under 6,000 characters, and falls back to "Copy the details" with a short address when a report is longer.
+- **How the build learns its commit.** A Fly machine has `FLY_IMAGE_REF` in its environment, and on a jobs machine it read `registry.fly.io/openantiquity-jobs:<commit>@sha256:…`, the label the deploy gives the image. `/meta` can read the commit from it, with no build argument.
 
 ## Phase exit criteria
 
