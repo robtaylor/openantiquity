@@ -7,6 +7,7 @@
  */
 
 import type { Map as MapLibreMap } from "maplibre-gl";
+import { useEffect } from "react";
 import { useNavigate } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { useFindingHighlight } from "../../map/findingHighlight.js";
@@ -53,6 +54,8 @@ export function FindingChooser({
   const navigate = useNavigate();
   const drawn = useDrawnFindings((state) => state.byId);
   const shown = request.candidates.slice(0, CHOOSER_MAX_ENTRIES);
+  // Every way out unmounts the chooser, so the highlight of the entry last pointed at goes with it.
+  useEffect(() => () => useFindingHighlight.getState().set(null), []);
 
   const entries: ChooserEntry[] = shown.map((candidate) => {
     const finding = drawn.get(candidate.publicId);
@@ -75,7 +78,6 @@ export function FindingChooser({
   });
 
   function finish(): void {
-    useFindingHighlight.getState().set(null);
     onClose();
     // Focus goes back to the map, where the tap was.
     requestAnimationFrame(() => {
@@ -85,14 +87,12 @@ export function FindingChooser({
 
   function choose(publicId: string): void {
     const candidate = request.candidates.find((each) => each.publicId === publicId);
-    useFindingHighlight.getState().set(null);
     onClose();
     useSelectedFinding.getState().select(publicId, candidate?.at ?? request.lngLat, false);
     navigate(findingPath(publicId));
   }
 
   function showAll(): void {
-    useFindingHighlight.getState().set(null);
     onClose();
     const { camera, requestCamera } = useMapStore.getState();
     requestCamera({ lng: request.lngLat[0], lat: request.lngLat[1], zoom: Math.max(camera.zoom, EXPLORE_ZOOM) });
