@@ -23,11 +23,10 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { MapPinned } from "lucide-react";
-import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
+import type { Map as MapLibreMap } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import type { Meta } from "../../api/meta.js";
-import { isMapLive } from "../../map/MapPane.js";
 import { useMainMap } from "../../map/mainMap.js";
 import { Button } from "../../ui/Button.js";
 import { EmptyState } from "../../ui/EmptyState.js";
@@ -47,7 +46,7 @@ import { usePanelEnvironment } from "../shell/panelContext.js";
 import { saveProblem } from "./compose.js";
 import { baseRevision, changeShapePath, editingKey } from "./editingKey.js";
 import { DrawingSection, useMarkInView } from "./MarkForm.js";
-import { MARK_PATH_LAYERS } from "./MarkLayer.js";
+import { MARK_PATH_LAYERS, useSourceData } from "./MarkLayer.js";
 import { useMarkPath, useMarkStore } from "./markStore.js";
 import { anchorOf, apiPath, type Path, plainPoints, spotPath } from "./path.js";
 import { useLeaveOnEscape } from "./useLeaveOnEscape.js";
@@ -95,30 +94,23 @@ function lookedAtFeatures(geometry: GeoJSONGeometry | null | undefined): Feature
   return { type: "FeatureCollection", features: [{ type: "Feature", geometry, properties: {} }] } as FeatureCollection;
 }
 
+function addLookedAtLayer(map: MapLibreMap): void {
+  map.addLayer(
+    {
+      id: LOOKED_AT_LAYER,
+      type: "line",
+      source: LOOKED_AT_SOURCE,
+      layout: { "line-join": "round", "line-cap": "round" },
+      paint: { "line-color": COLOURS.text, "line-width": 9, "line-opacity": 0.22 },
+    },
+    map.getLayer(MARK_PATH_LAYERS.fill) ? MARK_PATH_LAYERS.fill : undefined,
+  );
+}
+
 /** The faint under-line of what was looked at, under the path's own line where the map draws it. */
 function useLookedAtOnMap(map: MapLibreMap | null, geometry: GeoJSONGeometry | null | undefined): void {
   const data = useMemo(() => lookedAtFeatures(geometry), [geometry]);
-  useEffect(() => {
-    if (!map || !isMapLive(map)) return;
-    if (data === EMPTY_COLLECTION && !map.getSource(LOOKED_AT_SOURCE)) return;
-    if (!map.getSource(LOOKED_AT_SOURCE)) {
-      map.addSource(LOOKED_AT_SOURCE, { type: "geojson", data: EMPTY_COLLECTION });
-      map.addLayer(
-        {
-          id: LOOKED_AT_LAYER,
-          type: "line",
-          source: LOOKED_AT_SOURCE,
-          layout: { "line-join": "round", "line-cap": "round" },
-          paint: { "line-color": COLOURS.text, "line-width": 9, "line-opacity": 0.22 },
-        },
-        map.getLayer(MARK_PATH_LAYERS.fill) ? MARK_PATH_LAYERS.fill : undefined,
-      );
-    }
-    (map.getSource(LOOKED_AT_SOURCE) as GeoJSONSource | undefined)?.setData(data);
-    return () => {
-      if (isMapLive(map)) (map.getSource(LOOKED_AT_SOURCE) as GeoJSONSource | undefined)?.setData(EMPTY_COLLECTION);
-    };
-  }, [map, data]);
+  useSourceData(map, LOOKED_AT_SOURCE, data, addLookedAtLayer, true);
 }
 
 /** Cancel, or closing the panel: the change is thrown away, so the tool opens again on the saved shape. */

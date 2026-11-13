@@ -103,9 +103,7 @@ export function pathFeatures(path: Path): FeatureCollection {
   return { type: "FeatureCollection", features: [{ type: "Feature", geometry, properties: {} }] };
 }
 
-function ensurePathLayers(map: MapLibreMap): void {
-  if (map.getSource(MARK_PATH_SOURCE)) return;
-  map.addSource(MARK_PATH_SOURCE, { type: "geojson", data: EMPTY_COLLECTION });
+function addPathLayers(map: MapLibreMap): void {
   map.addLayer({
     id: MARK_PATH_LAYERS.fill,
     type: "fill",
@@ -130,18 +128,41 @@ function ensurePathLayers(map: MapLibreMap): void {
 }
 
 /**
+ * Keep `data` in the map's GeoJSON source `source`. The source, and the
+ * layers `addLayers` draws from it, are added the first time there is
+ * something to draw. With `clearOnLeave`, the source is emptied when the
+ * data changes or the map goes, so nothing is left drawn after the caller.
+ */
+export function useSourceData(
+  map: MapLibreMap | null,
+  source: string,
+  data: FeatureCollection,
+  addLayers: (map: MapLibreMap) => void,
+  clearOnLeave = false,
+): void {
+  useEffect(() => {
+    if (!map || !isMapLive(map)) return;
+    if (data === EMPTY_COLLECTION && !map.getSource(source)) return;
+    if (!map.getSource(source)) {
+      map.addSource(source, { type: "geojson", data: EMPTY_COLLECTION });
+      addLayers(map);
+    }
+    (map.getSource(source) as GeoJSONSource | undefined)?.setData(data);
+    if (!clearOnLeave) return;
+    return () => {
+      if (isMapLive(map)) (map.getSource(source) as GeoJSONSource | undefined)?.setData(EMPTY_COLLECTION);
+    };
+  }, [map, source, data, addLayers, clearOnLeave]);
+}
+
+/**
  * A long path is drawn by the map from a GeoJSON source, so a road of
  * thousands of points isn't re-projected into SVG on every frame. A short
  * one is drawn in SVG, which follows a drag at once.
  */
 function useLongPathOnMap(map: MapLibreMap | null, path: Path, marking: boolean): void {
   const data = useMemo(() => (marking ? pathFeatures(path) : EMPTY_COLLECTION), [path, marking]);
-  useEffect(() => {
-    if (!map || !isMapLive(map)) return;
-    if (data === EMPTY_COLLECTION && !map.getSource(MARK_PATH_SOURCE)) return;
-    ensurePathLayers(map);
-    (map.getSource(MARK_PATH_SOURCE) as GeoJSONSource | undefined)?.setData(data);
-  }, [map, data]);
+  useSourceData(map, MARK_PATH_SOURCE, data, addPathLayers);
 }
 
 /** The path as it is drawn while short enough for SVG: a line through the curve, lightly filled once closed. */
