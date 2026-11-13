@@ -140,19 +140,19 @@ def place_anchor(
 ) -> Point:
     """Where a finding's anchor goes, made or reshaped, with the point and shape held to the British Isles.
 
-    `placed` is a point the finder places now, and `current` the anchor a
-    finding has already, None for a new one, which `derived` says the server
-    chose. A new finding with no point is anchored on its shape
-    (`shapes.derived_anchor`). A point placed now is held to the British
-    Isles, which a point already stored was when it was placed.
+    `placed` is a point the finder places now. `current` is the anchor a
+    finding has already, None for a new one, and `derived` says whether the
+    server chose it. A new finding with no point is anchored on its shape
+    (`shapes.derived_anchor`). A point placed or derived now is held to the
+    British Isles, as a point already stored was when it was placed.
 
     A point the finder places now, or placed before, never moves by itself:
     the shape must come within `shapes.SHAPE_MAX_GAP_M` of it. A point the
     server chose stays while the shape passes within `shapes.ANCHOR_KEEP_M`,
     so extending a line never moves it, and otherwise moves to the point of
     the new shape nearest where it was, never to the new middle, which would
-    leave a trail of squares along a restricted line. Removing the shape
-    leaves the point where it is.
+    leave a trail of squares along a line the reader sees only as its
+    square. Removing the shape leaves the point where it is.
     """
     if placed is not None:
         if shape is not None:

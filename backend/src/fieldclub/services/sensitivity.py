@@ -1,14 +1,19 @@
 """Location sensitivity: what position a viewer may see for a finding (Decision 0005).
 
-A finding is `open`, `protected` or `restricted`. `visible_location` is the
-only place that decides what a viewer sees, and every route that returns a
-finding goes through it, exports included:
+A finding is `open` or `protected`. `visible_location` is the only place
+that decides what a viewer sees, and every route that returns a finding goes
+through it, exports included:
 
-| Viewer                             | open  | protected   | restricted  |
-|------------------------------------|-------|-------------|-------------|
-| Signed out                         | exact | 1 km square | 1 km square |
-| Member                             | exact | exact       | 1 km square |
-| Finder, trusted, expert, moderator | exact | exact       | exact       |
+| Viewer                             | open  | protected   |
+|------------------------------------|-------|-------------|
+| Signed out                         | exact | 1 km square |
+| Member                             | exact | exact       |
+| Finder, trusted, expert, moderator | exact | exact       |
+
+Decision 0032 dropped the `restricted` level: no request can set it. The
+code here still handles a finding stored at it, shown exactly only to the
+table's last row and as its square to everyone else, until a later sweep
+takes the level out.
 
 Downloads are stricter (`downloads_exact`): a member's download carries a
 protected finding at its square. Admins count as moderators. A banned or deleted account is treated as signed

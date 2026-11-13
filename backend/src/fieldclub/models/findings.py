@@ -274,8 +274,8 @@ class Observation(Base):
     # good. A later change of role or a ban moves no score through an answer,
     # so neither can show how a named person answered (Decision 0019).
     role_at_answer: Mapped[str] = mapped_column(Text)
-    # The finding's `shape_revision` when the answer was given, so the page can
-    # say what has been added to its shape since anyone looked.
+    # The finding's `shape_revision` when the answer was given. `looked_at.grow`
+    # reads it, to add a shape to what was looked at once for each revision.
     shape_revision: Mapped[int | None] = mapped_column(Integer)
 
 
