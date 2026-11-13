@@ -61,7 +61,7 @@ New and changed columns on `findings`:
 | `outline_low` | Geometry, null | `outline` simplified at 0.0005° (about 35 to 55 m), for zooms 9 to 12 |
 | `shape_kind` | text, null | `line` or `area`, or null without a shape |
 | `shape_length_m` | real, null | Geodesic length of a line, or perimeter of an area |
-| `shape_revision` | int, default 0 | Raised by one on every change to the shape |
+| `shape_revision` | int, default 0 | Raised by one on every change to the shape. A finding made with its shape starts at 0 and has no change row |
 | `looked_at` | Geometry, null | The ground second looks were given on: the union of the finding's shape, or point, at each second look. See "Once looked at, most of it stays" |
 | `added_since_looked_m` | real, null | How much of the shape lies further than 250 m from `looked_at`. See "Extending, and what it does to second looks" |
 | `added_view` | jsonb, null | A centre and zoom that frame that part |
@@ -210,7 +210,7 @@ All under `/api/v1`. Mutating requests carry `X-OpenAntiquity-Client: web` as ev
 
 The owner decided this. In the code:
 
-- An answer stores `shape_revision` when it is given, and is refused when it names an older one (see "The API contract"). The ladder, its weights and Decision 0019's rule are untouched, because nothing reassesses on a shape change.
+- An answer stores `shape_revision` when it is given, and is refused when it names an older one (see "The API contract"). The ladder, its weights and Decision 0019's rule are untouched, because a shape change moves no tier. The finding is assessed again only so that `look_at_new_part` starts or stops being asked.
 - Every change writes a `finding_shape_changes` row, with `path_before` kept for moderators and for a later undo.
 - An extension's change row records `added_length_m` and `added_view`, the centre and zoom of the vertices it added, for the timeline.
 - What has been added since the last second look is measured from the ground, not from the kind of each change. It is the part of the shape further than 250 m from `looked_at` (`added_since_looked_m`, framed by the finding's `added_view`). So a change that nudges an end point and adds 20 km is a reshape on the timeline and still counts, an area grown round what was looked at counts, and an extension later cut away no longer does. The classifier and each change's `kind` only label the timeline.

@@ -22,11 +22,11 @@ The owner later raised other people's changes as suggestions the owner accepts o
 ## Decision
 
 1. Only the finder changes, extends or removes a finding's shape. Joining different people's lines waits until there is a need. An edit names the revision it started from, so one tab can't silently undo another.
-2. Every change is recorded with the path before it, and is classed as an extension when the old points stay unchanged and in order with new points only at the ends.
-3. A change of shape never reassesses. The tier, every answer and its weight stand under Decision 0019, and each answer records the shape revision it saw.
+2. Every change is recorded with the path before it, where the shape had one, and is classed as an extension when the old points stay unchanged and in order with new points only at the ends.
+3. A change of shape never moves the tier. The tier, every answer and its weight stand under Decision 0019, and each answer records the shape revision it saw. The finding is assessed again only so that it starts or stops asking for a look at a new part (point 4).
 4. The finding page tells exact viewers how much was added since the second looks and lists every change. What was added is the part of the shape more than 250 m from what was looked at, measured from the ground and not from the kind of each change, so a nudged end with more line beyond counts and an extension later cut away doesn't. More than 200 m of it invites fresh looks without moving the tier. A change that stays within what was looked at is shown with its date and no invitation. A square-only viewer learns only that the shape changed and when.
 5. Nobody but those who may see answers under Decision 0010 learns how many there were. "Added since the last second look" does tell other viewers that some answer came before a date. This was weighed and accepted, since the score already moves when answers come in.
-6. Nothing moves a whole shape. The tool moves, adds and deletes single points.
+6. The tool has no way to move a whole shape. It moves, adds and deletes single points. Until a second look stands the finder may still redraw the shape freely, as they could by withdrawing the finding and marking it again. From then on point 7 bounds every change, however it is sent.
 7. The finding keeps the ground its second looks were given on, which only grows. An edit must keep every looked-at point, and at least three-quarters of the looked-at length, within 250 m of the new shape. The mechanics are in the plan's section "Once looked at, most of it stays".
 8. So a finder may extend anywhere, move points, shorten a looked-at line by up to a quarter, and move a point-only finding up to 250 m. Anything more means withdrawing the finding and marking it again from the first step.
 

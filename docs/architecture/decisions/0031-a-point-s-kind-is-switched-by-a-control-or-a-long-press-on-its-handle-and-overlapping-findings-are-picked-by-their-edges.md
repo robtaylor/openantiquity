@@ -22,7 +22,7 @@ The owner also asked: "how do users select when there are overlapping shapes?" T
 2. The mark panel carries guidance in plain text that says what a tap will do now, and changes as the marking grows.
 3. Every way of choosing a point's kind has a visible control in the drawing bar or the selected-point bar. On a computer Shift-click does the same.
 4. On a phone a long press on a point's handle switches its kind. Handles sit above the map, so the gesture never reaches it. The tool uses neither a long press on the bare map nor pressure.
-5. While drawing, double-tap and box zoom are off so they don't act on taps meant for the tool, and taps belong to the tool, not to other findings.
+5. While a finding is being marked or its shape changed, on every page of that panel, double-tap and box zoom are off so they don't act on taps meant for the tool, and taps belong to the tool, not to other findings.
 6. An area is picked by its edge, never its inside, so a point or record inside a large area stays reachable. A finger gets a wider reach than a mouse.
 7. Markers beat lines and lines beat area edges. Among candidates of one kind, the smaller wins only when it is under half the other's length or extent. Otherwise the chooser opens.
 8. The chooser lists the candidates and highlights each as its entry is hovered or focused. It's a popover on a computer and a sheet on a phone that never covers the spot tapped. On a computer the pointer shows what a click would open.

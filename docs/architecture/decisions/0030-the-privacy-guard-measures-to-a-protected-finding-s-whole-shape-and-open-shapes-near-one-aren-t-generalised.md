@@ -18,7 +18,7 @@ An open road drawn past somebody else's protected barrow shows the road, not the
 
 ## Decision
 
-1. A saved view's centre, a height profile's line and an investigation's area are judged by their distance to a protected or restricted finding's anchor or to its whole line or area, whichever is nearer. `hidden_near` tests `ST_DWithin` against `location` or `outline`, using the spatial index on `outline`, and `PositionGuard.near` measures to the exact shape. The distance stays 1.5 km.
+1. A saved view's centre, a height profile's line and an investigation's area are judged by their distance to a protected or restricted finding's anchor or to its whole line or area, whichever is nearer. `hidden_near` tests `ST_DWithin` against `location` or `outline`, using the spatial index on `outline`, and `PositionGuard.near` measures to the exact shape. The distance stays 1.5 km. A finding a moderator has hidden takes no part (Decision 0032, point 5).
 2. This replaces point 1 of Decision 0023 in that one respect, what the distance is measured to. Points 2 to 8 of Decision 0023 stand as they were.
 3. An open finding's line or area is shown by the finding's own level, to everyone who may see it exactly, whatever protected or restricted findings it passes near. This is an accepted limit, the same one that already applies to an open point finding placed on a protected site.
 
