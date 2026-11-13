@@ -31,7 +31,7 @@ import { type PanelEnvironment, usePanelEnvironment } from "../shell/panelContex
 import { DrawingBar, Guidance, SelectedPointBar } from "./DrawingTool.js";
 import { exactGridRefOf, suggestTitle } from "./describe.js";
 import type { FindingDraft } from "./findingDrafts.js";
-import { useMarkPath, useMarkStore } from "./markStore.js";
+import { isAdding, useMarkPath, useMarkStore } from "./markStore.js";
 import { FINDS_NOTICE, findsRoute, sensitivityNotice } from "./notices.js";
 import { anchorOf, type LngLat } from "./path.js";
 import { useSaveMark } from "./useSaveMark.js";
@@ -161,15 +161,17 @@ function ClassChooser({ meta }: { meta: Meta }) {
   );
 }
 
-/** The guidance and, on a computer, the drawing bars, with what the server or the limits said of the shape. */
+/** The guidance and the drawing bars, with what the server or the limits said of the shape. */
 function DrawingSection({ map, isPhone }: { map: MapLibreMap | null; isPhone: boolean }) {
   const problem = useMarkStore((state) => (state.problem?.field === "path" ? state.problem.message : null));
+  // On a phone the bars float above the sheet while points are being added (`MarkButton`).
+  const floating = useMarkStore((state) => isPhone && isAdding(state));
   return (
     <div className="fc-mark__step">
       <Guidance map={map} isPhone={isPhone} />
-      {isPhone ? null : (
+      {floating ? null : (
         <>
-          <DrawingBar map={map} isPhone={false} />
+          <DrawingBar map={map} isPhone={isPhone} />
           <SelectedPointBar map={map} />
         </>
       )}

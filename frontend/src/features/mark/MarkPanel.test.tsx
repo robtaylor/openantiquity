@@ -391,6 +391,12 @@ describe("the guidance", () => {
     act(() => map.click(400, 300));
     expect(within(floating).getByRole("status")).toHaveTextContent("1 point. Tap the map to add the next one.");
     expect(guidance()).toHaveTextContent(/This is a spot\. Tap again/);
+    // Once drawing stops the bars move into the sheet, which rises for the form, and the map is clear again.
+    fireEvent.click(within(floating).getByRole("button", { name: "Finish" }));
+    expect(screen.queryByRole("region", { name: "Drawing" })).toBe(panel().getByRole("region", { name: "Drawing" }));
+    await waitFor(() =>
+      expect(screen.getByRole("complementary", { name: "Mark a finding" })).toHaveAttribute("data-stop", "half"),
+    );
   });
 
   it("invites a spot of a linear class to carry on into a line", async () => {

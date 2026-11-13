@@ -244,6 +244,11 @@ export const useMarkStore = create<MarkState>()((set, get) => {
   };
 });
 
+/** True while taps add points: drawing, and the shape not closed. */
+export function isAdding(state: MarkFields): boolean {
+  return state.drawing && !state.shape.present.closed;
+}
+
 /** The path being marked, for components. */
 export function useMarkPath(): Path {
   return useMarkStore((state) => state.shape.present);
