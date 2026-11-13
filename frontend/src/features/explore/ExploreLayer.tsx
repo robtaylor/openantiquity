@@ -7,7 +7,6 @@ import { findingCandidatesAt, pickAt, pickFinding, REACH_PX } from "../../map/fi
 import { kmSquareAt } from "../../map/gridref.js";
 import { isMapLive } from "../../map/MapPane.js";
 import { useMainMap } from "../../map/mainMap.js";
-import { useMapStore } from "../../map/store.js";
 import { overlaySourceId } from "../../map/style.js";
 import { mapToolActive } from "../../map/tool.js";
 import { screenPoint, useMapFrame } from "../../map/useMapFrame.js";
@@ -16,6 +15,7 @@ import { isMarkPath } from "../mark/MarkLayer.js";
 import { recordUnder } from "../records/useRecordsOnMap.js";
 import { useIsPhone } from "../shell/useIsPhone.js";
 import { type ChooserRequest, FindingChooser, findingsHereWords } from "./FindingChooser.js";
+import { useOpenExploreAt } from "./openExplore.js";
 import "../mark/mark.css";
 import "./explore.css";
 
@@ -81,6 +81,7 @@ function useFindingClicks(
   onHint: (hint: HoverHint | null) => void,
 ): void {
   const navigate = useNavigate();
+  const openExploreAt = useOpenExploreAt();
   useEffect(() => {
     if (!map || marking || !isMapLive(map)) return;
     const canvas = map.getCanvas();
@@ -108,9 +109,7 @@ function useFindingClicks(
         navigate(findingPath(only));
         return;
       }
-      const { camera, requestCamera } = useMapStore.getState();
-      requestCamera({ lng: square.centre[0], lat: square.centre[1], zoom: Math.max(camera.zoom, SQUARE_ZOOM) });
-      navigate("/");
+      openExploreAt(square.centre, SQUARE_ZOOM);
     };
     // The pointer is checked at most once a frame, however often it moves.
     let pending: MapMouseEvent | null = null;
@@ -158,7 +157,7 @@ function useFindingClicks(
       map.off("mousemove", onMove);
       map.off("mouseout", onLeave);
     };
-  }, [map, meta, marking, navigate, onChoose, onHint]);
+  }, [map, meta, marking, navigate, openExploreAt, onChoose, onHint]);
 }
 
 /** A ring round the chosen finding, or its square drawn bright when its position is obscured. */

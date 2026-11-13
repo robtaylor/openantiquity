@@ -13,12 +13,12 @@ import type { Meta } from "../../api/meta.js";
 import { useFindingHighlight } from "../../map/findingHighlight.js";
 import type { FindingCandidate } from "../../map/findingHits.js";
 import { isMapLive } from "../../map/MapPane.js";
-import { useMapStore } from "../../map/store.js";
 import { useDrawnFindings } from "../../map/useFindingsOverlay.js";
 import { Chooser, type ChooserEntry } from "../../ui/Chooser.js";
 import { TierBadge } from "../../ui/TierBadge.js";
 import { labelOf } from "../finding/describe.js";
 import { findingPath, useSelectedFinding } from "../findings/selection.js";
+import { useOpenExploreAt } from "./openExplore.js";
 
 /** At most this many entries, then "Show all in Explore". */
 export const CHOOSER_MAX_ENTRIES = 8;
@@ -52,6 +52,7 @@ export function FindingChooser({
   onClose: () => void;
 }) {
   const navigate = useNavigate();
+  const openExploreAt = useOpenExploreAt();
   const drawn = useDrawnFindings((state) => state.byId);
   const shown = request.candidates.slice(0, CHOOSER_MAX_ENTRIES);
   // Every way out unmounts the chooser, so the highlight of the entry last pointed at goes with it.
@@ -94,9 +95,7 @@ export function FindingChooser({
 
   function showAll(): void {
     onClose();
-    const { camera, requestCamera } = useMapStore.getState();
-    requestCamera({ lng: request.lngLat[0], lat: request.lngLat[1], zoom: Math.max(camera.zoom, EXPLORE_ZOOM) });
-    navigate("/");
+    openExploreAt(request.lngLat, EXPLORE_ZOOM);
   }
 
   return (
