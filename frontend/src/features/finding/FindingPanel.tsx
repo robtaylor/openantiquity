@@ -23,6 +23,7 @@ import { panIntoView, useFindingOnMap, whenStageSettled } from "./mapView.js";
 import { NextSteps } from "./NextSteps.js";
 import { Answers, Credits } from "./People.js";
 import { SecondLook } from "./secondLook/SecondLook.js";
+import { AddedSince } from "./shapeChanges.js";
 import { actionForStep, STEP_PARAM, STRAND_PARAM, stepFromAddress } from "./stepLink.js";
 import { copyLink, Tools } from "./Tools.js";
 import { FollowUpTimeline } from "./timeline/FollowUpTimeline.js";
@@ -175,6 +176,7 @@ function FindingPage({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
     <div className="fc-finding">
       <FindingHead meta={meta} finding={finding} signedIn={viewer.signedIn} change={change} />
       <NextSteps meta={meta} finding={finding} position={position} onAction={act} />
+      <AddedSince finding={finding} />
       <SecondLook
         ref={secondLook}
         meta={meta}

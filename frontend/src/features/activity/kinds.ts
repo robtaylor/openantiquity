@@ -32,7 +32,7 @@ const GROUP_OF = {
 } as const satisfies Record<FeedKind, KindGroupId>;
 
 const GROUP_LABELS: Record<KindGroupId, string> = {
-  findings: "New findings",
+  findings: "Findings marked or drawn further",
   steps: "Steps and states",
   looks: "Second looks",
   evidence: "Evidence and visits",

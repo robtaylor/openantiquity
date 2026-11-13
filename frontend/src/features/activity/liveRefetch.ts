@@ -42,7 +42,12 @@ export const REFETCH_DELAY_MS: Record<RefetchTarget["kind"], number> = {
 };
 
 /** Kinds that can change how a finding is drawn on the map or listed in Explore. */
-const MOVES_LISTS = new Set<StreamEvent["kind"]>(["finding_created", "tier_changed", "state_changed"]);
+const MOVES_LISTS = new Set<StreamEvent["kind"]>([
+  "finding_created",
+  "tier_changed",
+  "state_changed",
+  "shape_extended",
+]);
 
 /**
  * The refetches one event asks for. `handle` is the signed-in person's, or

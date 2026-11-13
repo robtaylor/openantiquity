@@ -120,7 +120,8 @@ function sentenceFor(meta: Meta, event: EventFacts): Part[] {
       return actor ? [person(actor), " published ", investigation] : [investigation, " was published"];
     }
     case "shape_extended":
-      return [finding, " was extended"];
+      // Listed only to people who see the finding exactly. How much was added is on its page, not here.
+      return actor ? [person(actor), " drew more of ", finding] : ["more of ", finding, " was drawn"];
     case "investigation_invitation":
       return actor
         ? [person(actor), " invited you to join an investigation"]

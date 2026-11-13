@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { BadgeCheck, ExternalLink, Footprints, Plus, TrendingUp } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import type { Meta } from "../../../api/meta.js";
 import { safeHref } from "../../../map/attribution.js";
 import { Button } from "../../../ui/Button.js";
@@ -9,9 +9,10 @@ import { formatDate, labelOf, needsVerifying, outcomeWords, stanceWords, type Vi
 import { KindChooser, useOpener } from "../evidence/KindChooser.js";
 import { useSignedInFirst } from "../feedback.js";
 import { findingPageKeys } from "../keys.js";
+import { ShapeChangeEntry } from "../shapeChanges.js";
 import type { Evidence, FindingDetail } from "../types.js";
 import { fetchLadderEvents } from "./api.js";
-import { followUpKinds, ladderMoves, timelineEntries } from "./followUps.js";
+import { entryDay, followUpKinds, ladderMoves, timelineEntries } from "./followUps.js";
 import "./timeline.css";
 
 /** What a follow-up found, in a few words: its outcome, whether a record is verified, or its stance. */
@@ -93,7 +94,8 @@ export interface FollowUpTimelineProps {
  * each with its date, who did it, what it found and a link, and the step it
  * moved the finding up to when it did. The entries are the finding's own
  * evidence, so adding one opens that kind's evidence form, which reminds the
- * person of the rules before a visit is logged.
+ * person of the rules before a visit is logged. Changes to the finding's
+ * shape are listed among them by their day, after a follow-up of the same day.
  */
 export function FollowUpTimeline({ meta, finding, position, onAdd }: FollowUpTimelineProps) {
   const signedInFirst = useSignedInFirst();
@@ -109,6 +111,23 @@ export function FollowUpTimeline({ meta, finding, position, onAdd }: FollowUpTim
   });
   const moves = events.data ? ladderMoves(meta, events.data.items) : new Map<number, string>();
   const kinds = followUpKinds(meta);
+  const changes = finding.location.shape.changes.map((change, index) => ({ change, index }));
+  // Both lists are oldest first. Merged by day, a follow-up goes before a change of the same day.
+  const items: Array<{ key: string; day: string; node: ReactNode }> = [
+    ...entries.map((item) => ({
+      key: `evidence-${item.id}`,
+      day: entryDay(item),
+      node: <Entry key={`evidence-${item.id}`} meta={meta} item={item} movedTo={moves.get(item.id)} />,
+    })),
+    ...changes.map(({ change, index }) => ({
+      key: `shape-${index}`,
+      day: change.on,
+      node: <ShapeChangeEntry key={`shape-${index}`} change={change} />,
+    })),
+  ];
+  const ordered = items
+    .map((item, order) => ({ ...item, order }))
+    .sort((a, b) => a.day.localeCompare(b.day) || a.order - b.order);
 
   return (
     <section className="fc-finding__section" aria-labelledby="fc-timeline-title" id="fc-timeline">
@@ -116,16 +135,14 @@ export function FollowUpTimeline({ meta, finding, position, onAdd }: FollowUpTim
       <p className="fc-finding__hint">
         What has happened at the site and on record since it was spotted, in date order. Each entry is also evidence.
       </p>
-      {entries.length === 0 ? (
+      {ordered.length === 0 ? (
         <p className="fc-muted fc-timeline__empty">
           <Footprints size={15} aria-hidden /> Nothing yet. A site visit, a survey, a dig or a new heritage record goes
           here, with its date.
         </p>
       ) : (
         <ol className="fc-timeline" aria-label="What happened, oldest first">
-          {entries.map((item) => (
-            <Entry key={item.id} meta={meta} item={item} movedTo={moves.get(item.id)} />
-          ))}
+          {ordered.map((item) => item.node)}
         </ol>
       )}
       {events.isError ? (

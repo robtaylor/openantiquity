@@ -1,7 +1,7 @@
 import { InfiniteQueryObserver, QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { activityKeys, feedRequestOf } from "./keys.js";
-import { refreshNewest, withNewestPage } from "./liveRefetch.js";
+import { refreshNewest, targetsFor, withNewestPage } from "./liveRefetch.js";
 
 interface Page {
   items: { id: number; text: string }[];
@@ -97,5 +97,18 @@ describe("reading a feed key back", () => {
     expect(feedRequestOf(activityKeys.feed(null, []))).toEqual({ bbox: null, kinds: [] });
     expect(feedRequestOf(activityKeys.all)).toBeNull();
     expect(feedRequestOf(["activity", "feed", null, "not_a_kind"])).toBeNull();
+  });
+});
+
+describe("what a live event asks for again", () => {
+  it("asks the map and the list again when a line is drawn further, since it is drawn differently", () => {
+    const event = {
+      id: 1,
+      kind: "shape_extended" as const,
+      finding: "f-1",
+      actor: "QuietBarrow42",
+      investigation: null,
+    };
+    expect(targetsFor(event, null).map((target) => target.kind)).toEqual(["feed", "finding", "lists"]);
   });
 });

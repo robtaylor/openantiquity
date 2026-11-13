@@ -72,6 +72,12 @@ describe("what happened, in a sentence", () => {
     );
     expect(said({ kind: "comment_added", finding: null })).toBe("A finding has a new comment.");
   });
+
+  it("says who carried a line or shape further, and nothing of how far", () => {
+    expect(said({ kind: "shape_extended", actor: ada })).toBe("Ada Lovelace drew more of Enclosure in SU 10 69.");
+    expect(said({ kind: "shape_extended" })).toBe("More of Enclosure in SU 10 69 was drawn.");
+    expect(said({ kind: "shape_extended", finding: null })).toBe("More of a finding was drawn.");
+  });
 });
 
 describe("the feed's kinds", () => {
@@ -81,6 +87,9 @@ describe("the feed's kinds", () => {
     expect(kinds).toContain("observation_added");
     expect(kinds).not.toContain("investigation_invitation");
     expect(kindsFor(["steps"])).toEqual(["tier_changed", "state_changed"]);
+    // A line drawn further is listed and filtered with the findings marked, which the filter says.
+    expect(kindsFor(["findings"])).toEqual(["finding_created", "shape_extended"]);
+    expect(KIND_GROUPS.find((group) => group.id === "findings")?.label).toBe("Findings marked or drawn further");
     expect(kindsFor([])).toEqual([]);
   });
 });
