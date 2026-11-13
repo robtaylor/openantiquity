@@ -128,26 +128,22 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
   const points: FilterSpecification = ["all", IS_POINT, ["!", ["in", STATE, ["literal", SPECIAL_STATES]]]];
   const known: FilterSpecification = ["all", IS_POINT, ["==", STATE, "known"]];
   const ruledOut: FilterSpecification = ["all", IS_POINT, ["==", STATE, "ruled_out"]];
-  const liveSquare: FilterSpecification = [
-    "all",
-    IS_SQUARE,
-    ["!", ["in", STATE, ["literal", ["ruled_out", "withdrawn"]]]],
-  ];
+  const liveSquare: FilterSpecification = ["all", IS_SQUARE, LIVE];
   const ruledOutSquare: FilterSpecification = ["all", IS_SQUARE, ["==", STATE, "ruled_out"]];
 
   function circle(id: string, filter: FilterSpecification, paint: Record<string, unknown>): LayerSpecification {
     return { id, type: "circle", source, filter, paint } as LayerSpecification;
   }
 
-  function squareLine(id: string, filter: FilterSpecification, paint: Record<string, unknown>): LayerSpecification {
-    return {
-      id,
-      type: "line",
-      source,
-      filter,
-      layout: { "line-join": "miter" },
-      paint,
-    } as LayerSpecification;
+  /** A line layer: round joins and caps for a finding's shape, mitred corners for a square. */
+  function lineLayer(
+    id: string,
+    filter: FilterSpecification,
+    paint: Record<string, unknown>,
+    join: "round" | "miter" = "round",
+  ): LayerSpecification {
+    const layout = join === "round" ? { "line-join": "round", "line-cap": "round" } : { "line-join": "miter" };
+    return { id, type: "line", source, filter, layout, paint } as LayerSpecification;
   }
 
   // A hollow ring is two circles: a wide dark stroke, then a narrower
@@ -188,55 +184,49 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
     ];
   }
 
-  function shapeLayer(id: string, type: "line" | "fill", filter: FilterSpecification, paint: Record<string, unknown>) {
-    const layout = type === "line" ? { "line-join": "round", "line-cap": "round" } : undefined;
-    return { id, type, source, filter, ...(layout ? { layout } : {}), paint } as LayerSpecification;
+  // A shape's line is two lines, as a ring is two circles: a dark casing as wide as the line and an outline on each
+  // side, then the line in the tier colour along its middle.
+  function casedLine(
+    id: string,
+    filter: FilterSpecification,
+    width: ExpressionSpecification,
+    casingOpacity: number,
+  ): OverlayLayer[] {
+    const casingWidth = ["+", width, OUTLINE_WIDTH * 2] as unknown as ExpressionSpecification;
+    return [
+      {
+        layer: lineLayer(`${id}-casing`, filter, { "line-color": OUTLINE, "line-width": casingWidth }),
+        opacity: { "line-opacity": casingOpacity },
+      },
+      {
+        layer: lineLayer(id, filter, { "line-color": colour, "line-width": width }),
+        opacity: { "line-opacity": 1 },
+      },
+    ];
   }
 
   const isKnown: ExpressionSpecification = ["==", STATE, "known"];
   const lineWidth: ExpressionSpecification = ["case", isKnown, 1.5, 2.5];
   const edgeWidth: ExpressionSpecification = ["case", isKnown, 1.25, 2];
-  const casing = (width: ExpressionSpecification): ExpressionSpecification =>
-    ["+", width, OUTLINE_WIDTH * 2] as unknown as ExpressionSpecification;
   const lines: FilterSpecification = ["all", IS_LINE, LIVE];
   const areas: FilterSpecification = ["all", IS_AREA, LIVE];
   const ruledOutShapes: FilterSpecification = ["all", ["has", "shape"], ["==", STATE, "ruled_out"]];
 
   const shapes: OverlayLayer[] = [
     {
-      layer: shapeLayer(FINDING_SHAPE_LAYERS.areaFills, "fill", areas, {
-        "fill-color": colour,
-        "fill-antialias": false,
-      }),
+      layer: {
+        id: FINDING_SHAPE_LAYERS.areaFills,
+        type: "fill",
+        source,
+        filter: areas,
+        paint: { "fill-color": colour, "fill-antialias": false },
+      } as LayerSpecification,
       opacity: { "fill-opacity": 0.04 },
     },
+    ...casedLine(FINDING_SHAPE_LAYERS.areaEdges, areas, edgeWidth, 0.75),
+    ...casedLine(FINDING_SHAPE_LAYERS.lines, lines, lineWidth, 0.9),
     {
-      layer: shapeLayer(`${FINDING_SHAPE_LAYERS.areaEdges}-casing`, "line", areas, {
-        "line-color": OUTLINE,
-        "line-width": casing(edgeWidth),
-      }),
-      opacity: { "line-opacity": 0.75 },
-    },
-    {
-      layer: shapeLayer(FINDING_SHAPE_LAYERS.areaEdges, "line", areas, {
-        "line-color": colour,
-        "line-width": edgeWidth,
-      }),
-      opacity: { "line-opacity": 1 },
-    },
-    {
-      layer: shapeLayer(`${FINDING_SHAPE_LAYERS.lines}-casing`, "line", lines, {
-        "line-color": OUTLINE,
-        "line-width": casing(lineWidth),
-      }),
-      opacity: { "line-opacity": 0.9 },
-    },
-    {
-      layer: shapeLayer(FINDING_SHAPE_LAYERS.lines, "line", lines, { "line-color": colour, "line-width": lineWidth }),
-      opacity: { "line-opacity": 1 },
-    },
-    {
-      layer: shapeLayer(FINDING_SHAPE_LAYERS.ruledOut, "line", ruledOutShapes, {
+      layer: lineLayer(FINDING_SHAPE_LAYERS.ruledOut, ruledOutShapes, {
         "line-color": ruledOutColour,
         "line-width": 1.5,
       }),
@@ -248,7 +238,7 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
   const nothing: FilterSpecification = ["==", ["get", "public_id"], ""];
   const highlightShape: OverlayLayer = {
     // Light, so it stands apart from every tier's colour, ochre included, and laid under the shapes' own lines.
-    layer: shapeLayer(FINDING_HIGHLIGHT_LAYERS.shape, "line", ["all", ["has", "shape"], nothing], {
+    layer: lineLayer(FINDING_HIGHLIGHT_LAYERS.shape, ["all", ["has", "shape"], nothing], {
       "line-color": COLOURS.text,
       "line-width": 9,
     }),
@@ -268,23 +258,25 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
     highlightShape,
     ...shapes,
     {
-      layer: squareLine("findings-obscured-casing", liveSquare, { "line-color": OUTLINE, "line-width": 5 }),
+      layer: lineLayer("findings-obscured-casing", liveSquare, { "line-color": OUTLINE, "line-width": 5 }, "miter"),
       opacity: { "line-opacity": 0.75 },
     },
     {
-      layer: squareLine("findings-obscured", liveSquare, {
-        "line-color": colour,
-        "line-width": 2,
-        "line-dasharray": [2.5, 2],
-      }),
+      layer: lineLayer(
+        "findings-obscured",
+        liveSquare,
+        { "line-color": colour, "line-width": 2, "line-dasharray": [2.5, 2] },
+        "miter",
+      ),
       opacity: { "line-opacity": 1 },
     },
     {
-      layer: squareLine("findings-obscured-ruled-out", ruledOutSquare, {
-        "line-color": ruledOutColour,
-        "line-width": 1.5,
-        "line-dasharray": [2.5, 2],
-      }),
+      layer: lineLayer(
+        "findings-obscured-ruled-out",
+        ruledOutSquare,
+        { "line-color": ruledOutColour, "line-width": 1.5, "line-dasharray": [2.5, 2] },
+        "miter",
+      ),
       opacity: { "line-opacity": 0.9 },
       ruledOutOnly: true,
     },
