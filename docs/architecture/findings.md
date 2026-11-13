@@ -53,7 +53,7 @@ The limits are constants in `services/shapes.py` and `services/looked_at.py`. `G
 
 | Limit | Value | Constant | Refused with |
 |-------|-------|----------|--------------|
-| Points in a path, counted before they are read | 5,000 | `PATH_MAX_POINTS` | 422 `path_too_many_points` |
+| Points in a path | 5,000 | `PATH_MAX_POINTS` | 422 `path_too_many_points` |
 | Vertices in the derived shape, counted before it is drawn | 50,000 | `SHAPE_MAX_VERTICES` | 422 `shape_too_complex` |
 | A closed shape across: the larger of its east–west width at its middle latitude and its north–south height | 25 km | `SHAPE_MAX_ACROSS_M` | 422 `shape_too_big` |
 | A line's geodesic length | 600 km | `LINE_MAX_LENGTH_M` | 422 `line_too_long` |
@@ -62,6 +62,8 @@ The limits are constants in `services/shapes.py` and `services/looked_at.py`. `G
 | Every point in the British Isles | | | 422 `outside_british_isles` |
 
 A line has no limit across. The schema's general cap on client shapes, 2,000 positions and 200 parts (`geometry_too_complex`), applies to an `outline` sent in place of a path.
+
+At the API, the request model parses every point of a path before `shapes.read_path` counts them. What bounds that work is the 1 MB limit on a request body (`security.BODY_MAX_BYTES`), which is refused with 413 `request_too_large` before it is read.
 
 ### The anchor
 
@@ -123,12 +125,17 @@ One function decides each reader's view of a shape, `sensitivity.visible_shape`,
 | Where | A reader who sees the finding exactly | A signed-out reader of a protected finding |
 |-------|----------------------------------------|---------------------------------------------|
 | `GET /findings/{public_id}` `location` | `outline` (the `outline_mid` copy), `path`, and `shape` with `kind`, `length_m`, `revision`, `extent`, the newest 50 changes oldest first, each with its date and an extension's length and view, `added_since_looked_m` and `added_view`. `shape.looked_at` goes only to someone who may change the finding | The square. `outline`, `path` and `extent` are null, and `shape` holds only a `{"kind": "changed", "on": …}` entry for each of the newest 50 changes. The finder's saved view loses its zoom, as every hidden finding's does |
-| `GET /findings`, `/users/{handle}/findings`, investigation items, activity, mentions, help-wanted tasks | No outline. `location.shape_kind` says `line` or `area` | No outline, and `shape_kind` null |
+| `GET /findings`, `/users/{handle}/findings`, investigation items, activity, mentions | No outline. `location.shape_kind` says `line` or `area` | No outline, and `shape_kind` null |
+| `GET /review/tasks` | No outline. `place.shape_kind` says `line` or `area`, and a task gives the finding's `shape_revision`. A `look_at_new_part` task is offered, with its place and zoom framing the finding's `added_view` | The task's place is the square, with no outline, no `shape_kind`, no `shape_revision` and the finder's view without its zoom. No `look_at_new_part` task is offered |
+| `GET /review/next` | A card holds the place, the finder's view and `shape_revision`. A `look_at_new_part` card's place and zoom frame the finding's `added_view` | No card: the queue offers only findings the reader sees exactly |
+| `GET /records/{record_id}/findings` | The finding's public id, title, class, tier and state, with no position or shape | Left out: the list holds only findings the reader sees exactly |
+| `GET /geo/search` by public id | The anchor, the saved zoom or 17, and for a line or area a `bbox` framing all of it | The square's centre at zoom 14, `obscured`, and the square as the `bbox` |
+| `GET /events/stream` | The same for every reader: an event's id and kind, and the public ids of its finding, investigation and actor, only for events a signed-out visitor's feed lists | The same. `shape_extended` on a protected finding isn't announced, since that feed doesn't list it |
 | `GET /findings?format=geojson&zoom=` | `properties.shape`: `outline_low` below zoom 13, `outline_mid` to 15, `outline` from 16, each cut to the box widened by 500 m (`ST_ClipByBox2D`), so a shape may arrive as a `MultiLineString` or `MultiPolygon`. The `bbox` matches the shape as well as the anchor | No `shape`. The `bbox` matches the square's centre alone |
 | Downloads | The anchor as the geometry, with `shape_kind`, `shape_length_m` and the whole derived shape as the `outline` property. For a protected finding this goes only to the finder and trusted people | The square, with no `outline`. A member who isn't trusted downloads a protected finding the same way |
 | `finding_shape_changes` | Never served whole. `path_before` isn't sent to anyone | |
 
-Investigations hold back what is drawn within 1.5 km of a finding the reader doesn't see exactly, measured to its point or anywhere along its line or area (`sensitivity.hidden_near`, `PositionGuard.near`, [Decision 0030](decisions/0030-the-privacy-guard-measures-to-a-protected-finding-s-whole-shape-and-open-shapes-near-one-aren-t-generalised.md)). An open finding's shape is shown by its own level, whatever protected findings it passes near.
+Investigations hold back what is drawn within 1.5 km of a finding the reader doesn't see exactly, measured to its point or anywhere along its line or area (`sensitivity.hidden_near`, `PositionGuard.near`, [Decision 0030](decisions/0030-the-privacy-guard-measures-to-a-protected-finding-s-whole-shape-and-open-shapes-near-one-aren-t-generalised.md)). A finding a moderator has hidden takes no part in that rule: `hidden_near` and `near_hidden_clause` leave out any finding with `hidden_at` set. An investigation that holds or has held a hidden finding still holds back what is written beside it. An open finding's shape is shown by its own level, whatever protected findings it passes near.
 
 ### Drawing findings on the map
 
