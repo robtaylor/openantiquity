@@ -30,7 +30,7 @@ export function SearchOrGuide() {
           setBack(null);
           setSearching(true);
         }}
-        focusSearch={back === "escape"}
+        focusSearch={back === "escape" || back === "chosen"}
       />
     );
   }

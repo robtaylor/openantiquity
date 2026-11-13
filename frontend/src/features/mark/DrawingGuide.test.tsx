@@ -165,6 +165,7 @@ describe("searching while drawing", () => {
     await user.type(searchBox() as HTMLElement, "ave");
     await user.click(await screen.findByRole("option", { name: /Avebury Trusloe/ }));
     expect(guide()).toBeInTheDocument();
+    expect(within(guide()).getByRole("button", { name: "Search for a place" })).toHaveFocus();
     expect(address()).toBe("/mark");
   });
 

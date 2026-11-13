@@ -121,7 +121,7 @@ function Row({ row }: { row: GuideRow }) {
 /**
  * The card itself. `onSearch` swaps it for the search box, and
  * `focusSearch` puts focus on its search button as it appears, for when it
- * comes back from a search left with Escape.
+ * comes back from a search left with Escape or ended by a chosen result.
  */
 export function DrawingGuide({ onSearch, focusSearch = false }: { onSearch: () => void; focusSearch?: boolean }) {
   const rows = useGuideRows();
