@@ -186,8 +186,8 @@ The overlay asks for nothing below zoom 9, sends the map's zoom with the box, an
 
 | Part | Gap | Tracking |
 |---|---|---|
-| Other people's changes as suggestions, and a marking handed on | Not designed | [Plan: lines and curves](../plans/archive/lines-and-curves.md), "Left out of the first version" |
-| Undoing a saved change | `path_before` is kept but nothing offers it | [Plan: lines and curves](../plans/archive/lines-and-curves.md) |
+| Other people's changes as suggestions, a marking handed on, and removing an orphaned marking | Planned, not built | [Plan: lines and shapes, phase 2](../plans/lines-phase-2.md) |
+| Undoing a saved change | `path_before` is kept but nothing offers it | Not planned. [Plan: lines and shapes, phase 2](../plans/lines-phase-2.md) leaves it out |
 | Taking the `restricted` level out of the code | The enum and the services still handle it | Decision 0032 |
 
 ## Decisions behind this
