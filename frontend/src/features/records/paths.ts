@@ -12,3 +12,15 @@ export function recordPath(id: number | string): string {
 export function elsewherePath(lon: number, lat: number): string {
   return `${ELSEWHERE_PATH}?lon=${lon.toFixed(5)}&lat=${lat.toFixed(5)}`;
 }
+
+/**
+ * What a record's page is told when a click on the map opened it. The page
+ * then leaves the map where it is, where it would otherwise go to the
+ * record's middle, which for a large record can be far from the click.
+ */
+export const OPENED_FROM_MAP = { openedFromMap: true } as const;
+
+/** Whether this is the state `OPENED_FROM_MAP` puts on a page's address. */
+export function wasOpenedFromMap(state: unknown): boolean {
+  return typeof state === "object" && state !== null && (state as { openedFromMap?: unknown }).openedFromMap === true;
+}

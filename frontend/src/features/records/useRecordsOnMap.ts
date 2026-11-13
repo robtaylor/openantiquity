@@ -29,7 +29,7 @@ import { EMPTY_COLLECTION, type FeatureCollection } from "./geojson.js";
 import { pickedKey, useLiveStore } from "./live/store.js";
 import { useLiveRecords } from "./live/useLiveRecords.js";
 import { useRecordsOnScreen } from "./onScreen.js";
-import { elsewherePath, recordPath } from "./paths.js";
+import { elsewherePath, OPENED_FROM_MAP, recordPath } from "./paths.js";
 import { impreciseSquares, type TileRecordFeature, useRecordSelection } from "./shape.js";
 
 /** The layers a click or a hover can land on, top first. */
@@ -71,8 +71,20 @@ export type RecordTarget =
 
 type Hit = Pick<MapGeoJSONFeature, "id" | "properties"> & { layer: { id: string } };
 
-/** What a click on these features, topmost first, should open. */
-export function recordTarget(hits: readonly Hit[], at: { lng: number; lat: number }): RecordTarget | null {
+/**
+ * What a click on these features, topmost first, should open.
+ *
+ * A record whose area fills the whole view isn't opened by a click inside
+ * it (`fillsView`). Some records are the extent of a survey, the size of a
+ * county, and would otherwise take every click made within them. Such a
+ * record is opened by its outline, or once the map is far enough out for an
+ * edge of it to show, and whatever lies under it is reached through it.
+ */
+export function recordTarget(
+  hits: readonly Hit[],
+  at: { lng: number; lat: number },
+  fillsView: (id: number) => boolean = () => false,
+): RecordTarget | null {
   for (const hit of hits) {
     const props = hit.properties ?? {};
     const layer = hit.layer.id;
@@ -82,7 +94,9 @@ export function recordTarget(hits: readonly Hit[], at: { lng: number; lat: numbe
       }
     } else if (RECORD_HIT_LAYERS.has(layer)) {
       const id = Number(props.id ?? hit.id);
-      if (Number.isSafeInteger(id) && id > 0) return { kind: "record", id };
+      if (!Number.isSafeInteger(id) || id <= 0) continue;
+      if (layer === RECORD_LAYERS.fills && fillsView(id)) continue;
+      return { kind: "record", id };
     } else if (layer === RECORD_LAYERS.counts) {
       return { kind: "count", ...at };
     }
@@ -101,6 +115,80 @@ export function sourcesOf(features: ReadonlyArray<Pick<MapGeoJSONFeature, "prope
   return [...keys];
 }
 
+/** How near the edge of the view, in pixels, an area must reach to count as reaching it. */
+const EDGE_PX = 2;
+
+/** Whether points drawn at these places, between them, reach every edge of a view of this size. */
+export function spansView(
+  places: ReadonlyArray<{ x: number; y: number }>,
+  size: { width: number; height: number },
+): boolean {
+  if (places.length === 0) return false;
+  const xs = places.map((place) => place.x);
+  const ys = places.map((place) => place.y);
+  return (
+    Math.min(...xs) <= EDGE_PX &&
+    Math.max(...xs) >= size.width - EDGE_PX &&
+    Math.min(...ys) <= EDGE_PX &&
+    Math.max(...ys) >= size.height - EDGE_PX
+  );
+}
+
+type Ring = ReadonlyArray<readonly [number, number]>;
+
+/** Every corner of an area as a tile gives it: a polygon's rings, or those of each of its parts. */
+function corners(geometry: { type: string; coordinates?: unknown } | undefined): Array<readonly [number, number]> {
+  if (!geometry) return [];
+  if (geometry.type === "Polygon") return (geometry.coordinates as Ring[]).flat();
+  if (geometry.type === "MultiPolygon") return (geometry.coordinates as Ring[][]).flat(2);
+  return [];
+}
+
+/**
+ * Whether the record's area, as drawn, fills the whole of this map's view.
+ * The answer is kept for as long as the map stays where it is, since the
+ * pointer asks on every frame it moves.
+ */
+function makeFillsView(map: MapLibreMap): (id: number) => boolean {
+  let view = "";
+  const known = new Map<number, boolean>();
+  return (id) => {
+    const canvas = map.getCanvas();
+    const size = { width: canvas.clientWidth, height: canvas.clientHeight };
+    const centre = map.getCenter();
+    const now = [
+      centre.lng,
+      centre.lat,
+      map.getZoom(),
+      map.getBearing(),
+      map.getPitch(),
+      size.width,
+      size.height,
+    ].join();
+    if (now !== view) {
+      view = now;
+      known.clear();
+    }
+    const remembered = known.get(id);
+    if (remembered !== undefined) return remembered;
+    const layers = existing(map, [RECORD_LAYERS.fills]);
+    const pieces =
+      layers.length === 0
+        ? []
+        : map.queryRenderedFeatures(
+            [
+              [0, 0],
+              [size.width, size.height],
+            ],
+            { layers, filter: ["==", ["id"], id] },
+          );
+    const places = pieces.flatMap((piece) => corners(piece.geometry).map(([lng, lat]) => map.project([lng, lat])));
+    const fills = spansView(places, size);
+    known.set(id, fills);
+    return fills;
+  };
+}
+
 function existing(map: MapLibreMap, layers: readonly string[]): string[] {
   return layers.filter((layer) => map.getLayer(layer) !== undefined);
 }
@@ -114,9 +202,9 @@ function query(map: MapLibreMap, layers: readonly string[], point?: PointLike): 
   ) as Hit[];
 }
 
-/** True when a record, a count or a live record is drawn under this point. */
+/** True when a click at this point would open a record, a count or a live record. */
 export function recordUnder(map: MapLibreMap, point: PointLike): boolean {
-  return query(map, CLICKABLE, point).length > 0;
+  return recordTarget(query(map, CLICKABLE, point), { lng: 0, lat: 0 }, makeFillsView(map)) !== null;
 }
 
 function setData(map: MapLibreMap, sourceId: string, data: FeatureCollection): void {
@@ -174,15 +262,17 @@ export function useRecordsOnMap(meta: Meta, main: MapLibreMap | null, compare: M
     const maps = [main, compare].filter((map): map is MapLibreMap => map !== null && isMapLive(map));
     const detach: Array<() => void> = [];
     for (const map of maps) {
+      const fillsView = makeFillsView(map);
       const onClick = (event: MapMouseEvent): void => {
         // A tool such as the height profile has the clicks while it is open, and marking a finding has them too.
         if (!isMapLive(map) || mapToolActive() || isMarkPath(latest.current.location.pathname)) return;
         // Findings sit above records, so a click with a finding in reach is Explore's.
         if (findingInReach(map, event)) return;
-        const target = recordTarget(query(map, CLICKABLE, event.point), event.lngLat);
+        const target = recordTarget(query(map, CLICKABLE, event.point), event.lngLat, fillsView);
         if (target === null) return;
         const { navigate: go, location: here } = latest.current;
-        if (target.kind === "record") go(recordPath(target.id));
+        // The record was clicked where the person is looking, so its page leaves the map there.
+        if (target.kind === "record") go(recordPath(target.id), { state: OPENED_FROM_MAP });
         else if (target.kind === "count") {
           const zoom = useMapStore.getState().camera.zoom + COUNT_ZOOM_STEP;
           useMapStore.getState().requestCamera({ lng: target.lng, lat: target.lat, zoom });
@@ -204,7 +294,7 @@ export function useRecordsOnMap(meta: Meta, main: MapLibreMap | null, compare: M
         frame = requestAnimationFrame(() => {
           frame = 0;
           if (!pending || !isMapLive(map)) return;
-          const over = query(map, CLICKABLE, pending.point).length > 0;
+          const over = recordTarget(query(map, CLICKABLE, pending.point), pending.lngLat, fillsView) !== null;
           map.getCanvas().style.cursor = over ? "pointer" : "";
         });
       };

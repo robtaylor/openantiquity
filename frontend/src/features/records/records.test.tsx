@@ -228,6 +228,32 @@ describe("records on the map", () => {
     expect(await screen.findByRole("complementary", { name: FIND_RECORD.name })).toBeInTheDocument();
   });
 
+  it("leaves the map where it is when a click on the map opens a record whose middle is out of sight", async () => {
+    // Well away from the record's own point, as a click near the edge of a large record is.
+    window.history.replaceState(null, "", "/#m=12/53/-2/0/0");
+    renderShell();
+    const map = await mapReady();
+    const before = useMapStore.getState().camera;
+    map.rendered = [
+      { id: 101, properties: { id: 101, source: "nhle-scheduled" }, layer: { id: RECORD_LAYERS.squares } },
+    ];
+    act(() => map.fire("click", { point: { x: 10, y: 10 }, lngLat: { lng: -2, lat: 53 } }));
+    await screen.findByRole("complementary", { name: AVENUE_RECORD.name });
+    await waitFor(() => expect(selection(map)?.features.length).toBeGreaterThan(0));
+
+    expect(useMapStore.getState().camera).toMatchObject({ lng: before.lng, lat: before.lat, zoom: before.zoom });
+  });
+
+  it("goes to a record whose middle is out of sight when its page is opened any other way", async () => {
+    window.history.replaceState(null, "", "/#m=12/53/-2/0/0");
+    renderShell(`/r/${AVENUE_RECORD.id}`);
+    await mapReady();
+    await screen.findByRole("complementary", { name: AVENUE_RECORD.name });
+    await waitFor(() =>
+      expect(useMapStore.getState().camera).toMatchObject({ lng: AVENUE_RECORD.lon, lat: AVENUE_RECORD.lat }),
+    );
+  });
+
   it("opens a record's page when its square is clicked, and zooms into a count", async () => {
     renderShell();
     const map = await mapReady();

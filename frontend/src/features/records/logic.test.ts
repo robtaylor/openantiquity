@@ -17,7 +17,7 @@ import { elsewherePath, recordPath } from "./paths.js";
 import { searchFromParams, searchToParams } from "./searchAddress.js";
 import { impreciseSquares, precisionText, recordShape } from "./shape.js";
 import { decodeEntities } from "./text.js";
-import { recordTarget, sourcesOf } from "./useRecordsOnMap.js";
+import { recordTarget, sourcesOf, spansView } from "./useRecordsOnMap.js";
 
 describe("parseRecordId", () => {
   it("takes whole numbers from 1 up and nothing else", () => {
@@ -187,6 +187,22 @@ describe("recordTarget", () => {
     ).toEqual({ kind: "live", source: "wilts", id: "MWI1" });
   });
 
+  it("passes over the inside of an area that fills the whole view, and reaches what lies under it", () => {
+    const region = { layer: { id: RECORD_LAYERS.fills }, properties: {}, id: 9 };
+    const monument = { layer: { id: RECORD_LAYERS.fills }, properties: {}, id: 4 };
+    const fillsView = (id: number): boolean => id === 9;
+    // A project area the size of a county would otherwise take every click inside it.
+    expect(recordTarget([region], at, fillsView)).toBeNull();
+    expect(recordTarget([region, monument], at, fillsView)).toEqual({ kind: "record", id: 4 });
+    // Its outline still opens it, and so does its inside once it no longer fills the view.
+    expect(recordTarget([{ layer: { id: RECORD_LAYERS.outlines }, properties: {}, id: 9 }], at, fillsView)).toEqual({
+      kind: "record",
+      id: 9,
+    });
+    expect(recordTarget([region], at, () => false)).toEqual({ kind: "record", id: 9 });
+    expect(recordTarget([region], at)).toEqual({ kind: "record", id: 9 });
+  });
+
   it("ignores features it can't open", () => {
     expect(recordTarget([], at)).toBeNull();
     expect(
@@ -335,5 +351,44 @@ describe("recordPath", () => {
   it("encodes the id, so it can only ever name a record's page", () => {
     expect(recordPath(101)).toBe("/r/101");
     expect(recordPath("../account?x=1")).toBe("/r/..%2Faccount%3Fx%3D1");
+  });
+});
+
+describe("spansView", () => {
+  const size = { width: 1000, height: 800 };
+
+  it("is true for pieces that reach every edge of the view between them", () => {
+    expect(
+      spansView(
+        [
+          { x: -200, y: -50 },
+          { x: 600, y: 300 },
+          { x: 1200, y: 900 },
+        ],
+        size,
+      ),
+    ).toBe(true);
+  });
+
+  it("is false for an area with an edge in the view, and for something long and thin across it", () => {
+    expect(
+      spansView(
+        [
+          { x: 100, y: -50 },
+          { x: 1200, y: 900 },
+        ],
+        size,
+      ),
+    ).toBe(false);
+    expect(
+      spansView(
+        [
+          { x: -200, y: 380 },
+          { x: 1200, y: 420 },
+        ],
+        size,
+      ),
+    ).toBe(false);
+    expect(spansView([], size)).toBe(false);
   });
 });

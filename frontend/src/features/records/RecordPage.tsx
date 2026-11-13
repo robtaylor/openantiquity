@@ -17,7 +17,7 @@ import { PanelFrame } from "../shell/PanelFrame.js";
 import { fetchRecord, parseRecordId, type RecordOut, recordKeys } from "./api.js";
 import { CategoryMark } from "./CategoryMark.js";
 import { LinkedFindings } from "./LinkedFindings.js";
-import { elsewherePath } from "./paths.js";
+import { elsewherePath, wasOpenedFromMap } from "./paths.js";
 import { SourceCredit } from "./SourceCredit.js";
 import { precisionText, recordShape, useRecordSelection } from "./shape.js";
 import { decodeEntities } from "./text.js";
@@ -139,7 +139,7 @@ function RecordBody({ record, meta }: { record: RecordOut; meta: Meta }) {
 /** `/r/:id`: one heritage record, drawn on the map while its page is open. */
 export function RecordPage() {
   const params = useParams();
-  const { pathname } = useLocation();
+  const { pathname, state: arrivedWith } = useLocation();
   const meta = useMeta().data;
   const id = parseRecordId(params.id);
   const query = useQuery({
@@ -156,7 +156,9 @@ export function RecordPage() {
   const name = record ? decodeEntities(record.name) : "Heritage record";
   useDocumentTitle(name);
 
-  // The open record is drawn on the map, and the map goes to it if it is out of sight.
+  // The open record is drawn on the map, and the map goes to it if it is out of sight, unless a
+  // click on the map opened it: the person is then looking at the part of it they clicked.
+  const openedFromMap = wasOpenedFromMap(arrivedWith);
   const flown = useRef<number | null>(null);
   useEffect(() => {
     if (!record) return;
@@ -164,10 +166,11 @@ export function RecordPage() {
     useRecordSelection.getState().setShape(shape.collection);
     if (flown.current !== record.id) {
       flown.current = record.id;
-      if (!inside(useViewAreaStore.getState().bounds, record.lon, record.lat)) showOnMap(record, shape.imprecise);
+      const outOfSight = !inside(useViewAreaStore.getState().bounds, record.lon, record.lat);
+      if (outOfSight && !openedFromMap) showOnMap(record, shape.imprecise);
     }
     return () => useRecordSelection.getState().setShape(null);
-  }, [record]);
+  }, [record, openedFromMap]);
 
   const notFound =
     id === null || (query.error instanceof ApiError && (query.error.status === 404 || query.error.status === 422));
