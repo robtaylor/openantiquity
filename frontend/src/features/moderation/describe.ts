@@ -69,16 +69,15 @@ function text(value: unknown): string | null {
 }
 
 /**
- * A level's name. The log keeps what was stored when the moderator acted, so
- * a level this version has no name for is shown as stored, with a capital.
+ * A level's name as it reads inside a sentence. The log keeps what was stored
+ * when the moderator acted, so a level this version has no name for is shown
+ * as stored.
  */
 function levelWord(level: string): string {
-  if (isSensitivity(level)) return LEVEL_NAMES[level];
-  const words = level.replaceAll("_", " ");
-  return words.charAt(0).toUpperCase() + words.slice(1);
+  return isSensitivity(level) ? LEVEL_NAMES[level].toLowerCase() : level.replaceAll("_", " ");
 }
 
-/** What changed, from the action's data: "from Member to Trusted member", "from Protected to Open". */
+/** What changed, from the action's data: "from Member to Trusted member", "from protected to open". */
 function change(action: Action): string | null {
   const from = text(action.data?.from);
   const to = text(action.data?.to);

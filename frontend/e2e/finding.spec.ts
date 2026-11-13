@@ -137,7 +137,7 @@ test("the finder gets their own controls and a link to ask others", async ({ pag
   await expect(dialog).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
-  await panel.getByRole("button", { name: "Protect it more" }).click();
+  await panel.getByRole("button", { name: "Protect it" }).click();
   await expect(page.getByRole("dialog", { name: "Protect this finding" })).toContainText(
     "Only people who have signed in see its exact place.",
   );

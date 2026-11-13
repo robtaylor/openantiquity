@@ -802,7 +802,7 @@ describe("states of the page", () => {
     const { panel } = await open(finderView(), THE_FINDER);
     expect(panel.getByRole("button", { name: "Edit" })).toBeInTheDocument();
     expect(panel.getByRole("button", { name: "Withdraw" })).toBeInTheDocument();
-    await user.click(panel.getByRole("button", { name: "Protect it more" }));
+    await user.click(panel.getByRole("button", { name: "Protect it" }));
     const dialog = within(screen.getByRole("dialog", { name: "Protect this finding" }));
     expect(dialog.getByText(/Only people who have signed in see its exact place/)).toBeInTheDocument();
     expect(dialog.getByText("Only a moderator can lower it again.")).toBeInTheDocument();
@@ -818,13 +818,13 @@ describe("states of the page", () => {
     const { panel } = await open(finderView({ actions: withdrawnActions }), THE_FINDER);
     expect(panel.getByRole("button", { name: "Edit" })).toBeInTheDocument();
     expect(panel.queryByRole("button", { name: "Withdraw" })).toBeNull();
-    expect(panel.queryByRole("button", { name: "Protect it more" })).toBeNull();
+    expect(panel.queryByRole("button", { name: "Protect it" })).toBeNull();
   });
 
   it("offers the finder protected, and nothing higher", async () => {
     const user = userEvent.setup();
     const { panel } = await open(finderView({ sensitivity: "open" }), THE_FINDER);
-    await user.click(panel.getByRole("button", { name: "Protect it more" }));
+    await user.click(panel.getByRole("button", { name: "Protect it" }));
     const dialog = within(screen.getByRole("dialog", { name: "Protect this finding" }));
     const levels = within(dialog.getByRole("radiogroup", { name: "New level" }));
     expect(levels.getAllByRole("radio").map((chip) => chip.textContent)).toEqual(["Protected"]);

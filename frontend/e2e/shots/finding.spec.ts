@@ -210,7 +210,7 @@ test("viewers", async ({ page }) => {
   await sheetTo(page, "full");
   await scrollTo(panel.getByRole("heading", { name: "Your finding" }));
   await shoot(page, "23-finder-tools");
-  await panel.getByRole("button", { name: "Protect it more" }).click();
+  await panel.getByRole("button", { name: "Protect it" }).click();
   await shoot(page, "24-finder-protect");
   await page.keyboard.press("Escape");
   await panel.getByRole("button", { name: "Edit" }).click();

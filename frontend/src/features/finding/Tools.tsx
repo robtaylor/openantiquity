@@ -209,7 +209,7 @@ function RaiseDialog({
       toast(`It's now ${LEVEL_NAMES[level].toLowerCase()}. ${whoSees(level)}`, { kind: "success" });
       onClose();
     } catch (error) {
-      toastFailure("Its level couldn't be raised.", error);
+      toastFailure("It couldn't be protected.", error);
     } finally {
       setSaving(false);
     }
@@ -224,7 +224,7 @@ function RaiseDialog({
         <>
           <Button onClick={onClose}>Cancel</Button>
           <Button variant="primary" disabled={saving || !level} onClick={() => void save()}>
-            {saving ? "Saving…" : "Raise it"}
+            {saving ? "Saving…" : "Protect it"}
           </Button>
         </>
       }
@@ -389,7 +389,7 @@ export function Tools({ meta, finding, position, onApplied }: ToolsProps) {
             ) : null}
             {position.mayRaise ? (
               <Button size="sm" icon={<ShieldPlus size={15} aria-hidden />} onClick={() => setDialog("raise")}>
-                Protect it more
+                Protect it
               </Button>
             ) : null}
             {position.mayLower ? (

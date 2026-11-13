@@ -62,7 +62,7 @@ describe("moderation in words", () => {
           data: { from: "protected", to: "open" },
         }),
       ),
-    ).toBe("Morag Kerr changed the level of the finding “Barrow” from Protected to Open.");
+    ).toBe("Morag Kerr changed the level of the finding “Barrow” from protected to open.");
     // A level this version has no name for, stored in the log by an earlier one, is shown as stored.
     expect(
       actionSentence(
@@ -72,7 +72,7 @@ describe("moderation in words", () => {
           data: { from: "open", to: "restricted" },
         }),
       ),
-    ).toBe("Morag Kerr changed the level of the finding “Barrow” from Open to Restricted.");
+    ).toBe("Morag Kerr changed the level of the finding “Barrow” from open to restricted.");
     expect(actionSentence(actionFixture({ action: "resolve_report", data: { outcome: "dismissed" } }))).toMatch(
       /^Morag Kerr dismissed a report on a comment/,
     );
