@@ -293,3 +293,42 @@ test("a line and an area in several parts draw every part, and each part picks i
   await press(page, [120, -100]);
   await expectOpened(page, "f-clipped-area");
 });
+
+/** Nine markers on one spot, a little north of the view's centre: the chooser lists eight and "Show all in Explore". */
+const CROWDED: Metres = [0, 60];
+const NINE_MARKERS = Array.from({ length: 9 }, (_, i) =>
+  finding(`f-crowd-${i}`, `Bank ${i + 1}`, [CROWDED[0] + (i % 3), CROWDED[1] + Math.floor(i / 3)], null, "bank"),
+);
+
+test("the chooser fits a window 700 px tall, scrolls inside itself, and never covers the spot tapped", async ({
+  page,
+}) => {
+  const width = page.viewportSize()?.width ?? 0;
+  await page.setViewportSize({ width, height: 700 });
+  await openOverlapping(page, NINE_MARKERS);
+  const spot = onScreen(page, CROWDED);
+  // Above the middle, so it opens below the spot, where eight entries don't fit.
+  expect(spot.y).toBeLessThan(350);
+  await press(page, CROWDED);
+  const chooser = page.getByRole("dialog", { name: "9 findings here" });
+  await expect(chooser).toBeVisible();
+  // It slides 8 px into place as it opens: its box is read once that has finished.
+  await chooser.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+  const box = await chooser.boundingBox();
+  if (!box) throw new Error("the chooser has no box");
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(700);
+  const covers = (b: { x: number; y: number; width: number; height: number }) =>
+    spot.x >= b.x && spot.x <= b.x + b.width && spot.y >= b.y && spot.y <= b.y + b.height;
+  expect(covers(box)).toBe(false);
+
+  // The last entry and "Show all in Explore" are reached by scrolling the chooser, which stays where it was.
+  const more = chooser.getByRole("button", { name: "Show all in Explore" });
+  await more.scrollIntoViewIfNeeded();
+  await expect(more).toBeInViewport();
+  const moreBox = await more.boundingBox();
+  if (!moreBox) throw new Error("no box for the last button");
+  expect(moreBox.y + moreBox.height).toBeLessThanOrEqual(box.y + box.height + 1);
+  expect(await chooser.boundingBox()).toEqual(box);
+  await expect(chooser.getByRole("button", { name: /^Bank \d,/ })).toHaveCount(8);
+});

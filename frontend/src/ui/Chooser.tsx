@@ -3,7 +3,8 @@
  * screen: a popover by the pointer on a computer, a short sheet on a phone.
  * Either way it never covers the point (docs/UI.md, "Behaviour"): the
  * popover sits in the quarter away from the screen's middle, and the sheet
- * at the top or the bottom, whichever leaves the point clear.
+ * at the top or the bottom, whichever leaves the point clear. Its height is
+ * capped to the room it has there, and its entries scroll inside it.
  *
  * Built on `Dialog`, so it takes focus, keeps Tab inside and closes on
  * Escape. The first entry takes focus on opening. The arrow keys, Home and
@@ -42,6 +43,8 @@ export interface ChooserProps {
 
 /** Space kept between the point and the chooser, in pixels. */
 export const CHOOSER_GAP = 16;
+/** Space kept between a popover and the window's edge, in pixels. */
+export const CHOOSER_EDGE = 8;
 
 /** Where the chooser goes, so the point stays in sight. */
 export function chooserPlace(
@@ -58,8 +61,14 @@ export function chooserPlace(
   }
   const right = at.x < view.width / 2;
   const style: CSSProperties = right ? { left: at.x + CHOOSER_GAP } : { right: view.width - at.x + CHOOSER_GAP };
-  if (below) style.top = at.y + CHOOSER_GAP;
-  else style.bottom = view.height - at.y + CHOOSER_GAP;
+  // Its height is capped to the room on its side of the point, and its entries scroll inside it.
+  if (below) {
+    style.top = at.y + CHOOSER_GAP;
+    style.maxHeight = Math.max(0, view.height - style.top - CHOOSER_EDGE);
+  } else {
+    style.bottom = view.height - at.y + CHOOSER_GAP;
+    style.maxHeight = Math.max(0, at.y - CHOOSER_GAP - CHOOSER_EDGE);
+  }
   return { place: `popover-${below ? "below" : "above"}-${right ? "right" : "left"}`, style };
 }
 
