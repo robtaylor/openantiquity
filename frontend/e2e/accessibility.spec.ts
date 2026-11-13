@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { answerJson } from "./support/account.js";
 import { boxOf, describeFocus, openMap, overlaps, SLOW_MAP, tabTo } from "./support/app.js";
 import { expect, test } from "./support/fixtures.js";
+import { finding, line, onScreen, openWithFindings, VIEW } from "./support/shapes.js";
 
 /**
  * Keyboard, focus and small-screen behaviour, checked in a real browser
@@ -391,5 +392,144 @@ test.describe("phone", () => {
     await page.keyboard.press("Escape");
     await expect(tabs.getByRole("link", { name: "Investigations" })).toHaveCount(0);
     await expect(more).toBeFocused();
+  });
+});
+
+/**
+ * What the focused element is, and whether it is the topmost thing at its
+ * middle. The map canvas is the one thing meant to lie under everything else.
+ */
+function focusState(page: Page) {
+  return page.evaluate(() => {
+    const element = document.activeElement as HTMLElement | null;
+    if (!element || element === document.body) return { label: "body", onTop: true };
+    const box = element.getBoundingClientRect();
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    const name = element.getAttribute("aria-label") ?? element.textContent ?? "";
+    const label = `${element.tagName.toLowerCase()}.${String(element.className).split(" ")[0]} ${name.trim().slice(0, 30)}`;
+    const onTop = element.tagName === "CANVAS" || (hit !== null && (element.contains(hit) || hit.contains(element)));
+    return { label, onTop };
+  });
+}
+
+test.describe("drawing", () => {
+  test.skip(({ viewport }) => (viewport?.width ?? 0) < 720, "the keyboard is the computer's");
+
+  test("draws and finishes a line with the keyboard alone", async ({ page }) => {
+    await openMap(page, `/mark${VIEW}`);
+    const panel = page.getByRole("complementary", { name: "Mark a finding" });
+    const add = panel.getByRole("button", { name: "Add a point at the cross" });
+    const status = panel.locator(".fc-mark__status");
+
+    await tabTo(page, add);
+    await page.keyboard.press("Enter");
+    await expect(status).toHaveText(/^1 point\./);
+    // The map is moved by its own keys, and a second point goes down at the cross.
+    await tabTo(page, page.locator(".fc-map__pane--main canvas"));
+    for (let presses = 0; presses < 4; presses++) await page.keyboard.press("ArrowRight");
+    await page.waitForTimeout(400);
+    await tabTo(page, add);
+    await page.keyboard.press("Enter");
+    await expect(status).toHaveText(/^2 points, \d+ m\./);
+    await tabTo(page, panel.getByRole("button", { name: "Finish" }));
+    expect(await ringOf(page), `focus ring on ${await describeFocus(page)}`).toEqual(HAS_RING);
+    await page.keyboard.press("Enter");
+    await expect(status).toHaveText(/^2 points, \d+ m\.$/);
+    await expect(panel.getByRole("region", { name: "How to mark it" })).toContainText("Continue from this end");
+
+    // The path is one tab stop, and [ and ] step along it.
+    const handles = page.getByRole("group", { name: "The points of your marking" });
+    await expect(handles.locator('[tabindex="0"]')).toHaveCount(1);
+    await tabTo(page, handles.locator('[tabindex="0"]'));
+    expect(await ringOf(page), `focus ring on ${await describeFocus(page)}`).toEqual(HAS_RING);
+    const first = handles.getByRole("button", { name: /^Point 1 of 2/ });
+    const second = handles.getByRole("button", { name: /^Point 2 of 2/ });
+    await page.keyboard.press("[");
+    await page.keyboard.press("[");
+    await expect(first).toBeFocused();
+    await page.keyboard.press("]");
+    await expect(second).toBeFocused();
+  });
+});
+
+test.describe("phone drawing", () => {
+  test.skip(({ viewport }) => (viewport?.width ?? 0) >= 720, "phone layout only");
+
+  test("keeps the drawing bar off every point tapped, and Tab off anything hidden", async ({ page }) => {
+    await openMap(page, `/mark${VIEW}`);
+    await page.touchscreen.tap(195, 160);
+    const bar = page.locator(".fc-mark-float");
+    await expect(bar).toBeVisible();
+    const barBox = await boxOf(bar);
+    // Down the screen to just above the bar, the last tap half a handle from its top.
+    const taps = [240, 340, 440, barBox.y - 24].filter((y) => y > 160 && y < barBox.y);
+    for (const [index, y] of taps.entries()) {
+      await page.touchscreen.tap(index % 2 === 0 ? 120 : 270, y);
+    }
+    const handles = page.locator(".fc-path-handle");
+    await expect(handles).toHaveCount(taps.length + 1);
+    const clear = await handles.evaluateAll((elements) =>
+      elements.map((element) => {
+        const box = element.getBoundingClientRect();
+        const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        return hit !== null && element.contains(hit);
+      }),
+    );
+    expect(clear, "each point's handle is the topmost thing where it was tapped").toEqual(clear.map(() => true));
+    for (const box of await handles.evaluateAll((elements) =>
+      elements.map((element) => {
+        const { x, y } = element.getBoundingClientRect();
+        // The dot itself, 12 px in the middle of the 44 px target.
+        return { x: x + 16, y: y + 16, width: 12, height: 12 };
+      }),
+    )) {
+      expect(overlaps(box, await boxOf(bar)), "a point under the drawing bar").toBe(false);
+    }
+
+    const seen = new Set<string>();
+    for (let presses = 0; presses < 40; presses++) {
+      await page.keyboard.press("Tab");
+      const state = await focusState(page);
+      expect(state.onTop, `${state.label} took focus while something else was drawn over it`).toBe(true);
+      seen.add(state.label);
+    }
+    expect([...seen].join(" | ")).toContain("Finish");
+  });
+
+  test("opens the chooser as a sheet that leaves the place tapped in sight", async ({ page }) => {
+    // Two alike roads crossing low on the map, just above the "Mark a finding" button.
+    const crossing: [number, number] = [0, -260];
+    await openWithFindings(page, [
+      finding(
+        "f-east",
+        "Road to the east",
+        [-140, -260],
+        line([
+          [-140, -260],
+          [140, -260],
+        ]),
+        "road",
+      ),
+      finding(
+        "f-north",
+        "Way to the north",
+        [0, -60],
+        line([
+          [0, -420],
+          [0, -60],
+        ]),
+        "trackway",
+      ),
+    ]);
+    const at = onScreen(page, crossing);
+    await page.touchscreen.tap(at.x, at.y);
+    const chooser = page.getByRole("dialog", { name: "2 findings here" });
+    await expect(chooser).toBeVisible();
+    await page.waitForTimeout(300);
+    const box = await boxOf(chooser);
+    const spot = { x: at.x - 22, y: at.y - 22, width: 44, height: 44 };
+    expect(overlaps(box, spot), `the chooser at ${JSON.stringify(box)} covers the tap at ${JSON.stringify(at)}`).toBe(
+      false,
+    );
   });
 });
