@@ -4,7 +4,7 @@
 
 ## Goal
 
-Someone who hits a fault can report it in under a minute, and the report carries enough for the fault to be found and reproduced: which build, what kind of page, what failed. The report opens as a prefilled issue on the project's public GitHub repository, with a second route for people who have no GitHub account. The owner asked for this on 2026-11-12 as a nice to have, and it waits behind lines and curves.
+Someone who hits a fault can report it in under a minute, and the report carries enough for the fault to be found and reproduced: which build, what kind of page, what failed. The report opens as a prefilled issue on the project's public GitHub repository, with a second route for people who have no GitHub account. The owner asked for this on 2026-11-12 as a nice to have. It waited behind lines and curves, which landed on 2026-11-13.
 
 ## Prerequisites
 
@@ -77,15 +77,19 @@ Issue text comes from strangers and would be read by a model, on a public reposi
 - A new issue that restates an open one gets a comment naming it within a few minutes.
 - The workflow file grants `issues: write` and no other permission, and `actionlint` passes.
 
+## Decided by the owner
+
+Asked on 2026-11-13 with a recommendation for each, the owner replied: "sounds good to me all round".
+
+- **Logs.** Fly's own log search and nothing else for now. Fly's documentation says it keeps an app's logs for 7 days, searchable in its Grafana, free while the feature is in beta, and names no set-up ([Search logs](https://docs.fly.io/monitoring/search-logs)). It hasn't been tried on this account. The privacy notice says seven days. If that proves too short, or the beta ends, the next step is Fly's log shipper writing to a Tigris bucket that expires objects after 30 days, which needs one small machine running all the time.
+- **The address for email reports.** One role address on the project's domain that forwards to the owner, used for reports, for the privacy notice's contact and for complaints, so that no personal address is published. Its name isn't chosen yet, and WS2's email link waits for it.
+- **Security reports** go by GitHub's private vulnerability reporting, switched on for the repository on 2026-11-13, with [`SECURITY.md`](../../SECURITY.md) pointing to it.
+- **No stored reports.** A prefilled issue and a copy-and-email route cover the need. A table of reports would add moderation and personal data to look after. Revisit if emailed reports become regular, or if reports about protected places need somewhere private.
+
 ## Open questions
 
-Three are the owner's, each with a recommendation. Three more were checked on 2026-11-13 and are settled below.
-
-**For the owner:**
-
-- **Where logs are kept, and for how long.** Recommended: Fly's own log search and nothing else for now. Fly's documentation says it keeps an app's logs for 7 days, searchable in its Grafana, free while the feature is in beta, and names no set-up ([Search logs](https://docs.fly.io/monitoring/search-logs)). That wasn't tried on this account. Seven days is enough to follow a request id from a report made the same week, and the privacy notice would say so. If it proves too short, or the beta ends, the next step is Fly's log shipper writing to a Tigris bucket that expires objects after 30 days, which needs one small machine running all the time.
-- **The address for email reports.** Recommended: one role address on the project's domain that forwards to the owner, used for reports, for the privacy notice's contact and for complaints, so that no personal address is published. Security reports are a separate route: GitHub's private vulnerability reporting, switched on in the repository's settings, with a `SECURITY.md` that points to it.
-- **Whether reports should ever be stored in the app.** Recommended: no. A prefilled issue and a copy-and-email route cover the need, and a table of reports adds moderation and personal data to look after. Revisit if emailed reports become regular, or if reports about protected places need somewhere private.
+- **The role address's name**, and where it forwards. The owner's to choose.
+- **Whether GitHub's duplicate suggestions are on for this repository.** See below. If they are, WS3 is dropped.
 
 **Checked on 2026-11-13:**
 
