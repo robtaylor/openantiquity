@@ -368,8 +368,8 @@ def _beyond(shape: BaseGeometry, looked: Looked) -> tuple[float, tuple[float, fl
     return float(beyond.length), looked.from_grid(beyond).bounds
 
 
-def refresh_added(finding: Finding, shape: BaseGeometry | None, looked: Looked | None) -> bool:
-    """Store `added_since_looked_m` and `added_view` from the shape and `looked_at`, and say if they changed.
+def refresh_added(finding: Finding, shape: BaseGeometry | None, looked: Looked | None) -> None:
+    """Store `added_since_looked_m` and `added_view` from the shape and `looked_at`.
 
     Call it whenever either changes: after a change of shape and after a
     second look grows `looked_at`. The caller passes what it holds already,
@@ -380,7 +380,5 @@ def refresh_added(finding: Finding, shape: BaseGeometry | None, looked: Looked |
     assert (looked is None) == (finding.looked_at is None), "what was looked at is the finding's"
     found = None if shape is None or looked is None else _beyond(shape, looked)
     length, view = (None, None) if found is None else (round(found[0], 1), shapes.view_of(found[1]))
-    changed = (length, view) != (finding.added_since_looked_m, finding.added_view)
     finding.added_since_looked_m = length
     finding.added_view = view
-    return changed
