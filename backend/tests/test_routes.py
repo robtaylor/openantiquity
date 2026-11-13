@@ -83,6 +83,7 @@ class Expect:
 
 
 F = "/api/v1/findings/{finding}"
+CHANGES = "test_changes_to_a_finding_answer_with_what_the_writer_may_see"
 OWN_ACCOUNT = "changes only the caller's own account, which needs no welcome step"
 SIGN_IN = "signs someone in, before any welcome step"
 NOT_STORED = "stores nothing: a read that needs a body"
@@ -133,9 +134,9 @@ ROUTES: dict[tuple[str, str], Expect] = {
         "test_downloads_of_a_filtered_set", sample="/api/v1/findings/export", hidden_test=HIDDEN
     ),
     ("GET", "/api/v1/findings/{public_id}"): Expect("test_a_finding_page", sample=F, hidden_test=HIDDEN),
-    ("PATCH", "/api/v1/findings/{public_id}"): Expect("test_a_finding_page", CONTRIBUTOR),
-    ("POST", "/api/v1/findings/{public_id}/withdraw"): Expect("test_a_finding_page", CONTRIBUTOR),
-    ("PUT", "/api/v1/findings/{public_id}/sensitivity"): Expect("test_a_finding_page", CONTRIBUTOR),
+    ("PATCH", "/api/v1/findings/{public_id}"): Expect(CHANGES, CONTRIBUTOR),
+    ("POST", "/api/v1/findings/{public_id}/withdraw"): Expect(CHANGES, CONTRIBUTOR),
+    ("PUT", "/api/v1/findings/{public_id}/sensitivity"): Expect(CHANGES, CONTRIBUTOR),
     ("GET", "/api/v1/findings/{public_id}/export"): Expect(
         "test_downloads_of_one_finding", sample=F + "/export", hidden_test=HIDDEN
     ),
@@ -164,7 +165,7 @@ ROUTES: dict[tuple[str, str], Expect] = {
     ),
     ("DELETE", "/api/v1/evidence/{evidence_id}"): Expect(writer=CONTRIBUTOR),
     ("PUT", "/api/v1/evidence/{evidence_id}/vote"): Expect(writer=CONTRIBUTOR),
-    ("POST", "/api/v1/evidence/{evidence_id}/verify"): Expect("test_a_finding_page", CONTRIBUTOR),
+    ("POST", "/api/v1/evidence/{evidence_id}/verify"): Expect(CHANGES, CONTRIBUTOR),
     # Discussion
     ("GET", "/api/v1/findings/{public_id}/comments"): Expect(
         "test_comments_and_answers_carry_no_position", sample=F + "/comments", hidden_test=HIDDEN
@@ -289,7 +290,9 @@ ROUTES: dict[tuple[str, str], Expect] = {
         hidden_test=HIDDEN,
     ),
     ("GET", "/api/v1/users/{handle}/points"): Expect(
-        ACTIVITY_LEAKS + "test_points", sample=U + "/points", hidden_test=HIDDEN
+        ACTIVITY_LEAKS + "test_a_banned_finder_is_refused_their_points",
+        sample=U + "/points",
+        hidden_test=HIDDEN,
     ),
     # Activity
     ("GET", "/api/v1/activity"): Expect(
@@ -302,7 +305,7 @@ ROUTES: dict[tuple[str, str], Expect] = {
         writer="marks the caller's own notifications read; stores nothing"
     ),
     ("GET", "/api/v1/events/stream"): Expect(
-        ACTIVITY_LEAKS + "test_stream_payloads_carry_no_position",
+        ACTIVITY_LEAKS + "test_the_stream_tells_a_visitor_of_a_hidden_line_by_its_id_alone",
         unsampled="a stream that stays open: tests/activity/test_events.py checks it is sent no-cache",
         hidden_test=HIDDEN_STREAM,
     ),
@@ -434,14 +437,15 @@ def test_each_route_that_returns_a_position_has_a_leak_test() -> None:
 
 
 def test_every_leak_test_includes_a_line_finding() -> None:
-    """A protected or restricted line's shape must not reach anyone who sees only its square (Decision 0030).
+    """A protected line's shape must not reach anyone who sees only its square (Decision 0030).
 
-    So each row's leak test must build one of the leak world's lines,
-    `tests.findings.test_leaks.draw_line`, and read it through the route: a
-    request's address or body, its response, or a text the test checks names
-    the line (`tests.leak_record`).
-    The leak tests run before this module, so their record is here. Run on
-    its own, there is nothing to prove, and this test is skipped.
+    So for each row, its leak test must build one of the leak world's lines,
+    `tests.findings.test_leaks.draw_line`, and, as a reader who sees that line
+    only as its square, make a request through the row's route whose response
+    the test checked for the line's exact position (`tests.leak_record`). A
+    leak test this session runs that left no record fails here. `conftest.py`
+    runs this test last, so every record is in. When the session runs no leak
+    test, there is nothing to prove, and this test is skipped.
     """
     named = {}
     for key, expect in ROUTES.items():
@@ -450,12 +454,16 @@ def test_every_leak_test_includes_a_line_finding() -> None:
         test = leak_test(expect.leak_test)
         assert test is not None, f"{key}: there is no {expect.leak_test}"
         named[key] = f"{test.__module__}:{test.__name__}"
-    ran = {key: leak_record.RESULTS[name] for key, name in named.items() if name in leak_record.RESULTS}
+    ran = {key: name for key, name in named.items() if name in leak_record.COLLECTED}
     if not ran:
-        pytest.skip("run with the leak tests, which record whether they built and read a line")
-    for key, proof in ran.items():
-        assert proof.built, f"{key}: {named[key]} builds no line finding"
-        assert proof.read, f"{key}: {named[key]} never reads its line finding"
+        pytest.skip("run with the leak tests, which record what they proved of a line")
+    unrecorded = sorted({name for name in ran.values() if name not in leak_record.RESULTS})
+    assert not unrecorded, f"these leak tests ran and left no record: {unrecorded}"
+    unproved = sorted(f"{key}: {name}" for key, name in ran.items() if key not in leak_record.RESULTS[name])
+    assert not unproved, (
+        "these leak tests never read a line through their route as someone who sees only its square, "
+        f"and checked the response: {unproved}"
+    )
 
 
 def test_every_write_says_who_may_make_it_and_every_read_how_it_is_checked() -> None:

@@ -30,7 +30,7 @@ from fieldclub.models import Activity, Finding, Notification, User
 from fieldclub.models.common import db_point
 from fieldclub.services import findings, sensitivity, shapes
 from fieldclub.services.findings import EvidenceFields
-from fieldclub.vocab import EvidenceKind, FeatureClass, Outcome, Relation, Sensitivity, Visible
+from fieldclub.vocab import EvidenceKind, FeatureClass, Outcome, Relation, Sensitivity, Stance, Visible
 from tests import leak_record
 from tests.findings.support import API, answer, create, outline_of
 from tests.helpers import MakeUser, add_record, add_source, lon_lat
@@ -161,7 +161,7 @@ def check(
     Times are taken out first: a timestamp such as `11:07:51.776491` carries no
     position, but its seconds can spell one, which made this check fail at random.
     """
-    leak_record.read(text)
+    leak_record.checked(text, {level.value for level in LEVELS if level not in allowed})
     text = _TIMES.sub("", text)
     for level in LEVELS:
         leaked = [s for s in exact_strings(level) if s in text]
@@ -169,6 +169,17 @@ def check(
             assert not leaked, f"{where}: the {level} finding's exact position leaks as {leaked}"
         elif present is not None and level in present:
             assert leaked, f"{where}: the {level} finding's exact position should be there"
+
+
+def checked_unlisted(response: object, world: World, seen: set[Sensitivity]) -> None:
+    """Say that `response`, already checked, was checked against each line it leaves out.
+
+    For a response that lists only what the viewer sees exactly, so it never
+    names a line seen only as its square (`tests.leak_record.checked_response`).
+    """
+    for level, line in world.lines.items():
+        if level not in seen:
+            leak_record.checked_response(response, line.public_id)
 
 
 KINDS = ("area", "line")
@@ -421,6 +432,8 @@ def test_review_cards_are_only_for_findings_the_viewer_sees_exactly(world: World
     expected = {f.public_id for level, f in world.every() if level in SEES[viewer] - own}
     assert offered == expected
     check(response.text, SEES[viewer] - own, where="GET /review/next")
+    # A line the viewer sees only as its square is left out, so the response doesn't name it.
+    checked_unlisted(response, world, SEES[viewer])
 
 
 @pytest.mark.parametrize("viewer", VIEWERS)
@@ -501,6 +514,57 @@ def test_writes_answer_with_what_the_writer_may_see(
             check(refused.text, set(), where="refused answer")
         assert revealed.json()["error"]["code"] == "observation_not_found"
         check(revealed.text, set(), where="refused reveal")
+
+    # A finding marked about 400 m from this one's anchor, which sends back nothing of it.
+    lon, lat = lon_lat(finding.location)
+    beside = {"type": "Point", "coordinates": [round(lon + 0.0043, 6), round(lat + 0.0021, 6)]}
+    marked = client.post(f"{API}/findings", json={"location": beside, "feature_class": "enclosure"})
+    assert marked.status_code == 201
+    check(marked.text, set(), where=f"POST /findings beside the {level} {kind}")
+    leak_record.checked_response(marked, finding.public_id)
+
+
+@pytest.mark.parametrize("viewer", VIEWERS)
+@pytest.mark.parametrize("level", LEVELS)
+@pytest.mark.parametrize("kind", KINDS)
+def test_changes_to_a_finding_answer_with_what_the_writer_may_see(
+    world: World, db: Session, viewer: str, level: Sensitivity, kind: str
+) -> None:
+    """A change answers with the finding's page, so only to someone who sees it exactly.
+
+    The finder renames and withdraws it, a trusted member raises it, and a
+    moderator verifies an HER record added to it. Everyone else is refused, and
+    a refusal says nothing of where it is.
+    """
+    finding = world.of(kind, level)
+    official, _ = findings.add_evidence(
+        db,
+        findings.lock(db, finding),
+        world.people["trusted"],
+        EvidenceFields(kind=EvidenceKind.HER_RECORD, stance=Stance.SUPPORTS, reference="MWI1234"),
+    )
+    db.commit()
+    client = world.client(viewer)
+    allowed = {level} & SEES[viewer]
+    page = f"{API}/findings/{finding.public_id}"
+    answered = {
+        "PATCH": client.patch(page, json={"title": f"A {level} {kind}, renamed"}),
+        # The address names the record, not the finding.
+        "verify": client.post(f"{API}/evidence/{official.id}/verify"),
+        "raise": client.put(f"{page}/sensitivity", json={"level": "protected"}),
+        "withdraw": client.post(f"{page}/withdraw"),
+    }
+    for change, response in answered.items():
+        where = f"{change} of the {level} {kind} as {viewer}"
+        assert response.status_code < 500, where
+        if viewer == "signed_out":
+            assert response.status_code == 401, where
+        check(response.text, allowed, where=where)
+        leak_record.checked_response(response, finding.public_id)
+    if viewer == "finder":
+        assert answered["PATCH"].status_code == answered["withdraw"].status_code == 200
+    if viewer == "moderator":
+        assert answered["verify"].status_code == 200
 
 
 def test_activity_and_notifications_never_hold_an_exact_position(world: World, db: Session) -> None:
@@ -643,6 +707,8 @@ def test_a_records_linked_findings(world: World, db: Session, viewer: str) -> No
     check(response.text, SEES[viewer], where="GET /records/{id}/findings")
     listed = {item["public_id"] for item in response.json()["items"]}
     assert listed == {f.public_id for level, f in world.every() if level in SEES[viewer]}
+    # Every line is linked to the record, and one the viewer sees only as its square is left out.
+    checked_unlisted(response, world, SEES[viewer])
 
 
 def test_a_saved_zoom_goes_only_to_those_who_see_the_finding_exactly(

@@ -13,8 +13,10 @@ import asyncio
 import json
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -22,11 +24,12 @@ from shapely.geometry import box
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fieldclub.models import Activity, Evidence, Finding, User
+from fieldclub.models import Activity, Evidence, Finding, ReputationEvent, User
 from fieldclub.services import events, findings, sensitivity
 from fieldclub.services.events import Announcement, EventHub, StreamFilter
 from fieldclub.vocab import FeatureClass, Sensitivity, Visible
-from tests.activity.support import API, add_map, comment, follow
+from tests import leak_record
+from tests.activity.support import API, TIMEOUT_S, add_map, comment, follow, next_activity, read_event
 from tests.findings.support import answer, create
 from tests.findings.test_leaks import LEVELS, POINTS, SEES, check, draw_line, extend_line
 from tests.helpers import ClientFor, MakeUser, lon_lat
@@ -145,10 +148,24 @@ def test_notifications(world: World, viewer: str) -> None:
     assert extended == {world.lines[level].public_id for level in told}
 
 
+def checked_hidden_lines(response: object, world: World, viewer: str) -> None:
+    """Say that `response`, already checked, was checked against each line `viewer` sees only as its square.
+
+    For a response about the person who drew the lines, which never names them.
+    """
+    for level, line in world.lines.items():
+        if level not in SEES[viewer]:
+            leak_record.checked_response(response, line.public_id)
+
+
 @pytest.mark.parametrize("viewer", VIEWERS)
 def test_profiles_findings_and_contributions(world: World, viewer: str) -> None:
     allowed = SEES[viewer]
-    check(get(world, viewer, "/users/Finder"), set(), where="profile")
+    profile = world.client(viewer).get(f"{API}/users/Finder")
+    assert profile.status_code == 200
+    check(profile.text, set(), where="profile")
+    # The profile of the person who drew every line names none of them.
+    checked_hidden_lines(profile, world, viewer)
     check(get(world, viewer, "/users/Finder/findings"), allowed, allowed, where="a person's findings")
     for kind in (None, "evidence", "comment", "second_look"):
         params = {"kind": kind} if kind else {}
@@ -175,6 +192,24 @@ def test_a_persons_own_second_looks(
 def test_points(world: World, viewer: str) -> None:
     handle = world.people[viewer].handle
     check(get(world, viewer, f"/users/{handle}/points"), SEES[viewer], where="points")
+
+
+def test_a_banned_finder_is_refused_their_points(world: World, db: Session) -> None:
+    """Points are listed only to the person who earned them, here the finder, who sees every line exactly.
+
+    Once banned they see what the public sees, and they are refused their
+    points with nothing of the lines they earned them on.
+    """
+    finder = world.people["finder"]
+    earned = db.scalars(select(ReputationEvent.finding_id).where(ReputationEvent.user_id == finder.id)).all()
+    assert {line.id for line in world.lines.values()} <= set(earned), "each line earned the finder points"
+    finder.banned_at = datetime.now(UTC)
+    db.commit()
+    response = world.client("finder").get(f"{API}/users/Finder/points")
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "user_not_found"
+    check(response.text, set(), where="a banned finder's points")
+    checked_hidden_lines(response, world, "signed_out")
 
 
 def test_the_finders_points_are_for_findings_they_see_exactly(world: World) -> None:
@@ -226,6 +261,26 @@ def test_stream_payloads_carry_no_position(world: World, db: Session) -> None:
     for item in got:
         assert set(asdict(item)) == {"id", "kind", "finding", "investigation", "actor"}
         check(json.dumps(asdict(item)), set(), where=f"stream event {item.kind}")
+
+
+def test_the_stream_tells_a_visitor_of_a_hidden_line_by_its_id_alone(
+    world: World, db: Session, server: str
+) -> None:
+    """A visitor following a protected line hears that something happened to it, and nothing of where."""
+    line = world.lines[Sensitivity.PROTECTED]
+    with (
+        httpx.Client(base_url=server, timeout=TIMEOUT_S) as visitor,
+        visitor.stream("GET", "/api/v1/events/stream", params={"finding": line.public_id}) as stream,
+    ):
+        assert stream.status_code == 200
+        lines = stream.iter_lines()
+        assert read_event(lines) == {"comment": "connected", "retry": "3000"}
+        comment(db, line, world.people["member"], "Faint on the ground.")
+        heard = next_activity(lines)
+    assert (heard["kind"], heard["finding"]) == ("comment_added", line.public_id)
+    check(json.dumps(heard), SEES["signed_out"], where="the stream, as a visitor")
+    # The stream is read line by line, so the test says which line it checked.
+    leak_record.checked_response(stream, line.public_id)
 
 
 def test_a_withdrawn_finding_leaves_every_list(world: World, db: Session) -> None:

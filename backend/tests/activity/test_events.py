@@ -21,8 +21,6 @@ from typing import Any
 import httpx
 import psycopg
 import pytest
-import uvicorn
-from fastapi import FastAPI
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -32,10 +30,10 @@ from fieldclub.models import Finding, User
 from fieldclub.services import events, findings, review, sensitivity
 from fieldclub.services.events import Announcement, EventHub, Signal, StreamFilter, TooManyStreamsError
 from fieldclub.vocab import Visible
+from tests.activity.support import TIMEOUT_S, next_activity, read_event
 from tests.findings.support import create
 from tests.helpers import MakeUser
 
-TIMEOUT_S = 10.0
 # Long enough for a check to time out and psycopg to give up cancelling it.
 SILENT_S = 20.0
 
@@ -658,45 +656,6 @@ def test_the_process_has_one_hub_per_loop(db: Session) -> None:
 # --------------------------------------------------------------------------
 # Over HTTP, through a real server
 # --------------------------------------------------------------------------
-
-
-@pytest.fixture
-def server(app: FastAPI) -> Iterator[str]:
-    """The app served by uvicorn on a free port. Close every stream before the test ends."""
-    config = uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning", lifespan="on", ws="none")
-    running = uvicorn.Server(config)
-    thread = threading.Thread(target=running.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if running.started:
-            break
-        threading.Event().wait(0.05)
-    assert running.started, "uvicorn didn't start"
-    port = running.servers[0].sockets[0].getsockname()[1]
-    yield f"http://127.0.0.1:{port}"
-    running.should_exit = True
-    thread.join(timeout=TIMEOUT_S)
-    assert not thread.is_alive(), "uvicorn didn't stop"
-
-
-def read_event(lines: Iterator[str]) -> dict[str, str]:
-    """The next SSE event, as its fields. Comment lines come back as `comment`."""
-    fields: dict[str, str] = {}
-    for line in lines:
-        if line == "":
-            if fields:
-                return fields
-            continue
-        name, _, value = line.partition(":")
-        fields["comment" if name == "" else name] = value.strip()
-    raise AssertionError("the stream ended")
-
-
-def next_activity(lines: Iterator[str]) -> dict[str, Any]:
-    while True:
-        fields = read_event(lines)
-        if fields.get("event") == "activity":
-            return {"id": fields["id"], **json.loads(fields["data"])}
 
 
 def test_two_browsers_receive_an_event_over_http(server: str, scene: dict[str, Any]) -> None:

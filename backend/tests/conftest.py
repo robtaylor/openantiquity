@@ -20,12 +20,15 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
+from http.cookies import SimpleCookie
 from pathlib import Path
 from types import FrameType
 from typing import Any
 
+import httpx
+import httpx2
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.pool import NullPool
@@ -96,12 +99,15 @@ for _name in (
     os.environ.pop(_name, None)
 
 from fastapi import FastAPI  # noqa: E402
+from fastapi.routing import iter_route_contexts  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
+from starlette.routing import compile_path  # noqa: E402
 
 from fieldclub import db as fieldclub_db  # noqa: E402
 from fieldclub import gridref, ratelimit  # noqa: E402
 from fieldclub.auth import sessions  # noqa: E402
+from fieldclub.auth.tokens import hash_presented  # noqa: E402
 from fieldclub.config import (  # noqa: E402
     CLIENT_HEADER,
     CLIENT_HEADER_VALUE,
@@ -110,9 +116,9 @@ from fieldclub.config import (  # noqa: E402
     reset_settings,
 )
 from fieldclub.main import create_app  # noqa: E402
-from fieldclub.models import Finding, User  # noqa: E402
+from fieldclub.models import Finding, User, UserSession  # noqa: E402
 from fieldclub.models.common import db_point  # noqa: E402
-from fieldclub.services import findings, ids  # noqa: E402
+from fieldclub.services import findings, ids, sensitivity  # noqa: E402
 from fieldclub.vocab import AgeBand, FeatureClass, Role, Sensitivity  # noqa: E402
 from tests import leak_record  # noqa: E402
 from tests.helpers import AVEBURY, BASE_URL  # noqa: E402
@@ -192,28 +198,111 @@ def pytest_runtest_setup(item: pytest.Item) -> Iterator[None]:
     return (yield)
 
 
+_CLIENTS = (httpx.Client, httpx2.Client)
+_route_table: list[tuple[str, re.Pattern[str], tuple[str, str]]] = []
+
+
+def _route_of(method: str, path: str) -> tuple[str, str] | None:
+    """The route `method` and `path` go to, named as `tests/test_routes.py` names it, or None."""
+    if not _route_table:
+        for context in iter_route_contexts(create_app(include_dev_routes=True).routes):
+            if context.path is None or not context.methods:
+                continue
+            regex, _, _ = compile_path(context.path)
+            _route_table.extend((verb, regex, (verb, context.path)) for verb in sorted(context.methods))
+    for verb, regex, route in _route_table:
+        if verb == method and regex.match(path):
+            return route
+    return None
+
+
+def _session_token(request: httpx.Request | httpx2.Request) -> str | None:
+    cookies = SimpleCookie()
+    for header in request.headers.get_list("cookie"):
+        cookies.load(header)
+    morsel = cookies.get(SESSION_COOKIE)
+    return morsel.value if morsel is not None else None
+
+
+def _unseen_lines(request: httpx.Request | httpx2.Request) -> dict[str, str]:
+    """Each line the running test built that the request's reader doesn't see exactly, with its level.
+
+    The reader is found from the session cookie the request sends, as the
+    app finds it, read without taking a lock.
+    """
+    lines = leak_record.lines()
+    if not lines:
+        return {}
+    with fieldclub_db.SessionLocal() as session:
+        reader = None
+        token_hash = hash_presented(_session_token(request))
+        if token_hash is not None:
+            reader = session.scalar(
+                select(User)
+                .join(UserSession, UserSession.user_id == User.id)
+                .where(UserSession.token_hash == token_hash, UserSession.expires_at > datetime.now(UTC))
+            )
+            if reader is not None and reader.is_deleted:
+                reader = None
+        built = session.scalars(select(Finding).where(Finding.public_id.in_(lines))).all()
+        unseen = {
+            line.public_id: line.sensitivity for line in built if not sensitivity.sees_exact(line, reader)
+        }
+        session.rollback()
+    return unseen
+
+
 @pytest.hookimpl(wrapper=True)
 def pytest_runtest_call(item: pytest.Item) -> Iterator[None]:
-    """Record what the test's clients read, for `leak_record`, and keep it once the test passes."""
-    send = TestClient.request
+    """Note what the test's clients ask and read, for `leak_record`, and keep it once the test passes.
 
-    def recorded(self: TestClient, *args: Any, **kwargs: Any) -> Any:
-        response = send(self, *args, **kwargs)
-        # A route reads a line when its address names it, or its reply does.
-        leak_record.read(f"{response.request.url} {response.request.content!r}")
-        if not kwargs.get("stream"):
-            leak_record.read(response.text)
-        return response
+    Every request a test client sends is noted, a `TestClient`'s or one sent
+    to a real server alike. A streamed response's text isn't read here.
+    """
 
-    TestClient.request = recorded
+    def recording(send: Callable[..., Any]) -> Callable[..., Any]:
+        def recorded(self: Any, request: Any, **kwargs: Any) -> Any:
+            unseen = _unseen_lines(request)
+            response = send(self, request, **kwargs)
+            text = None if kwargs.get("stream") else response.text
+            words = f"{request.url} {request.content!r} {text or ''}"
+            leak_record.requested(response, _route_of(request.method, request.url.path), text, words, unseen)
+            return response
+
+        return recorded
+
+    # Starlette's TestClient is built on `httpx2`, and a test that talks to a real server uses `httpx`.
+    sends: dict[type, Callable[..., Any]] = {client: client.send for client in _CLIENTS}
+    for client, send in sends.items():
+        setattr(client, "send", recording(send))  # noqa: B010
     try:
         result = yield
     finally:
-        TestClient.request = send
+        for client, send in sends.items():
+            setattr(client, "send", send)  # noqa: B010
     function = getattr(item, "function", None)
     if function is not None:
         leak_record.finish(f"{function.__module__}:{function.__name__}")
     return result
+
+
+# Run last, so that every leak test this session runs has left its record first.
+_RUN_LAST = "test_every_leak_test_includes_a_line_finding"
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    last = [item for item in items if getattr(item, "originalname", item.name) == _RUN_LAST]
+    for item in last:
+        items.remove(item)
+    items.extend(last)
+
+
+def pytest_collection_finish(session: pytest.Session) -> None:
+    leak_record.COLLECTED.clear()
+    for item in session.items:
+        function = getattr(item, "function", None)
+        if function is not None:
+            leak_record.COLLECTED.add(f"{function.__module__}:{function.__name__}")
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:

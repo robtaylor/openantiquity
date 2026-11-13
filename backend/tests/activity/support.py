@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from typing import Any
 
@@ -78,3 +79,31 @@ def walk(value: Any) -> Iterator[tuple[str, Any]]:
     elif isinstance(value, list):
         for item in value:
             yield from walk(item)
+
+
+# --------------------------------------------------------------------------
+# The event stream over HTTP
+# --------------------------------------------------------------------------
+
+# How long a test waits on a real server or a stream.
+TIMEOUT_S = 10.0
+
+
+def read_event(lines: Iterator[str]) -> dict[str, str]:
+    """The next SSE event, as its fields. Comment lines come back as `comment`."""
+    fields: dict[str, str] = {}
+    for line in lines:
+        if line == "":
+            if fields:
+                return fields
+            continue
+        name, _, value = line.partition(":")
+        fields["comment" if name == "" else name] = value.strip()
+    raise AssertionError("the stream ended")
+
+
+def next_activity(lines: Iterator[str]) -> dict[str, Any]:
+    while True:
+        fields = read_event(lines)
+        if fields.get("event") == "activity":
+            return {"id": fields["id"], **json.loads(fields["data"])}

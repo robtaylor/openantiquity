@@ -53,8 +53,6 @@ def test_a_photo_goes_only_to_those_who_see_its_finding_exactly(
     )
     db.commit()
     path = f"{API}/media/{waiting.id}"
-    # The photo's address and its bytes don't name the finding, so the test says which it reads.
-    leak_record.read(finding.public_id)
     clients: dict[str, TestClient] = {viewer: world.client(viewer) for viewer in leaks.VIEWERS}
 
     for viewer, client in clients.items():
@@ -70,6 +68,8 @@ def test_a_photo_goes_only_to_those_who_see_its_finding_exactly(
         where = f"approved photo on the {level} finding, as {viewer}"
         assert response.status_code == (200 if level in leaks.SEES[viewer] else 404), where
         assert_private(response, where)
+        # The photo's address and its bytes don't name the finding, so the test says which it checked.
+        leak_record.checked_response(response, finding.public_id)
 
 
 def test_no_answer_that_carries_an_unapproved_photos_address_is_publicly_cacheable(
