@@ -7,11 +7,11 @@
  * filters name the finding, so the highlight hides with the overlay.
  */
 
-import type { FilterSpecification, Map as MapLibreMap } from "maplibre-gl";
+import type { Map as MapLibreMap } from "maplibre-gl";
 import { useEffect } from "react";
 import { create } from "zustand";
 import { isMapLive } from "./MapPane.js";
-import { FINDING_HIGHLIGHT_LAYERS } from "./overlayLayers.js";
+import { FINDING_HIGHLIGHT_LAYERS, highlightFilters } from "./overlayLayers.js";
 
 interface HighlightState {
   publicId: string | null;
@@ -28,22 +28,15 @@ export const useFindingHighlight = create<HighlightState>()((set, get) => ({
   },
 }));
 
-/** The filters that draw the highlight on `publicId`, or on nothing. */
-export function highlightFilters(publicId: string | null): Record<string, FilterSpecification> {
-  const id = publicId ?? "";
-  return {
-    [FINDING_HIGHLIGHT_LAYERS.shape]: ["all", ["has", "shape"], ["==", ["get", "public_id"], id]],
-    [FINDING_HIGHLIGHT_LAYERS.marker]: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "public_id"], id]],
-  };
-}
-
 /** Keep the main map's highlight layers on the highlighted finding. */
 export function useFindingHighlightOnMap(map: MapLibreMap | null): void {
   const publicId = useFindingHighlight((state) => state.publicId);
   useEffect(() => {
     if (!map || !isMapLive(map)) return;
-    for (const [layer, filter] of Object.entries(highlightFilters(publicId))) {
-      if (map.getLayer(layer)) map.setFilter(layer, filter);
+    const filters = highlightFilters(publicId);
+    for (const role of ["shape", "marker"] as const) {
+      const layer = FINDING_HIGHLIGHT_LAYERS[role];
+      if (map.getLayer(layer)) map.setFilter(layer, filters[role]);
     }
   }, [map, publicId]);
 }

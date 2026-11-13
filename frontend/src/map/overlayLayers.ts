@@ -61,6 +61,21 @@ export const FINDING_HIGHLIGHT_LAYERS = {
   marker: "findings-highlight-marker",
 } as const;
 
+/**
+ * The filters that draw the highlight on `publicId`, or on nothing: the
+ * layers are built with `highlightFilters(null)`, and `findingHighlight.ts`
+ * sets them as the highlight moves.
+ */
+export function highlightFilters(
+  publicId: string | null,
+): Record<keyof typeof FINDING_HIGHLIGHT_LAYERS, FilterSpecification> {
+  const id = publicId ?? "";
+  return {
+    shape: ["all", ["has", "shape"], ["==", ["get", "public_id"], id]],
+    marker: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "public_id"], id]],
+  };
+}
+
 /** States that are not drawn as ordinary filled circles. */
 const SPECIAL_STATES = ["known", "ruled_out", "withdrawn"];
 
@@ -235,17 +250,17 @@ export function findingsLayers(meta: Meta, source: string): OverlayLayer[] {
     },
   ];
 
-  const nothing: FilterSpecification = ["==", ["get", "public_id"], ""];
+  const highlightNothing = highlightFilters(null);
   const highlightShape: OverlayLayer = {
     // Light, so it stands apart from every tier's colour, ochre included, and laid under the shapes' own lines.
-    layer: lineLayer(FINDING_HIGHLIGHT_LAYERS.shape, ["all", ["has", "shape"], nothing], {
+    layer: lineLayer(FINDING_HIGHLIGHT_LAYERS.shape, highlightNothing.shape, {
       "line-color": COLOURS.text,
       "line-width": 9,
     }),
     opacity: { "line-opacity": 0.55 },
   };
   const highlightMarker: OverlayLayer = {
-    layer: circle(FINDING_HIGHLIGHT_LAYERS.marker, ["all", IS_POINT, nothing], {
+    layer: circle(FINDING_HIGHLIGHT_LAYERS.marker, highlightNothing.marker, {
       "circle-radius": 11,
       "circle-color": "rgba(0, 0, 0, 0)",
       "circle-stroke-color": COLOURS.text,
