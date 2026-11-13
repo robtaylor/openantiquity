@@ -117,17 +117,70 @@ function onUncoveredMap(point: [number, number]): boolean {
   return x >= stage.left && x <= stage.right && y >= stage.top && y <= stage.bottom;
 }
 
-/** Space kept round a framed shape, in pixels. */
-const FRAME_MARGIN = 72;
+/** A box on the page, by its edges, in pixels. */
+export interface Edges {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
 
 /**
- * Move the map so every point is on the part of it nothing covers, as close
- * as `maxZoom` and the points allow. Fewer than two points leave it be.
+ * The part of `stage` clear of every box floating on it. Each box that
+ * still overlaps what is left is cut off along whichever side loses the
+ * least of it: a search box across the top comes off the top, a column of
+ * buttons at the side comes off that side, a bar at the foot off the foot.
+ */
+export function clearOf(stage: Edges, covers: readonly Edges[]): Edges {
+  // Copied edge by edge: a DOMRect's edges are getters, which spreading would lose.
+  let clear: Edges = { left: stage.left, top: stage.top, right: stage.right, bottom: stage.bottom };
+  for (const box of covers) {
+    const overlaps =
+      box.right > box.left &&
+      box.bottom > box.top &&
+      box.left < clear.right &&
+      box.right > clear.left &&
+      box.top < clear.bottom &&
+      box.bottom > clear.top;
+    if (!overlaps) continue;
+    const width = clear.right - clear.left;
+    const height = clear.bottom - clear.top;
+    const cuts: Array<[number, Edges]> = [
+      [(box.bottom - clear.top) * width, { ...clear, top: box.bottom }],
+      [(clear.bottom - box.top) * width, { ...clear, bottom: box.top }],
+      [(box.right - clear.left) * height, { ...clear, left: box.right }],
+      [(clear.right - box.left) * height, { ...clear, right: box.left }],
+    ];
+    cuts.sort((a, b) => a[0] - b[0]);
+    clear = cuts[0]?.[1] ?? clear;
+  }
+  return clear;
+}
+
+/** What floats on the map and would cover a handle: the search box, the map's buttons, the drawing bar and the rest. */
+const FLOATING = ".fc-stage > *, .fc-mark-float";
+
+/** The part of the map nothing covers, less what floats on it, in page pixels. Null before the page is laid out. */
+export function clearArea(): Edges | null {
+  const stage = document.querySelector(".fc-stage")?.getBoundingClientRect();
+  if (!stage || stage.width === 0 || stage.height === 0) return null;
+  const covers = [...document.querySelectorAll(FLOATING)].map((element) => element.getBoundingClientRect());
+  return clearOf(stage, covers);
+}
+
+/** Space kept between a framed shape and whatever is round it, in pixels: half a handle's 44 px target, and some. */
+const FRAME_MARGIN = 36;
+
+/**
+ * Move the map so every point is on the part of it nothing covers, clear
+ * of the controls floating on it, as close as `maxZoom` and the points
+ * allow. Fewer than two points leave it be.
  */
 export function frameExtent(points: ReadonlyArray<readonly [number, number]>, maxZoom = 18): void {
   if (points.length < 2) return;
-  const stage = document.querySelector(".fc-stage")?.getBoundingClientRect();
-  if (!stage || stage.width === 0 || stage.height === 0) return;
+  const clear = clearArea();
+  const canvas = useMainMapStore.getState().map?.getCanvas().getBoundingClientRect();
+  if (!clear || !canvas) return;
   const lons = points.map(([lon]) => lon);
   const lats = points.map(([, lat]) => lat);
   const [west, east, south, north] = [Math.min(...lons), Math.max(...lons), Math.min(...lats), Math.max(...lats)];
@@ -137,13 +190,18 @@ export function frameExtent(points: ReadonlyArray<readonly [number, number]>, ma
     const sin = Math.sin((lat * Math.PI) / 180);
     return 0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI);
   };
-  const width = Math.max(1, stage.width - FRAME_MARGIN * 2);
-  const height = Math.max(1, stage.height - FRAME_MARGIN * 2);
+  const width = Math.max(1, clear.right - clear.left - FRAME_MARGIN * 2);
+  const height = Math.max(1, clear.bottom - clear.top - FRAME_MARGIN * 2);
   const across = Math.max(1e-12, (x(east) - x(west)) * WORLD_PX);
   const down = Math.max(1e-12, (y(south) - y(north)) * WORLD_PX);
   const zoom = Math.min(maxZoom, Math.log2(width / across), Math.log2(height / down));
+  const offset = {
+    x: (clear.left + clear.right) / 2 - (canvas.left + canvas.width / 2),
+    y: (clear.top + clear.bottom) / 2 - (canvas.top + canvas.height / 2),
+  };
   const { camera, requestCamera } = useMapStore.getState();
-  const [lng, lat] = centreFor([(west + east) / 2, (south + north) / 2], zoom, camera.bearing, uncoveredOffset());
+  // The extent is measured as if the map faced north.
+  const [lng, lat] = centreFor([(west + east) / 2, (south + north) / 2], zoom, camera.bearing, offset);
   requestCamera({ lng, lat, zoom });
 }
 
