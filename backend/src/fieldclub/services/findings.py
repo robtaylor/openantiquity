@@ -624,15 +624,9 @@ def create_finding(
     feature_class = FeatureClass(feature_class)
     shape = shape_edits.shape_from_request(path, outline)
     derived = location is None
-    if location is None:
-        if shape is None:
-            raise LocationRequiredError()
-        location = shapes.derived_anchor(shape)
-    elif shape is not None:
-        shapes.check_shape(shape.geometry, location)
-    geo.check_in_british_isles(location)
-    if shape is not None:
-        geo.check_in_british_isles(shape.geometry)
+    if location is None and shape is None:
+        raise LocationRequiredError()
+    location = shape_edits.place_anchor(shape, placed=location)
     lon, lat = shape_edits.point_parts(location)
     level = sensitivity.starting_sensitivity(feature_class, requested_sensitivity, author)
     check_text_for_level(level, {"title": title, "description": description})

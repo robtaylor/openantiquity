@@ -131,8 +131,20 @@ def _classify(finding: Finding, old: shapes.Path | None, new: shapes.Shape | Non
     return shapes.classify_change(old, new.path if new is not None else None)
 
 
-def _anchor_for(finding: Finding, shape: shapes.Shape | None, location: Point, *, placed: bool) -> Point:
-    """Where the anchor goes when the shape changes.
+def place_anchor(
+    shape: shapes.Shape | None,
+    *,
+    placed: Point | None,
+    current: Point | None = None,
+    derived: bool = False,
+) -> Point:
+    """Where a finding's anchor goes, made or reshaped, with the point and shape held to the British Isles.
+
+    `placed` is a point the finder places now, and `current` the anchor a
+    finding has already, None for a new one, which `derived` says the server
+    chose. A new finding with no point is anchored on its shape
+    (`shapes.derived_anchor`). A point placed now is held to the British
+    Isles, which a point already stored was when it was placed.
 
     A point the finder places now, or placed before, never moves by itself:
     the shape must come within `shapes.SHAPE_MAX_GAP_M` of it. A point the
@@ -142,14 +154,27 @@ def _anchor_for(finding: Finding, shape: shapes.Shape | None, location: Point, *
     leave a trail of squares along a restricted line. Removing the shape
     leaves the point where it is.
     """
-    if shape is None:
-        return location
-    if placed or not finding.location_derived:
-        shapes.check_shape(shape.geometry, location)
-        return location
-    if shapes.distance_m(shape.geometry, location) <= shapes.ANCHOR_KEEP_M:
-        return location
-    return shapes.nearest_point(shape.geometry, location)
+    if placed is not None:
+        if shape is not None:
+            shapes.check_shape(shape.geometry, placed)
+        anchor = placed
+        geo.check_in_british_isles(anchor)
+    elif current is None:
+        assert shape is not None, "a new finding has a point or a shape"
+        anchor = shapes.derived_anchor(shape)
+        geo.check_in_british_isles(anchor)
+    elif shape is None:
+        anchor = current
+    elif not derived:
+        shapes.check_shape(shape.geometry, current)
+        anchor = current
+    elif shapes.distance_m(shape.geometry, current) <= shapes.ANCHOR_KEEP_M:
+        anchor = current
+    else:
+        anchor = shapes.nearest_point(shape.geometry, current)
+    if shape is not None:
+        geo.check_in_british_isles(shape.geometry)
+    return anchor
 
 
 def _record_shape_change(
@@ -222,7 +247,7 @@ def change_shape(
     `path` (or `outline`, read as one) replaces the whole shape, and None for
     both removes it. `revision` must be the shape's revision now. A shape
     sent unchanged changes nothing and returns None. Otherwise it is held to
-    the limits and the British Isles, the anchor follows `_anchor_for` (with
+    the limits and the British Isles, the anchor follows `place_anchor` (with
     `placed`, a point placed with the change, which the shape must come near),
     the change must keep most of what second looks were given on
     (`looked_at.check`), the change row is written and the revision raised.
@@ -240,9 +265,7 @@ def change_shape(
     if kind is None:
         return None
     current = Point(point_lon_lat(finding.location))
-    anchor = _anchor_for(finding, new_shape, placed or current, placed=placed is not None)
-    if new_shape is not None:
-        geo.check_in_british_isles(new_shape.geometry)
+    anchor = place_anchor(new_shape, placed=placed, current=current, derived=finding.location_derived)
     looked = looked_at.check(db, finding, new_shape.geometry if new_shape is not None else anchor)
     _record_shape_change(db, finding, by, kind, old_path, new_shape)
     for name, value in shape_columns(new_shape).items():
