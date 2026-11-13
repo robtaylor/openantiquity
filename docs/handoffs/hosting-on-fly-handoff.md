@@ -28,7 +28,7 @@ cd backend && uv run pytest -q tests/infra tests/test_config.py tests/test_stora
 fly apps list --org openantiquity
 # Expect: openantiquity and openantiquity-jobs alone
 fly machine list --app openantiquity
-# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit d8f42e0 or later
+# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit 770cadc or later
 fly ips list --app openantiquity
 # Expect: the private address, the shared IPv4 address 66.241.124.216 and the IPv6 address 2a09:8280:1::1fe:8e38:0
 fly machine list --app openantiquity-jobs
@@ -37,7 +37,7 @@ fly mpg list --org openantiquity
 # Expect: the cluster openantiquity, d2gznoqz2n8opkm8, ready, attached to both apps
 fly storage list --org openantiquity
 # Expect: openantiquity-elevation, openantiquity-cache and openantiquity-photos
-uv run infra/fly_jobs.py --commit de016fa0cab563898c0bf73f2a98c26d51fac572 run fieldclub-terrain info
+uv run infra/fly_jobs.py --commit 770cadce6433294ac401290e65457194dd7bc421 run fieldclub-terrain info
 fly logs --app openantiquity-jobs --no-tail | grep -e mirrored -e overview
 # Expect: mirrored 5877 tiles (100.00%), and overview c2a8a0e49f2f, 5877 tiles
 ```
@@ -61,10 +61,13 @@ The last pair names the jobs image that exists. `fly_jobs.py` looks for the imag
 | `a0d74e6` | Run the end-to-end tests on the real backend in CI | `pnpm e2e:full` has a CI job of its own |
 | `3958ced` | Lines and curves, 115 commits | Its release added columns and a table, and the shapes backfill was run afterwards and found nothing to fill |
 | `945e33a` | The first point follows the chosen kind, and an index of shaped findings | The index steadies the map query's plan, which had failed a plan test on one CI run |
-| `de016fa` | The restricted level's code removed | The commit the hourly machine runs, since nothing in the backend has changed after it. Its release made the check on `findings.sensitivity` again with two values |
+| `de016fa` | The restricted level's code removed | The commit the hourly machine ran until 2026-11-13. Its release made the check on `findings.sensitivity` again with two values |
 | `25a218d` | Terrain tiles that wait, and the map switch first in the layer panel | The map asks again for a tile the server answers 503 with a `Retry-After`. Found by the owner on the live site |
 | `db914b9` | The drawing guide, midpoint dots, an unsaved marking kept, and a map that stays put | Frontend only |
-| `d8f42e0` | Large records passed over, and pages that arrive once | The commit the web app runs since 2026-11-13. Frontend only |
+| `d8f42e0` | Large records passed over, and pages that arrive once | Frontend only |
+| `416f8f7` | Towns named again, Multi-direction shade as the view the map opens on, and a linked record that opens its source | A record of a source with no page for each record is served with the address of the viewer that holds its material |
+| `d82679f` | Read a stored class this version has no name for as "Not sure" | Decision 0035, released by itself. The schema step now only widens a vocabulary's check, so going back to this commit or a later one doesn't narrow one. Both apps ran it before the next release |
+| `770cadc` | A "Building or ruin" class | The commit both apps run since 2026-11-13. Its release added the value to the three class checks |
 
 ## Open follow-ups (priority-ordered)
 
@@ -74,7 +77,7 @@ The first refresh of every bulk source from Fly ran on 2026-11-13 from 03:41 to 
 
 Commit `7175a31` keeps the lock's connection in use, and the hourly machine has run an image with it since that day. Both sources were then run by hand on that image and completed, in 54 and 56 minutes. Neither run lasted the 62 minutes at which a lock's connection was seen closed, so they don't show the fix by themselves. The 78-minute test in the runbook does, and no run of over an hour has completed on Fly yet.
 
-The two fall due again at the 03:41 UTC refresh of 2026-11-21, with the other sources refreshed weekly. Read that night with `fly logs --app openantiquity-jobs`, or ask the database for the runs. To run a source by hand: `uv run infra/fly_jobs.py --commit de016fa0cab563898c0bf73f2a98c26d51fac572 ingest <key>`.
+The two fall due again at the 03:41 UTC refresh of 2026-11-21, with the other sources refreshed weekly. Read that night with `fly logs --app openantiquity-jobs`, or ask the database for the runs. To run a source by hand: `uv run infra/fly_jobs.py --commit 770cadce6433294ac401290e65457194dd7bc421 ingest <key>`.
 
 Still to look at: how much of the 10 GB volume the downloads took. `fly volumes list` doesn't say, so it needs `df` from a machine with the volume mounted.
 
@@ -111,13 +114,23 @@ The domains were pointed at Fly on 2026-11-12 at the owner's word ("noone will b
 
 `infra/README.md`, "Taking the Google project down", once the site on Fly has passed its checks. Its first check, that Tigris lacks none of Google's tiles, was made on 2026-11-12. Then delete `infra/terraform` and the Google paragraphs of the runbook. Until then the Google deployment keeps image `2a3d8eee8b4b`: an image built from `main` can't run there.
 
-### 7. What the security review left for hosting
+### 7. One way to read every stored vocabulary (a day)
+
+Decision 0033 passes over an activity kind or a next step this version has no name for, and Decision 0035 reads a feature class it has no name for as "Not sure". Every other vocabulary stored as text is still read strictly, so a value added to one takes a release of its own first, as the building class did. A review on 2026-11-13 listed the strict reads: a second look's `visible`, an evidence item's kind and stance, a finding's period, tier, state and level, a mention's kind, a shape's kind, an investigation item's kind and a person's role. The evidence kind, the mention kind, the shape kind and the investigation item kind are the likeliest to grow. One helper that reads a stored value with a rule chosen for its vocabulary, and the response type that `ShownClass` is for classes, would replace both mechanisms. Until then, a new value in any of these needs the two releases.
+
+### 8. What the day's map changes left (hours each)
+
+- Multi-direction shade is three colour channels where Composite is one, so its tiles are about two and a half times the bytes: 360 to 450 KB against 140 to 170 KB, measured on the live site on 2026-11-13. It is now the view the map opens on. A palette or WebP encoding would cut that, and changes the pixels, so the style's version goes up with it.
+- Marking a finding doesn't record itself as the tool that has the map (`map/tool.ts`), so each handler asks about marking in its own way: the records hook, the findings layer and the scan layer. Having the marking pages set the tool would leave one question to ask.
+- Terrain past zoom 16 was tried and gives a modest gain for Composite alone ([the spike](../architecture/decisions/spikes/deeper-terrain-tiles.md)).
+
+### 9. What the security review left for hosting
 
 - Done: the jobs app has no session key, and its jobs start without one. The tile render queue on Fly is 16, inside the soft limit.
 - Open: one database login, `fly-user` with the role `schema_admin`, serves both apps. Managed Postgres offers the roles `schema_admin`, `writer` and `reader` (`fly mpg users create`). The web app's release command creates the schema, so the web app's login needs `schema_admin` as things are. Giving the web app `writer` means moving the schema command to the jobs app, a change to how a deploy runs. It can be done later without making the cluster again. The owner was told on 2026-11-12.
 - Open: `timeout` stopping a job that runs past its limit hasn't been seen on Fly.
 
-### 8. Check Managed Postgres's backups before relying on them (an hour)
+### 10. Check Managed Postgres's backups before relying on them (an hour)
 
 How long Fly keeps backups wasn't found, and no restore has been tried. `fly mpg backup list d2gznoqz2n8opkm8`, then restore one into a new cluster, look, and destroy it. The owner kept Managed Postgres for its backups and failover, so this is worth doing before the site holds anything a member wrote.
 
