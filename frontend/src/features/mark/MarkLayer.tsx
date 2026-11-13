@@ -163,15 +163,15 @@ function PathShape({ map, path }: { map: MapLibreMap; path: Path }) {
 /**
  * Findings marked by someone not signed in, as dashed hollow rings with a
  * "not saved" sign, so they can't be taken for real marks. Each opens its
- * draft. The one being edited is drawn as the mark instead.
+ * draft. The one open in the tool is drawn as its path instead.
  */
-function DraftMarks({ map, editing }: { map: MapLibreMap; editing: string | null }) {
+function DraftMarks({ map, openDraft }: { map: MapLibreMap; openDraft: string | null }) {
   const drafts = useKindDrafts(findingDrafts);
   const navigate = useNavigate();
   return (
     <>
       {drafts
-        .filter((draft) => draft.id !== editing)
+        .filter((draft) => draft.id !== openDraft)
         .map((draft) => {
           const { x, y } = screenPoint(map, draft.data.point);
           return (
@@ -330,7 +330,7 @@ export function MarkLayer() {
   useMapFrame(marking || drawn > 0 ? map : null);
   const path = useMarkPath();
   const drawing = useMarkStore((state) => state.drawing);
-  const editing = useMarkStore((state) => state.draftId);
+  const draftId = useMarkStore((state) => state.draftId);
   useMarkingClicks(map, marking);
   useAskBeforeLeaving(marking);
   useLongPathOnMap(map, path, marking);
@@ -344,7 +344,7 @@ export function MarkLayer() {
           <PathShape map={map} path={path} />
         </svg>
       ) : null}
-      <DraftMarks map={map} editing={marking ? editing : null} />
+      <DraftMarks map={map} openDraft={marking ? draftId : null} />
       <PendingMarks map={map} />
       {marking && path.points.length > 0 ? <PathHandles map={map} path={path} /> : null}
       {marking ? <PathProblem map={map} path={path} /> : null}

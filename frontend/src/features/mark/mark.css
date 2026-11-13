@@ -18,11 +18,13 @@
   overflow: visible;
 }
 
+/* The map's cursor while marking, when every click on it adds a point. */
 .maplibregl-canvas.fc-canvas--placing {
   cursor: crosshair;
 }
 
-/* The outline, with a dark edge so it reads on pale terrain and on dark. */
+/* The path being marked while it is short enough for SVG (`PathShape`), with a dark edge so it reads on
+   pale terrain and on dark. Lightly filled once closed into a shape. */
 .fc-mark-outline polyline,
 .fc-mark-outline polygon {
   fill: none;
@@ -165,7 +167,7 @@
   }
 }
 
-/* Where "Place it here" puts the mark: the middle of the uncovered map, as .fc-stage frames it. */
+/* Where "Add a point at the cross" puts a point: the middle of the uncovered map, as .fc-stage frames it. */
 .fc-reticle-frame {
   position: absolute;
   top: env(safe-area-inset-top, 0px);

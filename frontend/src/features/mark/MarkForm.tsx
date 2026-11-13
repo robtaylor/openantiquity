@@ -97,7 +97,7 @@ export function useMarkInView(anchor: LngLat | null, drawing: boolean): void {
   const placed = anchor !== null;
   const latest = useRef(anchor);
   latest.current = anchor;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: placing the mark and stopping drawing are the triggers, not each move
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the first point and stopping drawing are the triggers, not each move
   useEffect(() => {
     if (isPhone) setStop(placed && !drawing ? "half" : "peek");
     const point = latest.current;
