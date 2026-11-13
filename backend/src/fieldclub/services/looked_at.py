@@ -35,6 +35,7 @@ import logging
 from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import cached_property
+from typing import Any
 
 import numpy as np
 import shapely
@@ -42,8 +43,8 @@ from geoalchemy2.shape import to_shape
 from pyproj import Transformer
 from shapely.geometry import LineString, MultiLineString, Point
 from shapely.geometry.base import BaseGeometry
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import Exists, func, select
+from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from fieldclub import gridref
 from fieldclub.errors import ValidationFailedError
@@ -187,17 +188,18 @@ def grow(db: Session, finding: Finding, observation: Observation) -> None:
     refresh_added(finding, shape, Looked(whole))
 
 
+def _standing(finding_id: InstrumentedAttribute[Any] | int) -> Exists:
+    """Whether anyone's second look on the finding with this id, or this column's, stands."""
+    return (
+        select(Observation.id)
+        .where(Observation.finding_id == finding_id, Observation.withdrawn_at.is_(None))
+        .exists()
+    )
+
+
 def has_standing_look(db: Session, finding: Finding) -> bool:
     """Whether anyone's second look on the finding stands, not taken back."""
-    return bool(
-        db.scalar(
-            select(
-                select(Observation.id)
-                .where(Observation.finding_id == finding.id, Observation.withdrawn_at.is_(None))
-                .exists()
-            )
-        )
-    )
+    return bool(db.scalar(select(_standing(finding.id))))
 
 
 def seed(db: Session, finding: Finding, shape: BaseGeometry | None) -> Looked | None:
@@ -232,15 +234,10 @@ def backfill(db: Session, *, batch: int = BACKFILL_BATCH) -> int:
     committed meanwhile is seen, and a second run changes nothing.
     """
     assert batch > 0, "a batch holds a finding at least"
-    standing = (
-        select(Observation.id)
-        .where(Observation.finding_id == Finding.id, Observation.withdrawn_at.is_(None))
-        .exists()
-    )
     seeded, after = 0, 0
     while ids := db.scalars(
         select(Finding.id)
-        .where(Finding.id > after, Finding.looked_at.is_(None), standing)
+        .where(Finding.id > after, Finding.looked_at.is_(None), _standing(Finding.id))
         .order_by(Finding.id)
         .limit(batch)
     ).all():
