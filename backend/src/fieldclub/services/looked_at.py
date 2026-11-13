@@ -98,12 +98,16 @@ def _parts(geometry: BaseGeometry) -> Iterator[BaseGeometry]:
             yield from _parts(part)
 
 
+def _edge(shape: BaseGeometry) -> BaseGeometry:
+    """A line as it is, and an area as its edge."""
+    return shape.boundary if shape.geom_type in ("Polygon", "MultiPolygon") else shape
+
+
 def ground(finding: Finding) -> BaseGeometry:
     """What a second look given now is given on: the shape, an area as its edge, or the point."""
     if finding.outline is None:
         return to_shape(finding.location)
-    shape = to_shape(finding.outline)
-    return shape.boundary if shape.geom_type in ("Polygon", "MultiPolygon") else shape
+    return _edge(to_shape(finding.outline))
 
 
 def _simplified(geometry: BaseGeometry, metres: float) -> BaseGeometry:
@@ -301,7 +305,7 @@ def _beyond(finding: Finding) -> tuple[float, tuple[float, float, float, float]]
     shape = to_shape(finding.outline)
     assert not looked_at.is_empty, f"finding {finding.public_id} has looked at nothing"
     assert not shape.is_empty, f"finding {finding.public_id} has an empty shape"
-    edge = shape.boundary if shape.geom_type in ("Polygon", "MultiPolygon") else shape
+    edge = _edge(shape)
     system = gridref.grid_system(*looked_at.representative_point().coords[0])
     to_grid = gridref.transformer(4326, gridref.EPSG[system])
     reach = _on_grid(looked_at, to_grid).buffer(LOOKED_AT_MAX_MOVE_M, quad_segs=_BUFFER_QUAD_SEGS)
