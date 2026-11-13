@@ -2,7 +2,7 @@
 
 A finding's title, description and notes, its comments, evidence and
 mentions are free text, and a person can type a position into any of them.
-For a protected or restricted finding that would undo Decision 0005, so
+For a protected finding that would undo Decision 0005, so
 `services.sensitivity.visible_text` replaces every position found here with
 `PLACEHOLDER` for a viewer who doesn't see the exact position, and
 `services.findings` refuses a title or description that holds one when the
@@ -511,33 +511,3 @@ def redact(text: str) -> str:
         end = item.end
     parts.append(text[end:])
     return "".join(parts)
-
-
-def _hidden_parts(text: str) -> list[str]:
-    """What each `PLACEHOLDER` in `redact(text)` stands for, in order: a position, or a placeholder typed."""
-    parts: list[str] = []
-    end = 0
-    for item in find_positions(text):
-        parts.extend([PLACEHOLDER] * text[end : item.start].count(PLACEHOLDER))
-        parts.append(text[item.start : item.end])
-        end = item.end
-    parts.extend([PLACEHOLDER] * text[end:].count(PLACEHOLDER))
-    return parts
-
-
-def restore(edited: str, original: str) -> str | None:
-    """`edited`, a change to `redact(original)`, with each placeholder put back to what it hid.
-
-    Someone shown text with positions hidden can still edit the rest of it,
-    and what they couldn't see is kept. None when `edited` doesn't hold
-    exactly as many placeholders as they were shown, so which one is which
-    can't be told.
-    """
-    parts = _hidden_parts(original)
-    pieces = edited.split(PLACEHOLDER)
-    if len(pieces) != len(parts) + 1:
-        return None
-    restored = [pieces[0]]
-    for part, piece in zip(parts, pieces[1:], strict=True):
-        restored.extend((part, piece))
-    return "".join(restored)

@@ -138,7 +138,7 @@ def test_extending_a_line_keeps_the_anchor_the_square_and_the_grid_reference(
     db: Session, make_user: MakeUser
 ) -> None:
     finder = make_user()
-    finding = drawn(db, finder, meridian(0, 0.006, 0.012), requested_sensitivity="restricted")
+    finding = drawn(db, finder, meridian(0, 0.006, 0.012), requested_sensitivity="protected")
     anchor, public, grid_ref = lon_lat(finding.location), lon_lat(finding.location_public), finding.grid_ref
     length = finding.shape_length_m
     assert length is not None

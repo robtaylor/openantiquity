@@ -98,7 +98,7 @@ def test_a_moderator_cannot_skip_the_log_through_the_members_routes(
     db: Session, client_as: ClientAs, make_user: MakeUser, make_finding: MakeFinding
 ) -> None:
     owner = make_user(handle="Owner")
-    finding = make_finding(owner, sensitivity="restricted")
+    finding = make_finding(owner, sensitivity="protected")
     said = comment(db, finding, owner)
     evidence, _ = add_desk_evidence(db, finding, owner)
     talked = mention(db, finding, owner)
@@ -107,7 +107,6 @@ def test_a_moderator_cannot_skip_the_log_through_the_members_routes(
     pid = finding.public_id
     refusals = [
         ("PUT", f"/findings/{pid}/sensitivity", {"level": "open"}, "lower_through_moderation"),
-        ("PUT", f"/findings/{pid}/sensitivity", {"level": "protected"}, "lower_through_moderation"),
         ("DELETE", f"/comments/{said.id}", None, "comment_forbidden"),
         ("DELETE", f"/evidence/{evidence.id}", None, "evidence_forbidden"),
         ("DELETE", f"/mentions/{talked.id}", None, "mention_forbidden"),
@@ -119,7 +118,7 @@ def test_a_moderator_cannot_skip_the_log_through_the_members_routes(
         response = client.request(method, API + path, json=body)
         assert (response.status_code, error_code(response)) == (403, code), (method, path, response.text)
     db.expire_all()
-    assert finding.sensitivity == "restricted"
+    assert finding.sensitivity == "protected"
     assert finding.title != "Renamed by a moderator"
     assert finding.state != "withdrawn"
     assert said.deleted_at is None

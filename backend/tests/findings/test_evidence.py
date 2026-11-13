@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fieldclub.models import Evidence, Follow, Media, Record, User
-from fieldclub.services import findings
+from fieldclub.services import findings, review
 from fieldclub.services.findings import EvidenceFields, InvalidEvidenceError
 from fieldclub.vocab import EvidenceKind, Outcome, Relation, Stance
 from tests.findings.support import API, add_desk_evidence, create
@@ -343,28 +343,26 @@ def test_an_unapproved_photo_is_not_shown_to_others(
     assert client_as(make_user()).get(path).json()["evidence"][0]["media_id"] == media.id
 
 
-def test_evidence_and_votes_need_the_exact_position(
-    db: Session, client_as: ClientAs, make_user: MakeUser
-) -> None:
+def test_evidence_votes_and_answers_need_the_exact_position(db: Session, make_user: MakeUser) -> None:
+    """Nobody who sees a finding only as its square adds to it, since nobody can check a square.
+
+    Every signed-in member sees every finding exactly, and the routes refuse a
+    banned account before they get here. The services still refuse such an
+    account on their own, since it counts as signed out.
+    """
     finder, trusted, member = make_user(), make_user("trusted"), make_user()
-    finding = create(db, finder, requested_sensitivity="restricted")
-    assert client_as(member).get(f"{API}/findings/{finding.public_id}").json()["location"]["obscured"]
+    finding = create(db, finder, feature_class="round_barrow")
+    assert finding.sensitivity == "protected"
     evidence, _ = add_desk_evidence(db, finding, trusted)
-    path = f"{API}/findings/{finding.public_id}/evidence"
-    for outcome in ("supports", "contradicts"):
-        visit = {"kind": "field_visit", "outcome": outcome, "occurred_on": VISIT.isoformat()}
-        refused = client_as(member).post(path, json=visit)
-        assert (refused.status_code, error_code(refused)) == (403, "location_hidden")
-    voted = client_as(member).put(f"{API}/evidence/{evidence.id}/vote", json={"value": -1})
-    assert (voted.status_code, error_code(voted)) == (403, "location_hidden")
-    db.expire_all()
-    assert (finding.state, finding.evidence_count) == ("open", 1)
-    assert (
-        client_as(make_user("trusted"))
-        .put(f"{API}/evidence/{evidence.id}/vote", json={"value": 1})
-        .status_code
-        == 200
-    )
+    banned = make_user(banned_at=datetime.now(UTC))
+    for check in (
+        lambda who: findings.check_may_add_evidence(finding, who),
+        lambda who: findings.check_may_vote(finding, evidence, who),
+        lambda who: review.check_may_answer(finding, who),
+    ):
+        with pytest.raises(findings.LocationHiddenError):
+            check(banned)
+        check(member)
 
 
 def test_an_archaeologist_cannot_verify_evidence_they_added(db: Session, make_user: MakeUser) -> None:

@@ -29,7 +29,7 @@ def notebook(db: Session, make_user: MakeUser, make_finding: MakeFinding) -> tup
     hidden = make_finding(title="Hidden barrow")
     withdrawn = make_finding(title="Withdrawn enclosure")
     open_source = add_source(db)
-    restricted_source = add_source(
+    non_commercial_source = add_source(
         db,
         "nc-source",
         name="Lost villages",
@@ -42,7 +42,7 @@ def notebook(db: Session, make_user: MakeUser, make_finding: MakeFinding) -> tup
     henge = add_record(
         db, open_source, "Avebury henge", -1.8542, 51.4286, monument_types=["HENGE"], periods=["NEOLITHIC"]
     )
-    village = add_record(db, restricted_source, "West Kennet village", -1.84, 51.41, precision_m=1000)
+    village = add_record(db, non_commercial_source, "West Kennet village", -1.84, 51.41, precision_m=1000)
     db.commit()
     add(db, investigation, owner, kind=KIND.FINDING, finding=finding.public_id, note="Clear on slope")
     add(db, investigation, owner, kind=KIND.FINDING, finding=hidden.public_id)

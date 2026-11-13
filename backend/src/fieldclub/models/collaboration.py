@@ -180,7 +180,7 @@ class Activity(Base):
     data: Mapped[JsonDict | None] = json_column()
     # Roughly where it happened: the centre of the finding's 1 km grid square,
     # whatever its sensitivity. Never an exact position, because a finding can
-    # be restricted after the event and this copy would not follow. Use it to
+    # be protected after the event and this copy would not follow. Use it to
     # filter a feed by area. To show a position, go through
     # `services.sensitivity.visible_location`.
     location: Mapped[WKBElement | None] = mapped_column(point())

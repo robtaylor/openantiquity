@@ -4,21 +4,17 @@ A finding is `open` or `protected`. `visible_location` is the only place
 that decides what a viewer sees, and every route that returns a finding goes
 through it, exports included:
 
-| Viewer                             | open  | protected   |
-|------------------------------------|-------|-------------|
-| Signed out                         | exact | 1 km square |
-| Member                             | exact | exact       |
-| Finder, trusted, expert, moderator | exact | exact       |
+| Viewer                  | open  | protected   |
+|-------------------------|-------|-------------|
+| Signed out              | exact | 1 km square |
+| Any signed-in member    | exact | exact       |
 
-Decision 0032 dropped the `restricted` level: no request can set it. The
-code here still handles a finding stored at it, shown exactly only to the
-table's last row and as its square to everyone else, until a later sweep
-takes the level out.
-
-Downloads are stricter (`downloads_exact`): a member's download carries a
-protected finding at its square. Admins count as moderators. A banned or deleted account is treated as signed
-out, whatever its role. A generalised finding is shown at the centre of its
-1 km grid square, with `obscured=True` and no outline.
+Downloads are stricter (`downloads_exact`): only the finder and the trusted
+roles download a protected finding's exact place, and any other member's
+download carries its square. Admins count as moderators. A banned or deleted
+account is treated as signed out, whatever its role. A generalised finding is
+shown at the centre of its 1 km grid square, with `obscured=True` and no
+outline.
 
 `findings.location_public` holds the position anyone may see: the exact point
 for an open finding, the square's centre otherwise. The ORM writes it on every
@@ -42,7 +38,7 @@ Things callers must not do:
   ORM and leaves `location_public` behind. Use `change_sensitivity`, or set
   the attribute on a loaded `Finding`. A trigger in `models/extras.sql` refuses
   an open finding whose public position differs from its location, and a change
-  from open to a higher level that leaves the public position exact.
+  from open to protected that leaves the public position exact.
 - Don't serve free text about a finding as it was typed. Pass it through
   `visible_text`, which hides positions written in it from anyone who
   doesn't see the exact position. A search over titles matches
@@ -86,7 +82,6 @@ from fieldclub.models import Finding, FindingShapeChange, User
 from fieldclub.models.common import db_point, point_lon_lat
 from fieldclub.services import geo, shapes, text_positions
 from fieldclub.vocab import (
-    EXACT_LOCATION_ROLES,
     MODERATOR_ROLES,
     PROTECTED_CLASSES,
     TRUSTED_ROLES,
@@ -102,8 +97,8 @@ logger = logging.getLogger(__name__)
 # Four digits of grid reference name a 1 km square.
 SQUARE_DIGITS = 4
 
-# Who may move a finding's level up, and who may move it down. The finder may
-# also raise their own finding. Experts and admins count as trusted, and
+# Who may protect a finding, and who may make it open again. The finder may
+# also protect their own finding. Experts and admins count as trusted, and
 # admins as moderators.
 MAY_RAISE_ROLES: frozenset[Role] = TRUSTED_ROLES
 MAY_LOWER_ROLES: frozenset[Role] = MODERATOR_ROLES
@@ -112,14 +107,14 @@ MAY_LOWER_ROLES: frozenset[Role] = MODERATOR_ROLES
 class SensitivityChangeForbiddenError(ForbiddenError):
     code = "sensitivity_change_forbidden"
     message = (
-        "Only the finder, a trusted member or a moderator can raise a level, "
-        "and only a moderator can lower one."
+        "Only a finding's finder, a trusted member, an archaeologist or a moderator can protect it, "
+        "and only a moderator can make it open again."
     )
 
 
 class LowerThroughModerationError(ForbiddenError):
     code = "lower_through_moderation"
-    message = "A moderator lowers a level from the moderation tools, with a reason for the log."
+    message = "A moderator makes a finding open again from the moderation tools, with a reason for the log."
 
 
 @dataclass(frozen=True)
@@ -161,15 +156,9 @@ def sees_exact(finding: Finding, viewer: User | None) -> bool:
 
     This is the viewer table. Everything else in this module follows from it.
     """
-    level = Sensitivity(finding.sensitivity)
-    if level is Sensitivity.OPEN:
+    if Sensitivity(finding.sensitivity) is Sensitivity.OPEN:
         return True
-    active = active_viewer(viewer)
-    if active is None:
-        return False
-    if active.has_id(finding.author_id) or Role(active.role) in EXACT_LOCATION_ROLES:
-        return True
-    return level is Sensitivity.PROTECTED
+    return active_viewer(viewer) is not None
 
 
 def downloads_exact(finding: Finding, viewer: User | None) -> bool:
@@ -177,8 +166,8 @@ def downloads_exact(finding: Finding, viewer: User | None) -> bool:
 
     Stricter than `sees_exact` (Decision 0005, rule 8): only the finder and
     trusted people (experts, moderators and admins among them) download a
-    protected or restricted finding's exact position. Any member sees a
-    protected one exactly on its page.
+    protected finding's exact position. Any member sees it exactly on its
+    page.
     """
     if Sensitivity(finding.sensitivity) is Sensitivity.OPEN:
         return True
@@ -191,19 +180,13 @@ def downloads_exact(finding: Finding, viewer: User | None) -> bool:
 def sees_exact_clause(viewer: User | None) -> ColumnElement[bool] | bool:
     """SQL for `sees_exact(finding, viewer)`: where the viewer sees the exact position.
 
-    A plain True when a trusted viewer sees every position exactly. It has to
-    agree with `sees_exact` row for row, and a test checks every viewer
+    A plain True for a signed-in viewer, who sees every position exactly. It
+    has to agree with `sees_exact` row for row, and a test checks every viewer
     against every level.
     """
-    active = active_viewer(viewer)
-    if active is None:
+    if active_viewer(viewer) is None:
         return Finding.sensitivity == Sensitivity.OPEN.value
-    if Role(active.role) in EXACT_LOCATION_ROLES:
-        return True
-    return or_(
-        Finding.sensitivity.in_([Sensitivity.OPEN.value, Sensitivity.PROTECTED.value]),
-        Finding.author_id == active.id,
-    )
+    return True
 
 
 def as_sql(clause: ColumnElement[bool] | bool) -> ColumnElement[bool]:
@@ -242,18 +225,12 @@ def visible_position_clause(viewer: User | None, area: ColumnElement[Any]) -> Co
     """Findings whose position, as this viewer may see it, lies in `area`.
 
     A signed-out visitor is matched on `location_public` alone, which is the
-    exact point for an open finding. Otherwise each branch tests one indexed
-    column, so the planner can use both spatial indexes.
+    exact point for an open finding. A signed-in viewer sees every position
+    exactly, and is matched on `location`.
     """
-    in_public = func.ST_Intersects(Finding.location_public, area)
-    if active_viewer(viewer) is None:
-        return in_public
-    exact = sees_exact_clause(viewer)
-    in_exact = func.ST_Intersects(Finding.location, area)
-    if exact is True:
-        return in_exact
-    assert not isinstance(exact, bool), "only a trusted viewer sees every position exactly"
-    return or_(and_(exact, in_exact), and_(not_(exact), in_public))
+    if sees_exact_clause(viewer) is True:
+        return func.ST_Intersects(Finding.location, area)
+    return func.ST_Intersects(Finding.location_public, area)
 
 
 def _square(lon: float, lat: float, public_id: str | None) -> gridref.GridRef:
@@ -681,22 +658,15 @@ class PositionGuard:
     only when it is rebuilt from an identifier (`url`), a view or a line
     that comes within `NEAR_HIDDEN_M` of one's point or shape is held back
     (`near`), and an area that does is shown as the whole grid squares it
-    covers (`area`). What the reader added themselves is theirs to see
-    (`for_item`). Everything is left as it is for a reader who sees every
-    finding exactly.
+    covers (`area`). Everything is left as it is for a reader who sees every
+    finding exactly, which every signed-in reader does on the page.
     """
 
     hidden: tuple[tuple[float, float], ...] = ()
-    # The reader, whose own items are shown to them as they made them.
-    reader_id: int | None = None
     hidden_shapes: tuple[BaseGeometry, ...] = ()
 
     def __post_init__(self) -> None:
         assert len(self.hidden_shapes) <= len(self.hidden), "every hidden shape is a hidden finding's"
-
-    def for_item(self, added_by: int) -> PositionGuard:
-        """The guard for an item added by `added_by`: none when the reader added it."""
-        return PositionGuard() if self.reader_id is not None and self.reader_id == added_by else self
 
     def text(self, value: str | None) -> str | None:
         return text_positions.redact(value) if value and self.hidden else value
@@ -790,8 +760,10 @@ def position_guard(
     """The guard for what was written beside `findings`, as `viewer` may read it or download it.
 
     `near` are findings from `hidden_near` for `shapes`, what was drawn: each
-    counts when it is within `NEAR_HIDDEN_M` of one of them. The reader's own
-    items are shown to them as made, except in a download.
+    counts when it is within `NEAR_HIDDEN_M` of one of them. A download keeps
+    its stricter rule for the reader's own items too: a member's own view of
+    a protected finding is still that finding's exact position (Decision 0005,
+    rule 8).
     """
     exact = downloads_exact if download else sees_exact
     hidden = {finding.id: finding for finding in findings if not exact(finding, viewer)}
@@ -801,17 +773,13 @@ def position_guard(
             continue
         if _guard_for([finding]).near(drawn):
             hidden[finding.id] = finding
-    # A download keeps the stricter rule even for the reader's own items: a member's own view of a
-    # protected finding is still that finding's exact position (Decision 0005, rule 8).
-    active = active_viewer(viewer) if not download else None
-    return _guard_for(list(hidden.values()), active.id if active is not None else None)
+    return _guard_for(list(hidden.values()))
 
 
-def _guard_for(hidden: Sequence[Finding], reader_id: int | None = None) -> PositionGuard:
+def _guard_for(hidden: Sequence[Finding]) -> PositionGuard:
     """The guard for `hidden`, findings the reader may not see exactly: their points and their shapes."""
     return PositionGuard(
         tuple(_exact_point(finding) for finding in hidden),
-        reader_id,
         tuple(to_shape(finding.outline) for finding in hidden if finding.outline is not None),
     )
 

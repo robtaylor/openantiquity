@@ -56,9 +56,9 @@ All of these come from `tests/conftest.py`.
 | `make_finding(author=None, *, lon=..., lat=..., feature_class=..., sensitivity=None, **columns)` | A committed `Finding`. Defaults to an enclosure at Avebury by a new member. Left out, `sensitivity` is the class default, so an enclosure is open and a round barrow protected. Any `Finding` column can be passed |
 
 ```python
-def test_a_moderator_can_see_a_restricted_location(client_as, make_user, make_finding):
-    finding = make_finding(sensitivity="restricted")
-    response = client_as(make_user("moderator")).get(f"/api/v1/findings/{finding.public_id}")
+def test_a_member_sees_a_protected_finding_exactly(client_as, make_user, make_finding):
+    finding = make_finding(sensitivity="protected")
+    response = client_as(make_user()).get(f"/api/v1/findings/{finding.public_id}")
     assert response.json()["location"]["obscured"] is False
 ```
 

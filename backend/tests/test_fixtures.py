@@ -125,7 +125,7 @@ def test_make_finding_overrides(db: Session, make_finding: MakeFinding, make_use
         lon=-5.0036,
         lat=56.7969,
         feature_class="hut_circle",
-        sensitivity="restricted",
+        sensitivity="protected",
         title="Ring on the shoulder of the hill",
         tier="seen",
         confidence=30,
@@ -139,7 +139,7 @@ def test_make_finding_overrides(db: Session, make_finding: MakeFinding, make_use
     )
     assert (finding.feature_class, finding.sensitivity, finding.tier, finding.confidence, finding.nation) == (
         "hut_circle",
-        "restricted",
+        "protected",
         "seen",
         30,
         "scotland",

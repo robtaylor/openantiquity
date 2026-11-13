@@ -154,8 +154,8 @@ CREATE OR REPLACE TRIGGER investigations_private_check
 
 -- location_public is kept right by an ORM listener (services.sensitivity).
 -- This trigger refuses two writes that skip it: an open finding whose public
--- position differs from its location, and a finding made protected or
--- restricted while its public position is still its exact location. The
+-- position differs from its location, and a finding made protected while its
+-- public position is still its exact location. The
 -- second check also refuses an open finding that sits exactly on the centre
 -- of its square, which is impossible in practice. A write that moves a
 -- protected finding to another point in the same square is not caught, and

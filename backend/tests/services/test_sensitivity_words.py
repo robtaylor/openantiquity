@@ -13,9 +13,10 @@ from fastapi.testclient import TestClient
 
 from fieldclub.models import User
 from fieldclub.services import sensitivity
-from fieldclub.vocab import OFFERED_SENSITIVITIES, SENSITIVITY_LEVELS, Role, Sensitivity, SensitivityViewer
+from fieldclub.vocab import SENSITIVITY_LEVELS, Role, Sensitivity, SensitivityViewer
 from tests.helpers import MakeFinding, MakeUser
 
+# Who downloads a protected finding's exact place.
 FEW = frozenset(
     {
         SensitivityViewer.FINDER,
@@ -24,7 +25,6 @@ FEW = frozenset(
         SensitivityViewer.MODERATOR,
     }
 )
-FEW_WORDS = "Only its finder, trusted members, archaeologists and moderators see"
 
 
 def _viewers(make_user: MakeUser, finder: User) -> dict[SensitivityViewer, list[User | None]]:
@@ -59,8 +59,7 @@ def test_each_level_s_sentences_say_what_its_audience_is() -> None:
     for level in SENSITIVITY_LEVELS:
         everyone = level.exact_for == frozenset(SensitivityViewer)
         signed_in = level.exact_for == frozenset(SensitivityViewer) - {SensitivityViewer.SIGNED_OUT}
-        few = level.exact_for == FEW
-        assert everyone + signed_in + few == 1, f"{level.id} has an audience no sentence describes"
+        assert everyone + signed_in == 1, f"{level.id} has an audience no sentence describes"
         if everyone:
             assert level.who_sees == "Everyone sees its exact place."
             # Nobody is shown the square, so nobody is told why.
@@ -68,15 +67,9 @@ def test_each_level_s_sentences_say_what_its_audience_is() -> None:
             continue
         assert "Everyone else sees its one-kilometre square." in level.who_sees
         assert level.square_sentence is not None
-        if signed_in:
-            assert level.who_sees.startswith("Only people who have signed in see its exact place.")
-            # Only the signed out see the square here, and signing in shows them the place.
-            assert level.square_sentence.endswith("Sign in to see it.")
-        else:
-            assert level.who_sees.startswith(f"{FEW_WORDS} its exact place.")
-            # A member sees the square too, so signing in is no help.
-            assert level.square_sentence.endswith(f"{FEW_WORDS} it.")
-            assert "Sign in" not in level.square_sentence
+        assert level.who_sees.startswith("Only people who have signed in see its exact place.")
+        # Only the signed out see the square, and signing in shows them the place.
+        assert level.square_sentence.endswith("Sign in to see it.")
 
 
 def test_a_level_whose_downloads_are_stricter_than_its_page_says_so(
@@ -114,9 +107,5 @@ def test_meta_serves_the_words(client: TestClient) -> None:
             "exact_for": [kind.value for kind in SensitivityViewer if kind in level.exact_for],
         }
         for level in SENSITIVITY_LEVELS
-        if level.id in OFFERED_SENSITIVITIES
     ]
-    # Restricted is dropped (Decision 0032). Its words stay for a stored finding until the sweep.
     assert [item["label"] for item in served] == ["Open", "Protected"]
-    for item in served:
-        assert "restricted" not in f"{item['who_sees']} {item['square_sentence']}".lower(), item["id"]

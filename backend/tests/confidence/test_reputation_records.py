@@ -75,7 +75,7 @@ def test_a_member_becomes_eligible_at_fifty_points_but_is_not_promoted(
     finding = make_finding(member)
     recorded = record_awards(db, finding.id, [Award(member.id, 20, "tier_ground_checked")])
     db.commit()
-    # Trusted users see restricted positions, so promotion is a moderator's call.
+    # Trusted users download protected positions, so promotion is a moderator's call.
     assert reload(db, member).role == Role.MEMBER.value
     assert recorded.eligible == ((member.id,) if eligible else ())
 

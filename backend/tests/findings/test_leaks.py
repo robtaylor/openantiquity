@@ -2,8 +2,8 @@
 
 Every route that returns a finding, or anything derived from its position,
 is called as a signed-out visitor, a member, the finder, a
-trusted member and a moderator, against an open, a protected and a
-restricted finding drawn as an area, and one drawn as a line and extended.
+trusted member and a moderator, against an open and a protected finding
+drawn as an area, and one drawn as a line and extended.
 Each finding sits at its own point, so a response that holds several can be
 checked for each one separately. The check searches the whole response body
 for the exact position in every form it could take: degrees, both grid
@@ -36,13 +36,12 @@ from tests.findings.support import API, answer, create, outline_of
 from tests.helpers import MakeUser, add_record, add_source, lon_lat
 
 VIEWERS = ("signed_out", "member", "finder", "trusted", "moderator")
-LEVELS = (Sensitivity.OPEN, Sensitivity.PROTECTED, Sensitivity.RESTRICTED)
+LEVELS = tuple(Sensitivity)
 
 # Each level's finding has its own point, with decimals nothing else produces.
 POINTS = {
     Sensitivity.OPEN: (-1.854173, 51.428637),
     Sensitivity.PROTECTED: (-1.812947, 51.402583),
-    Sensitivity.RESTRICTED: (-1.776491, 51.384219),
 }
 
 # Each level's line: three points drawn first, with the anchor half way along
@@ -53,9 +52,6 @@ LINES = {
     ),
     Sensitivity.PROTECTED: (
         (-1.846159, 51.415382), (-1.830694, 51.409741), (-1.815228, 51.404107), (-1.799763, 51.398462),
-    ),
-    Sensitivity.RESTRICTED: (
-        (-1.790384, 51.396152), (-1.774917, 51.390518), (-1.759452, 51.384873), (-1.743986, 51.379238),
     ),
 }  # fmt: skip
 
@@ -443,7 +439,7 @@ def test_help_wanted(world: World, viewer: str) -> None:
     check(response.text, SEES[viewer], where="GET /review/tasks")
     groups = {group["code"]: group for group in response.json()["groups"]}
     strand = groups["need_strand"]
-    assert strand["total"] == 6
+    assert strand["total"] == 2 * len(LEVELS)
     for item in strand["items"]:
         level = next(lv for lv, f in world.every() if f.public_id == item["public_id"])
         assert item["place"]["obscured"] is (level not in SEES[viewer])
@@ -488,32 +484,21 @@ def test_writes_answer_with_what_the_writer_may_see(
         f"{API}/findings/{finding.public_id}/evidence",
         json={"kind": "document", "title": "Parish history, page 12"},
     )
-    if level in SEES[viewer]:
-        assert evidence.status_code == 201
-        check(evidence.text, allowed, allowed, where=f"POST evidence ({level})")
-    else:
-        assert evidence.status_code == 403
-        assert evidence.json()["error"]["code"] == "location_hidden"
-        check(evidence.text, set(), where="refused evidence")
+    # Every signed-in writer sees every finding exactly (Decision 0032).
+    assert level in SEES[viewer]
+    assert evidence.status_code == 201
+    check(evidence.text, allowed, allowed, where=f"POST evidence ({level})")
 
     path = f"{API}/findings/{finding.public_id}/observation"
     held = client.put(path, json={"visible": "yes", "detail_follows": True})
     revealed = client.post(f"{path}/reveal", json={"feature_class": "enclosure"})
     looked = client.put(path, json={"visible": "yes", "feature_class": "enclosure"})
-    if level in SEES[viewer]:
-        assert held.status_code == 200
-        check(held.text, set(), where="answer whose detail follows")
-        assert revealed.status_code == 200
-        check(revealed.text, allowed, allowed, where="reveal after the detail")
-        assert looked.status_code == 200
-        check(looked.text, allowed, allowed, where="reveal")
-    else:
-        for refused in (held, looked):
-            assert refused.status_code == 403
-            assert refused.json()["error"]["code"] == "location_hidden"
-            check(refused.text, set(), where="refused answer")
-        assert revealed.json()["error"]["code"] == "observation_not_found"
-        check(revealed.text, set(), where="refused reveal")
+    assert held.status_code == 200
+    check(held.text, set(), where="answer whose detail follows")
+    assert revealed.status_code == 200
+    check(revealed.text, allowed, allowed, where="reveal after the detail")
+    assert looked.status_code == 200
+    check(looked.text, allowed, allowed, where="reveal")
 
     # A finding marked about 400 m from this one's anchor, which sends back nothing of it.
     lon, lat = lon_lat(finding.location)

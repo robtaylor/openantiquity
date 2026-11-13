@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Literal, get_args
 
 # --------------------------------------------------------------------------
 # People
@@ -50,12 +49,13 @@ ROLES: tuple[RoleInfo, ...] = (
 ROLE_WEIGHTS: dict[Role, float] = {info.id: info.weight for info in ROLES}
 
 # Trusted members and everyone above them. Moderators and admins count as
-# trusted, and so do experts.
+# trusted, and so do experts. On top of what a member may do, they download a
+# protected finding's exact place (`services.sensitivity.downloads_exact`),
+# protect a finding someone else found (`services.sensitivity.MAY_RAISE_ROLES`),
+# approve photos (`MEDIA_APPROVER_ROLES`), and their second looks count as an
+# experienced review (`REVIEWER_ROLES`). On a finding's page they see what a
+# member sees.
 TRUSTED_ROLES: frozenset[Role] = frozenset({Role.TRUSTED, Role.EXPERT, Role.MODERATOR, Role.ADMIN})
-
-# Roles that see the exact position of every finding, whatever its
-# sensitivity. The finder always does. See `services.sensitivity`.
-EXACT_LOCATION_ROLES: frozenset[Role] = TRUSTED_ROLES
 
 # Roles that may approve an uploaded photo so other people can see it
 # (Decision 0009). See `services.media`.
@@ -767,7 +767,7 @@ NEXT_STEPS: tuple[NextStepInfo, ...] = (
 
 
 class Sensitivity(StrEnum):
-    """How much of a finding's position each viewer sees (Decision 0005).
+    """How much of a finding's position each viewer sees (Decision 0005, Decision 0032).
 
     In order from least to most protected. `services.sensitivity` decides who
     sees what.
@@ -775,21 +775,9 @@ class Sensitivity(StrEnum):
 
     OPEN = "open"
     PROTECTED = "protected"
-    RESTRICTED = "restricted"
 
 
 SENSITIVITY_ORDER: tuple[Sensitivity, ...] = tuple(Sensitivity)
-
-
-# The levels a finding can be set to (Decision 0032). `restricted` is dropped
-# because it kept a finding's exact place from people who could draw beside
-# it. It stays in `Sensitivity` until a later sweep, so a stored finding can
-# still be read, but no request takes it. Request models use this type, so the
-# OpenAPI schema and a refusal both name the offered levels alone.
-OfferedSensitivity = Literal["open", "protected"]
-OFFERED_SENSITIVITIES: tuple[Sensitivity, ...] = tuple(
-    Sensitivity(value) for value in get_args(OfferedSensitivity)
-)
 
 
 def sensitivity_rank(level: Sensitivity | str) -> int:
@@ -798,14 +786,18 @@ def sensitivity_rank(level: Sensitivity | str) -> int:
 
 
 # Classes that suggest burials, rich occupation or ritual use. A new finding
-# of one of these is `protected` unless someone raises it further.
+# of one of these is `protected`.
 PROTECTED_CLASSES: frozenset[FeatureClass] = frozenset(
     {FeatureClass.ROUND_BARROW, FeatureClass.LONG_BARROW, FeatureClass.RITUAL, FeatureClass.SETTLEMENT}
 )
 
 
 class SensitivityViewer(StrEnum):
-    """The kinds of viewer the sensitivity table tells apart. Admins count as moderators."""
+    """The kinds of viewer the sensitivity rules tell apart. Admins count as moderators.
+
+    A finding's page tells apart only the signed-out visitor. A download also
+    tells the finder and the trusted roles from a member.
+    """
 
     SIGNED_OUT = "signed_out"
     MEMBER = "member"
@@ -829,10 +821,8 @@ class SensitivityInfo:
     exact_for: frozenset[SensitivityViewer]
 
 
-_KEPT_BACK = "Sites like this can attract illegal metal detecting, so its exact place is kept back."
-_FEW_SEE_IT = "Only its finder, trusted members, archaeologists and moderators see"
-_EVERYONE_ELSE = "Everyone else sees its one-kilometre square."
-# Downloads are stricter than the page (Decision 0005, rule 8: `sensitivity.downloads_exact`).
+# Downloads are stricter than the page (Decision 0005, rule 8: `sensitivity.downloads_exact`). This is
+# what a trusted member or an archaeologist sees of a protected finding that a member doesn't.
 _FEW_DOWNLOAD_IT = (
     "Downloads give its exact place only to its finder, trusted members, archaeologists and moderators."
 )
@@ -844,16 +834,11 @@ SENSITIVITY_LEVELS: tuple[SensitivityInfo, ...] = (
     SensitivityInfo(
         Sensitivity.PROTECTED,
         "Protected",
-        f"Only people who have signed in see its exact place. {_EVERYONE_ELSE} {_FEW_DOWNLOAD_IT}",
-        f"{_KEPT_BACK} Sign in to see it.",
+        "Only people who have signed in see its exact place. Everyone else sees its one-kilometre square. "
+        + _FEW_DOWNLOAD_IT,
+        "Sites like this can attract illegal metal detecting, so its exact place is kept back. "
+        "Sign in to see it.",
         frozenset(SensitivityViewer) - {SensitivityViewer.SIGNED_OUT},
-    ),
-    SensitivityInfo(
-        Sensitivity.RESTRICTED,
-        "Restricted",
-        f"{_FEW_SEE_IT} its exact place. {_EVERYONE_ELSE}",
-        f"{_KEPT_BACK} {_FEW_SEE_IT} it.",
-        frozenset(SensitivityViewer) - {SensitivityViewer.SIGNED_OUT, SensitivityViewer.MEMBER},
     ),
 )
 
@@ -1459,7 +1444,6 @@ def _check_complete() -> None:
     assert set(FIND_REPORTING) == set(Nation), "every nation needs a route for reporting a find"
     assert set(AGE_BAND_YOUNGEST) == set(AgeBand), "every age band needs its youngest age"
     assert SENSITIVITY_ORDER[0] is Sensitivity.OPEN
-    assert list(OFFERED_SENSITIVITIES) == sorted(OFFERED_SENSITIVITIES, key=sensitivity_rank)
     assert [info.base_score for info in TIERS] == sorted(info.base_score for info in TIERS)
 
 

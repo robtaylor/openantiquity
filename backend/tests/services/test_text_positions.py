@@ -15,7 +15,6 @@ from fieldclub.services.text_positions import (
     find_positions,
     holds_position,
     redact,
-    restore,
 )
 from tests.helpers import AVEBURY
 
@@ -403,18 +402,3 @@ def test_finding_positions_takes_linear_time_however_long_the_spaces(before: str
     started = time.monotonic()
     find_positions(text)
     assert time.monotonic() - started < 0.5, repr(before)
-
-
-def test_text_edited_around_its_placeholders_gets_back_what_they_hid() -> None:
-    original = f"Bank at SU 1023 6996, ditch at 51.4286, -1.8542, and a literal {PLACEHOLDER} typed."
-    shown = redact(original)
-    assert shown.count(PLACEHOLDER) == 3
-    edited = shown.replace("Bank", "Low bank").replace("typed", "kept")
-    assert restore(edited, original) == (
-        f"Low bank at SU 1023 6996, ditch at 51.4286, -1.8542, and a literal {PLACEHOLDER} kept."
-    )
-    assert restore(shown, original) == original
-    # One placeholder fewer or more, and nothing can be put back.
-    assert restore(shown.replace(PLACEHOLDER, "", 1), original) is None
-    assert restore(shown + PLACEHOLDER, original) is None
-    assert restore("No positions", "No positions") == "No positions"

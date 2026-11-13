@@ -1,8 +1,8 @@
 """Findings as GeoJSON and as CSV in the shape a Historic Environment Record expects.
 
-Positions: a download carries the generalised position of a protected or
-restricted finding unless the person downloading is its finder or trusted
-(Decision 0005, rule 8). That is stricter than the page, where any member
+Positions: a download carries the generalised position of a protected
+finding unless the person downloading is its finder or trusted (Decision
+0005, rule 8). That is stricter than the page, where any member
 sees a protected finding exactly. `sensitivity.downloads_exact` is the rule,
 beside the other viewer rules, and `export_location` applies it
 by asking `sensitivity.visible_location` either as the viewer or as the

@@ -82,28 +82,28 @@ def test_kind_may_be_given_as_a_string_but_must_be_known(db: Session, make_user:
         activity.record(db, "made_up", None)
 
 
-def test_activity_for_a_restricted_finding_stores_only_the_coarse_position(
+def test_activity_for_a_protected_finding_stores_only_the_coarse_position(
     db: Session, make_finding: MakeFinding
 ) -> None:
-    finding = make_finding(lon=-1.8542, lat=51.4286, sensitivity="restricted")
+    finding = make_finding(lon=-1.8542, lat=51.4286, sensitivity="protected")
     row = activity.record(db, ActivityKind.FINDING_CREATED, None, finding)
     db.commit()
     assert row.location is not None
     assert lon_lat(row.location) == pytest.approx(gridref.centre_of_square("SU1069"))
 
 
-def test_restricting_a_finding_later_leaves_no_exact_position_in_the_feed(
+def test_protecting_a_finding_later_leaves_no_exact_position_in_the_feed(
     db: Session, make_user: MakeUser, make_finding: MakeFinding
 ) -> None:
     # The usual order: a finding is created open, things happen to it, and
-    # then its finder or a moderator restricts it.
+    # then its finder or a moderator protects it.
     exact = (-1.85421, 51.42861)
     finding = make_finding(lon=exact[0], lat=exact[1])
     activity.record(db, ActivityKind.FINDING_CREATED, None, finding)
     activity.record(db, ActivityKind.OBSERVATION_ADDED, make_user(), finding)
     db.commit()
 
-    finding.sensitivity = "restricted"
+    finding.sensitivity = "protected"
     db.commit()
 
     public = visible_location(finding, None)
@@ -119,7 +119,7 @@ def test_restricting_a_finding_later_leaves_no_exact_position_in_the_feed(
     assert db.scalar(near) == 0
 
 
-def test_an_open_and_a_restricted_finding_in_one_square_are_stored_alike(
+def test_an_open_and_a_protected_finding_in_one_square_are_stored_alike(
     db: Session, make_finding: MakeFinding
 ) -> None:
     open_row = activity.record(db, ActivityKind.FINDING_CREATED, None, make_finding(lon=-1.851, lat=51.4281))
@@ -127,7 +127,7 @@ def test_an_open_and_a_restricted_finding_in_one_square_are_stored_alike(
         db,
         ActivityKind.FINDING_CREATED,
         None,
-        make_finding(lon=-1.857, lat=51.4263, sensitivity="restricted"),
+        make_finding(lon=-1.857, lat=51.4263, sensitivity="protected"),
     )
     db.commit()
     assert open_row.location is not None
@@ -248,7 +248,7 @@ def test_the_payload_is_small_and_carries_no_position(
     db: Session, make_user: MakeUser, make_finding: MakeFinding
 ) -> None:
     actor = make_user()
-    finding = make_finding(actor, sensitivity="restricted")
+    finding = make_finding(actor, sensitivity="protected")
     row = activity.record(db, ActivityKind.FINDING_CREATED, actor, finding, data={"note": "x" * 50_000})
     payload = activity.event_payload(row, actor, finding, None)
     assert len(payload) < 200

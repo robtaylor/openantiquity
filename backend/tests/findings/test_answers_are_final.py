@@ -194,9 +194,7 @@ def test_next_steps_carry_no_numbers_for_someone_who_has_not_answered(
     assert review_step["weight_needed"] == 5.0
 
 
-def test_three_accounts_cannot_farm_their_way_to_restricted_positions(
-    db: Session, make_user: MakeUser
-) -> None:
+def test_three_accounts_cannot_farm_their_way_to_trusted_downloads(db: Session, make_user: MakeUser) -> None:
     finder, helper, endorser = make_user(), make_user(), make_user()
     for n in range(2):
         finding = create(db, finder, lon=-1.85 + 0.01 * n)
@@ -220,5 +218,7 @@ def test_three_accounts_cannot_farm_their_way_to_restricted_positions(
     assert farmed is not None
     assert farmed.reputation >= 50
     assert farmed.role == Role.MEMBER.value
-    restricted = create(db, make_user(), requested_sensitivity="restricted")
-    assert not sensitivity.sees_exact(restricted, farmed)
+    # A trusted member downloads a protected finding's exact place. Points alone don't make one.
+    protected = create(db, make_user(), feature_class=FeatureClass.ROUND_BARROW)
+    assert protected.sensitivity == "protected"
+    assert not sensitivity.downloads_exact(protected, farmed)

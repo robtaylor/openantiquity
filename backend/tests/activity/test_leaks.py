@@ -2,8 +2,8 @@
 
 The feed, notifications, profiles, a person's findings and contributions,
 points, and the event stream's payloads, each as a signed-out visitor, a
-member, the finder, a trusted member and a moderator, against an open, a
-protected and a restricted finding. The check is the findings track's: it
+member, the finder, a trusted member and a moderator, against an open and a
+protected finding. The check is the findings track's: it
 searches the whole body for the exact position in every form it could take.
 """
 
@@ -248,7 +248,7 @@ def test_stream_payloads_carry_no_position(world: World, db: Session) -> None:
         return got
 
     got = asyncio.run(announced())
-    # That a protected or restricted line grew isn't announced: the public feed doesn't list it.
+    # That a protected line grew isn't announced: the public feed doesn't list it.
     unlisted = {
         row.id
         for row in db.query(Activity)

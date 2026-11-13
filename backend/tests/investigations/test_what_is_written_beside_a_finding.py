@@ -1,10 +1,10 @@
 """What people write and draw beside a finding in an investigation gives no more away than the finding.
 
-A public investigation holding a restricted barrow, with a saved view centred
+A public investigation holding a protected barrow, with a saved view centred
 on it, a height profile across it, an area drawn round it and its grid
-reference in the notes, must show a signed-out visitor or a member no more
-than the barrow's 1 km square, on the page and in every download (Decision
-0005). The rules apply when the page is read, so items saved before them, or
+reference in the notes, must show a signed-out visitor no more than the
+barrow's 1 km square, on the page and in every download, and a member no more
+in a download (Decision 0005). The rules apply when the page is read, so items saved before them, or
 while the finding was open, are covered too.
 """
 
@@ -79,9 +79,7 @@ class World:
             db, self.notebook, self.finder, kind=InvestigationItemKind.VIEW,
             data={"centre": [-1.7, 51.5], "zoom": 14, "layer": "slope"}, title="Far away",
         )  # fmt: skip
-        sensitivity.change_sensitivity(
-            db, findings.lock(db, self.barrow), self.finder, Sensitivity.RESTRICTED
-        )
+        sensitivity.change_sensitivity(db, findings.lock(db, self.barrow), self.finder, Sensitivity.PROTECTED)
         db.commit()
         self.clients: dict[str, TestClient] = {
             "signed_out": client_for(app),
@@ -119,16 +117,15 @@ def _leaks(text: str) -> list[str]:
     return [position for position in POSITIONS if position in text]
 
 
-@pytest.mark.parametrize("viewer", ["signed_out", "member"])
-def test_nothing_beside_the_finding_gives_its_place_away(world: World, viewer: str) -> None:
-    client = world.clients[viewer]
+def test_nothing_beside_the_finding_gives_its_place_away(world: World) -> None:
+    client = world.clients["signed_out"]
     for path in world.paths():
         response = client.get(path)
         assert response.status_code == 200, (path, response.text)
-        assert _leaks(response.text) == [], (viewer, path)
+        assert _leaks(response.text) == [], path
 
 
-@pytest.mark.parametrize("viewer", ["finder", "trusted"])
+@pytest.mark.parametrize("viewer", ["member", "finder", "trusted"])
 def test_those_who_see_the_finding_exactly_get_everything_as_it_was_saved(world: World, viewer: str) -> None:
     client = world.clients[viewer]
     page = client.get(url(world.notebook)).json()
@@ -137,11 +134,13 @@ def test_those_who_see_the_finding_exactly_get_everything_as_it_was_saved(world:
     items = client.get(url(world.notebook, "/items")).json()["items"]
     assert [item["unavailable"] for item in items] == [None] * len(items)
     assert items[1]["view"]["centre"] == [LON, LAT]
-    assert "51.402583" in client.get(url(world.notebook, "/export?format=geojson")).text
+    # A member downloads it at its square (Decision 0005, rule 8).
+    downloaded = "51.402583" in client.get(url(world.notebook, "/export?format=geojson")).text
+    assert downloaded is (viewer != "member")
 
 
 def test_the_page_says_what_it_held_back(world: World) -> None:
-    client = world.clients["member"]
+    client = world.clients["signed_out"]
     page = client.get(url(world.notebook)).json()
     assert page["title"] == f"The mound at {PLACEHOLDER}"
     assert page["summary"] == f"Centred on {PLACEHOLDER}."
@@ -225,11 +224,10 @@ def test_a_finding_taken_off_the_page_is_still_guarded(
     assert item is not None
     removed = world.clients["finder"].delete(url(world.notebook, f"/items/{item.id}"))
     assert removed.status_code == 204, removed.text
-    for viewer in ("signed_out", "member"):
-        for path in world.paths():
-            response = world.clients[viewer].get(path)
-            assert response.status_code == 200, (path, response.text)
-            assert _leaks(response.text) == [], (viewer, path)
+    for path in world.paths():
+        response = world.clients["signed_out"].get(path)
+        assert response.status_code == 200, (path, response.text)
+        assert _leaks(response.text) == [], path
 
 
 def test_a_view_near_a_protected_finding_is_held_back_in_any_investigation(
@@ -242,14 +240,14 @@ def test_a_view_near_a_protected_finding_is_held_back_in_any_investigation(
         db, unrelated, other, kind=InvestigationItemKind.VIEW,
         data={"centre": [LON + 0.001, LAT], "zoom": 18, "layer": "slope"}, title="Here",
     )  # fmt: skip
-    for viewer in ("signed_out", "member"):
-        client = world.clients[viewer]
-        (view,) = client.get(url(unrelated, "/items")).json()["items"]
-        assert (view["unavailable"], view["view"]) == ("near_protected", None)
-        assert _leaks(client.get(url(unrelated)).text) == []
-        assert _leaks(client.get(url(unrelated, "/export?format=html")).text) == []
-    (view,) = world.clients["finder"].get(url(unrelated, "/items")).json()["items"]
-    assert view["view"]["centre"] == [LON + 0.001, LAT]
+    client = world.clients["signed_out"]
+    (view,) = client.get(url(unrelated, "/items")).json()["items"]
+    assert (view["unavailable"], view["view"]) == ("near_protected", None)
+    assert _leaks(client.get(url(unrelated)).text) == []
+    assert _leaks(client.get(url(unrelated, "/export?format=html")).text) == []
+    for viewer in ("member", "finder"):
+        (view,) = world.clients[viewer].get(url(unrelated, "/items")).json()["items"]
+        assert view["view"]["centre"] == [LON + 0.001, LAT], viewer
 
 
 @pytest.mark.parametrize(
@@ -275,14 +273,15 @@ def test_a_reference_link_goes_only_to_those_who_see_the_finding_exactly(
         title="Link",
         data={"url": link},
     )
+    items = world.clients["signed_out"].get(url(world.notebook, "/items")).json()["items"]
+    assert items[-1]["reference"].get("url") is None
     for viewer in ("signed_out", "member"):
-        items = world.clients[viewer].get(url(world.notebook, "/items")).json()["items"]
-        assert items[-1]["reference"].get("url") is None, viewer
         for form in ("geojson", "html"):
             download = world.clients[viewer].get(url(world.notebook, f"/export?format={form}")).text
             assert link not in download, (viewer, form)
-    items = world.clients["finder"].get(url(world.notebook, "/items")).json()["items"]
-    assert items[-1]["reference"]["url"] == link
+    for viewer in ("member", "finder"):
+        items = world.clients[viewer].get(url(world.notebook, "/items")).json()["items"]
+        assert items[-1]["reference"]["url"] == link, viewer
 
 
 def test_a_doi_reference_keeps_its_link_rebuilt_from_the_doi(db: Session, world: World) -> None:
@@ -295,25 +294,24 @@ def test_a_doi_reference_keeps_its_link_rebuilt_from_the_doi(db: Session, world:
 
 
 def test_the_feed_shows_an_investigation_s_title_as_its_page_does(world: World) -> None:
-    for viewer in ("signed_out", "member"):
+    events = world.clients["signed_out"].get(f"{API}/activity").json()["items"]
+    titles = [event["investigation"]["title"] for event in events if event["investigation"] is not None]
+    assert titles == [f"The mound at {PLACEHOLDER}"]
+    for viewer in ("member", "finder"):
         events = world.clients[viewer].get(f"{API}/activity").json()["items"]
-        titles = [event["investigation"]["title"] for event in events if event["investigation"] is not None]
-        assert titles == [f"The mound at {PLACEHOLDER}"], viewer
-    events = world.clients["finder"].get(f"{API}/activity").json()["items"]
-    assert [event["investigation"]["title"] for event in events if event["investigation"]] == [
-        "The mound at SU 1310 6707"
-    ]
+        assert [event["investigation"]["title"] for event in events if event["investigation"]] == [
+            "The mound at SU 1310 6707"
+        ], viewer
 
 
-def test_what_a_member_added_themselves_is_shown_to_them_as_they_made_it(
-    db: Session, world: World, app: FastAPI, client_for: Callable[..., TestClient]
+def test_a_member_s_own_view_near_the_finding_is_held_back_from_others_and_from_their_download(
+    db: Session, world: World
 ) -> None:
-    """Their own view tells them nothing they don't know. Others still get it held back."""
-    access_editor = world.member
-    investigations.add_member(db, world.notebook, access_editor, InvestigationRole.EDITOR)
+    """A member sees it on the page, as they see the finding. A download keeps the download rule."""
+    investigations.add_member(db, world.notebook, world.member, InvestigationRole.EDITOR)
     db.commit()
     add(
-        db, world.notebook, access_editor, kind=InvestigationItemKind.VIEW,
+        db, world.notebook, world.member, kind=InvestigationItemKind.VIEW,
         data={"centre": [LON + 0.002, LAT], "zoom": 17, "layer": "slope"}, title="Mine",
         note="I stood at SU 1330 6707",
     )  # fmt: skip
@@ -327,79 +325,6 @@ def test_what_a_member_added_themselves_is_shown_to_them_as_they_made_it(
     download = world.clients["member"].get(url(world.notebook, "/export?format=geojson")).text
     assert str(LON + 0.002)[:8] not in download
     assert "SU 1330 6707" not in download
-
-
-@pytest.fixture
-def editor(db: Session, world: World) -> TestClient:
-    """The member, made an editor of the notebook: they see the barrow only as its square."""
-    investigations.add_member(db, world.notebook, world.member, InvestigationRole.EDITOR)
-    db.commit()
-    return world.clients["member"]
-
-
-def test_an_editor_never_writes_the_hidden_text_over_what_was_written(
-    db: Session, world: World, editor: TestClient
-) -> None:
-    shown = editor.get(url(world.notebook)).json()
-    assert PLACEHOLDER in shown["notes"]
-    # Sent back as shown, with another field changed: the hidden text stays as it was.
-    kept = editor.patch(
-        url(world.notebook),
-        json={
-            "title": shown["title"],
-            "notes": shown["notes"],
-            "summary": shown["summary"],
-            "area": shown["area"],
-        },
-    )
-    assert kept.status_code == 200, kept.text
-    # Edited around the placeholder, the text keeps what the placeholder hid.
-    edited = editor.patch(url(world.notebook), json={"notes": shown["notes"].replace("hedge", "hedges")})
-    assert edited.status_code == 200, edited.text
-    assert PLACEHOLDER in edited.json()["notes"]
-    db.expire_all()
-    assert world.notebook.notes == "## Where\n\nThe mound is at **SU 1310 6707**, by the hedges."
-    # Without the placeholder, or with another, which one is which can't be told: refused.
-    for notes in ("The mound is by the hedges.", f"{PLACEHOLDER} and {PLACEHOLDER}"):
-        changed = editor.patch(url(world.notebook), json={"notes": notes})
-        assert changed.status_code == 409
-        assert changed.json()["error"]["code"] == "held_back"
-        assert changed.json()["error"]["details"] == {"field": "notes"}
-    area = editor.patch(url(world.notebook), json={"area": None})
-    assert area.json()["error"]["code"] == "held_back"
-    db.expire_all()
-    assert world.notebook.notes == "## Where\n\nThe mound is at **SU 1310 6707**, by the hedges."
-    assert world.notebook.title == "The mound at SU 1310 6707"
-    assert world.notebook.area is not None
-    finder = world.clients["finder"].patch(url(world.notebook), json={"notes": "Rewritten"})
-    assert finder.status_code == 200
-
-
-def test_an_editor_cannot_write_over_an_item_they_see_held_back(
-    db: Session, world: World, editor: TestClient
-) -> None:
-    items = editor.get(url(world.notebook, "/items")).json()["items"]
-    note = next(item for item in items if item["kind"] == "note")
-    view = next(item for item in items if item["unavailable"] == "near_protected" and item["kind"] == "view")
-    assert (
-        editor.patch(url(world.notebook, f"/items/{note['id']}"), json={"note": note["note"]}).status_code
-        == 200
-    )
-    refused = editor.patch(url(world.notebook, f"/items/{note['id']}"), json={"note": "Exact spot: gone"})
-    assert refused.json()["error"]["code"] == "held_back"
-    over = editor.patch(
-        url(world.notebook, f"/items/{view['id']}"),
-        json={"view": {"centre": [-1.7, 51.5], "zoom": 14, "layer": "slope"}},
-    )
-    assert over.json()["error"]["code"] == "held_back"
-    # A title the editor sees whole can still be changed.
-    assert (
-        editor.patch(url(world.notebook, f"/items/{view['id']}"), json={"title": "Slopes"}).status_code == 200
-    )
-    db.expire_all()
-    stored = {item.id: item for item in world.notebook_items(db)}
-    assert stored[note["id"]].note == "Exact spot: SU 1310 6707"
-    assert (stored[view["id"]].data or {}).get("centre") == [LON, LAT]
 
 
 def test_a_member_downloads_a_protected_finding_s_neighbours_at_its_square(
@@ -423,7 +348,7 @@ def test_a_member_downloads_a_protected_finding_s_neighbours_at_its_square(
     assert "51.402583" in client_for(app, finder).get(url(notebook, "/export?format=geojson")).text
 
 
-def test_what_is_drawn_beside_a_restricted_road_far_from_its_anchor_is_held_back(
+def test_what_is_drawn_beside_a_protected_road_far_from_its_anchor_is_held_back(
     db: Session, world: World, make_user: MakeUser
 ) -> None:
     """The guard measures to the whole line, not only to its anchor (Decision 0030)."""
@@ -437,7 +362,7 @@ def test_what_is_drawn_beside_a_restricted_road_far_from_its_anchor_is_held_back
             {"points": [{"lon": road_lon, "lat": lat, "kind": "corner"} for lat in (51.0, 51.18, 51.36)]}
         ),
         feature_class=FeatureClass.ROAD,
-        requested_sensitivity=Sensitivity.RESTRICTED,
+        requested_sensitivity=Sensitivity.PROTECTED,
     )
     db.commit()
     assert abs(lon_lat(road.location)[1] - 51.18) < 1e-5
@@ -454,15 +379,14 @@ def test_what_is_drawn_beside_a_restricted_road_far_from_its_anchor_is_held_back
         db, walk, surveyor, kind=InvestigationItemKind.VIEW,
         data={"centre": [beside, 51.005], "zoom": 17, "layer": "slope"}, title="Bank",
     )  # fmt: skip
-    for viewer in ("signed_out", "member"):
-        client = world.clients[viewer]
-        items = client.get(url(walk, "/items")).json()["items"]
-        assert [item["unavailable"] for item in items] == ["near_protected", "near_protected"], viewer
-        assert all(item["view"] is None and item["profile"] is None for item in items)
-        area = shape(client.get(url(walk)).json()["area"])
-        # Shown as whole squares, not as drawn.
-        assert area.area > box(beside, 51.0, beside + 0.001, 51.001).area * 50
-    for viewer in ("finder", "trusted"):
+    client = world.clients["signed_out"]
+    items = client.get(url(walk, "/items")).json()["items"]
+    assert [item["unavailable"] for item in items] == ["near_protected", "near_protected"]
+    assert all(item["view"] is None and item["profile"] is None for item in items)
+    area = shape(client.get(url(walk)).json()["area"])
+    # Shown as whole squares, not as drawn.
+    assert area.area > box(beside, 51.0, beside + 0.001, 51.001).area * 50
+    for viewer in ("member", "finder", "trusted"):
         items = world.clients[viewer].get(url(walk, "/items")).json()["items"]
         assert [item["unavailable"] for item in items] == [None, None], viewer
 

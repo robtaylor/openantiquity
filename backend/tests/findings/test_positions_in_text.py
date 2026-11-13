@@ -134,7 +134,7 @@ def test_editing_refuses_a_position_once_the_finding_is_not_open(
 
 
 class World:
-    """An open finding with a position written into every kind of text, then raised to restricted."""
+    """An open finding with a position written into every kind of text, then raised to protected."""
 
     def __init__(self, db: Session, make_user: MakeUser, client_as: ClientAs, client: TestClient) -> None:
         self.finder, self.helper, self.member, self.trusted = (
@@ -165,7 +165,7 @@ class World:
             db, notebook, self.helper,
             kind=InvestigationItemKind.FINDING, finding=finding.public_id, note=WRITTEN["item_note"],
         )  # fmt: skip
-        sensitivity.change_sensitivity(db, findings.lock(db, finding), self.finder, Sensitivity.RESTRICTED)
+        sensitivity.change_sensitivity(db, findings.lock(db, finding), self.finder, Sensitivity.PROTECTED)
         db.commit()
         self.finding: Finding = finding
         self.notebook = notebook
@@ -209,31 +209,33 @@ def _leaks(text: str) -> list[str]:
     return [position for position in POSITIONS if position in text]
 
 
-@pytest.mark.parametrize("viewer", ["signed_out", "member"])
-def test_no_route_gives_a_written_position_to_someone_who_sees_only_the_square(
-    world: World, viewer: str
-) -> None:
-    client = world.clients[viewer]
+def test_no_route_gives_a_written_position_to_someone_who_sees_only_the_square(world: World) -> None:
+    client = world.clients["signed_out"]
     hidden = 0
     for path in world.paths():
         response = client.get(API + path)
         assert response.status_code in (200, 403), (path, response.status_code)
-        assert _leaks(response.text) == [], (viewer, path)
+        assert _leaks(response.text) == [], path
         hidden += response.text.count(PLACEHOLDER)
     assert hidden > 0
 
 
 def test_the_finding_page_hides_every_field_but_keeps_the_rest_of_the_words(world: World) -> None:
-    page = world.clients["member"].get(f"{API}/findings/{world.finding.public_id}").json()
+    page = world.clients["signed_out"].get(f"{API}/findings/{world.finding.public_id}").json()
     assert page["location"]["obscured"] is True
     assert page["title"] == f"Bank at {PLACEHOLDER}"
     assert page["description"] == f"Seen from {PLACEHOLDER} at dusk"
     (item,) = page["evidence"]
     assert (item["title"], item["note"]) == (f"Estate map, plot at {PLACEHOLDER}", f"Gate at {PLACEHOLDER}")
-    assert page["my_observation"]["note"] == f"Faint at {PLACEHOLDER}"
 
 
-@pytest.mark.parametrize("viewer", ["finder", "trusted"])
+def test_a_member_who_answered_reads_their_own_note_as_written(world: World) -> None:
+    page = world.clients["member"].get(f"{API}/findings/{world.finding.public_id}").json()
+    assert page["location"]["obscured"] is False
+    assert page["my_observation"]["note"] == WRITTEN["answer_note"]
+
+
+@pytest.mark.parametrize("viewer", ["member", "finder", "trusted"])
 def test_those_who_see_the_exact_position_read_the_text_as_written(world: World, viewer: str) -> None:
     client = world.clients[viewer]
     page = client.get(f"{API}/findings/{world.finding.public_id}").json()
@@ -256,7 +258,7 @@ def test_a_title_search_reads_the_hidden_title_for_those_who_see_only_the_square
     mine = [world.finding.public_id]
     for q in ("1025", "SU 1025 6996", "6996"):
         assert found("signed_out", q) == [], q
-        assert found("member", q) == [], q
+        assert found("member", q) == mine, q
         assert found("trusted", q) == mine, q
     assert found("signed_out", "Bank") == mine
     assert found("signed_out", world.finding.public_id) == mine
@@ -305,10 +307,7 @@ def test_a_stale_hidden_title_catches_up_the_next_time_the_finding_is_saved(
         assert found("Bank")
 
 
-@pytest.mark.parametrize("viewer", ["signed_out", "member"])
-def test_a_mention_s_address_reaches_only_those_who_see_the_exact_position(
-    world: World, db: Session, viewer: str
-) -> None:
+def test_a_mention_s_address_reaches_only_those_who_see_the_exact_position(world: World, db: Session) -> None:
     """A page's address can say where the finding is in any form, so it goes only to those who see it.
 
     A video's or a DOI's address is rebuilt from its identifier alone, so it is kept.
@@ -318,7 +317,7 @@ def test_a_mention_s_address_reaches_only_those_who_see_the_exact_position(
     video.canonical_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
     video.thumbnail_url = "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
     db.commit()
-    client = world.clients[viewer]
+    client = world.clients["signed_out"]
     for path in (f"/findings/{world.finding.public_id}/mentions", "/mentions/recent"):
         items = {item["title"]: item for item in client.get(API + path).json()["items"]}
         assert (items["Where it is"]["url"], items["Where it is"]["canonical_url"]) == (None, None), path

@@ -51,7 +51,6 @@ from fieldclub.vocab import (
     FeatureClass,
     FindingState,
     NextStepCode,
-    OfferedSensitivity,
     Outcome,
     Period,
     PointKind,
@@ -324,7 +323,7 @@ class FindingCreate(RequestModel):
     outline: GeoJSONGeometry | None = None
     view_state: ViewState | None = None
     # A request below the class default is honoured only from a moderator.
-    sensitivity: OfferedSensitivity | None = None
+    sensitivity: Sensitivity | None = None
     # The browser's own name for the draft this saves, up to 64 printable
     # ASCII characters without spaces, such as a UUID. Sent again by the same
     # person, it answers 200 with the finding already made and stores nothing.
@@ -351,7 +350,7 @@ class FindingUpdate(RequestModel):
 
 
 class SensitivityChange(RequestModel):
-    level: OfferedSensitivity
+    level: Sensitivity
 
 
 # --------------------------------------------------------------------------

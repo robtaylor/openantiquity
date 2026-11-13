@@ -32,6 +32,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from fieldclub.config import get_settings
+from fieldclub.vocab import Sensitivity
 
 logger = logging.getLogger(__name__)
 
@@ -204,6 +205,42 @@ def _enum_checks() -> list[_EnumCheck]:
 _QUOTED = re.compile(r"'((?:[^']|'')*)'")
 
 
+@dataclass(frozen=True)
+class _DroppedValue:
+    table: str
+    column: str
+    dropped: str
+    becomes: str
+
+
+# Values an earlier version stored that this one has no name for, each with
+# the value it becomes. A finding's public position is its square's centre at
+# both of these levels, so `location_public` stays right (Decision 0032).
+_DROPPED_VALUES: tuple[_DroppedValue, ...] = (
+    _DroppedValue("findings", "sensitivity", "restricted", Sensitivity.PROTECTED.value),
+)
+
+
+def _move_dropped_values(conn: Connection) -> None:
+    """Give every row that holds a dropped value the value that replaced it.
+
+    This runs before `_sync_enum_checks`, in the same transaction, so a check
+    made again without the dropped value is never validated against a row
+    that holds it. The version before may still be serving: no request it
+    takes can store the dropped value, and it reads the new one as it always
+    did. Once no row holds it, the update finds nothing and locks no row.
+    """
+    checked = {(check.table, check.name) for check in _enum_checks()}
+    for value in _DROPPED_VALUES:
+        assert (value.table, f"ck_{value.table}_{value.column}_valid") in checked, value
+        moved = conn.execute(
+            text(f'UPDATE "{value.table}" SET "{value.column}" = :becomes WHERE "{value.column}" = :dropped'),
+            {"becomes": value.becomes, "dropped": value.dropped},
+        ).rowcount
+        if moved:
+            logger.info("Moved %d rows of %s from %s to %s", moved, value.table, value.dropped, value.becomes)
+
+
 def _sync_enum_checks(conn: Connection) -> None:
     """Make again each vocabulary check whose stored values differ from its enumeration's now.
 
@@ -261,8 +298,9 @@ def create_schema(engine: Engine | None = None) -> None:
     The steps run in one transaction under an advisory lock, so two processes
     starting at the same moment can't trip over each other. Each waits at
     most `SCHEMA_LOCK_TIMEOUT_MS` for a lock on a table, and then the whole
-    run fails and changes nothing. A vocabulary check made again is
-    validated afterwards in a second transaction.
+    run fails and changes nothing. A row holding a value this version dropped
+    is given its new value first. A vocabulary check made again is validated
+    afterwards in a second transaction.
     """
     import fieldclub.models  # noqa: F401 - registers every table on Base.metadata
 
@@ -275,6 +313,7 @@ def create_schema(engine: Engine | None = None) -> None:
         Base.metadata.create_all(conn)
         for statement in extras_statements():
             conn.exec_driver_sql(statement)
+        _move_dropped_values(conn)
         _sync_enum_checks(conn)
     with engine.begin() as conn:
         conn.execute(text("SELECT pg_advisory_xact_lock(:id)"), {"id": _SCHEMA_LOCK_ID})

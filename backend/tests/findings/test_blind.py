@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-import pytest
 import time_machine
 from sqlalchemy.orm import Session
 
@@ -214,22 +213,15 @@ def test_the_reveal_shows_the_finding_in_full_and_how_your_answer_compares(
     assert body["observation"]["feature_class"] == "moat"
 
 
-@pytest.mark.parametrize(
-    ("who", "code"),
-    [("finder", "own_finding"), ("member", "location_hidden")],
-)
-def test_refusals_say_nothing_about_answers(
-    db: Session, client_as: ClientAs, make_user: MakeUser, who: str, code: str
-) -> None:
+def test_refusals_say_nothing_about_answers(db: Session, client_as: ClientAs, make_user: MakeUser) -> None:
     finder, helper = make_user(), make_user("trusted")
-    finding = _claimed(db, finder, requested_sensitivity="restricted")
+    finding = _claimed(db, finder)
     answer(db, finding, helper, Visible.NO, feature_class=FeatureClass.MOAT, note=ANSWER_NOTE)
-    viewer = finder if who == "finder" else make_user()
-    response = client_as(viewer).put(
+    response = client_as(finder).put(
         f"{API}/findings/{finding.public_id}/observation", json={"visible": "yes"}
     )
     assert response.status_code == 403
-    assert error_code(response) == code
+    assert error_code(response) == "own_finding"
     _no_claim_or_answers(response.text)
     assert not any(ch.isdigit() for ch in response.text)
 

@@ -42,7 +42,7 @@ def proved() -> set[tuple[str, str]]:
 def test_a_response_checked_against_a_line_the_reader_sees_only_as_its_square_proves_its_route() -> None:
     text = f'{{"items": ["{OPEN}", "{PROTECTED}"]}}'
     leak_record.requested(Response(), ROUTE, text, text, {PROTECTED: "protected"})
-    leak_record.checked(text, {"protected", "restricted"})
+    leak_record.checked(text, {"protected"})
     assert proved() == {ROUTE}
 
 
@@ -50,7 +50,7 @@ def test_a_response_checked_against_a_line_the_reader_sees_only_as_its_square_pr
 def test_naming_only_the_open_line_proves_nothing() -> None:
     text = f'{{"items": ["{OPEN}"]}}'
     leak_record.requested(Response(), ROUTE, text, text, {PROTECTED: "protected"})
-    leak_record.checked(text, {"protected", "restricted"})
+    leak_record.checked(text, {"protected"})
     assert proved() == set()
 
 
@@ -58,7 +58,7 @@ def test_naming_only_the_open_line_proves_nothing() -> None:
 def test_a_reader_who_sees_the_line_exactly_proves_nothing() -> None:
     text = f'{{"items": ["{OPEN}", "{PROTECTED}"]}}'
     leak_record.requested(Response(), ROUTE, text, text, {})
-    leak_record.checked(text, {"restricted"})
+    leak_record.checked(text, set())
     assert proved() == set()
 
 
@@ -66,7 +66,7 @@ def test_a_reader_who_sees_the_line_exactly_proves_nothing() -> None:
 def test_a_check_that_allows_the_line_s_level_proves_nothing() -> None:
     text = f'{{"items": ["{PROTECTED}"]}}'
     leak_record.requested(Response(), ROUTE, text, text, {PROTECTED: "protected"})
-    leak_record.checked(text, {"restricted"})
+    leak_record.checked(text, set())
     assert proved() == set()
 
 
@@ -74,7 +74,7 @@ def test_a_check_that_allows_the_line_s_level_proves_nothing() -> None:
 def test_a_response_that_was_never_checked_proves_nothing() -> None:
     text = f'{{"items": ["{PROTECTED}"]}}'
     leak_record.requested(Response(), ROUTE, text, text, {PROTECTED: "protected"})
-    leak_record.checked('{"items": []}', {"protected", "restricted"})
+    leak_record.checked('{"items": []}', {"protected"})
     assert proved() == set()
 
 

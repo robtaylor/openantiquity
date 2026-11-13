@@ -92,9 +92,8 @@ def test_a_map_box_uses_the_spatial_index_and_is_quick(
     assert not any(n["Node Type"] == "Seq Scan" and n.get("Relation Name") == "findings" for n in nodes), (
         json.dumps(plan, indent=1)
     )
-    expected = {"signed_out": {"idx_findings_location_public"}, "trusted": {"idx_findings_location"}}.get(
-        viewer, {"idx_findings_location", "idx_findings_location_public"}
-    )
+    # A signed-out visitor is matched on the public position, and anyone signed in on the exact one.
+    expected = {"idx_findings_location_public"} if viewer == "signed_out" else {"idx_findings_location"}
     assert expected <= indexes, f"{viewer} used {indexes}"
     # The shapes crossing the box are found through the index of shaped findings alone. With the
     # whole-table index the planner sometimes read every finding for them.

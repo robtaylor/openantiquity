@@ -1,7 +1,7 @@
 """No investigation route gives a viewer a finding's exact position they shouldn't have.
 
-One public investigation holds an open, a protected and a restricted
-finding, each with an outline and at a point of its own, and a line at each
+One public investigation holds an open and a protected finding,
+each with an outline and at a point of its own, and a line at each
 level, extended after it was drawn. Its items and its
 three exports are fetched as someone signed out, a member, the finder, a
 trusted member and a moderator. Items follow what the finding's page shows,

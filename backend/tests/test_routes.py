@@ -48,7 +48,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from starlette.routing import Mount, Route, WebSocketRoute
 
-from fieldclub.auth.deps import current_contributor
+from fieldclub.auth.deps import current_contributor, current_user
 from fieldclub.main import create_app, mount_frontend
 from fieldclub.services import record_tiles
 from fieldclub.vocab import Visibility
@@ -436,7 +436,7 @@ def test_each_route_that_returns_a_position_has_a_leak_test() -> None:
             assert callable(test), f"{key}: there is no {expect.leak_test}"
 
 
-def test_every_leak_test_includes_a_line_finding() -> None:
+def test_every_leak_test_includes_a_line_finding(every_route: dict[tuple[str, str], APIRoute]) -> None:
     """A protected line's shape must not reach anyone who sees only its square (Decision 0030).
 
     So for each row, its leak test must build one of the leak world's lines,
@@ -446,6 +446,14 @@ def test_every_leak_test_includes_a_line_finding() -> None:
     leak test this session runs that left no record fails here. `conftest.py`
     runs this test last, so every record is in. When the session runs no leak
     test, there is nothing to prove, and this test is skipped.
+
+    Only a signed-out visitor sees a line as its square on a page or in a
+    reply (Decision 0032), and a download as a member who isn't trusted. A
+    route that answers only someone signed in (`auth.deps.current_user`,
+    which refuses a signed-out or banned caller) and isn't a download has no
+    such reader, so it is the one kind of row that may prove nothing.
+    `tests/findings/test_two_levels.py` pins that every signed-in member sees
+    every level exactly; if that ever stops holding, those rows need proof again.
     """
     named = {}
     for key, expect in ROUTES.items():
@@ -459,7 +467,16 @@ def test_every_leak_test_includes_a_line_finding() -> None:
         pytest.skip("run with the leak tests, which record what they proved of a line")
     unrecorded = sorted({name for name in ran.values() if name not in leak_record.RESULTS})
     assert not unrecorded, f"these leak tests ran and left no record: {unrecorded}"
-    unproved = sorted(f"{key}: {name}" for key, name in ran.items() if key not in leak_record.RESULTS[name])
+
+    def no_square_reader(key: tuple[str, str]) -> bool:
+        signed_in_only = current_user in set(_calls(every_route[key].dependant))
+        return signed_in_only and "export" not in key[1]
+
+    unproved = sorted(
+        f"{key}: {name}"
+        for key, name in ran.items()
+        if key not in leak_record.RESULTS[name] and not no_square_reader(key)
+    )
     assert not unproved, (
         "these leak tests never read a line through their route as someone who sees only its square, "
         f"and checked the response: {unproved}"

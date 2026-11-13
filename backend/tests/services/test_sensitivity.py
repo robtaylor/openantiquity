@@ -2,10 +2,12 @@
 
 The viewer table in docs/ARCHITECTURE.md, "Location sensitivity":
 
-| Viewer                             | open  | protected   | restricted  |
-| Signed out                         | exact | 1 km square | 1 km square |
-| Member                             | exact | exact       | 1 km square |
-| Finder, trusted, expert, moderator | exact | exact       | exact       |
+| Viewer               | open  | protected   |
+| Signed out           | exact | 1 km square |
+| Any signed-in member | exact | exact       |
+
+Downloads give a protected finding's exact place only to its finder and the
+trusted roles.
 """
 
 from __future__ import annotations
@@ -45,22 +47,22 @@ OUTLINE = box(LON - 0.0005, LAT - 0.0003, LON + 0.0005, LAT + 0.0003)
 GEOD = Geod(ellps="WGS84")
 NOW = datetime(2026, 11, 10, 12, 0, tzinfo=UTC)
 
-OPEN, PROTECTED, RESTRICTED = Sensitivity.OPEN, Sensitivity.PROTECTED, Sensitivity.RESTRICTED
+OPEN, PROTECTED = Sensitivity.OPEN, Sensitivity.PROTECTED
 
 # Every kind of viewer, and what the table says each one sees at each level.
 EXACT, SQUARE = True, False
 VIEWER_TABLE: dict[str, dict[Sensitivity, bool]] = {
-    "signed_out": {OPEN: EXACT, PROTECTED: SQUARE, RESTRICTED: SQUARE},
-    "member": {OPEN: EXACT, PROTECTED: EXACT, RESTRICTED: SQUARE},
-    "finder": {OPEN: EXACT, PROTECTED: EXACT, RESTRICTED: EXACT},
-    "trusted": {OPEN: EXACT, PROTECTED: EXACT, RESTRICTED: EXACT},
-    "expert": {OPEN: EXACT, PROTECTED: EXACT, RESTRICTED: EXACT},
-    "moderator": {OPEN: EXACT, PROTECTED: EXACT, RESTRICTED: EXACT},
-    "admin": {OPEN: EXACT, PROTECTED: EXACT, RESTRICTED: EXACT},
+    "signed_out": {OPEN: EXACT, PROTECTED: SQUARE},
+    "member": {OPEN: EXACT, PROTECTED: EXACT},
+    "finder": {OPEN: EXACT, PROTECTED: EXACT},
+    "trusted": {OPEN: EXACT, PROTECTED: EXACT},
+    "expert": {OPEN: EXACT, PROTECTED: EXACT},
+    "moderator": {OPEN: EXACT, PROTECTED: EXACT},
+    "admin": {OPEN: EXACT, PROTECTED: EXACT},
     # A banned or deleted account is treated as signed out, whatever its role.
-    "banned_expert": {OPEN: EXACT, PROTECTED: SQUARE, RESTRICTED: SQUARE},
-    "deleted_moderator": {OPEN: EXACT, PROTECTED: SQUARE, RESTRICTED: SQUARE},
-    "banned_finder": {OPEN: EXACT, PROTECTED: SQUARE, RESTRICTED: SQUARE},
+    "banned_expert": {OPEN: EXACT, PROTECTED: SQUARE},
+    "deleted_moderator": {OPEN: EXACT, PROTECTED: SQUARE},
+    "banned_finder": {OPEN: EXACT, PROTECTED: SQUARE},
 }
 
 CASES = [(viewer, level) for viewer in VIEWER_TABLE for level in Sensitivity]
@@ -141,19 +143,19 @@ def test_downloads_are_exact_only_where_the_page_is_and_never_for_a_plain_member
 
 def test_unsaved_objects_with_no_ids_are_not_mistaken_for_finder_and_finding() -> None:
     # Neither has been flushed, so both ids are None. None == None must not
-    # read as "this viewer is the finder".
+    # read as "this viewer is the finder", who downloads the exact place.
     finding = Finding(
         public_id="NEW002",
         title="Unsaved",
         feature_class="round_barrow",
-        sensitivity="restricted",
+        sensitivity="protected",
         location=db_point(LON, LAT),
     )
     stranger = User(handle="Stranger", display_name="Stranger", role="member")
     assert (finding.author_id, stranger.id) == (None, None)
-    assert_square(visible_location(finding, stranger))
+    assert sensitivity.downloads_exact(finding, stranger) is False
     stranger.id = 7
-    assert_square(visible_location(finding, stranger))
+    assert sensitivity.downloads_exact(finding, stranger) is False
 
 
 def test_works_on_a_finding_that_has_not_been_saved_yet(make_user: MakeUser) -> None:
@@ -163,7 +165,7 @@ def test_works_on_a_finding_that_has_not_been_saved_yet(make_user: MakeUser) -> 
         author_id=author.id,
         title="Unsaved",
         feature_class="round_barrow",
-        sensitivity="restricted",
+        sensitivity="protected",
         location=db_point(LON, LAT),
         grid_ref="SU 1023 6996",
     )
@@ -179,11 +181,12 @@ def test_an_unknown_sensitivity_value_is_an_error_not_an_open_door(make_finding:
 
 
 def test_an_unknown_role_is_an_error_not_an_open_door(make_finding: MakeFinding, make_user: MakeUser) -> None:
-    finding = make_finding(lon=LON, lat=LAT, sensitivity="restricted")
+    # Only a download tells roles apart.
+    finding = make_finding(lon=LON, lat=LAT, sensitivity="protected")
     wizard = make_user()
     wizard.role = "wizard"
     with pytest.raises(ValueError, match="wizard"):
-        visible_location(finding, wizard)
+        sensitivity.downloads_exact(finding, wizard)
 
 
 # --------------------------------------------------------------------------
@@ -205,7 +208,7 @@ def test_the_square_point_is_the_same_wherever_in_the_square_the_finding_is(
 
 
 def test_the_square_point_is_within_the_square_and_under_a_kilometre_away(make_finding: MakeFinding) -> None:
-    finding = make_finding(lon=LON, lat=LAT, sensitivity="restricted")
+    finding = make_finding(lon=LON, lat=LAT, sensitivity="protected")
     seen = visible_location(finding, None)
     assert gridref.parse_gridref("SU1069").polygon().contains(Point(seen.lon, seen.lat))
     _, _, distance = GEOD.inv(LON, LAT, seen.lon, seen.lat)
@@ -232,16 +235,15 @@ def test_a_finding_on_a_square_edge_lands_in_one_square_and_stays_there(
 def test_one_metre_either_side_of_a_square_edge_gives_neighbouring_squares(make_finding: MakeFinding) -> None:
     west = gridref.to_lonlat(gridref.GridSystem.OSGB, 410_999, 169_500)
     east = gridref.to_lonlat(gridref.GridSystem.OSGB, 411_001, 169_500)
-    seen_west = visible_location(make_finding(lon=west[0], lat=west[1], sensitivity="restricted"), None)
-    seen_east = visible_location(make_finding(lon=east[0], lat=east[1], sensitivity="restricted"), None)
+    seen_west = visible_location(make_finding(lon=west[0], lat=west[1], sensitivity="protected"), None)
+    seen_east = visible_location(make_finding(lon=east[0], lat=east[1], sensitivity="protected"), None)
     assert (seen_west.square, seen_east.square) == ("SU1069", "SU1169")
     _, _, distance = GEOD.inv(seen_west.lon, seen_west.lat, seen_east.lon, seen_east.lat)
     assert distance == pytest.approx(1000, abs=2)
 
 
-@pytest.mark.parametrize("level", [PROTECTED, RESTRICTED])
-def test_northern_ireland_uses_the_irish_grid_square(make_finding: MakeFinding, level: Sensitivity) -> None:
-    finding = make_finding(lon=-5.9301, lat=54.5964, sensitivity=level)
+def test_northern_ireland_uses_the_irish_grid_square(make_finding: MakeFinding) -> None:
+    finding = make_finding(lon=-5.9301, lat=54.5964, sensitivity=PROTECTED)
     seen = visible_location(finding, None)
     assert (seen.obscured, seen.grid_ref, seen.square) == (True, "J 33 73", "J3373")
     assert (seen.lon, seen.lat) == pytest.approx(gridref.centre_of_square("J3373"), abs=1e-9)
@@ -269,7 +271,7 @@ def test_an_irish_grid_square_edge(make_finding: MakeFinding) -> None:
 def test_each_side_of_the_north_channel_uses_its_own_grid(
     make_finding: MakeFinding, lon: float, lat: float, letters: str
 ) -> None:
-    seen = visible_location(make_finding(lon=lon, lat=lat, sensitivity="restricted"), None)
+    seen = visible_location(make_finding(lon=lon, lat=lat, sensitivity="protected"), None)
     assert seen.square is not None
     assert seen.square.rstrip("0123456789") == letters
 
@@ -314,7 +316,7 @@ def test_location_public_follows_the_level_and_the_location(
     finding = make_finding(lon=LON, lat=LAT)
     assert stored_public(db, finding) == pytest.approx((LON, LAT), abs=1e-9)
 
-    change_sensitivity(db, finding, moderator, RESTRICTED)
+    change_sensitivity(db, finding, moderator, PROTECTED)
     db.commit()
     assert stored_public(db, finding) == pytest.approx(gridref.centre_of_square("SU1069"), abs=1e-9)
 
@@ -360,7 +362,7 @@ def test_a_bulk_update_that_would_leave_location_public_stale_is_refused(
     # two changes that would expose or misreport a position.
     finding = make_finding(lon=LON, lat=LAT)
     with pytest.raises(IntegrityError, match="location_public_mismatch"):
-        db.execute(update(Finding).where(Finding.id == finding.id).values(sensitivity="restricted"))
+        db.execute(update(Finding).where(Finding.id == finding.id).values(sensitivity="protected"))
     db.rollback()
 
     protected = make_finding(lon=LON, lat=LAT, sensitivity="protected")
@@ -382,7 +384,7 @@ def test_a_bulk_update_that_changes_both_columns_together_is_allowed(
     db.execute(
         update(Finding)
         .where(Finding.id == finding.id)
-        .values(sensitivity="restricted", location_public=centre)
+        .values(sensitivity="protected", location_public=centre)
     )
     db.commit()
     assert stored_public(db, finding) == pytest.approx(gridref.centre_of_square("SU1069"), abs=1e-9)
@@ -428,8 +430,8 @@ def test_default_sensitivity_refuses_an_unknown_class() -> None:
 # Who may raise and who may lower
 # --------------------------------------------------------------------------
 
-RAISES = [(OPEN, PROTECTED), (OPEN, RESTRICTED), (PROTECTED, RESTRICTED)]
-LOWERS = [(PROTECTED, OPEN), (RESTRICTED, OPEN), (RESTRICTED, PROTECTED)]
+RAISES = [(OPEN, PROTECTED)]
+LOWERS = [(PROTECTED, OPEN)]
 
 MAY_RAISE = {"finder", "trusted", "expert", "moderator", "admin"}
 MAY_LOWER = {"moderator", "admin"}
@@ -494,7 +496,7 @@ def test_square_centre_is_the_same_whatever_the_sensitivity(
     finding = make_finding(lon=LON, lat=LAT, sensitivity=level)
     centre = square_centre(finding)
     assert centre == pytest.approx(gridref.centre_of_square("SU1069"), abs=1e-9)
-    finding.sensitivity = "restricted"
+    finding.sensitivity = "protected"
     public = visible_location(finding, None)
     assert centre == pytest.approx((public.lon, public.lat), abs=1e-12)
 
@@ -513,7 +515,6 @@ def test_square_centre_is_none_off_the_grids(make_finding: MakeFinding) -> None:
     [
         ("member", "round_barrow", None, PROTECTED),
         ("member", "round_barrow", OPEN, PROTECTED),
-        ("member", "round_barrow", "restricted", RESTRICTED),
         ("trusted", "round_barrow", OPEN, PROTECTED),
         ("moderator", "round_barrow", OPEN, OPEN),
         ("admin", "round_barrow", OPEN, OPEN),
@@ -535,7 +536,6 @@ def test_a_signed_out_actor_cannot_lower_the_starting_level() -> None:
     ("current", "old", "new", "expected"),
     [
         (OPEN, "enclosure", "round_barrow", PROTECTED),
-        (RESTRICTED, "enclosure", "round_barrow", RESTRICTED),
         (PROTECTED, "round_barrow", "enclosure", PROTECTED),
         # A moderator lowered this barrow. Moving it to another protected class keeps that.
         (OPEN, "round_barrow", "long_barrow", OPEN),

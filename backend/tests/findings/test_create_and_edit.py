@@ -40,9 +40,8 @@ def test_a_new_finding_is_spotted_assessed_followed_and_announced(db: Session, m
         ("enclosure", None, "member", "open"),
         ("round_barrow", None, "member", "protected"),
         ("round_barrow", "open", "member", "protected"),
-        ("round_barrow", "restricted", "member", "restricted"),
         ("round_barrow", "open", "moderator", "open"),
-        ("enclosure", "restricted", "member", "restricted"),
+        ("enclosure", "protected", "member", "protected"),
     ],
 )
 def test_the_starting_level_is_the_higher_of_class_and_request_unless_a_moderator_lowers_it(
@@ -274,8 +273,6 @@ def test_level_changes_follow_decision_0005(db: Session, client_as: ClientAs, ma
     path = f"{API}/findings/{finding.public_id}/sensitivity"
     assert client_as(make_user()).put(path, json={"level": "protected"}).status_code == 403
     assert client_as(finder).put(path, json={"level": "protected"}).json()["sensitivity"] == "protected"
-    # Restricted is no longer a level anyone can set (Decision 0032).
-    assert client_as(make_user("trusted")).put(path, json={"level": "restricted"}).status_code == 422
     lowered = client_as(finder).put(path, json={"level": "open"})
     assert error_code(lowered) == "sensitivity_change_forbidden"
     assert error_code(client_as(make_user("trusted")).put(path, json={"level": "open"})) == (

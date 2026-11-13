@@ -126,7 +126,7 @@ def _holding(db: Session, finding: Finding, address: unfurl.Address) -> Mention 
 
 
 def _check_address_for_level(finding: Finding, address: unfurl.Address) -> None:
-    """Refuse a link that says where a protected or restricted finding is, such as a map link.
+    """Refuse a link that says where a protected finding is, such as a map link.
 
     It is the slip a title is refused for (`findings.check_text_for_level`).
     Readers who see only the square never get a mention's address in any case

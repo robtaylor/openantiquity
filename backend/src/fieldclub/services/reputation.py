@@ -21,12 +21,12 @@ reports the members who have just reached fifty points. It flushes and
 never commits.
 
 Fifty points makes a member eligible for trusted. It doesn't promote them:
-a moderator does that. Trusted users see the exact position of restricted
-findings (Decision 0005), and points can be farmed. Three colluding
+a moderator does that. Trusted users download the exact position of
+protected findings (Decision 0005), and points can be farmed. Three colluding
 accounts can take a finding to Checked on the ground (two answers, two desk
 items, one site report and one endorsement), which pays its finder 27
 points, so two such findings would cross fifty. Automatic promotion would
-hand restricted positions to anyone willing to run three accounts.
+hand downloads of protected positions to anyone willing to run three accounts.
 
 Each award has a stable `reason`, and `reputation_events` is unique on
 (user, finding, reason). `record_awards` skips an award already written, so

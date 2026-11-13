@@ -68,7 +68,7 @@ class MentionOut(ApiModel):
     id: int
     kind: MentionKind
     # The address as added, and its canonical form. For someone who doesn't see
-    # a protected or restricted finding's exact position, a video's or a DOI's
+    # a protected finding's exact position, a video's or a DOI's
     # address rebuilt from its identifier, or null for any other address: an
     # address can say where the finding is (`sensitivity.visible_url`).
     url: str | None

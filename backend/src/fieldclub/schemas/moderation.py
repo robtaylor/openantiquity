@@ -18,11 +18,11 @@ from fieldclub.services import moderation
 from fieldclub.services.actions import PersonActions
 from fieldclub.vocab import (
     ModerationActionKind,
-    OfferedSensitivity,
     ReportReason,
     ReportStatus,
     ReportTarget,
     Role,
+    Sensitivity,
 )
 
 NOTE_MAX = 2000
@@ -61,7 +61,7 @@ class RoleIn(ReasonIn):
 
 
 class ModSensitivityIn(ReasonIn):
-    level: OfferedSensitivity
+    level: Sensitivity
 
 
 # --------------------------------------------------------------------------

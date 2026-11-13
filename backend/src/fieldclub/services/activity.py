@@ -18,7 +18,7 @@ public can't see, such as a private investigation.
 
 `activity.location` is the centre of the finding's 1 km grid square, for every
 finding. It is there so a feed can be filtered by area. It is never an exact
-position, because a finding that is open today may be restricted tomorrow and
+position, because a finding that is open today may be protected tomorrow and
 the row would not follow. A reader that shows where something happened gets
 the position from `sensitivity.visible_location` at the time it is read.
 

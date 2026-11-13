@@ -364,8 +364,8 @@ def export_investigation(
 ) -> Response:
     """The investigation as GeoJSON, as a spreadsheet with HER field names, or as a printable report.
 
-    Protected and restricted findings carry their 1 km square unless you
-    are their finder or trusted. Every record carries its source's licence.
+    Protected findings carry their 1 km square unless you are their
+    finder or trusted. Every record carries its source's licence.
     """
     access = investigations.load(db, public_id, viewer)
     export = investigation_exports.gather(db, access.investigation, viewer)

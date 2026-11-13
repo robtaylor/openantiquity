@@ -341,10 +341,6 @@ def test_role_weights() -> None:
         vocab.role_weight("guest")
 
 
-def test_roles_that_see_restricted_locations() -> None:
-    assert {role.value for role in vocab.EXACT_LOCATION_ROLES} == {"trusted", "expert", "moderator", "admin"}
-
-
 def test_moderators_and_admins_count_as_trusted_reviewers() -> None:
     assert {role.value for role in vocab.REVIEWER_ROLES} == {"trusted", "expert", "moderator", "admin"}
     assert vocab.Role.MEMBER not in vocab.REVIEWER_ROLES
@@ -363,7 +359,7 @@ def test_sign_in_providers_are_the_six_in_the_contract_in_sign_in_order() -> Non
 
 
 def test_enumerations_from_the_contract() -> None:
-    assert [item.value for item in vocab.Sensitivity] == ["open", "protected", "restricted"]
+    assert [item.value for item in vocab.Sensitivity] == ["open", "protected"]
     assert [item.value for item in vocab.AgeBand] == ["16_17", "18_plus"]
     assert [item.value for item in vocab.Visible] == ["yes", "unsure", "no"]
     assert [item.value for item in vocab.Stance] == ["supports", "neutral", "contradicts"]
@@ -493,10 +489,9 @@ def test_age_bands_and_their_youngest_age() -> None:
     assert vocab.AGE_BAND_YOUNGEST == {vocab.AgeBand.AGE_16_17: 16, vocab.AgeBand.AGE_18_PLUS: 18}
 
 
-def test_trusted_roles_see_exact_locations_and_approve_photos() -> None:
+def test_trusted_roles_approve_photos() -> None:
     expected = {"trusted", "expert", "moderator", "admin"}
     assert {role.value for role in vocab.TRUSTED_ROLES} == expected
-    assert vocab.EXACT_LOCATION_ROLES == vocab.TRUSTED_ROLES
     assert vocab.MEDIA_APPROVER_ROLES == vocab.TRUSTED_ROLES
 
 

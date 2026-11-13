@@ -133,7 +133,7 @@ logger = logging.getLogger(__name__)
 class PositionInTextError(ValidationFailedError):
     code = "position_in_text"
     message = (
-        "A protected or restricted finding's title, description and links can't say where it is more "
+        "A protected finding's title, description and links can't say where it is more "
         "closely than its 1 km square: take out the grid reference, coordinates, map link or three-word "
         "address."
     )

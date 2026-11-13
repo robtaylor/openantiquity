@@ -101,7 +101,7 @@ from fieldclub.models import (
 from fieldclub.models.common import to_db_geometry
 from fieldclub.schemas.common import cursor_int, decode_cursor, offset_from_cursor, offset_page, paginate
 from fieldclub.schemas.text import has_unstorable_character
-from fieldclub.services import activity, findings, geo, ids, records, sensitivity, text_positions
+from fieldclub.services import activity, findings, geo, ids, records, sensitivity
 from fieldclub.services.records import RecordResult
 from fieldclub.vocab import ActivityKind, FindingState, InvestigationItemKind, InvestigationRole, Visibility
 
@@ -171,14 +171,6 @@ class ItemNotFoundError(NotFoundError):
 class TooManyItemsError(ConflictError):
     code = "too_many_items"
     message = f"An investigation can hold at most {MAX_ITEMS} items."
-
-
-class HeldBackError(ConflictError):
-    code = "held_back"
-    message = (
-        "This holds a place hidden from you, near a protected finding. Only someone who sees that "
-        "finding exactly can change it. In text, keep each [position hidden] where you want it kept."
-    )
 
 
 class InvalidItemError(ValidationFailedError):
@@ -461,7 +453,6 @@ def update_investigation(db: Session, access: Access, actor: User, changes: dict
         raise InvestigationForbiddenError()
     if "visibility" in changes and changes["visibility"] != investigation.visibility and not access.is_owner:
         raise OwnerOnlyError()
-    changes = _seen_changes(changes, _shown_fields(investigation, position_guard(db, investigation, actor)))
     for name in ("title", "summary", "notes"):
         if name in changes:
             setattr(investigation, name, changes[name])
@@ -473,63 +464,6 @@ def update_investigation(db: Session, access: Access, actor: User, changes: dict
     _touch(investigation)
     db.flush()
     return investigation
-
-
-# A shown area and one sent back are the same when they differ by less than this, in degrees.
-_SAME_SHAPE = 1e-6
-
-
-def _same(shown: Any, sent: Any) -> bool:
-    if isinstance(shown, BaseGeometry) or isinstance(sent, BaseGeometry):
-        return (
-            isinstance(shown, BaseGeometry)
-            and isinstance(sent, BaseGeometry)
-            and shown.normalize().equals_exact(sent.normalize(), tolerance=_SAME_SHAPE)
-        )
-    return shown == sent
-
-
-def _shown_fields(
-    investigation: Investigation, guard: sensitivity.PositionGuard
-) -> dict[str, tuple[Any, Any]]:
-    """Each editable field as stored and as the guard shows it."""
-    area = to_shape(investigation.area) if investigation.area is not None else None
-    squares = to_shape(investigation.area_squares) if investigation.area_squares is not None else None
-    return {
-        "title": (investigation.title, guard.text(investigation.title) or investigation.title),
-        "summary": (investigation.summary, guard.text(investigation.summary)),
-        "notes": (investigation.notes, guard.text(investigation.notes)),
-        "area": (area, guard.area(area, squares)),
-    }
-
-
-def _seen_changes(changes: dict[str, Any], fields: dict[str, tuple[Any, Any]]) -> dict[str, Any]:
-    """`changes` as they may be saved by an editor who was shown some of `fields` with a place hidden.
-
-    Saving what they were shown would replace what its writer wrote with the
-    placeholder. A field sent back as shown is left alone. Text they edited
-    keeps what each placeholder hid (`text_positions.restore`), and needs as
-    many placeholders as they were shown. Anything else they were shown
-    with a place hidden, an area as whole squares or a view held back, they
-    can't change, and `HeldBackError` names the field.
-    """
-    kept = dict(changes)
-    for name, (stored, shown) in fields.items():
-        if name not in changes or _same(stored, shown):
-            continue
-        sent = changes[name]
-        if _same(shown, sent):
-            del kept[name]
-            continue
-        restored = (
-            text_positions.restore(sent, stored)
-            if isinstance(sent, str) and isinstance(stored, str)
-            else None
-        )
-        if restored is None:
-            raise HeldBackError(details={"field": name})
-        kept[name] = restored
-    return kept
 
 
 def delete_investigation(db: Session, access: Access) -> None:
@@ -998,8 +932,7 @@ def update_item(
     """Change an item's title, note or data. Its kind and what it points at stay.
 
     `content_kinds` names the kinds of content the request sent, which must
-    be the item's own kind and nothing else. What `actor` was shown with a
-    place hidden can't be written over by them (`_seen_changes`).
+    be the item's own kind and nothing else.
     """
     assert set(changes) <= ITEM_EDITABLE, f"not editable: {set(changes) - ITEM_EDITABLE}"
     if not access.may_edit:
@@ -1008,14 +941,6 @@ def update_item(
     kind = InvestigationItemKind(item.kind)
     if content_kinds and list(content_kinds) != [kind]:
         raise InvalidItemError(f"A {kind} item takes only its own content.")
-    guard = position_guard(db, access.investigation, actor)
-    if guard.hidden:
-        (view,) = item_views(db, [item], actor)
-        title, note = item_text(view, actor, guard)
-        data = item_content(item, guard) if item.data is not None else None
-        changes = _seen_changes(
-            changes, {"title": (item.title, title), "note": (item.note, note), "data": (item.data, data)}
-        )
     merged = {"title": item.title, "note": item.note, "data": item.data} | changes
     _check_item(kind, title=merged["title"], note=merged["note"], data=merged["data"])
     for name, value in changes.items():
@@ -1186,15 +1111,13 @@ def item_text(
     What a member writes on a finding item is about that finding, so a
     position written in it is hidden as the finding's own text is
     (`sensitivity.visible_text`), and from everyone once the finding isn't
-    shown. Every item's text goes through the investigation's `guard` too,
-    unless the reader added the item.
+    shown. Every item's text goes through the investigation's `guard` too.
     """
     item = view.item
     title, note = item.title, item.note
     if InvestigationItemKind(item.kind) is InvestigationItemKind.FINDING:
         title = sensitivity.visible_text(view.finding, reader, title)
         note = sensitivity.visible_text(view.finding, reader, note)
-    guard = guard.for_item(item.added_by)
     return guard.text(title), guard.text(note)
 
 
@@ -1217,10 +1140,8 @@ def item_content(item: InvestigationItem, guard: sensitivity.PositionGuard) -> d
     reader sees only as a square. A reference keeps its citation without the
     positions in it, and its link only as `sensitivity.visible_url` would
     give it: rebuilt from a video's or a DOI's identifier, or not at all.
-    The reader's own items are shown as they made them.
     """
     data = dict(item.data or {})
-    guard = guard.for_item(item.added_by)
     shape = item_shape(item.kind, data)
     if shape is not None and guard.near(shape):
         return None

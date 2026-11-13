@@ -24,8 +24,6 @@ def test_a_moderator_lowers_a_level_as_well_as_raising_it(
     assert raised.json()["sensitivity"] == "protected"
     # Setting the level it has is no change, and isn't logged.
     assert client.put(path, json={"level": "protected", **REASON}).status_code == 200
-    # Restricted is no longer a level a moderator can set either (Decision 0032).
-    assert client.put(path, json={"level": "restricted", **REASON}).status_code == 422
     entries = log_entries(db)
     assert [(e.action, e.data) for e in entries] == [
         ("change_sensitivity", {"from": "protected", "to": "open"}),

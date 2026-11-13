@@ -88,23 +88,21 @@ def test_two_findings_in_one_square_get_the_same_suggestions_for_the_public(
     db: Session, make_finding: MakeFinding, make_user: MakeUser, scattered: list[Record]
 ) -> None:
     """If the answer depended on the exact position, comparing answers would locate it."""
-    first = make_finding(**at(scattered[0]), sensitivity="restricted")
-    second = make_finding(**at(scattered[9]), sensitivity="restricted")
-    member = make_user()
-    for viewer in (None, member):
-        a = records.suggest_for_finding(db, first, viewer)
-        b = records.suggest_for_finding(db, second, viewer)
-        assert a.origin == b.origin
-        assert ids(a) == ids(b)
-        assert [item.result.distance_m for item in a.items] == [item.result.distance_m for item in b.items]
+    first = make_finding(**at(scattered[0]), sensitivity="protected")
+    second = make_finding(**at(scattered[9]), sensitivity="protected")
+    a = records.suggest_for_finding(db, first, None)
+    b = records.suggest_for_finding(db, second, None)
+    assert a.origin == b.origin
+    assert ids(a) == ids(b)
+    assert [item.result.distance_m for item in a.items] == [item.result.distance_m for item in b.items]
 
 
-def test_the_finder_and_trusted_see_a_restricted_finding_exactly(
+def test_everyone_signed_in_sees_a_protected_finding_exactly(
     db: Session, make_finding: MakeFinding, make_user: MakeUser, scattered: list[Record]
 ) -> None:
     finder = make_user()
-    finding = make_finding(finder, **at(scattered[5]), sensitivity="restricted")
-    for viewer in (finder, make_user("trusted")):
+    finding = make_finding(finder, **at(scattered[5]), sensitivity="protected")
+    for viewer in (finder, make_user(), make_user("trusted")):
         result = records.suggest_for_finding(db, finding, viewer)
         assert not result.origin.obscured
         assert result.items[0].result.record.id == scattered[5].id

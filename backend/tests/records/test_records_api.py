@@ -250,13 +250,6 @@ def test_suggested_records_never_reveal_an_exact_position(
     member = client_as(make_user()).get(url).json()
     assert member["origin"] == {"lon": exact[0], "lat": exact[1], "obscured": False, "square": None}
 
-    # A restricted one is the square even for a member.
-    restricted = make_finding(lon=exact[0], lat=exact[1], sensitivity="restricted")
-    member_view = (
-        client_as(make_user()).get(f"/api/v1/findings/{restricted.public_id}/suggested-records").json()
-    )
-    assert member_view["origin"]["obscured"] is True
-
 
 def test_suggested_records_for_an_unknown_finding(client: TestClient) -> None:
     response = client.get("/api/v1/findings/ZZZZZZ/suggested-records")

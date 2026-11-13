@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from fieldclub.models import Finding, Observation, User
 from fieldclub.services import findings, records, review
-from fieldclub.vocab import FeatureClass, Sensitivity, Visible
+from fieldclub.vocab import FeatureClass, Visible
 from tests.findings.support import API, answer, create
 from tests.helpers import ClientAs, MakeUser, add_record, add_source, error_code, lon_lat
 
@@ -272,13 +272,7 @@ def _withdraw(db: Session, finding: Finding) -> None:
     db.commit()
 
 
-def _raise(db: Session, finding: Finding) -> None:
-    db.refresh(finding)
-    finding.sensitivity = Sensitivity.RESTRICTED.value
-    db.commit()
-
-
-@pytest.mark.parametrize(("close", "code"), [(_withdraw, "finding_withdrawn"), (_raise, "location_hidden")])
+@pytest.mark.parametrize(("close", "code"), [(_withdraw, "finding_withdrawn")])
 def test_the_reveal_changes_a_note_only_where_the_answer_could_change(
     db: Session, client_as: ClientAs, make_user: MakeUser, close: Any, code: str
 ) -> None:
@@ -299,7 +293,7 @@ def test_the_reveal_changes_a_note_only_where_the_answer_could_change(
     assert client.post(f"{_path(finding)}/reveal").status_code == 200
 
 
-@pytest.mark.parametrize(("close", "code"), [(_withdraw, "finding_withdrawn"), (_raise, "location_hidden")])
+@pytest.mark.parametrize(("close", "code"), [(_withdraw, "finding_withdrawn")])
 def test_a_finding_closed_between_the_steps_takes_no_detail_but_can_still_be_revealed(
     db: Session, client_as: ClientAs, make_user: MakeUser, close: Any, code: str
 ) -> None:

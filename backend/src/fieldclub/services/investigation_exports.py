@@ -1,8 +1,8 @@
 """An investigation as GeoJSON, as a spreadsheet and as a printable report.
 
 Positions: each finding is written by `services.exports`, so a download
-carries the generalised position of a protected or restricted finding unless
-the person downloading is its finder or trusted (Decision 0005, rule 8). A
+carries the generalised position of a protected finding unless the person
+downloading is its finder or trusted (Decision 0005, rule 8). A
 finding the viewer may not see because it is hidden, and a withdrawn
 finding, are left out of the GeoJSON and the spreadsheet. The report keeps a
 line saying an item is no longer available, with nothing of it. Everything
