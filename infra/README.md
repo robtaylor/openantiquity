@@ -267,6 +267,18 @@ A deploy leaves the three machines stopped, not suspended, and the first request
 
 A deploy by hand is the same command as the workflow's, from the repository root: `fly deploy --no-public-ips --image-label "$(git rev-parse HEAD)"`.
 
+The schema command waits at most five seconds for a lock on any table (`SCHEMA_LOCK_TIMEOUT_MS` in `backend/src/fieldclub/db.py`). If something holds a table longer, the release fails, the schema is as it was and the machines keep their image: deploy again.
+
+While the machines are swapped, one still on the image before serves requests against the new schema. It reads past an activity kind or a next step the new image added (Decision 0033), but what it writes doesn't fill columns the new image added. Deploy a release that adds columns when nobody is marking or answering.
+
+The release that first brings lines and shapes has one more step. Once `fly status --app openantiquity` shows every machine on the new image, and the jobs app's image of the same commit is built, run the backfill:
+
+```
+uv run infra/fly_jobs.py run python -m fieldclub.services.shapes backfill
+```
+
+It fills the simplified copies, the kind and the length of every outline saved before paths existed, and the ground second looks were given on for every finding answered before that was kept. It logs how many of each it filled, and is safe to run again. Run it after the swap and not before, so that nothing an earlier machine wrote meanwhile is missed.
+
 Fly sends the old machine `SIGTERM` (`kill_signal`) and kills it ten seconds later (`kill_timeout`). The server ends its event streams at once and closes whatever else it still holds after five seconds (`FIELDCLUB_SHUTDOWN_GRACE_S`), so it stops before it is killed, and the browser opens a new stream on another machine.
 
 ## Rolling back
