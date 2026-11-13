@@ -3,7 +3,7 @@
  * (`MarkFields.editing`): the finding and the shape revision the change
  * began on. The panel (`ChangeShapePanel`) makes the key, and the map layer
  * (`MarkLayer`) reads it to draw a path only for the finding whose tool is
- * open.
+ * open. The tool's address is made and read here too.
  */
 
 import type { FindingDetail } from "../finding/types.js";
@@ -26,6 +26,11 @@ export function baseRevision(editing: string | null, publicId: string): number |
   const revision = Number(editing.slice(prefix.length));
   // A key this panel didn't make holds no change it can save.
   return Number.isInteger(revision) ? revision : null;
+}
+
+/** The address of the tool for a saved finding. */
+export function changeShapePath(publicId: string): string {
+  return `${CHANGE_SHAPE_PREFIX}${encodeURIComponent(publicId)}`;
 }
 
 /** The finding whose shape is being changed at `pathname`, or null on any other page. */

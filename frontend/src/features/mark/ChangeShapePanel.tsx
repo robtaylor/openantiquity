@@ -45,7 +45,7 @@ import { EMPTY_COLLECTION, type FeatureCollection } from "../records/geojson.js"
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { usePanelEnvironment } from "../shell/panelContext.js";
 import { saveProblem } from "./compose.js";
-import { baseRevision, editingKey } from "./editingKey.js";
+import { baseRevision, changeShapePath, editingKey } from "./editingKey.js";
 import { DrawingSection, useMarkInView } from "./MarkForm.js";
 import { MARK_PATH_LAYERS } from "./MarkLayer.js";
 import { useMarkPath, useMarkStore } from "./markStore.js";
@@ -60,11 +60,6 @@ export const CHANGED_ELSEWHERE = "The shape was changed somewhere else while you
 const REPLACE_FIRST = "Draw the new shape first, or cancel to leave it as it was.";
 export const CHANGED_UNDER_YOU =
   "The shape was changed somewhere else while you had it open, so what is here can't be saved over it.";
-
-/** The address of the tool for a saved finding. */
-export function changeShapePath(publicId: string): string {
-  return `/mark/finding/${encodeURIComponent(publicId)}`;
-}
 
 /**
  * The saved path, or the finding's one point when it has no shape. Null
