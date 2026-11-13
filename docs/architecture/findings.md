@@ -146,7 +146,7 @@ Investigations hold back what is drawn within 1.5 km of a finding the reader doe
 - A ruled-out finding's line or edge is 1.5 px in `--state-ruled-out`, shown only with the ruled-out switch.
 - An obscured finding is its dashed square and never a line.
 
-The overlay asks for nothing below zoom 9, sends the map's zoom with the box, and hides with the rest of the findings during a blind second look.
+The overlay asks for the findings in view at every zoom, sends the map's zoom with the box, and hides with the rest of the findings during a blind second look. Below zoom 9 it sends 9, the furthest out the server simplifies shapes for. The server answers at most a set number for one box and sets `next_cursor` when more matched. The map draws what came, isn't paged through the rest, and says on the map "Not every finding in view is drawn. Zoom in to see the rest." until an answer is whole again (`FindingsCutShortNotice` in `features/layers/MapNotices.tsx`).
 
 ### Picking one of overlapping findings
 

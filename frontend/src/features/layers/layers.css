@@ -53,9 +53,13 @@
   gap: 6px;
 }
 
-/* A line on the map saying a terrain view has no data in some or all of the view.
-   It sits under the row of the search field and the Layers button, clear of both. */
+/* Lines on the map saying a terrain view has no data in some or all of the view, or that
+   not every finding in view is drawn. They sit under the row of the search field and the
+   Layers button, clear of both, one above the other. */
 .fc-stage__notice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   top: calc(var(--gap) * 2 + var(--control-height));
   left: 50%;
   transform: translateX(-50%);

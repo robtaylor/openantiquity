@@ -87,6 +87,11 @@ export interface FindingFeature {
 export interface FindingCollection {
   type: "FeatureCollection";
   features: FindingFeature[];
+  /**
+   * Set when more findings matched than were sent. The map draws what came
+   * and says that some were left out. Null or absent when the answer is whole.
+   */
+  next_cursor?: string | null;
 }
 
 /** Shared. Never modify it. */
@@ -196,7 +201,8 @@ export function parseFindingCollection(value: unknown): FindingCollection {
     const feature = parseFeature(candidate);
     if (feature) features.push(feature);
   }
-  return { type: "FeatureCollection", features };
+  const nextCursor = typeof value.next_cursor === "string" ? value.next_cursor : null;
+  return { type: "FeatureCollection", features, next_cursor: nextCursor };
 }
 
 /**

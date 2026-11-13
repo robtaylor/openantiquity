@@ -45,7 +45,7 @@ import { HELP_PATH, HelpKindPanel, HelpPanel } from "../help/HelpPanel.js";
 import { INVESTIGATIONS_PATH } from "../investigations/api.js";
 import { InvestigationPage } from "../investigations/InvestigationPage.js";
 import { InvestigationsPanel } from "../investigations/InvestigationsPanel.js";
-import { CoverageNotice } from "../layers/MapNotices.js";
+import { CoverageNotice, FindingsCutShortNotice } from "../layers/MapNotices.js";
 import { PROFILE_PATH } from "../layers/profile/line.js";
 import { ProfilePanel } from "../layers/profile/ProfilePanel.js";
 import { ChangeShapePanel } from "../mark/ChangeShapePanel.js";
@@ -333,6 +333,7 @@ function ReadyShell({ meta }: { meta: Meta }) {
           </div>
           <div className="fc-stage__notice" inert={sheetFull}>
             <CoverageNotice meta={meta} />
+            <FindingsCutShortNotice />
           </div>
           <div className="fc-stage__drafts" inert={sheetFull}>
             <DraftsBar />

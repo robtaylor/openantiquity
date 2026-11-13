@@ -10,24 +10,21 @@ import { overlayShown } from "./style.js";
 import { overlayTroubleKey } from "./trouble.js";
 
 /**
- * Below this zoom the findings overlay asks for nothing. The box in view
- * then covers a county or more, which is more than a map of point markers
- * can usefully show and more than the server should be asked for on every
- * drag.
- */
-export const FINDINGS_MIN_ZOOM = 9;
-
-/**
  * What the map has drawn of each finding, by public id, so the chooser
- * between overlapping findings can name each one without asking again.
+ * between overlapping findings can name each one without asking again, and
+ * whether the server left some of the findings in view out of its answer.
  */
-export const useDrawnFindings = create<{ byId: ReadonlyMap<string, FindingProperties> }>()(() => ({
+export const useDrawnFindings = create<{ byId: ReadonlyMap<string, FindingProperties>; cutShort: boolean }>()(() => ({
   byId: new Map(),
+  cutShort: false,
 }));
 
 /**
  * The findings to draw: whatever `GET /findings` returns for the area the
- * main map shows, while the findings overlay is on.
+ * main map shows, at every zoom, while the findings overlay is on. The
+ * server sends at most a set number for a box. When it says there are more,
+ * the map draws what came and says so (`FindingsCutShortNotice`), and the
+ * rest are not paged through: zooming in shows them.
  *
  * A server without the endpoint is passed over in silence. Any other failure
  * switches the overlay off with the same notice and "Try again" as an
@@ -45,7 +42,7 @@ export function useFindingsOverlay(meta: Meta): FindingsMapData {
   // A blind second look holds the overlay back, so nothing about the findings near it is fetched or drawn.
   const hidden = useFindingsHidden();
 
-  const wanted = shown && !hidden && zoom >= FINDINGS_MIN_ZOOM;
+  const wanted = shown && !hidden;
   const { findings, error, errorAt } = useFindingsInBox(wanted ? bounds : null, attempt, zoom);
 
   // A failure already acted on comes back when the same box is asked for again, so each is handled once.
@@ -60,8 +57,9 @@ export function useFindingsOverlay(meta: Meta): FindingsMapData {
   useEffect(() => {
     useDrawnFindings.setState({
       byId: new Map(findings.features.map((feature) => [feature.properties.public_id, feature.properties])),
+      cutShort: wanted && typeof findings.next_cursor === "string",
     });
-  }, [findings]);
+  }, [findings, wanted]);
 
   return useMemo(() => findingsMapData(findings), [findings]);
 }

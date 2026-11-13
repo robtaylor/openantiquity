@@ -4,7 +4,6 @@ import { useLocation, useNavigate } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RECORD_LAYERS } from "../../map/overlayLayers.js";
 import { overlayTroubleKey, useMapStore, useViewAreaStore } from "../../map/store.js";
-import { FINDINGS_MIN_ZOOM } from "../../map/useFindingsOverlay.js";
 import { apiError, routeApi } from "../../test/apiRoutes.js";
 import { findingCollection, findingPage, findingSummary, findingsData, offset } from "../../test/fixtures/findings.js";
 import { json, mapReady, renderShell, setUpShellTests } from "../../test/shellHarness.js";
@@ -268,8 +267,12 @@ describe("the Explore panel", () => {
 
     const bounds = useViewAreaStore.getState().bounds;
     if (!bounds) throw new Error("The map has not said what it shows");
-    act(() => useViewAreaStore.getState().setArea(bounds, FINDINGS_MIN_ZOOM - 1));
-    expect(await explore().findByRole("heading", { name: "Zoom in to see findings" })).toBeInTheDocument();
+    // Zoomed out to a county or more, the list still asks for what is in view.
+    const asked = harness.requestsTo("/findings");
+    act(() => useViewAreaStore.getState().setArea(bounds, 7));
+    await waitFor(() => expect(harness.requestsTo("/findings")).toBeGreaterThan(asked));
+    expect(await explore().findByRole("heading", { name: "No findings here yet" })).toBeInTheDocument();
+    expect(explore().queryByText(/Zoom in/)).toBeNull();
   });
 
   it.each([

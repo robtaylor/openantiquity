@@ -3,7 +3,6 @@ import { useEffect, useRef } from "react";
 import { isEndpointMissing, isTransient } from "../../api/client.js";
 import { findOverlay } from "../../api/meta.js";
 import { overlayTroubleKey, useMapStore, useViewAreaStore } from "../../map/store.js";
-import { FINDINGS_MIN_ZOOM } from "../../map/useFindingsOverlay.js";
 import { useDebounced } from "../../ui/useDebounced.js";
 import { bboxParam, fetchFindingsPage, parseBboxParam, snapBbox } from "../findings/api.js";
 import { filtersKey, useEffectiveFilters } from "../findings/filters.js";
@@ -12,8 +11,6 @@ import type { FindingSummary } from "../findings/types.js";
 import { FINDINGS_DEBOUNCE_MS, FINDINGS_STALE_MS } from "../findings/useFindingsInBox.js";
 
 export type FindingsListStatus =
-  /** The map is zoomed out too far for findings, as it is for the markers. */
-  | "zoomed-out"
   /** The filters leave nothing to ask for. */
   | "filtered-out"
   | "loading"
@@ -37,14 +34,12 @@ export interface FindingsList {
 /**
  * The findings in view, a page at a time, newest first, for the Explore
  * panel. It asks for exactly the box and filters the map's markers use, so
- * the two agree: the same snapped box, the same wait for the map to hold
- * still, and nothing below the zoom where the markers stop.
+ * the two agree: the same snapped box and the same wait for the map to hold
+ * still, at every zoom.
  */
 export function useFindingsList(): FindingsList {
   const bounds = useViewAreaStore((state) => state.bounds);
-  const zoom = useViewAreaStore((state) => state.zoom);
-  const zoomedOut = bounds === null || zoom < FINDINGS_MIN_ZOOM;
-  const settled = useDebounced(zoomedOut ? null : bboxParam(snapBbox(bounds)), FINDINGS_DEBOUNCE_MS);
+  const settled = useDebounced(bounds === null ? null : bboxParam(snapBbox(bounds)), FINDINGS_DEBOUNCE_MS);
   const filters = useEffectiveFilters();
 
   const query = useInfiniteQuery({
@@ -79,8 +74,7 @@ export function useFindingsList(): FindingsList {
 
   const items = query.data?.pages.flatMap((page) => page.items) ?? [];
   let status: FindingsListStatus;
-  if (zoomedOut) status = "zoomed-out";
-  else if (filters.empty) status = "filtered-out";
+  if (filters.empty) status = "filtered-out";
   else if (query.isError && isEndpointMissing(query.error)) status = "missing";
   else if (query.isError && items.length === 0) status = "error";
   else if (query.data === undefined) status = "loading";

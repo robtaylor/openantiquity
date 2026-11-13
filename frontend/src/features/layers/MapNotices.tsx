@@ -2,6 +2,7 @@ import { Plus } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import type { Meta } from "../../api/meta.js";
 import { useMapStore, useViewAreaStore } from "../../map/store.js";
+import { useDrawnFindings } from "../../map/useFindingsOverlay.js";
 import { useMapCover, visibleOffset } from "../../map/visibleArea.js";
 import { useCoverageStore } from "./coverage/store.js";
 import { isTerrainView } from "./coverage/useCoverageOnMap.js";
@@ -51,6 +52,21 @@ export function CoverageNotice({ meta }: { meta: Meta }) {
   return (
     <p className="fc-map-notice" role="status" data-testid="coverage-notice">
       {words}
+    </p>
+  );
+}
+
+/**
+ * Says so on the map when the server sent fewer findings than there are in
+ * view, as it does past a set number for one box. What came is drawn, and
+ * zooming in shows the rest. It goes when an answer is whole again.
+ */
+export function FindingsCutShortNotice() {
+  const cutShort = useDrawnFindings((state) => state.cutShort);
+  if (!cutShort) return null;
+  return (
+    <p className="fc-map-notice" role="status" data-testid="findings-cut-short-notice">
+      Not every finding in view is drawn. Zoom in to see the rest.
     </p>
   );
 }

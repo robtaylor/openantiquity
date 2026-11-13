@@ -73,9 +73,13 @@ test("explore states", async ({ page }) => {
   await page.getByRole("heading", { name: "The findings couldn't be loaded" }).waitFor({ timeout: 15_000 });
   await shoot(page, "06-explore-error");
 
+  // Zoomed out to a county or more, the findings are still listed and drawn.
+  await page.unroute(apiRoute("/findings"));
+  await fakeFindings(page);
   await page.goto(`/#m=7/52/-1.8/0/0&v=composite`);
+  await page.reload();
   if (isPhone(page)) await page.getByRole("button", { name: /Press to resize/ }).click();
-  await page.getByRole("heading", { name: "Zoom in to see findings" }).waitFor();
+  await page.getByRole("list", { name: "Findings in view" }).waitFor();
   await shoot(page, "07-explore-zoomed-out");
 });
 

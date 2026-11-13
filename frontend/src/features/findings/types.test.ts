@@ -10,6 +10,14 @@ function feature(properties: Record<string, unknown>, coordinates: unknown = [-1
 const BASE = { public_id: "f1", tier: "seen", state: "open" };
 
 describe("parseFindingCollection", () => {
+  it("keeps the cursor that says more findings matched than were sent", () => {
+    expect(parseFindingCollection({ type: "FeatureCollection", features: [], next_cursor: "abc" }).next_cursor).toBe(
+      "abc",
+    );
+    expect(parseFindingCollection({ type: "FeatureCollection", features: [] }).next_cursor).toBeNull();
+    expect(parseFindingCollection({ type: "FeatureCollection", features: [], next_cursor: 3 }).next_cursor).toBeNull();
+  });
+
   it("knows two levels of sensitivity", () => {
     expect(SENSITIVITIES).toEqual(["open", "protected"]);
   });

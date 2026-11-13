@@ -8,9 +8,9 @@ import { meFixture } from "../test/fixtures/me.js";
 import { json, liveMaps, mapReady, renderShell, setUpShellTests } from "../test/shellHarness.js";
 import type { FindingsMapData } from "./findingsData.js";
 import { SQUARE_IMAGE } from "./overlayLayers.js";
-import { overlayTroubleKey, useMapStore } from "./store.js";
+import { overlayTroubleKey, useMapStore, useViewAreaStore } from "./store.js";
 import { overlaySourceId } from "./style.js";
-import { FINDINGS_MIN_ZOOM, useDrawnFindings } from "./useFindingsOverlay.js";
+import { useDrawnFindings } from "./useFindingsOverlay.js";
 
 vi.mock("maplibre-gl", async () => {
   const fake = await import("../test/fakeMapLibre.js");
@@ -128,16 +128,52 @@ describe("the findings overlay", () => {
     await waitFor(() => expect(drawn(compare)).toEqual(drawn(main)));
   });
 
-  it("asks for nothing while the overlay is off, or the map is zoomed too far out", async () => {
-    renderShell("/?panel=none#m=8/51.4286/-1.8542/0/0&v=composite&s=315/25&x=2&t=0/1.5&o=findings:100:h");
+  it("asks for nothing while the overlay is off, and at every zoom once it is on", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/#m=7/51.4286/-1.8542/0/0&v=composite&s=315/25&x=2&t=0/1.5&o=findings:100:h",
+    );
+    renderShell("/?panel=none");
     const map = await mapReady();
-    act(() => useMapStore.getState().setOverlayVisible("findings", true));
-    act(() => map.userMove({ zoom: FINDINGS_MIN_ZOOM - 0.5 }));
+    expect(useViewAreaStore.getState().zoom).toBe(7);
     await new Promise((resolve) => setTimeout(resolve, 500));
     expect(harness.requestsTo("/findings")).toBe(0);
 
-    act(() => map.userMove({ zoom: FINDINGS_MIN_ZOOM }));
-    await waitFor(() => expect(harness.requestsTo("/findings")).toBe(1));
+    act(() => useMapStore.getState().setOverlayVisible("findings", true));
+    await waitFor(() => expect(drawn(map)?.features.length).toBeGreaterThan(0));
+    // Zoomed out past the zooms the server simplifies for, it asks at the furthest out of them.
+    const url = harness
+      .fetchMock()
+      .mock.calls.map(([input]) => new URL(String(input), "http://localhost"))
+      .find((each) => each.pathname === "/api/v1/findings");
+    expect(url?.searchParams.get("zoom")).toBe("9");
+  });
+
+  it("says once, quietly, when there are more findings in view than were drawn, until the answer is whole", async () => {
+    let cut = true;
+    answerFindings(() => json({ ...findingsData, next_cursor: cut ? "more" : null }));
+    renderShell("/?panel=none");
+    const map = await mapReady();
+    const notice = await screen.findByText("Not every finding in view is drawn. Zoom in to see the rest.");
+    expect(notice).toHaveAttribute("role", "status");
+    expect(screen.getAllByText(/Not every finding in view is drawn/)).toHaveLength(1);
+    // It is not paged through: one request for the box.
+    expect(harness.requestsTo("/findings")).toBe(1);
+
+    cut = false;
+    act(() => map.userMove({ lng: -1.8, zoom: 15 }));
+    await waitFor(() => expect(harness.requestsTo("/findings")).toBe(2));
+    await waitFor(() => expect(screen.queryByText(/Not every finding in view is drawn/)).toBeNull());
+  });
+
+  it("says nothing of findings left out while the findings overlay is off", async () => {
+    answerFindings(() => json({ ...findingsData, next_cursor: "more" }));
+    renderShell("/?panel=none");
+    await mapReady();
+    await screen.findByText(/Not every finding in view is drawn/);
+    act(() => useMapStore.getState().setOverlayVisible("findings", false));
+    await waitFor(() => expect(screen.queryByText(/Not every finding in view is drawn/)).toBeNull());
   });
 
   it("says nothing and shows nothing when the server has no findings endpoint yet", async () => {

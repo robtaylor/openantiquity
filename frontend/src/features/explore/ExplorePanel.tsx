@@ -1,4 +1,4 @@
-import { MapPinPlus, SearchX, SlidersHorizontal, Unplug, ZoomIn } from "lucide-react";
+import { MapPinPlus, SearchX, SlidersHorizontal, Unplug } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { useNavigate } from "react-router";
 import type { Meta } from "../../api/meta.js";
@@ -215,12 +215,6 @@ function ListBody({ meta, list }: { meta: Meta; list: FindingsList }) {
   const filtered = useFindingFilters((state) => hasFilters(state.filters));
 
   switch (list.status) {
-    case "zoomed-out":
-      return (
-        <EmptyState icon={<ZoomIn size={22} />} title="Zoom in to see findings">
-          <p>Findings are listed once the map shows a few miles across or less.</p>
-        </EmptyState>
-      );
     case "filtered-out": {
       const explained = labelOf(meta.vocab.states, "ruled_out");
       return (
