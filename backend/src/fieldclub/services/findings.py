@@ -627,10 +627,10 @@ def create_finding(
     if location is None and shape is None:
         raise LocationRequiredError()
     location = shape_edits.place_anchor(shape, placed=location)
-    lon, lat = shape_edits.point_parts(location)
+    lon, lat = location.x, location.y
     level = sensitivity.starting_sensitivity(feature_class, requested_sensitivity, author)
     check_text_for_level(level, {"title": title, "description": description})
-    nation = geo.nation_of(db, Point(lon, lat))
+    nation = geo.nation_of(db, location)
 
     finding = ids.insert_with_public_id(
         db,
@@ -777,8 +777,8 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
         shape_edits.move_anchor(db, finding, location)
     if placed:
         finding.location_derived = False
-    location = Point(point_lon_lat(finding.location))
-    moved = shape_edits.point_parts(location) != before
+    after = point_lon_lat(finding.location)
+    moved = after != before
 
     for name in ("title", "view_state"):
         if changes.get(name) is not None:
@@ -792,7 +792,7 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
         finding.feature_class = FeatureClass(changes["feature_class"]).value
         class_changed = True
     if suggested and changes.get("title") is None and (moved or class_changed):
-        finding.title = suggested_title(finding.feature_class, *shape_edits.point_parts(location))
+        finding.title = suggested_title(finding.feature_class, *after)
     level_before = finding.sensitivity
     db.flush()
     # The flush applies a level a new class raises. A raised level checks the

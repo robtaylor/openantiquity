@@ -217,16 +217,10 @@ def _record_shape_change(
 # --------------------------------------------------------------------------
 
 
-def point_parts(point: Point) -> tuple[float, float]:
-    """A finding's point as longitude and latitude."""
-    assert isinstance(point, Point), "a finding's location is a point"
-    return point.x, point.y
-
-
 def move_anchor(db: Session, finding: Finding, location: Point) -> None:
     """Put the finding's anchor at `location`. The ORM keeps `grid_ref` and the public position in step."""
     finding.location = to_db_geometry(location)
-    finding.nation = geo.nation_of(db, Point(*point_parts(location)))
+    finding.nation = geo.nation_of(db, location)
 
 
 def change_shape(
@@ -273,7 +267,7 @@ def change_shape(
     finding.shape_revision += 1
     if new_shape is None:
         finding.location_derived = False
-    if point_parts(anchor) != point_parts(current):
+    if (anchor.x, anchor.y) != (current.x, current.y):
         move_anchor(db, finding, anchor)
     looked_at.refresh_added(finding, new_shape.geometry if new_shape is not None else None, looked)
     return kind
