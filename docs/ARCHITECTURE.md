@@ -87,6 +87,7 @@ docs/
 - Enumerations are `StrEnum` classes in `vocab.py`, stored as `TEXT`. No native PostgreSQL enums.
 - A version passes over an activity kind or a next step it has no name for (`feed._listed`, `confidence._known_steps`, Decision 0033). A deploy changes the schema before it swaps the machines, so an earlier version meets what a later one stored. A new value in any other stored vocabulary takes a new `ASSESSMENT_VERSION` or a deploy of its own first.
 - A version reads a stored feature class it has no name for as `unknown`, "Not sure" (`vocab.stored_class`, Decision 0035). Every reader of a finding's or a second look's class goes through it. "Not sure" sent back in an edit or a note for such a class leaves the stored class alone. The interface shows a class id its `/meta` doesn't list as "Not sure" (`shownClass` and `classLabel` in `features/finding/describe.ts`).
+- The schema step widens a vocabulary's check and never narrows one, except for a value named in `_DROPPED_VALUES` in `db.py` (`_sync_enum_checks`, Decision 0035). A check that admits a value this version has no name for is left alone, so an earlier image gone back to doesn't refuse what a later one stored.
 - Primary keys are `BIGINT` identity columns. Public URLs use `findings.public_id`, `investigations.public_id` and `users.handle`, never raw ids.
 - All geometry is stored in EPSG:4326. Distance queries cast to `geography`. The functional indexes below make those casts indexable.
 - Timestamps are `timestamptz` and always UTC.

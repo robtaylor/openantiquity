@@ -331,7 +331,8 @@ def reveal(db: Session, finding: Finding, user: User, detail: Detail) -> AnswerR
     if observation.revealed_at is None:
         return _add_detail(db, finding, user, observation, detail)
     given = {name: value for name, value in detail.detail_columns().items() if value is not None}
-    if any(getattr(observation, name) != value for name, value in given.items()):
+    stored = _stored(observation)
+    if any(stored[name] != value for name, value in given.items()):
         raise AnswerFinalError()
     if detail.note is not None:
         observation.note = detail.note

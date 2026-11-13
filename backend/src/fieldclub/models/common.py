@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any
@@ -58,13 +59,17 @@ def enum_check(column: str, enum_cls: type[StrEnum]) -> CheckConstraint:
     )
 
 
-def enum_check_text(column: str, enum_cls: type[StrEnum]) -> str:
-    """The condition of an `enum_check`: the column is one of the enumeration's values."""
-    values = [member.value for member in enum_cls]
-    assert values, f"{enum_cls.__name__} has no members"
-    assert all("'" not in value for value in values), f"{enum_cls.__name__} has a value with a quote in it"
+def values_check_text(column: str, values: Sequence[str]) -> str:
+    """The condition that the column is one of `values`."""
+    assert values, f"no values for the check on {column}"
+    assert all("'" not in value for value in values), f"a value for {column} has a quote in it"
     quoted = ", ".join(f"'{value}'" for value in values)
     return f"{column} IN ({quoted})"
+
+
+def enum_check_text(column: str, enum_cls: type[StrEnum]) -> str:
+    """The condition of an `enum_check`: the column is one of the enumeration's values."""
+    return values_check_text(column, [member.value for member in enum_cls])
 
 
 def point(*, spatial_index: bool = True) -> Geometry:

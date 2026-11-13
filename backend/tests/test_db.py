@@ -13,7 +13,7 @@ from enum import StrEnum
 import pytest
 from sqlalchemy import CheckConstraint, create_engine, inspect, select, text
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
@@ -341,14 +341,71 @@ def test_the_activity_kind_check_follows_the_vocabulary(
         conn.execute(text("INSERT INTO activity (kind) VALUES ('made_up')"))
         conn.execute(text("DELETE FROM activity WHERE kind = 'made_up'"))
 
+
+def test_a_version_gone_back_to_leaves_a_check_a_later_one_widened(
+    scratch_database: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Going back to an earlier image runs its schema step against what the later one left.
+
+    The later version added a value and stored rows with it. Made again
+    without it, the check would refuse everything the later version saves,
+    and validating it would fail on those rows after the narrowed check had
+    been committed.
+    """
+    create_schema(scratch_database)
+    (check,) = [
+        constraint
+        for constraint in Base.metadata.tables["activity"].constraints
+        if isinstance(constraint, CheckConstraint) and constraint.name == "ck_activity_kind_valid"
+    ]
+    grown = StrEnum(
+        "GrownActivityKind", {kind.value: kind.value for kind in [*ActivityKind]} | {"made_up": "made_up"}
+    )
+    monkeypatch.setitem(check.info, "enum", grown)
+    create_schema(scratch_database)
+    with scratch_database.begin() as conn:
+        conn.execute(text("INSERT INTO activity (kind) VALUES ('made_up')"))
+
     monkeypatch.setitem(check.info, "enum", ActivityKind)
     create_schema(scratch_database)
+
     definition, validated = _kind_check(scratch_database)
-    assert "'made_up'" not in definition
+    assert "'made_up'" in definition
     assert "'shape_extended'" in definition
     assert validated
-    with pytest.raises(IntegrityError), scratch_database.begin() as conn:
+    with scratch_database.begin() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM activity WHERE kind = 'made_up'")) == 1
+        # The later version, still serving or put back, goes on saving its value.
         conn.execute(text("INSERT INTO activity (kind) VALUES ('made_up')"))
+        conn.execute(text("DELETE FROM activity WHERE kind = 'made_up'"))
+
+
+def test_a_check_made_again_for_a_new_value_keeps_what_a_later_version_added(
+    scratch_database: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    create_schema(scratch_database)
+    (check,) = [
+        constraint
+        for constraint in Base.metadata.tables["activity"].constraints
+        if isinstance(constraint, CheckConstraint) and constraint.name == "ck_activity_kind_valid"
+    ]
+    kinds = {kind.value: kind.value for kind in [*ActivityKind]}
+    monkeypatch.setitem(check.info, "enum", StrEnum("OneBranch", kinds | {"made_up": "made_up"}))
+    create_schema(scratch_database)
+    with scratch_database.begin() as conn:
+        conn.execute(text("INSERT INTO activity (kind) VALUES ('made_up')"))
+
+    # A version cut before that one, with a value of its own to add.
+    monkeypatch.setitem(check.info, "enum", StrEnum("AnotherBranch", kinds | {"its_own": "its_own"}))
+    create_schema(scratch_database)
+
+    definition, validated = _kind_check(scratch_database)
+    assert "'made_up'" in definition
+    assert "'its_own'" in definition
+    assert validated
+    with scratch_database.begin() as conn:
+        conn.execute(text("INSERT INTO activity (kind) VALUES ('its_own')"))
+        conn.execute(text("DELETE FROM activity WHERE kind IN ('made_up', 'its_own')"))
 
 
 def test_the_hand_written_shape_kind_check_holds_the_vocabulary() -> None:

@@ -185,20 +185,20 @@ def extras_statements() -> list[str]:
 class _EnumCheck:
     table: str
     name: str
-    condition: str
+    column: str
+    # The enumeration's values as this version has them.
+    values: tuple[str, ...]
 
 
 def _enum_checks() -> list[_EnumCheck]:
-    """Every `models.common.enum_check` on the tables, with its condition as the enumeration gives it now."""
-    from fieldclub.models.common import enum_check_text
-
+    """Every `models.common.enum_check` on the tables, with the values its enumeration has now."""
     found: list[_EnumCheck] = []
     for table in Base.metadata.tables.values():
         for constraint in table.constraints:
             if isinstance(constraint, CheckConstraint) and "enum" in constraint.info:
                 assert isinstance(constraint.name, str), f"an unnamed check on {table.name}"
-                condition = enum_check_text(constraint.info["column"], constraint.info["enum"])
-                found.append(_EnumCheck(table.name, constraint.name, condition))
+                values = tuple(member.value for member in constraint.info["enum"])
+                found.append(_EnumCheck(table.name, constraint.name, constraint.info["column"], values))
     return found
 
 
@@ -263,23 +263,41 @@ def _move_dropped_values(conn: Connection) -> None:
 
 
 def _sync_enum_checks(conn: Connection) -> None:
-    """Make again each vocabulary check whose stored values differ from its enumeration's now.
+    """Make again each vocabulary check that lacks a value of its enumeration, or still admits a dropped one.
 
     `create_all` makes a check only with its table, so a database built before
     a value was added keeps the old check. The new one is added `NOT VALID`,
     which needs no scan of the table, and `_validate_checks` checks the rows
     after this transaction has let go of its locks.
+
+    A check is never made narrower except by a value named in
+    `_DROPPED_VALUES`. A stored check can admit a value this version has no
+    name for: a later version added it, and this one is serving beside it or
+    was gone back to. Made again without that value, the check would refuse
+    what the later version saves and fail on the rows it has stored, so such
+    a value is left in, and kept when the check is made again for another
+    reason (Decision 0035).
     """
+    from fieldclub.models.common import values_check_text
+
     stored = _stored_checks(conn)
     for check in _enum_checks():
         definition = stored.get((check.table, check.name))
         assert definition is not None, f"{check.table} has no check {check.name}"
-        if set(_QUOTED.findall(definition)) == set(_QUOTED.findall(check.condition)):
+        admitted = _QUOTED.findall(definition)
+        dropped = {
+            value.dropped
+            for value in _DROPPED_VALUES
+            if (value.table, value.column) == (check.table, check.column)
+        }
+        if set(check.values) <= set(admitted) and dropped.isdisjoint(admitted):
             continue
+        later = [value for value in admitted if value not in check.values and value not in dropped]
         logger.info("Making %s on %s again with the values it has now", check.name, check.table)
+        condition = values_check_text(check.column, [*check.values, *later])
         conn.exec_driver_sql(
             f'ALTER TABLE "{check.table}" DROP CONSTRAINT "{check.name}", '
-            f'ADD CONSTRAINT "{check.name}" CHECK ({check.condition}) NOT VALID'
+            f'ADD CONSTRAINT "{check.name}" CHECK ({condition}) NOT VALID'
         )
 
 

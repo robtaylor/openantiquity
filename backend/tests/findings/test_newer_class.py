@@ -354,6 +354,36 @@ def test_a_note_saved_on_a_second_look_naming_the_later_class_keeps_the_class(
     assert (stored.note, stored.feature_class) == ("Clearer at dusk", LATER_CLASS)
 
 
+def test_a_reveal_asked_again_with_the_not_sure_it_showed_answers_the_same(
+    db: Session, finder: User, make_user: MakeUser, client_as: ClientAs, later_schema: None
+) -> None:
+    finding = create(db, finder)
+    helper = make_user()
+    answer(db, finding, helper, Visible.YES, feature_class=FeatureClass.MOAT)
+    db.execute(update(Observation).where(Observation.user_id == helper.id).values(feature_class=LATER_CLASS))
+    db.commit()
+    shown = client_as(helper).get(f"{API}/findings/{finding.public_id}").json()["my_observation"]
+
+    again = client_as(helper).post(
+        f"{API}/findings/{finding.public_id}/observation/reveal",
+        json={"feature_class": shown["feature_class"], "note": "Clearer at dusk"},
+    )
+
+    assert shown["feature_class"] == "unknown"
+    assert again.status_code == 200, again.text
+    stored = db.scalars(select(Observation).where(Observation.user_id == helper.id)).one()
+    db.refresh(stored)
+    assert (stored.note, stored.feature_class) == ("Clearer at dusk", LATER_CLASS)
+
+    # Any other class is a change to an answer that is final, as it is for a class this version names.
+    other = client_as(helper).post(
+        f"{API}/findings/{finding.public_id}/observation/reveal", json={"feature_class": "enclosure"}
+    )
+    assert other.status_code == 409, other.text
+    db.refresh(stored)
+    assert stored.feature_class == LATER_CLASS
+
+
 # --------------------------------------------------------------------------
 # Protection
 # --------------------------------------------------------------------------

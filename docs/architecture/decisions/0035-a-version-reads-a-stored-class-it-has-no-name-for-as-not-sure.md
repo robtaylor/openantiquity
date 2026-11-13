@@ -12,6 +12,8 @@ When this was written the code read a stored feature class strictly. A finding's
 
 A deploy ran `fieldclub-release` once and then replaced the web machines one at a time, so for some minutes the earlier version served beside the later one. Going back to an earlier image left every row the later one had written. Decision 0033 had met the same problem for activity kinds and next steps, and said in its third point that a new value in any other stored vocabulary needed a deploy of its own first.
 
+The schema step that `fieldclub-release` ran made a vocabulary's check again whenever the values stored in it differed from the enumeration's. So an earlier image gone back to would have made the class checks again without the later version's class. The narrower check was committed before the rows were checked against it. With a finding of the new class stored, that check failed and so did the release, and the narrower check stayed, refusing every save of the new class and every change to a row that held it. An independent review of this change found that on 2026-11-13, before either part was deployed.
+
 On 2026-11-13 the owner asked for a class for buildings and ruins. Had it been deployed over the version then live, a single finding saved with it would have made that version answer 500 on the public map, the list, the feed and the finding's own page.
 
 ## Decision
@@ -21,7 +23,8 @@ On 2026-11-13 the owner asked for a class for buildings and ruins. Had it been d
 3. An edit or a note on a second look is compared with the class this version showed, not the one stored. "Not sure" sent back for a class this version can't name changes nothing, and any other class is saved.
 4. A class this version can't name has the default level of `unknown` when one is needed, and never changes a level a finding already has.
 5. The interface shows a class id its `/meta` doesn't list as "Not sure" with its icon, so a page left open across a deploy doesn't break either.
-6. This is deployed by itself, ahead of the first version that adds a class.
+6. The schema step never takes a value out of a vocabulary's check unless this version names it as dropped (`_DROPPED_VALUES` in `db.py`). A check that admits a value this version has no name for is left as it is, and keeps that value when it is made again for a value of this version's own. This holds for every stored vocabulary, not only classes.
+7. This is deployed by itself, ahead of the first version that adds a class.
 
 ## Alternatives considered
 
@@ -32,9 +35,12 @@ On 2026-11-13 the owner asked for a class for buildings and ruins. Had it been d
 
 ## Consequences
 
-- A class can be added in a deploy of its own once every machine reads unknown classes, and going back from it is safe.
+- A class can be added in a deploy of its own once every machine reads unknown classes. Going back from it is safe as far as the first version that holds this decision, and no further.
 - An earlier version shows such a finding as "Not sure", and its downloads give it the monument type `SITE`. A filter on "Not sure" lists it.
-- When an earlier version reassesses such a finding it counts the class as "Not sure", which gives it no class support, and stores `community_class` as that assessment says. The later version puts both back the next time it assesses the finding.
+- When an earlier version reassesses such a finding it counts the class as "Not sure", which gives it no class support, and stores `community_class` as that assessment says. A finding that had reached a tier on the strength of that class can drop a tier, and its followers are told. The later version puts the support, the community's class and the tier back the next time it assesses the finding, and the followers are told again.
+- On an earlier version nobody can choose "Not sure" for such a finding: it is what that version already shows, so sending it changes nothing.
+- While machines are swapped, a page loaded from the later version can send the new class to a machine on the earlier one, which refuses it as not valid. Saving again once the swap is over works.
+- A value taken out of a vocabulary stays in its check until a version names it as dropped.
 - A finding's title that is still the suggested one doesn't follow a move made on an earlier version, because that version can't tell the title was suggested.
 - The class itself is never written over: only a person choosing another class replaces it.
 
