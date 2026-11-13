@@ -758,17 +758,18 @@ function SignInHere() {
 }
 
 describe("the person changing", () => {
-  it("forgets a new marking", async () => {
+  it("keeps a new marking, which is the person's own and no saved finding's", async () => {
     const user = userEvent.setup();
     const routes = routeApi(harness.fetchMock(), { "GET /auth/me": () => signedOutResponse() });
     renderShell("/mark", <SignInHere />);
     const map = await mapReady();
     act(() => map.click(400, 300));
-    act(() => useMarkStore.getState().setTitle("Somebody else's"));
+    act(() => useMarkStore.getState().setTitle("Drawn before signing in"));
     routes.on("GET /auth/me", () => json(meFixture()));
     await user.click(screen.getByRole("button", { name: "Sign in for the test" }));
-    await waitFor(() => expect(points()).toHaveLength(0));
-    expect(useMarkStore.getState().title).toBe("");
+    await screen.findByRole("button", { name: "Save finding" });
+    expect(points()).toHaveLength(1);
+    expect(useMarkStore.getState().title).toBe("Drawn before signing in");
   });
 
   it("takes up again a draft still open in the panel once the store has forgotten it", async () => {

@@ -11,8 +11,9 @@
  *
  * Nothing here is stored. Pressing save turns it into a request, or into a
  * draft when nobody is signed in (`findingDrafts`). It may hold a saved
- * finding's exact path ("Change the shape"), so it is all forgotten when the
- * person changes, as every store of exact places is (`onPersonChanged`).
+ * finding's exact path ("Change the shape") or a kept draft, and forgets
+ * either when the person changes, as every store of exact places does
+ * (`onPersonChanged`). A marking never kept stays.
  */
 
 import { create } from "zustand";
@@ -274,7 +275,14 @@ export const useMarkStore = create<MarkState>()((set, get) => {
   };
 });
 
-onPersonChanged(() => useMarkStore.getState().start());
+// A saved finding's path is something one viewer was allowed to see, and a
+// kept draft is one person's: both go, and the panel loads again a draft that
+// is still this person's. A marking that was never kept is the work of
+// whoever is at the screen, drawn perhaps before they signed in, and stays.
+onPersonChanged(() => {
+  const { editing, draftId } = useMarkStore.getState();
+  if (editing !== null || draftId !== null) useMarkStore.getState().start();
+});
 
 /** True while taps add points: drawing, and the shape not closed. */
 export function isAdding(state: MarkFields): boolean {
