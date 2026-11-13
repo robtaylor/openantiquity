@@ -12,6 +12,7 @@ import { Skeleton } from "../../ui/Skeleton.js";
 import { TierBadge } from "../../ui/TierBadge.js";
 import { DraftBadge } from "../drafts/DraftBadge.js";
 import { useKindDrafts } from "../drafts/savers.js";
+import { labelOf } from "../finding/describe.js";
 import { type FilterKey, filterableStates, hasFilters, useFindingFilters } from "../findings/filters.js";
 import { findingPath, useSelectedFinding } from "../findings/selection.js";
 import { whereRef } from "../findings/square.js";
@@ -24,10 +25,6 @@ import { useDocumentTitle } from "../placeholders.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { type FindingsList, useFindingsList } from "./useFindingsList.js";
 import "./explore.css";
-
-function labelOf(list: ReadonlyArray<{ id: string; label: string }>, id: string): string {
-  return list.find((entry) => entry.id === id)?.label ?? id;
-}
 
 /** What a row needs of a finding: a list's summary, or the smaller one a feed or a profile sends. */
 export type FindingRowData = Pick<

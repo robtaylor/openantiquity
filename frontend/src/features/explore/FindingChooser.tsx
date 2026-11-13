@@ -16,6 +16,7 @@ import { useMapStore } from "../../map/store.js";
 import { useDrawnFindings } from "../../map/useFindingsOverlay.js";
 import { Chooser, type ChooserEntry } from "../../ui/Chooser.js";
 import { TierBadge } from "../../ui/TierBadge.js";
+import { labelOf } from "../finding/describe.js";
 import { findingPath, useSelectedFinding } from "../findings/selection.js";
 
 /** At most this many entries, then "Show all in Explore". */
@@ -29,10 +30,6 @@ export interface ChooserRequest {
   /** Where the tap was on the ground. */
   lngLat: [number, number];
   candidates: FindingCandidate[];
-}
-
-function labelOf(list: ReadonlyArray<{ id: string; label: string }>, id: string | undefined): string {
-  return list.find((entry) => entry.id === id)?.label ?? id ?? "";
 }
 
 /** "1 finding here", "3 findings here". */
@@ -59,8 +56,8 @@ export function FindingChooser({
 
   const entries: ChooserEntry[] = shown.map((candidate) => {
     const finding = drawn.get(candidate.publicId);
-    const tier = { id: finding?.tier ?? "", label: labelOf(meta.vocab.tiers, finding?.tier) };
-    const featureClass = labelOf(meta.vocab.feature_classes, finding?.feature_class);
+    const tier = { id: finding?.tier ?? "", label: labelOf(meta.vocab.tiers, finding?.tier ?? "") };
+    const featureClass = labelOf(meta.vocab.feature_classes, finding?.feature_class ?? "");
     const title = finding?.title ?? "A finding";
     return {
       id: candidate.publicId,
