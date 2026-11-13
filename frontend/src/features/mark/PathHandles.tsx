@@ -9,8 +9,9 @@
  * - A drag moves the point, recorded as one change for undo. It starts once
  *   a finger or a pen has moved 8 px, or a mouse 3 px, so a finger's wobble
  *   is still a tap or a press.
- * - A long press, 500 ms without moving 8 px, switches the point's kind
- *   (Decision 0031), with a short vibration where the device has one.
+ * - A long press by a finger or a pen, 500 ms without moving 8 px, switches
+ *   the point's kind (Decision 0031), with a short vibration where the
+ *   device has one. A mouse never long-presses.
  * - The arrow keys nudge it, with Shift for bigger steps. `[` and `]` step to
  *   the previous and next point, and Delete removes it.
  *
@@ -145,14 +146,18 @@ function Handle({
     event.currentTarget.setPointerCapture?.(event.pointerId);
     endPress();
     swallowClick.current = false;
-    const timer = window.setTimeout(() => {
-      const current = press.current;
-      if (!current || current.dragging) return;
-      current.timer = null;
-      swallowClick.current = true;
-      useMarkStore.getState().switchPointKind(index);
-      navigator.vibrate?.(15);
-    }, LONG_PRESS_MS);
+    // The long press is a finger's or a pen's gesture. A mouse has Shift-click and the bar's control.
+    const timer =
+      event.pointerType === "mouse"
+        ? null
+        : window.setTimeout(() => {
+            const current = press.current;
+            if (!current || current.dragging) return;
+            current.timer = null;
+            swallowClick.current = true;
+            useMarkStore.getState().switchPointKind(index);
+            navigator.vibrate?.(15);
+          }, LONG_PRESS_MS);
     press.current = {
       pointerId: event.pointerId,
       pointerType: event.pointerType,

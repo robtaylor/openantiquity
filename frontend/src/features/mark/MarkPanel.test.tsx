@@ -338,6 +338,19 @@ describe("marking by tapping", () => {
     });
   }
 
+  it("never long-presses for a mouse: a pause before a drag still drags, and switches nothing", async () => {
+    const { map } = await openMarking();
+    act(() => map.click(400, 300));
+    const target = handle(0);
+    fireEvent.pointerDown(target, { pointerId: 8, button: 0, pointerType: "mouse", clientX: 400, clientY: 300 });
+    await act(() => new Promise((resolve) => setTimeout(resolve, LONG_PRESS_MS + 50)));
+    expect(points()[0]?.kind).toBe("corner");
+    fireEvent.pointerMove(target, { pointerId: 8, pointerType: "mouse", clientX: 460, clientY: 300 });
+    fireEvent.pointerUp(target, { pointerId: 8, pointerType: "mouse", clientX: 460, clientY: 300 });
+    expect(points()[0]?.kind).toBe("corner");
+    expect(map.project(point()).x).toBeCloseTo(460, 6);
+  });
+
   it("drags a point once a mouse moves past 3 px", async () => {
     const { map } = await openMarking();
     act(() => map.click(400, 300));
