@@ -34,13 +34,13 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useMainMap } from "../../map/mainMap.js";
-import { useMapStore } from "../../map/store.js";
 import { IconButton } from "../../ui/IconButton.js";
 import { useIsPhone } from "../shell/useIsPhone.js";
 import { useDevice } from "./DrawingTool.js";
 import { GUIDE_FOLDED_KEY, type GuideIcon, type GuideRow, guideRows, stageOf } from "./guideRows.js";
+import { useDotsDrawn } from "./MidpointDots.js";
 import { useMarkPath, useMarkStore } from "./markStore.js";
-import { canClose, hasRoomForPoint, segmentMiddles } from "./path.js";
+import { canClose } from "./path.js";
 import "./mark.css";
 
 const ICONS: Record<GuideIcon, LucideIcon> = {
@@ -91,8 +91,7 @@ function useGuideRows(): GuideRow[] {
   const drawing = useMarkStore((state) => state.drawing);
   const end = useMarkStore((state) => state.end);
   const nextKind = useMarkStore((state) => state.nextKind);
-  const limits = useMapStore((state) => state.meta?.shapes);
-  const dots = segmentMiddles(path).length > 0 && limits !== undefined && hasRoomForPoint(path, limits);
+  const dots = useDotsDrawn((state) => state.drawn);
   return guideRows({ stage: stageOf(path), drawing, device, nextKind, end, canClose: canClose(path), dots });
 }
 

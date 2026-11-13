@@ -8,6 +8,7 @@ import { GEO_RESULTS } from "../../test/fixtures/records.js";
 import { json, mapReady, renderShell, setUpShellTests, usePhoneLayout } from "../../test/shellHarness.js";
 import { GUIDE_FOLDED_KEY } from "./guideRows.js";
 import { useMarkStore } from "./markStore.js";
+import { history, type Path } from "./path.js";
 
 vi.mock("maplibre-gl", async () => {
   const fake = await import("../../test/fakeMapLibre.js");
@@ -101,6 +102,30 @@ describe("the drawing guide on the map", () => {
     expect(shift?.tagName).toBe("KBD");
     // Every row's icon is hidden from a screen reader, which reads the words.
     for (const icon of guide().querySelectorAll("li svg")) expect(icon).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("names the dots only while some are drawn", async () => {
+    const map = await openAt("/mark");
+    act(() => map.click(300, 300));
+    act(() => map.click(370, 300));
+    // Too short a segment for a dot.
+    expect(screen.queryAllByTestId("midpoint-dot")).toHaveLength(0);
+    expect(rows().some((row) => row.startsWith("Drag a dot"))).toBe(false);
+    act(() => map.click(500, 300));
+    expect(screen.queryAllByTestId("midpoint-dot")).not.toHaveLength(0);
+    expect(rows()).toContain("Drag a dot on the line: Adds a point there to bend it");
+
+    // More than 150 points in view: no handles but the ends, no dots, and no row for them.
+    const many: Path = {
+      closed: false,
+      points: Array.from({ length: 160 }, (_, index) => {
+        const { lng, lat } = map.unproject([100 + index * 5, 300 + (index % 2) * 40]);
+        return { lon: lng, lat, kind: "corner" as const };
+      }),
+    };
+    act(() => useMarkStore.setState({ shape: history(many) }));
+    expect(screen.queryAllByTestId("midpoint-dot")).toHaveLength(0);
+    expect(rows().some((row) => row.startsWith("Drag a dot"))).toBe(false);
   });
 
   it("names the keys once a point has keyboard focus", async () => {

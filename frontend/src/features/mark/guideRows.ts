@@ -68,7 +68,7 @@ export interface GuideState {
   end: PathEnd;
   /** True when a tap on the far end would close the shape: an open path of three points or more. */
   canClose: boolean;
-  /** True when the midpoint dots are offered: the path has a segment and room for another point. */
+  /** True when a midpoint dot is drawn on the map now. */
   dots: boolean;
 }
 

@@ -21,6 +21,7 @@
 
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef } from "react";
+import { create } from "zustand";
 import type { ShapeLimits } from "../../api/meta.js";
 import { useMapStore } from "../../map/store.js";
 import { lngLatAtClient, screenPoint } from "../../map/useMapFrame.js";
@@ -170,6 +171,13 @@ function useDotPress(map: MapLibreMap): (event: ReactPointerEvent<HTMLElement>, 
   };
 }
 
+/** Whether any midpoint dot is drawn now, for the guide's row about them. */
+export const useDotsDrawn = create<{ drawn: boolean }>()(() => ({ drawn: false }));
+
+function noteDrawn(drawn: boolean): void {
+  if (useDotsDrawn.getState().drawn !== drawn) useDotsDrawn.setState({ drawn });
+}
+
 /** The dots of the path, under its handles. */
 export function MidpointDots({ map, path }: { map: MapLibreMap; path: Path }) {
   const selected = useMarkStore((state) => state.selected);
@@ -185,6 +193,9 @@ export function MidpointDots({ map, path }: { map: MapLibreMap; path: Path }) {
     limits,
     paddedBounds(map),
   );
+  const drawn = dots.length > 0;
+  useEffect(() => noteDrawn(drawn), [drawn]);
+  useEffect(() => () => noteDrawn(false), []);
   return (
     <div className="fc-midpoints" aria-hidden="true">
       {dots.map((dot) => (
