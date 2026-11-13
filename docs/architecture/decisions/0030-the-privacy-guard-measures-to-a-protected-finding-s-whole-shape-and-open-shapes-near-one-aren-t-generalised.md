@@ -4,7 +4,7 @@
 
 **Current architecture:** [Findings, "What each reader is sent"](../findings.md#what-each-reader-is-sent).
 
-**TL;DR.** In the context of findings drawn as lines and areas many kilometres long, facing a guard on investigations that measured only from a protected finding's anchor, and open roads drawn past barrows other people protected, we chose to measure the 1.5 km guard to a protected finding's whole shape and to show an open finding's shape by its own level alone, so that no view beside a protected road reaches a square-only reader and most roads stay visible to signed-out visitors, accepting more held-back views along protected lines and a line drawn to point at a protected finding saying where it is until a moderator raises it.
+**TL;DR.** In the context of findings drawn as lines and areas many kilometres long, facing a guard on investigations that measured only from a protected finding's anchor, and open roads drawn past barrows other people protected, we chose to measure the 1.5 km guard to a protected finding's whole shape and to show an open finding's shape by its own level alone, so that no view beside a protected road reaches a square-only reader and most roads stay visible to signed-out visitors, accepting more held-back views along protected lines, a line drawn to point at a protected finding saying where it is until a moderator raises it, and investigation areas drawn along a protected line showing roughly where it runs.
 
 ## Context
 
@@ -16,16 +16,20 @@ A shape finding keeps one anchor point, and a line may run 600 km (Decision 0028
 
 An open road drawn past somebody else's protected barrow shows the road, not the barrow. Nothing in the line says the barrow is there unless the line was drawn to point at it. Barrows line Roman roads. The plan asked the owner on 2026-11-12 whether to generalise such lines, as an open question with a recommended answer of no. They replied: "no".
 
+An investigation's area that comes within 1.5 km of a finding the reader doesn't see exactly is shown as the whole 1 km squares it covers (Decision 0023, point 3). Measured to a whole line, each area a member draws along a protected road is shown that way, and together the areas say roughly where the road runs. A review of the finished work raised this on 2026-11-13. The owner was asked whether to accept it or to withhold such areas from a reader who sees the road only as its square, with a recommendation to accept it, since they had declined a day earlier to pay a large cost against people set on finding a place (Decision 0032). They replied: "sounds good".
+
 ## Decision
 
 1. A saved view's centre, a height profile's line and an investigation's area are judged by their distance to the anchor, or to the whole line or area, of a finding the reader doesn't see exactly, whichever is nearer. `hidden_near` tests `ST_DWithin` against `location` or `outline`, using the spatial index on `outline`, and `PositionGuard.near` measures to the exact shape. The distance stays 1.5 km. A finding a moderator has hidden takes no part (Decision 0032, point 5).
 2. This replaces point 1 of Decision 0023 in that one respect, what the distance is measured to. Points 2 to 8 of Decision 0023 stand as they were.
 3. An open finding's line or area is shown by the finding's own level, to everyone who may see it exactly, whatever protected findings it passes near. This is an accepted limit, the same one that already applies to an open point finding placed on a protected site.
+4. An investigation's area within 1.5 km of a protected line is shown as whole squares to a reader who sees the line only as its square, as it is beside a protected point. Areas drawn along the line then show that reader roughly where it runs, to within about 2 km. This is an accepted limit too.
 
 ## Alternatives considered
 
 - **Measuring from the anchor alone, as before** — rejected because a view or profile anywhere along a protected line more than 1.5 km from its anchor would be served exactly and would trace the line.
 - **Generalising every open line near a protected finding** — rejected because it would hide most Roman roads from signed-out visitors, since barrows line them. It would also put a spatial guard on every finding read, list and map page.
+- **Withholding an area that comes near a protected line from a reader who sees the line only as its square** — rejected because it would take public investigations' areas off the map for signed-out visitors along every protected line, to keep a course to within 2 km from someone prepared to piece it together.
 
 ## Consequences
 
@@ -35,6 +39,7 @@ An open road drawn past somebody else's protected barrow shows the road, not the
 - The guard's spatial test now runs against shapes as well as points, which needs the new index on `outline`.
 - Open roads, trackways and boundaries are drawn in full for signed-out visitors.
 - A line drawn on purpose to point at someone else's protected finding says where it is to anyone who may see the line, until someone notices it.
+- A signed-out visitor can tell roughly where a protected line runs wherever members have drawn investigation areas along it. Its exact course, and any stretch with no area beside it, stay with members.
 - Reads of findings, lists and map pages stay free of a test against other people's protected findings, and adding one later would cost what rejected it.
 
 ## Walk-back options
@@ -43,6 +48,7 @@ An open road drawn past somebody else's protected barrow shows the road, not the
 - **If readers miss the held-back views** — show them at the zoom of the 1 km square, centred on the square, as Decision 0023 already names as its walk-back.
 - **If open lines are used to point at protected sites** — moderators raise such a finding to protected, as Decision 0005 lets them. From then on, anyone who sees it only as its 1 km square gets no line.
 - **If that happens often** — generalise an open line within 1.5 km of a protected finding, and accept the guard on every finding read and the roads it hides.
+- **If areas are drawn to trace protected lines** — give a reader who sees a line only as its square no area at all for an investigation that comes within 1.5 km of it, as `PositionGuard.area` already does for a shape off the grid.
 
 ## Links
 

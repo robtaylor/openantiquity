@@ -135,7 +135,7 @@ One function decides each reader's view of a shape, `sensitivity.visible_shape`,
 | Downloads | The anchor as the geometry, with `shape_kind`, `shape_length_m` and the whole derived shape as the `outline` property. For a protected finding this goes only to the finder and trusted people | The square, with no `outline`. A member who isn't trusted downloads a protected finding the same way |
 | `finding_shape_changes` | Never served whole. `path_before` isn't sent to anyone | |
 
-Investigations hold back what is drawn within 1.5 km of a finding the reader doesn't see exactly, measured to its point or anywhere along its line or area (`sensitivity.hidden_near`, `PositionGuard.near`, [Decision 0030](decisions/0030-the-privacy-guard-measures-to-a-protected-finding-s-whole-shape-and-open-shapes-near-one-aren-t-generalised.md)). A finding a moderator has hidden takes no part in that rule: `hidden_near` and `near_hidden_clause` leave out any finding with `hidden_at` set. An investigation that holds or has held a hidden finding still holds back what is written beside it. An open finding's shape is shown by its own level, whatever protected findings it passes near.
+Investigations hold back what is drawn within 1.5 km of a finding the reader doesn't see exactly, measured to its point or anywhere along its line or area (`sensitivity.hidden_near`, `PositionGuard.near`, [Decision 0030](decisions/0030-the-privacy-guard-measures-to-a-protected-finding-s-whole-shape-and-open-shapes-near-one-aren-t-generalised.md)). A finding a moderator has hidden takes no part in that rule: `hidden_near` and `near_hidden_clause` leave out any finding with `hidden_at` set. An investigation that holds or has held a hidden finding still holds back what is written beside it. An investigation's area that comes that near is shown as the whole 1 km squares it covers (`PositionGuard.area`). An open finding's shape is shown by its own level, whatever protected findings it passes near.
 
 ### Drawing findings on the map
 
@@ -166,6 +166,7 @@ The overlay asks for nothing below zoom 9, sends the map's zoom with the box, an
 - Smooth points take their curve from their neighbours. There are no handles to drag.
 - Only the finder changes a shape, so a finding whose finder has left can't be changed.
 - The anchor's square is the only place a signed-out reader of a protected finding is given. Suggested records start from the anchor, not from the whole line.
+- Where members have drawn investigation areas along a protected line, the squares those areas are shown as tell a signed-out reader roughly where the line runs, to within about 2 km (Decision 0030, point 4).
 - Every change of shape keeps the path before it, and nothing limits how many a finding may have beyond the hourly limit on writes. The page serves the newest 50. The rows of a finding changed over and over stay in `finding_shape_changes` until someone removes them.
 
 ## Implementation status
