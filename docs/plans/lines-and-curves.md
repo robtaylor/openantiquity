@@ -431,6 +431,7 @@ They were written on 2026-11-12 as four records, Proposed, and are checked again
 | A finder moves a finding with answers to ground nobody looked at | Medium | `looked_at`, the 250 m reach and the three-quarters that must stay (Decision 0029) |
 | An answer about a road's first stretch counts for the whole road | Low | The owner accepted this. `look_at_new_part` asks for looks at what was added |
 | A double tap adds two points before zooming | Low | Double-tap zoom is off while drawing, and a test checks it |
+| A member changes a long path over and over, and each change stores the path before it | Medium | The hourly limit on writes, moderators' hide and ban, and the page serving only the newest 50. Watch the size of `finding_shape_changes`. A cap on changes to one finding in a day is the walk-back |
 
 ## Left out of the first version
 

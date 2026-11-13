@@ -2,7 +2,7 @@
 
 **Status:** Proposed.
 
-**Current architecture:** [Plan: lines and curves for marking findings](../../plans/lines-and-curves.md).
+**Current architecture:** [Findings, "Shapes"](../findings.md#shapes).
 
 **TL;DR.** In the context of findings drawn as curved or straight lines and shapes, as long as a Roman road and extended later, facing outlines that can't be reopened, limits in degrees that refuse any long line, and a restricted line a square-only viewer mustn't trace, we chose to store the tapped points and derive the shape on the server with one named curve, to cap closed shapes at 25 km across and lines at 600 km, and to keep an anchor point that stays put, accepting a curve implemented twice and an anchor that drifts from a line's middle.
 
@@ -21,11 +21,11 @@ The caps were sized against Stanwick's ramparts at about 2.5 km, Watling Street 
 ## Decision
 
 1. A finding's shape is stored as its path: the tapped points in order, each a corner or a smooth point, whether it is closed, and the name of its curve. The path is the source of truth, and an old outline reads as an all-corner path.
-2. The server derives the stored and served geometry from the path with one curve, `catmull-rom-centripetal-1`, defined in the plan's section "The curve". A segment depends only on its own ends and neighbours, so an extension never changes a segment more than one away from the new point. The browser's preview only has to look the same, and shared test vectors keep the two in step.
+2. The server derives the stored and served geometry from the path with one curve, `catmull-rom-centripetal-1`, defined in [the findings area doc](../findings.md#the-curve-catmull-rom-centripetal-1). A segment depends only on its own ends and neighbours, so an extension never changes a segment more than one away from the new point. The browser's preview only has to look the same, and shared test vectors keep the two in step.
 3. Another curve can only come in under a new name, and any path can be re-derived from its points.
-4. A closed shape may be at most 25 km across. A line has no limit across and may be at most 600 km long, which leaves room for a line that wanders and a road followed into its continuation. A path may have at most 5,000 points and its derived shape at most 50,000 vertices. The plan's section "Limits, and why there are any" lists them with their error codes.
+4. A closed shape may be at most 25 km across. A line has no limit across and may be at most 600 km long, which leaves room for a line that wanders and a road followed into its continuation. A path may have at most 5,000 points and its derived shape at most 50,000 vertices. [The findings area doc](../findings.md#limits) lists them with their error codes.
 5. A finding keeps a required point, its anchor, and everything that places a finding by one point goes on using it.
-6. An anchor the finder placed never moves by itself, and the shape must come within 1,000 m of it. When a shape is drawn first, the server places the anchor near the middle of the line or inside the area, as the plan's section "The point a line finding keeps" sets out.
+6. An anchor the finder placed never moves by itself, and the shape must come within 1,000 m of it. When a shape is drawn first, the server places the anchor near the middle of the line or inside the area, as [the findings area doc](../findings.md#the-anchor) sets out.
 7. A derived anchor stays put while the shape still passes close to it, so extending a line never moves it. When an edit takes the shape away, the anchor moves to the nearest point on the new shape, not to the new middle, and the finding's square follows.
 
 ## Alternatives considered

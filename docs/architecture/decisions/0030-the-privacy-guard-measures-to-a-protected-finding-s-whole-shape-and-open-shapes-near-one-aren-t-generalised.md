@@ -2,7 +2,7 @@
 
 **Status:** Proposed.
 
-**Current architecture:** [Plan: lines and curves for marking findings](../../plans/lines-and-curves.md).
+**Current architecture:** [Findings, "What each reader is sent"](../findings.md#what-each-reader-is-sent).
 
 **TL;DR.** In the context of findings drawn as lines and areas many kilometres long, facing a guard on investigations that measured only from a protected finding's anchor, and open roads drawn past barrows other people protected, we chose to measure the 1.5 km guard to a protected finding's whole shape and to show an open finding's shape by its own level alone, so that no view beside a protected road reaches a square-only reader and most roads stay visible to signed-out visitors, accepting more held-back views along protected lines and a line drawn to point at a protected finding saying where it is until a moderator raises it.
 

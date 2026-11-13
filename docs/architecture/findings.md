@@ -166,6 +166,7 @@ The overlay asks for nothing below zoom 9, sends the map's zoom with the box, an
 - Smooth points take their curve from their neighbours. There are no handles to drag.
 - Only the finder changes a shape, so a finding whose finder has left can't be changed.
 - The anchor's square is the only place a signed-out reader of a protected finding is given. Suggested records start from the anchor, not from the whole line.
+- Every change of shape keeps the path before it, and nothing limits how many a finding may have beyond the hourly limit on writes. The page serves the newest 50. The rows of a finding changed over and over stay in `finding_shape_changes` until someone removes them.
 
 ## Implementation status
 

@@ -2,7 +2,7 @@
 
 **Status:** Proposed.
 
-**Current architecture:** [Plan: lines and curves for marking findings](../../plans/lines-and-curves.md).
+**Current architecture:** [UI.md, "The drawing tool"](../../UI.md#the-drawing-tool) and [Findings, "Picking one of overlapping findings"](../findings.md#picking-one-of-overlapping-findings).
 
 **TL;DR.** In the context of a drawing tool where each point is straight or curved, on a map where shapes overlap, facing a phone with no Shift key and taps that hit only a marker under the exact tap position, we chose a visible control and a long press on a point's handle to switch its kind, never pressure or a long press on the map, and chose to pick areas by their edges, let the more specific candidate win and open a chooser between equals, accepting slower mixing of kinds on a phone and a road that hides the edge of a field system it crosses.
 
@@ -26,7 +26,7 @@ The owner also asked: "how do users select when there are overlapping shapes?" T
 6. An area is picked by its edge, never its inside, so a point or record inside a large area stays reachable. A finger gets a wider reach than a mouse.
 7. Markers beat lines and lines beat area edges. Among candidates of one kind, the smaller wins only when it is under half the other's length or extent. Otherwise the chooser opens.
 8. The chooser lists the candidates and highlights each as its entry is hovered or focused. It's a popover on a computer and a sheet on a phone that never covers the spot tapped. On a computer the pointer shows what a click would open.
-9. Findings still win over records, obscured squares behave as before, and the Explore list stays the keyboard route to every finding in view. The controls and reaches are in the plan's sections "The drawing tool" and "Picking one of overlapping shapes".
+9. Findings still win over records, obscured squares behave as before, and the Explore list stays the keyboard route to every finding in view. The controls and reaches are in [UI.md](../../UI.md#the-drawing-tool) and [the findings area doc](../findings.md#picking-one-of-overlapping-findings).
 
 ## Alternatives considered
 
