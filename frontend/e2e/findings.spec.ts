@@ -22,8 +22,17 @@ function markPanel(page: Page): Locator {
   return page.getByRole("complementary", { name: "Mark a finding" });
 }
 
+/** The handle of the marking's first point. */
 function handle(page: Page): Locator {
-  return page.getByRole("button", { name: /^Your mark/ });
+  return page.getByRole("button", { name: /^Point 1 of / });
+}
+
+/**
+ * Stop adding points, so the form comes up: on a phone the sheet rests at
+ * peek while the map takes taps, and rises half-way once drawing stops.
+ */
+async function finish(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Finish" }).click();
 }
 
 /** Where on the screen the middle of the mark is. */
@@ -76,7 +85,7 @@ test("marks a finding by pointer and keyboard, saves it at once, and opens its p
   await expect(markPanel(page)).toBeVisible();
   await expect(page.locator(".maplibregl-canvas.fc-canvas--placing")).toHaveCount(1);
 
-  // A tap or click places the mark where it lands.
+  // A tap or click places the first point where it lands, and that alone is a finding at a spot.
   const spot = await openMapArea(page);
   await tapMap(page, spot.x - 60, spot.y - 30);
   await expect(handle(page)).toBeVisible();
@@ -101,8 +110,11 @@ test("marks a finding by pointer and keyboard, saves it at once, and opens its p
   const nudged = await markCentre(page);
   expect(nudged.x).toBeLessThan(dragged.x - 4);
   expect(Math.abs(nudged.y - dragged.y)).toBeLessThan(1);
+  // The point is selected now. On a phone its bar has taken the drawing bar's place above the sheet.
+  if (isPhone(page)) await page.getByRole("button", { name: "Done" }).click();
 
   // Only the class is needed. The save shows the mark at once, before the server answers.
+  await finish(page);
   const release = findings.holdCreates();
   await markPanel(page).getByRole("radio", { name: "Linear bank or ditch" }).click();
   await markPanel(page).getByRole("button", { name: "Save finding" }).click();
@@ -113,6 +125,9 @@ test("marks a finding by pointer and keyboard, saves it at once, and opens its p
   await expect(page).toHaveURL(/\/f\/new-1#/);
   expect(findings.created).toHaveLength(1);
   const [body] = findings.created;
+  // One point is sent as a location, with no path.
+  expect(body?.location?.type).toBe("Point");
+  expect(body?.path ?? null).toBeNull();
   expect(body).toMatchObject({
     feature_class: "linear",
     period: "unknown",
@@ -136,8 +151,13 @@ test("keeps the mark in sight above the form on a phone", async ({ page }) => {
   await openMap(page, `/mark${VIEW}`);
   const sheet = markPanel(page);
   await expect(sheet).toHaveAttribute("data-stop", "peek");
-  // A mark placed low on the screen, where the sheet will come up.
-  await page.touchscreen.tap(195, 600);
+  // A mark placed low on the screen, just above the drawing bar, where the sheet will come up.
+  const bar = await boxOf(page.locator(".fc-mark-float"));
+  await page.touchscreen.tap(195, bar.y - 30);
+  // The sheet stays at peek while the map takes taps, and rises once drawing stops.
+  await expect(handle(page)).toBeVisible();
+  await expect(sheet).toHaveAttribute("data-stop", "peek");
+  await finish(page);
   await expect(sheet).toHaveAttribute("data-stop", "half");
   await page.waitForTimeout(400);
   const mark = await boxOf(handle(page));
@@ -156,7 +176,8 @@ test.describe("a refused save", () => {
     const findings = await fakeFindings(page);
     findings.failNextCreate(503, "unavailable", "The server is restarting.");
     await openMap(page, `/mark${VIEW}`);
-    await page.getByRole("button", { name: "Place it here" }).click();
+    await page.getByRole("button", { name: "Add a point at the cross" }).click();
+    await finish(page);
     await markPanel(page).getByRole("radio", { name: "Moat" }).click();
     await markPanel(page).getByLabel("Title").fill("Moated site by the church");
     await markPanel(page).getByRole("button", { name: "Save finding" }).click();
@@ -183,6 +204,7 @@ test("keeps a signed-out mark as a draft through a reload and a sign-in, then sa
   await openMap(page, `/mark${VIEW}`);
   const spot = await openMapArea(page);
   await tapMap(page, spot.x + 30, spot.y - 20);
+  await finish(page);
   await markPanel(page).getByRole("radio", { name: "Hillfort" }).click();
   await markPanel(page).getByRole("button", { name: "Save finding" }).click();
 

@@ -16,7 +16,8 @@ test("saves a finding marked signed out as a real finding at the same place, onc
 }, testInfo) => {
   const handle = `Mark${testInfo.project.name}${Date.now() % 1_000_000}`;
   await openMap(page, `/mark${VIEW}`);
-  await page.getByRole("button", { name: "Place it here" }).click();
+  await page.getByRole("button", { name: "Add a point at the cross" }).click();
+  await page.getByRole("button", { name: "Finish" }).click();
   const panel = page.getByRole("complementary", { name: "Mark a finding" });
   await panel.getByRole("radio", { name: "Enclosure" }).click();
   await panel.getByLabel("Note (optional)").fill("A faint ring with a gap on the east side.");

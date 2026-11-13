@@ -100,7 +100,8 @@ test("a signed-out scan, with a finding marked in the square, is kept as drafts 
 
   // Mark something in the square with the marking flow every mode uses.
   await page.getByRole("button", { name: "Mark a finding" }).click();
-  await page.getByRole("button", { name: "Place it here" }).click();
+  await page.getByRole("button", { name: "Add a point at the cross" }).click();
+  await page.getByRole("button", { name: "Finish" }).click();
   const mark = page.getByRole("complementary", { name: "Mark a finding" });
   await mark.getByRole("radio", { name: "Hillfort" }).click();
   await mark.getByRole("button", { name: "Save finding" }).click();
@@ -154,7 +155,8 @@ test("a finding marked from the square and saved goes back to the square, which 
   await page.getByRole("button", { name: "Mark a finding" }).click();
   const mark = page.getByRole("complementary", { name: "Mark a finding" });
   await expect(mark.getByRole("button", { name: "Back to the square" })).toBeVisible();
-  await page.getByRole("button", { name: "Place it here" }).click();
+  await page.getByRole("button", { name: "Add a point at the cross" }).click();
+  await page.getByRole("button", { name: "Finish" }).click();
   await mark.getByRole("radio", { name: "Hillfort" }).click();
   await mark.getByRole("button", { name: "Save finding" }).click();
 

@@ -181,7 +181,8 @@ test("site visit reminder and finds notice", async ({ page }) => {
 
   await openMap(page, `/?panel=none${VIEW}`);
   await page.getByRole("button", { name: "Mark a finding" }).click();
-  await page.getByRole("button", { name: "Place it here" }).click();
+  await page.getByRole("button", { name: "Add a point at the cross" }).click();
+  await page.getByRole("button", { name: "Finish" }).click();
   const mark = page.getByRole("complementary", { name: "Mark a finding" });
   await sheetTo(page, "full");
   await mark.getByText(/This map is for earthworks, not objects/).scrollIntoViewIfNeeded();

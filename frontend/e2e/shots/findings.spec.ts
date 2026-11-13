@@ -81,31 +81,28 @@ test("marking", async ({ page }) => {
   await shoot(page, "10-mark-placing");
 
   const panel = page.getByRole("complementary", { name: "Mark a finding" });
-  await page.getByRole("button", { name: "Place it here" }).click();
-  await shoot(page, "11-mark-form");
-  await panel.getByRole("radio", { name: "Round barrow or mound" }).click();
-  await shoot(page, "12-mark-protected");
-  await panel.getByText(/This map is for earthworks, not objects/).scrollIntoViewIfNeeded();
-  await shoot(page, "12b-mark-finds-notice");
-
-  await panel.getByRole("button", { name: "Draw an outline" }).click();
-  const map = page.locator(".fc-map__pane--main canvas");
-  const box = await map.boundingBox();
-  if (box) {
-    const mark = await page.getByTestId("mark-handle").boundingBox();
-    const cx = (mark?.x ?? box.x + box.width / 2) + 22;
-    const cy = (mark?.y ?? box.y + box.height / 2) + 22;
+  // The first point at the cross, then a tap at each further corner.
+  await page.getByRole("button", { name: "Add a point at the cross" }).click();
+  const first = await page.getByRole("button", { name: /^Point 1 of / }).boundingBox();
+  if (first) {
+    const cx = first.x + first.width / 2;
+    const cy = first.y + first.height / 2;
     const corners: Array<[number, number]> = [
-      [-50, -40],
-      [50, -40],
-      [60, 30],
+      [100, 0],
+      [110, 70],
     ];
     for (const [dx, dy] of corners) {
       await page.mouse.click(cx + dx, cy + dy);
     }
   }
   await shoot(page, "13-mark-outline");
-  await panel.getByRole("button", { name: "Close the shape" }).click();
+  // Closing it stops drawing, and on a phone the sheet rises for the form.
+  await page.getByRole("button", { name: "Close the shape" }).click();
+  await shoot(page, "11-mark-form");
+  await panel.getByRole("radio", { name: "Round barrow or mound" }).click();
+  await shoot(page, "12-mark-protected");
+  await panel.getByText(/This map is for earthworks, not objects/).scrollIntoViewIfNeeded();
+  await shoot(page, "12b-mark-finds-notice");
   await panel.getByRole("button", { name: "Save finding" }).scrollIntoViewIfNeeded();
   await shoot(page, "14-mark-outline-closed");
 });
