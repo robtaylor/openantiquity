@@ -11,6 +11,7 @@ import { findView, type Meta } from "../../api/meta.js";
 import { useMainMapStore } from "../../map/mainMap.js";
 import { LIMITS } from "../../map/permalink.js";
 import { useMapStore } from "../../map/store.js";
+import { framePoints, type MapCover } from "../../map/visibleArea.js";
 import { clamp } from "../../ui/math.js";
 import { useSelectedFinding } from "../findings/selection.js";
 import type { FindingDetail, ViewState } from "../findings/types.js";
@@ -160,12 +161,23 @@ export function clearOf(stage: Edges, covers: readonly Edges[]): Edges {
 /** What floats on the map and would cover a handle: the search box, the map's buttons, the drawing bar and the rest. */
 const FLOATING = ".fc-stage > *, .fc-mark-float";
 
-/** The part of the map nothing covers, less what floats on it, in page pixels. Null before the page is laid out. */
-export function clearArea(): Edges | null {
+/**
+ * How much of each edge of the map is covered by the shell's chrome or by
+ * what floats on the map, in pixels, measured from the page: the part of
+ * the stage clear of the floating controls, as a cover. Null before the
+ * page is laid out.
+ */
+function floatingCover(canvas: DOMRect): MapCover | null {
   const stage = document.querySelector(".fc-stage")?.getBoundingClientRect();
   if (!stage || stage.width === 0 || stage.height === 0) return null;
   const covers = [...document.querySelectorAll(FLOATING)].map((element) => element.getBoundingClientRect());
-  return clearOf(stage, covers);
+  const clear = clearOf(stage, covers);
+  return {
+    left: clear.left - canvas.left,
+    top: clear.top - canvas.top,
+    right: canvas.right - clear.right,
+    bottom: canvas.bottom - clear.bottom,
+  };
 }
 
 /** Space kept between a framed shape and whatever is round it, in pixels: half a handle's 44 px target, and some. */
@@ -174,35 +186,17 @@ const FRAME_MARGIN = 36;
 /**
  * Move the map so every point is on the part of it nothing covers, clear
  * of the controls floating on it, as close as `maxZoom` and the points
- * allow. Fewer than two points leave it be.
+ * allow, keeping the bearing. Fewer than two points leave it be.
  */
 export function frameExtent(points: ReadonlyArray<readonly [number, number]>, maxZoom = 18): void {
   if (points.length < 2) return;
-  const clear = clearArea();
   const canvas = useMainMapStore.getState().map?.getCanvas().getBoundingClientRect();
-  if (!clear || !canvas) return;
-  const lons = points.map(([lon]) => lon);
-  const lats = points.map(([, lat]) => lat);
-  const [west, east, south, north] = [Math.min(...lons), Math.max(...lons), Math.min(...lats), Math.max(...lats)];
-  // Web Mercator, as the map draws it, in parts of the world's width.
-  const x = (lon: number): number => (lon + 180) / 360;
-  const y = (lat: number): number => {
-    const sin = Math.sin((lat * Math.PI) / 180);
-    return 0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI);
-  };
-  const width = Math.max(1, clear.right - clear.left - FRAME_MARGIN * 2);
-  const height = Math.max(1, clear.bottom - clear.top - FRAME_MARGIN * 2);
-  const across = Math.max(1e-12, (x(east) - x(west)) * WORLD_PX);
-  const down = Math.max(1e-12, (y(south) - y(north)) * WORLD_PX);
-  const zoom = Math.min(maxZoom, Math.log2(width / across), Math.log2(height / down));
-  const offset = {
-    x: (clear.left + clear.right) / 2 - (canvas.left + canvas.width / 2),
-    y: (clear.top + clear.bottom) / 2 - (canvas.top + canvas.height / 2),
-  };
+  const cover = canvas ? floatingCover(canvas) : null;
+  if (!canvas || !cover) return;
   const { camera, requestCamera } = useMapStore.getState();
-  // The extent is measured as if the map faced north.
-  const [lng, lat] = centreFor([(west + east) / 2, (south + north) / 2], zoom, camera.bearing, offset);
-  requestCamera({ lng, lat, zoom });
+  const size = { width: canvas.width, height: canvas.height };
+  const framing = framePoints(points, size, cover, { margin: FRAME_MARGIN, maxZoom, bearing: camera.bearing });
+  if (framing) requestCamera(framing);
 }
 
 /**

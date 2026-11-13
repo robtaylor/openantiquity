@@ -74,21 +74,68 @@ export function uncoveredBounds(
 }
 
 /**
- * Where a north-up camera must point, at `zoom`, for `lng`/`lat` to fall in
- * the middle of the uncovered map. MapLibre draws 512 px a tile.
+ * Where a camera must point, at `zoom` and `bearing`, for `lng`/`lat` to fall
+ * in the middle of the uncovered map. MapLibre draws 512 px a tile. The
+ * screen offset is turned by the bearing onto the ground, and is exact for a
+ * north-up map.
  */
 export function centreForVisible(
   lng: number,
   lat: number,
   zoom: number,
   cover: MapCover,
+  bearing = 0,
 ): { lng: number; lat: number } {
   const offset = visibleOffset(cover);
+  const angle = (bearing * Math.PI) / 180;
+  const east = bearing === 0 ? offset.x : offset.x * Math.cos(angle) - offset.y * Math.sin(angle);
+  const south = bearing === 0 ? offset.y : offset.x * Math.sin(angle) + offset.y * Math.cos(angle);
   const worldPx = 512 * 2 ** zoom;
   return {
-    lng: lng - (offset.x / worldPx) * 360,
-    lat: latitudeOf(mercatorY(lat) + (offset.y / worldPx) * 2 * Math.PI),
+    lng: lng - (east / worldPx) * 360,
+    lat: latitudeOf(mercatorY(lat) + (south / worldPx) * 2 * Math.PI),
   };
+}
+
+export interface FramingOptions {
+  /** How much of the uncovered width and height the points may take, from 0 to 1. */
+  fill?: number;
+  /** Pixels kept clear on every side of the uncovered map, inside `fill`. */
+  margin?: number;
+  /** The closest the camera comes, which is also the zoom for a single point. */
+  maxZoom: number;
+  /** The bearing the camera keeps. The points' extent is measured as if the map faced north. */
+  bearing?: number;
+}
+
+/**
+ * Where to point the camera, and how close, so every point is in the part of
+ * a `size` map that `cover` leaves showing: their middle in the middle of
+ * it, and their extent taking `fill` of what is left once `margin` is kept
+ * on every side. Null for no points.
+ */
+export function framePoints(
+  points: ReadonlyArray<readonly [number, number]>,
+  size: { width: number; height: number },
+  cover: MapCover,
+  { fill = 1, margin = 0, maxZoom, bearing = 0 }: FramingOptions,
+): { lng: number; lat: number; zoom: number } | null {
+  if (points.length === 0) return null;
+  const lngs = points.map((point) => point[0]);
+  const lats = points.map((point) => point[1]);
+  const west = Math.min(...lngs);
+  const east = Math.max(...lngs);
+  const south = Math.min(...lats);
+  const north = Math.max(...lats);
+  // The points' extent in pixels at zoom 0, 512 px a tile, in Web Mercator as the map draws it.
+  const across = ((east - west) / 360) * 512;
+  const down = ((mercatorY(north) - mercatorY(south)) / (2 * Math.PI)) * 512;
+  const width = size.width - cover.left - cover.right - margin * 2;
+  const height = size.height - cover.top - cover.bottom - margin * 2;
+  const zoomToFit = (pixels: number, span: number): number =>
+    span > 0 ? Math.log2((Math.max(1, pixels) * fill) / span) : maxZoom;
+  const zoom = Math.max(0, Math.min(maxZoom, zoomToFit(width, across), zoomToFit(height, down)));
+  return { ...centreForVisible((west + east) / 2, (south + north) / 2, zoom, cover, bearing), zoom };
 }
 
 /**

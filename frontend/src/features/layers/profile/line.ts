@@ -1,4 +1,4 @@
-import { centreForVisible, type MapCover, NO_COVER } from "../../../map/visibleArea.js";
+import { framePoints, type MapCover, NO_COVER } from "../../../map/visibleArea.js";
 /**
  * The line a height profile is drawn along: how it is written in the
  * address, how long it is, and which sample is nearest the pointer.
@@ -102,8 +102,7 @@ export function nearestIndex(
  * Where to point the camera so the whole line is in view, using about half the
  * width and height of the part of a `width` by `height` map that `cover`
  * leaves uncovered: a centre that puts the line's middle in the middle of that
- * part, and a zoom no closer than `maxZoom`. Mercator stretches latitude by
- * 1 / cos(latitude).
+ * part, and a zoom no closer than `maxZoom`.
  */
 export function framingFor(
   points: readonly LngLat[],
@@ -112,24 +111,7 @@ export function framingFor(
   cover: MapCover = NO_COVER,
   maxZoom = 17,
 ): { lng: number; lat: number; zoom: number } | null {
-  if (points.length === 0) return null;
-  const lngs = points.map((point) => point[0]);
-  const lats = points.map((point) => point[1]);
-  const west = Math.min(...lngs);
-  const east = Math.max(...lngs);
-  const south = Math.min(...lats);
-  const north = Math.max(...lats);
-  const lat = (south + north) / 2;
-  const stretch = 1 / Math.cos((lat * Math.PI) / 180);
-  // 512 px a tile, as MapLibre counts zoom.
-  const across = ((east - west) / 360) * 512;
-  const up = ((north - south) / 360) * 512 * stretch;
-  const zoomToFit = (pixels: number, span: number) =>
-    span > 0 ? Math.log2((Math.max(1, pixels) * 0.5) / span) : maxZoom;
-  const visibleWidth = width - cover.left - cover.right;
-  const visibleHeight = height - cover.top - cover.bottom;
-  const zoom = Math.max(0, Math.min(maxZoom, zoomToFit(visibleWidth, across), zoomToFit(visibleHeight, up)));
-  return { ...centreForVisible((west + east) / 2, lat, zoom, cover), zoom };
+  return framePoints(points, { width, height }, cover, { fill: 0.5, maxZoom });
 }
 
 /** A distance for people: metres to a kilometre, then kilometres to two places. */
