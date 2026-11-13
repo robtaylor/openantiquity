@@ -92,13 +92,28 @@ function useGuideKeepsPointsClear(card: RefObject<HTMLElement | null>): void {
   useEffect(() => {
     const element = card.current;
     if (!map || !element || !isMapLive(map) || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => {
+    let waiting = false;
+    const clear = (): void => {
+      waiting = false;
       if (!isMapLive(map)) return;
       const bar = document.querySelector(".fc-mark-float")?.getBoundingClientRect() ?? null;
       clearPointsOfGuide(map, element.getBoundingClientRect(), bar);
+    };
+    const observer = new ResizeObserver(() => {
+      if (!isMapLive(map) || waiting) return;
+      // A pan now would cut short a move under way, such as framing a saved shape, so it waits for the move to end.
+      if (map.isMoving?.()) {
+        waiting = true;
+        map.once("moveend", clear);
+        return;
+      }
+      clear();
     });
     observer.observe(element);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (waiting && isMapLive(map)) map.off("moveend", clear);
+    };
   }, [map, card]);
 }
 
