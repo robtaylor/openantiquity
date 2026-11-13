@@ -5,7 +5,7 @@ import { Button } from "../../../ui/Button.js";
 import { Dialog } from "../../../ui/Dialog.js";
 import { Field } from "../../../ui/Field.js";
 import { toast } from "../../../ui/toastStore.js";
-import { putObservation, withdrawObservation } from "../api.js";
+import { putObservation, shapeRevisionField, withdrawObservation } from "../api.js";
 import { labelOf } from "../describe.js";
 import { toastFailure } from "../feedback.js";
 import type { FindingDetail, Observation, Reveal } from "../types.js";
@@ -48,7 +48,10 @@ export function GivenAnswer({
   async function send(body = sameAnswer(observation, note)): Promise<void> {
     setBusy(true);
     try {
-      const reply = await putObservation(finding.public_id, body);
+      const reply = await putObservation(finding.public_id, {
+        ...body,
+        ...shapeRevisionField(finding.location.shape.revision),
+      });
       if (isReveal(reply)) onRevealed(reply);
       else onHeld(reply.observation);
     } catch (error) {

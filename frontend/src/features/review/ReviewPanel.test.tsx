@@ -185,6 +185,7 @@ describe("a blind card", () => {
     expect(routes.callsTo("PUT /findings/f-ring/observation")[0]?.body).toEqual({
       visible: "yes",
       detail_follows: true,
+      shape_revision: 0,
     });
     expect(await panel.findByText(/Your answer is in/)).toHaveTextContent("You can see it.");
     // After a key, the button that shows the comparison has focus, so Enter would show it.
@@ -212,7 +213,7 @@ describe("a blind card", () => {
 
     expect(await panel.findByRole("heading", { name: CLAIMED.title })).toBeInTheDocument();
     expect(routes.callsTo("PUT /findings/f-ring/observation").map((call) => call.body)).toEqual([
-      { visible: "yes", detail_follows: true },
+      { visible: "yes", detail_follows: true, shape_revision: 0 },
     ]);
     expect(routes.callsTo("POST /findings/f-ring/observation/reveal").map((call) => call.body)).toEqual([
       { feature_class: "round_barrow" },
@@ -265,7 +266,7 @@ describe("a blind card", () => {
     await user.keyboard("{Enter}");
     expect(await panel.findByRole("heading", { name: CLAIMED.title })).toBeInTheDocument();
     expect(routes.callsTo("PUT /findings/f-ring/observation").map((call) => call.body)).toEqual([
-      { visible: "unsure", detail_follows: true },
+      { visible: "unsure", detail_follows: true, shape_revision: 0 },
     ]);
     expect(routes.callsTo("POST /findings/f-ring/observation/reveal").map((call) => call.body)).toEqual([{}]);
   });

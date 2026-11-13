@@ -36,6 +36,8 @@ export interface AnswerDraftData {
   answer: ObservationIn;
   /** True once the person asked to see how it compares, so saving it reveals. */
   reveal: boolean;
+  /** The shape revision the answer was given on, or null for a draft made before answers named one. */
+  shape_revision?: number | null;
 }
 
 export function parseAnswerDraft(value: unknown): AnswerDraftData | null {
@@ -44,7 +46,8 @@ export function parseAnswerDraft(value: unknown): AnswerDraftData | null {
   if (!isRecord(answer) || !(ANSWERS as readonly unknown[]).includes(answer.visible)) return null;
   // A draft from before the answer came in two steps was made by pressing "Send", which asked for the reveal.
   const reveal = value.reveal !== false;
-  return { public_id: value.public_id, answer: answer as unknown as ObservationIn, reveal };
+  const revision = typeof value.shape_revision === "number" ? value.shape_revision : null;
+  return { public_id: value.public_id, answer: answer as unknown as ObservationIn, reveal, shape_revision: revision };
 }
 
 /** What saving a draft gave: the reveal, or the answer held for its detail. */
@@ -101,7 +104,7 @@ onPersonChanged(() => useSavedAnswers.getState().clear());
  * nothing is given twice.
  */
 async function saveAnswer(data: AnswerDraftData): Promise<Outcome> {
-  const first = await giveAnswer(data.public_id, data.answer.visible);
+  const first = await giveAnswer(data.public_id, data.answer.visible, data.shape_revision ?? null);
   if (isReveal(first)) return { kind: "revealed", reveal: first };
   if (!data.reveal) return { kind: "held", observation: first.observation };
   return { kind: "revealed", reveal: await revealAnswer(data.public_id, detailOf(data.answer)) };

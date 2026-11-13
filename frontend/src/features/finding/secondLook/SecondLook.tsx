@@ -4,7 +4,7 @@ import { toast } from "../../../ui/toastStore.js";
 import { accountIdentity, useSession } from "../../account/session.js";
 import { useKindDrafts } from "../../drafts/savers.js";
 import { discardDraft, sendHeldDraft } from "../../drafts/store.js";
-import { giveAnswer, revealAsAsked } from "../api.js";
+import { giveAnswer, isShapeChanged, revealAsAsked, SHAPE_CHANGED_WORDS } from "../api.js";
 import type { ViewerPosition } from "../describe.js";
 import { toastFailureWithRetry, useSignedInFirst } from "../feedback.js";
 import type { FindingDetail, Observation, Reveal, Visible } from "../types.js";
@@ -61,6 +61,9 @@ export function SecondLook({ meta, finding, position, ready, onRevealed, onHeld,
   const [sending, setSending] = useState<Visible | null>(null);
   const [detail, setDetail] = useState<AnswerDraft | null>(null);
   const [revealing, setRevealing] = useState(false);
+  /** True after an answer was refused because the shape changed while the person looked. */
+  const [shapeChanged, setShapeChanged] = useState(false);
+  const revision = finding.location.shape.revision;
   const drafts = useKindDrafts(answerDrafts);
   const draft = drafts.find((entry) => entry.data.public_id === publicId) ?? null;
   const signedIn = useSignedInFirst();
@@ -115,21 +118,29 @@ export function SecondLook({ meta, finding, position, ready, onRevealed, onHeld,
 
   async function answer(visible: Visible): Promise<void> {
     pressed.current = true;
+    setShapeChanged(false);
     if (!ready) {
-      const kept = keepAnswerDraft({ public_id: publicId, answer: { visible }, reveal: false }, draft?.id);
+      const data = { public_id: publicId, answer: { visible }, reveal: false, shape_revision: revision };
+      const kept = keepAnswerDraft(data, draft?.id);
       if (kept) setDetail(newAnswer(visible));
       return;
     }
     setSending(visible);
     setDetail(newAnswer(visible));
     try {
-      const reply = await giveAnswer(publicId, visible);
+      const reply = await giveAnswer(publicId, visible, revision);
       // A draft of an earlier answer that failed to save is done with: this answer is the one that counts.
       discardAnswerDrafts(publicId);
       if (isReveal(reply)) done(reply);
       else onHeld(reply.observation);
     } catch (error) {
       setDetail(null);
+      if (isShapeChanged(error)) {
+        // Nothing was stored. The page asks for the finding again, and the answer is given afresh on what it is now.
+        setShapeChanged(true);
+        onRefresh();
+        return;
+      }
       toastFailureWithRetry("Your answer couldn't be sent.", error, () => void answer(visible));
     } finally {
       setSending(null);
@@ -139,12 +150,22 @@ export function SecondLook({ meta, finding, position, ready, onRevealed, onHeld,
   async function showComparison(visible: Visible, given: AnswerDraft): Promise<void> {
     if (ready && draft?.held && account !== null) {
       // Given here before signing in: the person now says it is theirs, with the detail as it stands.
-      const data = { public_id: publicId, answer: answerBody(meta, { ...given, visible }), reveal: true };
+      const data = {
+        public_id: publicId,
+        answer: answerBody(meta, { ...given, visible }),
+        reveal: true,
+        shape_revision: draft.data.shape_revision ?? revision,
+      };
       if (keepAnswerDraft(data, draft.id)) sendHeldDraft(draft.id, account);
       return;
     }
     if (!ready) {
-      const data = { public_id: publicId, answer: answerBody(meta, { ...given, visible }), reveal: true };
+      const data = {
+        public_id: publicId,
+        answer: answerBody(meta, { ...given, visible }),
+        reveal: true,
+        shape_revision: draft?.data.shape_revision ?? revision,
+      };
       if (keepAnswerDraft(data, draft?.id) && !(await signedIn())) {
         toast("Your answer is kept in this browser until you sign in.");
       }
@@ -238,6 +259,7 @@ export function SecondLook({ meta, finding, position, ready, onRevealed, onHeld,
       {/* There before the answer, so the reveal is read out when it arrives. */}
       <div className="fc-second-look__news" role="status">
         {shown ? <RevealSummary meta={meta} reveal={shown} /> : null}
+        {shapeChanged && !shown ? <p className="fc-finding__notice">{SHAPE_CHANGED_WORDS}</p> : null}
       </div>
       {body}
     </section>

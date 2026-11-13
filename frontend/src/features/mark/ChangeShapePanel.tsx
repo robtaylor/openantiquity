@@ -20,7 +20,6 @@ import { MapPinned } from "lucide-react";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ApiError } from "../../api/client.js";
 import type { Meta } from "../../api/meta.js";
 import { isMapLive } from "../../map/MapPane.js";
 import { useMainMap } from "../../map/mainMap.js";
@@ -29,7 +28,7 @@ import { EmptyState } from "../../ui/EmptyState.js";
 import { toast } from "../../ui/toastStore.js";
 import { COLOURS } from "../../ui/tokens.js";
 import { useAccountUi } from "../account/requireAccount.js";
-import { updateFinding } from "../finding/api.js";
+import { isShapeChanged, updateFinding } from "../finding/api.js";
 import { findingPageKeys } from "../finding/keys.js";
 import type { FindingDetail, FindingUpdate } from "../finding/types.js";
 import { findingQuery, refreshFindingLists, useFinding } from "../finding/useFinding.js";
@@ -49,8 +48,6 @@ import "./mark.css";
 export const LOOKED_AT_SOURCE = "mark-looked-at";
 export const LOOKED_AT_LAYER = "mark-looked-at-line";
 
-/** What the server says when a save is refused because the shape changed meanwhile. */
-const SHAPE_CHANGED = "shape_changed";
 export const CHANGED_ELSEWHERE = "The shape was changed somewhere else while you had it open. This is it as it is now.";
 
 /** The address of the tool for a saved finding. */
@@ -186,7 +183,7 @@ function ChangeShape({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
       navigate(findingPath(updated.public_id), { replace: true });
       toast("The new shape is saved.", { kind: "success" });
     } catch (error) {
-      if (error instanceof ApiError && error.code === SHAPE_CHANGED) {
+      if (isShapeChanged(error)) {
         // Nothing of the change is kept: it was made to a shape that is no longer there.
         const fresh = await client.fetchQuery({ ...findingQuery(finding.public_id), staleTime: 0 }).catch(() => null);
         if (fresh) {

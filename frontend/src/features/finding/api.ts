@@ -52,12 +52,37 @@ export function lowerSensitivity(publicId: string, level: OfferedSensitivity, re
 
 /**
  * Send a second look's answer alone, saying its detail follows (Decision
- * 0008). It counts at once and the reply reveals nothing, unless the answer
+ * 0008), naming the shape revision it was given on (Decision 0029). It counts at once and the reply reveals nothing, unless the answer
  * was already revealed, as when another tab finished it: then the reply is
  * the reveal.
  */
-export function giveAnswer(publicId: string, visible: Visible): Promise<Reveal | AnswerHeld> {
-  return putObservation(publicId, { visible, detail_follows: true });
+export function giveAnswer(
+  publicId: string,
+  visible: Visible,
+  shapeRevision: number | null = null,
+): Promise<Reveal | AnswerHeld> {
+  return putObservation(publicId, { visible, detail_follows: true, ...shapeRevisionField(shapeRevision) });
+}
+
+/**
+ * The code the server refuses an answer with when the finding's shape has
+ * changed since the revision the answer named: nothing is stored, and the
+ * person is shown the finding again as it now is.
+ */
+export const SHAPE_CHANGED = "shape_changed";
+
+/** What the page and the queue say when an answer was refused for a shape changed meanwhile. */
+export const SHAPE_CHANGED_WORDS =
+  "The finder changed its shape while you were looking, so your answer wasn't counted. Have a look at it as it is now.";
+
+/** True for the refusal of an answer, or a save, made on a shape that has since changed. */
+export function isShapeChanged(error: unknown): boolean {
+  return error instanceof ApiError && error.code === SHAPE_CHANGED;
+}
+
+/** `shape_revision` for an answer's body, left out when it isn't known, as an old tab's answer is. */
+export function shapeRevisionField(revision: number | null | undefined): { shape_revision?: number } {
+  return revision === null || revision === undefined ? {} : { shape_revision: revision };
 }
 
 /** Add the detail to an answer given alone, or nothing to skip it. The reply is the reveal. */

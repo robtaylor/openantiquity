@@ -7,7 +7,7 @@ import { toast } from "../../ui/toastStore.js";
 import { accountIdentity, useSession } from "../account/session.js";
 import { useKindDrafts } from "../drafts/savers.js";
 import { sendHeldDraft } from "../drafts/store.js";
-import { giveAnswer, revealAsAsked } from "../finding/api.js";
+import { giveAnswer, isShapeChanged, revealAsAsked, SHAPE_CHANGED_WORDS } from "../finding/api.js";
 import { toastFailureWithRetry, useSignedInFirst } from "../finding/feedback.js";
 import {
   ALREADY_FINISHED,
@@ -121,6 +121,7 @@ export interface CardAnswers {
 
 /** Answering the current card, in its two steps. An answer sent at once replaces a draft of it that failed. */
 export function useCardAnswers(meta: Meta): CardAnswers {
+  const client = useQueryClient();
   const { ready, me } = useSession();
   const signedIn = useSignedInFirst();
   const apply = useApplyFinding();
@@ -135,23 +136,52 @@ export function useCardAnswers(meta: Meta): CardAnswers {
       useReviewStore.getState().revealed(reveal);
     }
 
+    /**
+     * The finder changed the shape while the person looked, so nothing was stored. Nothing of the answer is kept,
+     * and the card is shown again as it now is, with its new revision, when the queue still offers it.
+     */
+    async function showAgain(card: ReviewCard): Promise<void> {
+      toast(SHAPE_CHANGED_WORDS);
+      useReviewStore.setState({ sending: null, held: null, answer: null, revealing: false });
+      const { near, cursor } = useReviewStore.getState();
+      void client.invalidateQueries({ queryKey: reviewKeys.all });
+      try {
+        const page = await fetchReviewCards({ near: near ?? null, cursor });
+        const fresh = page.items.find((item) => item.public_id === card.public_id);
+        if (useReviewStore.getState().current?.public_id !== card.public_id) return;
+        if (fresh) useReviewStore.getState().show(fresh);
+        else useReviewStore.getState().drop();
+      } catch {
+        if (useReviewStore.getState().current?.public_id === card.public_id) useReviewStore.getState().drop();
+      }
+    }
+
     async function answer(card: ReviewCard, visible: Visible): Promise<void> {
       const store = useReviewStore.getState();
       if (!ready || identity === null) {
-        const data = { public_id: card.public_id, answer: { visible }, reveal: false };
+        const data = {
+          public_id: card.public_id,
+          answer: { visible },
+          reveal: false,
+          shape_revision: card.shape_revision,
+        };
         if (keepAnswerDraft(data, draftFor(card)?.id)) store.setAnswer(newAnswer(visible));
         return;
       }
       store.setSending(visible);
       store.setAnswer(newAnswer(visible));
       try {
-        const reply = await giveAnswer(card.public_id, visible);
+        const reply = await giveAnswer(card.public_id, visible, card.shape_revision);
         // A draft of an earlier answer that failed to save is done with: this answer is the one that counts.
         discardAnswerDrafts(card.public_id);
         if (isReveal(reply)) revealed(reply);
         else useReviewStore.getState().hold({ visible, by: identity });
       } catch (error) {
         useReviewStore.setState({ sending: null, answer: null });
+        if (isShapeChanged(error)) {
+          await showAgain(card);
+          return;
+        }
         toastFailureWithRetry("Your answer couldn't be sent.", error, () => void answer(card, visible));
       }
     }
@@ -161,12 +191,22 @@ export function useCardAnswers(meta: Meta): CardAnswers {
       const held = draftFor(card);
       if (ready && identity !== null && held?.held) {
         // Given here before signing in: the person now says it is theirs, with the detail as it stands.
-        const data = { public_id: card.public_id, answer: answerBody(meta, given), reveal: true };
+        const data = {
+          public_id: card.public_id,
+          answer: answerBody(meta, given),
+          reveal: true,
+          shape_revision: card.shape_revision,
+        };
         if (keepAnswerDraft(data, held.id)) sendHeldDraft(held.id, identity);
         return;
       }
       if (!ready) {
-        const data = { public_id: card.public_id, answer: answerBody(meta, given), reveal: true };
+        const data = {
+          public_id: card.public_id,
+          answer: answerBody(meta, given),
+          reveal: true,
+          shape_revision: card.shape_revision,
+        };
         if (keepAnswerDraft(data, draftFor(card)?.id) && !(await signedIn())) {
           toast("Your answer is kept in this browser until you sign in.");
         }
@@ -182,5 +222,5 @@ export function useCardAnswers(meta: Meta): CardAnswers {
     }
 
     return { answer, showComparison };
-  }, [meta, ready, identity, signedIn, apply, drafts]);
+  }, [meta, ready, identity, signedIn, apply, drafts, client]);
 }

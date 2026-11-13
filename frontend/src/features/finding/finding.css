@@ -801,3 +801,12 @@
   overflow: visible;
   text-overflow: clip;
 }
+
+/* Something the page says once, such as an answer refused because the shape changed meanwhile. */
+.fc-finding__notice {
+  padding: 10px 12px;
+  border-left: 3px solid var(--info);
+  border-radius: var(--radius-sm);
+  background: var(--raised);
+  font-size: 14px;
+}

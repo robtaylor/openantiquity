@@ -33,10 +33,16 @@ describe("a second look kept as a draft", () => {
       order.push("detail");
       return revealed;
     });
-    answerDrafts.put({ public_id: "f-ring", answer: { visible: "unsure", not_natural: true }, reveal: true });
+    answerDrafts.put({
+      public_id: "f-ring",
+      answer: { visible: "unsure", not_natural: true },
+      reveal: true,
+      shape_revision: 2,
+    });
     await saveWaitingDrafts(ME);
     expect(order).toEqual(["answer", "detail"]);
-    expect(give).toHaveBeenCalledWith("f-ring", "unsure");
+    // The answer names the shape revision it was given on, as it would have sent at once.
+    expect(give).toHaveBeenCalledWith("f-ring", "unsure", 2);
     expect(reveal).toHaveBeenCalledWith("f-ring", { not_natural: true });
     expect(useSavedAnswers.getState().saved["f-ring"]).toMatchObject({ kind: "revealed", reveal: revealed });
     expect(listDrafts()).toEqual([]);
@@ -64,6 +70,7 @@ describe("a second look kept as a draft", () => {
       public_id: "f-ring",
       answer: { visible: "no" },
       reveal: true,
+      shape_revision: null,
     });
     expect(parseAnswerDraft({ public_id: "f-ring", answer: { visible: "maybe" } })).toBeNull();
   });
