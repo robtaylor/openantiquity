@@ -17,7 +17,6 @@ Services flush and never commit.
 
 from __future__ import annotations
 
-import math
 from collections.abc import Sequence
 from typing import Any
 
@@ -271,7 +270,6 @@ MAP_ZOOM_DEFAULT = 14
 # A shape is cut to the box the map asked for, widened by this, so a line
 # drawn to the edge of the screen doesn't stop short of it.
 MAP_CLIP_MARGIN_M = 500
-_METRES_PER_DEGREE = 111_320
 
 
 def _map_shape_column(zoom: int) -> Any:
@@ -303,8 +301,8 @@ def map_shapes(
     column = _map_shape_column(zoom)
     if bbox is not None:
         _, south, _, north = bbox
-        margin_lat = MAP_CLIP_MARGIN_M / _METRES_PER_DEGREE
-        margin_lon = margin_lat / math.cos(math.radians((south + north) / 2))
+        margin_lat = MAP_CLIP_MARGIN_M / geo.METRES_PER_DEGREE
+        margin_lon = margin_lat / geo.lon_scale((south + north) / 2)
         column = func.ST_ClipByBox2D(column, func.ST_Expand(geo.envelope(bbox), margin_lon, margin_lat))
     rows = db.execute(
         select(Finding.id, func.ST_AsBinary(column)).where(

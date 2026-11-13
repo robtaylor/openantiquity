@@ -587,11 +587,10 @@ NEAR_HIDDEN_M = 1500.0
 # How far, in degrees, a finding may be from a shape and still be within
 # `NEAR_HIDDEN_M` of it, generously: a cheap first test the index can answer.
 NEAR_HIDDEN_DEGREES = 0.05
-# Metres in a degree of latitude, and of longitude at the equator, near enough
-# for distances of a kilometre or two.
+# Metres in a degree of latitude, near enough for distances of a kilometre or
+# two. A degree of longitude is `geo.METRES_PER_DEGREE` at the equator.
 _M_PER_DEG_LAT = 110_574.0
-_M_PER_DEG_LON = 111_320.0
-assert NEAR_HIDDEN_DEGREES * _M_PER_DEG_LON * math.cos(math.radians(61.5)) > NEAR_HIDDEN_M * 1.05, (
+assert NEAR_HIDDEN_DEGREES * geo.METRES_PER_DEGREE * geo.lon_scale(61.5) > NEAR_HIDDEN_M * 1.05, (
     "the first test must take in everything near, as far north as the grids go"
 )
 # An area more than this many squares round is shown as the bounding box of
@@ -638,7 +637,7 @@ def square_cover(geometry: BaseGeometry) -> Polygon | None:
 
 def _in_metres(geometry: BaseGeometry, lon: float, lat: float) -> BaseGeometry:
     """`geometry` in metres east and north of `lon, lat`, near enough for a kilometre or two."""
-    scale = np.array([_M_PER_DEG_LON * math.cos(math.radians(lat)), _M_PER_DEG_LAT])
+    scale = np.array([geo.METRES_PER_DEGREE * geo.lon_scale(lat), _M_PER_DEG_LAT])
     origin = np.array([lon, lat])
     return shapely.transform(geometry, lambda coords: (coords - origin) * scale)
 

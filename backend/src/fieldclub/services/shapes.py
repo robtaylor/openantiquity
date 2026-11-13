@@ -62,6 +62,7 @@ from sqlalchemy.orm import Session
 from fieldclub.errors import ValidationFailedError
 from fieldclub.models import Finding
 from fieldclub.models.common import to_db_geometry
+from fieldclub.services import geo
 from fieldclub.vocab import PointKind, ShapeChangeKind, ShapeKind
 
 logger = logging.getLogger(__name__)
@@ -480,7 +481,7 @@ def nearest_point(geometry: BaseGeometry, point: Point) -> Point:
 
     Inside an area, that is `point` itself.
     """
-    k = math.cos(math.radians(point.y))
+    k = geo.lon_scale(point.y)
     scaled = shapely.transform(geometry, lambda xy: xy * np.array([k, 1.0]))
     _, nearest = nearest_points(Point(point.x * k, point.y), scaled)
     return Point(round(nearest.x / k, DECIMALS), round(nearest.y, DECIMALS))

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -24,6 +25,20 @@ NEAR_NATION_M = 10_000.0
 # nation or county shown. `admin_areas` keeps no source of its own, so the
 # loaders in `ingest/reference/ons_boundaries.py` are tested against this.
 AREA_SOURCES = {AdminAreaKind.NATION: "ons-countries-2025", AdminAreaKind.COUNTY: "ons-counties-2025"}
+
+
+# Metres in a degree of longitude at the equator, taken for a degree of
+# latitude too where a shape's tolerances and margins need only be near enough.
+METRES_PER_DEGREE = 111_320.0
+
+
+def lon_scale(lat: float) -> float:
+    """What a degree of longitude is worth at `lat`, in degrees of latitude: the cosine of the latitude.
+
+    Longitude multiplied by this gives a plane where a degree is about the
+    same length both ways, near `lat`.
+    """
+    return math.cos(math.radians(lat))
 
 
 # A place is offered as the nearest only within this distance, in metres.

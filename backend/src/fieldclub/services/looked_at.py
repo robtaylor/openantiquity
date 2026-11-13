@@ -32,7 +32,6 @@ and may change it (`sensitivity.visible_shape`).
 from __future__ import annotations
 
 import logging
-import math
 from collections.abc import Iterator
 
 import numpy as np
@@ -48,7 +47,7 @@ from fieldclub import gridref
 from fieldclub.errors import ValidationFailedError
 from fieldclub.models import Finding, Observation
 from fieldclub.models.common import to_db_geometry
-from fieldclub.services import shapes
+from fieldclub.services import geo, shapes
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +71,6 @@ LOOKED_AT_SIMPLIFY_M = 5.0
 LOOKED_AT_MAX_VERTICES = 5_000
 # Past this tolerance the simplification would blur the 250 m rule itself.
 _SIMPLIFY_MAX_M = LOOKED_AT_MAX_MOVE_M / 4
-_METRES_PER_DEGREE = 111_320
-_DECIMALS = 7
 
 
 class LookedAtMovedError(ValidationFailedError):
@@ -112,11 +109,11 @@ def ground(finding: Finding) -> BaseGeometry:
 def _simplified(geometry: BaseGeometry, metres: float) -> BaseGeometry:
     """`geometry` simplified to within `metres`, in a plane scaled for its latitude, never emptied."""
     assert not geometry.is_empty, "an empty geometry is never simplified"
-    k = math.cos(math.radians(geometry.representative_point().y))
+    k = geo.lon_scale(geometry.representative_point().y)
     scale = np.array([k, 1.0])
     flat = shapely.transform(geometry, lambda xy: xy * scale)
-    simple = flat.simplify(metres / _METRES_PER_DEGREE, preserve_topology=True)
-    result = shapely.transform(simple, lambda xy: np.round(xy / scale, _DECIMALS))
+    simple = flat.simplify(metres / geo.METRES_PER_DEGREE, preserve_topology=True)
+    result = shapely.transform(simple, lambda xy: np.round(xy / scale, shapes.DECIMALS))
     assert not result.is_empty, "simplifying never empties what was looked at"
     return result
 
