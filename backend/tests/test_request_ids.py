@@ -167,9 +167,12 @@ def test_a_line_written_outside_any_request_has_none(
 
 
 def test_the_server_s_own_line_for_a_response_is_written_with_the_id(
-    tagged: pytest.LogCaptureFixture,
+    tagged: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Uvicorn writes its access line when the response starts, inside the request, as this server does."""
+    # A test that started uvicorn with its own configuration stops its access lines reaching the root.
+    monkeypatch.setattr(logging.getLogger("uvicorn.access"), "propagate", True)
+    monkeypatch.setattr(logging.getLogger("uvicorn.access"), "disabled", False)
 
     async def answer(scope: Scope, receive: Receive, send: Send) -> None:
         await send({"type": "http.response.start", "status": 204, "headers": []})

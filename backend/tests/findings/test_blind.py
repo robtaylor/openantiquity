@@ -223,7 +223,8 @@ def test_refusals_say_nothing_about_answers(db: Session, client_as: ClientAs, ma
     assert response.status_code == 403
     assert error_code(response) == "own_finding"
     _no_claim_or_answers(response.text)
-    assert not any(ch.isdigit() for ch in response.text)
+    # The request's own id is the only figure, and it says nothing about the finding.
+    assert not any(ch.isdigit() for ch in response.text.replace(response.headers["x-request-id"], ""))
 
 
 def test_help_wanted_tasks_for_second_looks_are_blind(

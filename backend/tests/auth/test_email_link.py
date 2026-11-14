@@ -26,7 +26,7 @@ from fieldclub.main import create_app
 from fieldclub.models import MagicLink, User, UserSession
 from fieldclub.schemas.auth import EmailStarted
 from tests.auth.fakes import PUBLIC_URL
-from tests.helpers import ClientFor, MakeUser, count, error_code, settings
+from tests.helpers import ClientFor, MakeUser, count, envelope, error_code, settings
 
 START = "/api/v1/auth/email/start"
 VERIFY = "/api/v1/auth/email/verify"
@@ -88,11 +88,17 @@ def test_an_unsafe_next_is_dropped_from_the_link(browser: TestClient) -> None:
 
 
 def _comparable(response) -> tuple[int, str, dict[str, str]]:
-    headers = {k: v for k, v in response.headers.items() if k.lower() not in ("date", "content-length")}
+    # Each request has its own id, in its header and in an error's body.
+    request_id = response.headers["x-request-id"]
+    headers = {
+        k: v
+        for k, v in response.headers.items()
+        if k.lower() not in ("date", "content-length", "x-request-id")
+    }
     # Each answer binds its own browser, so only the cookie's value may differ.
     if "set-cookie" in headers:
         headers["set-cookie"] = re.sub(r"=[^;]+;", "=<value>;", headers["set-cookie"], count=1)
-    return response.status_code, response.text, headers
+    return response.status_code, response.text.replace(request_id, "<id>"), headers
 
 
 @pytest.mark.parametrize(
@@ -472,7 +478,7 @@ def test_the_address_limit_answers_the_same_for_known_and_unknown_addresses(
         for number in range(21):
             last = caller_at(app, client_for, f"192.0.2.{number}").post(START, json={"email": email})
         assert last is not None
-        answers[email] = (last.status_code, last.json())
+        answers[email] = (last.status_code, envelope(last))
     assert answers["known@example.org"] == answers["nobody@example.org"]
     assert answers["known@example.org"][0] == 429
 
