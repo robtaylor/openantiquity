@@ -253,7 +253,7 @@ test("reaches Report a problem and every control of its form by keyboard, each w
   await page.keyboard.press("Space");
   await expect(dialog.getByLabel("Add where the map is looking")).toBeChecked();
   await expect(dialog.getByLabel("What will be sent")).toHaveValue(
-    /The map went white\.[\s\S]*Where the map was: -?\d/,
+    /The map went white\.[\s\S]*Where the map was: [A-Z]{1,2} \d\d \d\d at zoom \d+\n/,
   );
 
   // The form fits the window, and nothing in it scrolls the page sideways.

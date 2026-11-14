@@ -85,7 +85,6 @@ export function investigationFixture(overrides: Partial<InvestigationDetail> = {
     hidden: false,
     my_role: null,
     invited_as: null,
-    places_kept_back: false,
     ...overrides,
   };
 }
@@ -196,8 +195,6 @@ export class FakeInvestigations {
       member_count: stored.members.filter((member) => member.accepted).length,
       my_role: role,
       invited_as: invited,
-      // The server's guard holds more than this, such as what an investigation once held or lies near.
-      places_kept_back: stored.items.some((item) => item.finding?.location.obscured === true),
     };
   }
 

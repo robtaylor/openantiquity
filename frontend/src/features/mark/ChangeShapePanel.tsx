@@ -55,7 +55,6 @@ import { TakeOverNotice } from "./TakeOverNotice.js";
 import { useLeaveOnEscape } from "./useLeaveOnEscape.js";
 import { draftPath } from "./useSaveMark.js";
 import "./mark.css";
-import { useKeepsPlaceBack } from "../problem/keptBack.js";
 
 export const LOOKED_AT_SOURCE = "mark-looked-at";
 export const LOOKED_AT_LAYER = "mark-looked-at-line";
@@ -365,7 +364,6 @@ export function ChangeShapePanel({ meta }: { meta: Meta }) {
   const query = useFinding(publicId);
   const finding = query.data;
   useDocumentTitle("Change the shape");
-  useKeepsPlaceBack(finding?.location.obscured);
 
   const leave = useLeaveOnEscape(
     () => discardAndLeave(navigate, publicId),

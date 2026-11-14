@@ -279,10 +279,6 @@ class InvestigationDetail(InvestigationSummary):
     my_role: InvestigationRole | None
     # The role you've been invited to take, until you accept or decline. Null otherwise.
     invited_as: InvestigationRole | None
-    # True when it holds, has held or lies near a finding whose place is kept
-    # back from you: what its guard holds back (`sensitivity.PositionGuard`).
-    # The report form then leaves out where the map is.
-    places_kept_back: bool
 
     @classmethod
     def build(
@@ -302,7 +298,6 @@ class InvestigationDetail(InvestigationSummary):
             member_count=member_count,
             my_role=role,
             invited_as=invited_as,
-            places_kept_back=bool(guard.hidden),
         )
 
 

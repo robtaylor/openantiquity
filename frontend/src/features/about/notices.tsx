@@ -313,14 +313,18 @@ function Privacy({ meta }: { meta: Meta }) {
 
       <More title="When something goes wrong">
         <p>
-          The server writes a short log of the requests it answers: when, the address asked for, which can say what part
-          of the map was being looked at, and the answer. Each request is given a random number, which goes back with
-          the answer and on the request's lines in the log, so that a report of a problem can be matched to them. The
-          log is kept by our host, Fly.io, for seven days. While a page is open, your browser also keeps in memory the
-          last ten things that went wrong in it: when, what kind of address failed but never which one, the answer and
-          that number. They go when you close the page, and are sent nowhere unless you use "Report a problem", which
-          shows you everything it would send first. A report you open as a GitHub issue is public, and GitHub's own
-          privacy terms cover it.
+          The server writes a log as it works. For each request it answers there is a line with when, the address asked
+          for, which can say what part of the map was being looked at, and the answer. It isn't only a list of requests:
+          the server also writes lines of its own about what it is doing, and some of them name an account. Each request
+          is given a random number, which goes back with the answer and on that request's lines in the log, so that a
+          report of a problem can be matched to them. Our host, Fly.io, says it keeps the log for seven days. While a
+          page is open, your browser also keeps in memory the last ten things that went wrong in it: when, what kind of
+          address failed but never which one, the answer and that number, and the words of an error the page didn't
+          catch, with anything that looks like a place, an id or a quoted value taken out. They go when you close the
+          page, and are sent nowhere unless you use "Report a problem", which shows you everything it would send first.
+          It adds where the map was only if you ask, and then only the one-kilometre square the map was centred on and
+          how far in it was zoomed. A report you open as a GitHub issue is public, and GitHub's own privacy terms cover
+          it.
         </p>
       </More>
 

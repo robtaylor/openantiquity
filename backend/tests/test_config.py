@@ -734,7 +734,20 @@ def test_the_report_address_is_trimmed(clean_env: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.parametrize(
-    "value", ["not-an-address", "two@@example.org", "https://openantiquity.example/help"]
+    "value",
+    [
+        "not-an-address",
+        "two@@example.org",
+        "https://openantiquity.example/help",
+        "help@x.example?bcc=other%40y.example",
+        "help@x.example&cc=other@y.example",
+        "help%40x.example@y.example",
+        "help@x.example,other@y.example",
+        "help@x.example;other@y.example",
+        "Help<help@x.example",
+        "help@x.example>",
+        "help\t@x.example",
+    ],
 )
 def test_a_report_address_that_isn_t_one_is_refused(clean_env: pytest.MonkeyPatch, value: str) -> None:
     clean_env.setenv("FIELDCLUB_REPORT_EMAIL", value)

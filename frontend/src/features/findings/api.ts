@@ -1,4 +1,4 @@
-import { apiFetch } from "../../api/client.js";
+import { apiFetch, ENDPOINT_MISSING_STATUSES } from "../../api/client.js";
 import { type FindingFilters, filterParams, NO_FILTERS } from "./filters.js";
 import {
   type FindingCollection,
@@ -120,6 +120,7 @@ export async function fetchFindingsInBox(
       ...filterParams(filters),
     },
     signal,
+    expected: ENDPOINT_MISSING_STATUSES,
   });
   return parseFindingCollection(body);
 }
@@ -138,6 +139,7 @@ export async function fetchFindingsPage(
   const body = await apiFetch<unknown>(FINDINGS_PATH, {
     query: { bbox: bboxParam(bbox), limit: FINDINGS_PAGE_SIZE, cursor, ...filterParams(filters) },
     signal,
+    expected: ENDPOINT_MISSING_STATUSES,
   });
   return parseFindingPage(body);
 }

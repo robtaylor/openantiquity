@@ -104,7 +104,15 @@ export interface ApiRequest {
   /** Sent as it is, with its own type, in place of `body`: an image for `POST /media`. */
   file?: Blob;
   signal?: AbortSignal;
+  /**
+   * Statuses the caller expects and handles, such as 401 when asking who is
+   * signed in. They are thrown as ever, but not kept for a problem report.
+   */
+  expected?: readonly number[];
 }
+
+/** What an endpoint the interface was built ahead of answers when the server lacks it (`isEndpointMissing`). */
+export const ENDPOINT_MISSING_STATUSES: readonly number[] = [404, 405, 501];
 
 const SAFE_METHODS = new Set(["GET", "HEAD"]);
 /** Statuses that come from a proxy in front of a backend that is down. */
@@ -157,7 +165,7 @@ function errorFromPayload(status: number, statusText: string, payload: unknown, 
  * their endpoint use it to stay quiet until the endpoint exists.
  */
 export function isEndpointMissing(error: unknown): boolean {
-  return error instanceof ApiError && (error.status === 404 || error.status === 405 || error.status === 501);
+  return error instanceof ApiError && ENDPOINT_MISSING_STATUSES.includes(error.status);
 }
 
 /** A dropped connection or a server error may pass. A bad document or a 4xx will not. */
@@ -171,8 +179,9 @@ export async function apiFetch<T>(path: string, request: ApiRequest = {}): Promi
   try {
     return await send<T>(method, path, request);
   } catch (error) {
-    // Kept for a problem report: every failure but one stopped on purpose (`failures.ts`).
-    if (error instanceof ApiError) keepRequestFailure(method, path, error);
+    // Kept for a problem report, unless it was stopped on purpose or expected (`failures.ts`).
+    const kept = error instanceof ApiError && !request.signal?.aborted && !request.expected?.includes(error.status);
+    if (kept) keepRequestFailure(method, path, error);
     throw error;
   }
 }

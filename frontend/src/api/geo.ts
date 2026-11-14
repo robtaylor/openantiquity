@@ -1,4 +1,4 @@
-import { apiFetch } from "./client.js";
+import { apiFetch, ENDPOINT_MISSING_STATUSES } from "./client.js";
 import { isFiniteNumber, isRecord } from "./guards.js";
 
 /**
@@ -56,6 +56,10 @@ export function parseGeoPoint(value: unknown): GeoPoint {
 }
 
 export async function fetchGeoPoint(lng: number, lat: number, signal?: AbortSignal): Promise<GeoPoint> {
-  const body = await apiFetch<unknown>("/geo/point", { query: { lon: lng, lat }, signal });
+  const body = await apiFetch<unknown>("/geo/point", {
+    query: { lon: lng, lat },
+    signal,
+    expected: ENDPOINT_MISSING_STATUSES,
+  });
   return parseGeoPoint(body);
 }

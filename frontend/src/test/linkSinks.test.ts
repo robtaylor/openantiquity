@@ -28,6 +28,8 @@ const PARSED_SAFE = new Set([
 const BUILT_HERE = new Set([
   // The repository's new-issue form, with the report as its query (`problem/report.ts`, `githubIssueUrl`).
   "features/problem/ReportProblem.tsx: href={issue.url",
+  // The report's email link to the address /meta names, encoded (`problem/report.ts`, `emailUrl`).
+  "features/problem/ReportProblem.tsx: href={email.url",
 ]);
 
 const RAW_HREF = /href=\{\s*[\w.?]*\.(url|homepage|licenceUrl|licence_url|canonical_url|href)\b(?!\()/g;

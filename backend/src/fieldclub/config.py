@@ -96,9 +96,10 @@ def commit_from_image(reference: str) -> str | None:
     return found.group("commit") if found else None
 
 
-# Enough to catch a value that isn't an email address at all. Whether the
-# address takes mail is the owner's to check.
-_EMAIL = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+# An address with one "@", a dot after it, and none of the characters that
+# could add a recipient or a header to the email link (`?`, `&`, `%`, `,`,
+# `;`, `<`, `>`) or white space. Whether it takes mail is the owner's to check.
+_EMAIL = re.compile(r"[^@\s?&%,;<>]+@[^@\s?&%,;<>]+\.[^@\s?&%,;<>]+")
 
 
 # SQLAlchemy's own pattern for a URL (`sqlalchemy.engine.url._parse_url` in

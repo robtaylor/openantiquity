@@ -90,8 +90,14 @@ class RequestIdMiddleware:
                 MutableHeaders(scope=message)[HEADER] = request_id
             await send(message)
 
-        with bound(request_id):
-            await self.app(scope, receive, send_with_id)
+        token = _current.set(request_id)
+        await self.app(scope, receive, send_with_id)
+        # Only once the request has been answered. An exception goes on to
+        # Starlette's last-resort handler and to uvicorn, which write the 500,
+        # its access line and the traceback after this has returned, so the
+        # id is left bound for them. Each request under uvicorn runs in a task
+        # of its own, so nothing else sees it.
+        _current.reset(token)
 
 
 class RequestIdFilter(logging.Filter):

@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import threading
 from collections.abc import Iterator
 
+import httpx
 import pytest
+import uvicorn
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -210,3 +213,48 @@ def test_a_tile_drawn_on_the_tile_threads_is_drawn_inside_the_request() -> None:
         assert asyncio.run(draw_one()) == "0123456789abcdef"
     finally:
         workers.close()
+
+
+@pytest.fixture
+def served(app_with_routes: FastAPI, monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+    """The app under a real uvicorn writing its lines through the root handler, as `fieldclub-api` does."""
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        monkeypatch.setattr(logging.getLogger(name), "propagate", True)
+        monkeypatch.setattr(logging.getLogger(name), "disabled", False)
+    config = uvicorn.Config(
+        app_with_routes, host="127.0.0.1", port=0, log_config=None, log_level="info", ws="none"
+    )
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    for _ in range(200):
+        if server.started:
+            break
+        threading.Event().wait(0.05)
+    assert server.started, "uvicorn didn't start"
+    port = server.servers[0].sockets[0].getsockname()[1]
+    yield f"http://127.0.0.1:{port}"
+    server.should_exit = True
+    thread.join(timeout=10)
+    assert not thread.is_alive(), "uvicorn didn't stop"
+
+
+def test_an_unhandled_error_s_access_line_and_traceback_carry_the_id(
+    served: str, tagged: pytest.LogCaptureFixture
+) -> None:
+    response = httpx.get(f"{served}/api/v1/test/crash", timeout=10)
+    assert response.status_code == 500
+    request_id = request_id_of(response)
+    access = [
+        r for r in tagged.records if r.name == "uvicorn.access" and "/api/v1/test/crash" in r.getMessage()
+    ]
+    # Uvicorn writes the traceback once the 500 has gone, so it may come a moment after the answer.
+    traceback: list[logging.LogRecord] = []
+    for _ in range(100):
+        traceback = [r for r in tagged.records if r.getMessage().startswith("Exception in ASGI application")]
+        if traceback:
+            break
+        threading.Event().wait(0.05)
+    assert access
+    assert traceback
+    assert {r.request_id for r in access + traceback} == {request_id}  # type: ignore[attr-defined]

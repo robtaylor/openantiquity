@@ -3290,8 +3290,6 @@ export interface components {
             /** Notes */
             notes: string | null;
             owner: components["schemas"]["PublicUser"];
-            /** Places Kept Back */
-            places_kept_back: boolean;
             /** Public Id */
             public_id: string;
             /** Summary */

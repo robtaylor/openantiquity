@@ -50,6 +50,7 @@ square, which anyone may see, and the square never leaves the server.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
 import math
@@ -331,7 +332,11 @@ class EventHub:
         """Start listening, unless already listening. Call from the hub's event loop."""
         assert asyncio.get_running_loop() is self.loop, "a hub belongs to the loop that made it"
         if self._task is None and not self._stopped:
-            self._task = self.loop.create_task(self._listen(), name="fieldclub-event-listener")
+            # In a context of its own: it is started inside the first stream
+            # request but outlives it, so it mustn't log with that request's id.
+            self._task = self.loop.create_task(
+                self._listen(), name="fieldclub-event-listener", context=contextvars.Context()
+            )
             self._task.add_done_callback(self._listener_ended)
 
     def _listener_ended(self, task: asyncio.Task[None]) -> None:

@@ -22,12 +22,14 @@ import httpx
 import psycopg
 import pytest
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
-from sqlalchemy import text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from fieldclub import db as fieldclub_db
+from fieldclub import request_ids
 from fieldclub.models import Finding, User
 from fieldclub.services import events, findings, review, sensitivity
+from fieldclub.services.activity import EVENT_CHANNEL
 from fieldclub.services.events import Announcement, EventHub, Signal, StreamFilter, TooManyStreamsError
 from fieldclub.vocab import Visible
 from tests.activity.support import TIMEOUT_S, next_activity, read_event
@@ -754,3 +756,31 @@ def test_a_stream_carries_its_request_id(server: str, env: Any, db: Session) -> 
     ):
         assert len(stream.headers["x-request-id"]) == 16
         read_event(stream.iter_lines())
+
+
+def test_the_listener_s_lines_carry_no_request_s_id(db: Session, caplog: pytest.LogCaptureFixture) -> None:
+    """The listener is started inside the first stream request, but outlives it."""
+    tagger = request_ids.RequestIdFilter()
+    caplog.handler.addFilter(tagger)
+
+    async def scenario() -> None:
+        with request_ids.bound("feedfacefeedface"):
+            hub = await started_hub()
+            hub.subscribe(StreamFilter(), "a")
+        # After that request: a payload that isn't an event, which the listener logs.
+        db.execute(select(func.pg_notify(EVENT_CHANNEL, "not json")))
+        db.commit()
+        for _ in range(100):
+            if any("isn't one activity.record sends" in r.getMessage() for r in caplog.records):
+                break
+            await asyncio.sleep(0.05)
+        await hub.stop()
+
+    try:
+        with caplog.at_level("INFO"):
+            run(scenario())
+    finally:
+        caplog.handler.removeFilter(tagger)
+    lines = [r for r in caplog.records if "isn't one activity.record sends" in r.getMessage()]
+    assert lines
+    assert {r.request_id for r in lines} == {request_ids.NO_REQUEST}  # type: ignore[attr-defined]

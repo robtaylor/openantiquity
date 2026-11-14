@@ -3,14 +3,20 @@
  *
  * A report says which build, what kind of page, which layout and browser,
  * what the map showed and what failed, and nothing that says where anyone
- * was or who they are: no map position unless the person adds it, no id of
- * a finding, record, investigation, draft or person, no handle or name, and
- * nothing a form holds. The repository is public, and a position or an
- * address can say where a protected finding is (Decision 0005).
+ * was or who they are: no coordinates ever, no id of a finding, record,
+ * investigation, draft or person, no handle or name, and nothing a form
+ * holds. The repository is public, and a position or an address can say
+ * where a protected finding is (Decision 0005). Where the map was is added
+ * only when the person asks, and only as the one-kilometre square it was
+ * centred on, the size of square a protected finding is shown as, and the
+ * zoom. Signed in, a member sees a protected finding exactly, so the option
+ * is never offered on a page that shows a finding, a draft or an
+ * investigation.
  */
 
 import { matchPath } from "react-router";
 import type { KeptFailure } from "../../api/failures.js";
+import { formatGridRef, wgs84ToGrid } from "../../map/gridref.js";
 import { NEW_ISSUE_URL } from "./repository.js";
 
 /**
@@ -77,10 +83,47 @@ export interface MapFacts {
   threeD: boolean;
 }
 
+/** Where the map was looking, as much of it as a report may carry. */
 export interface MapPosition {
-  lng: number;
-  lat: number;
+  /** The one-kilometre grid square the map was centred on, such as "SK 23 88". */
+  square: string;
+  /** The zoom, as a whole number. */
   zoom: number;
+}
+
+/** The square and zoom of a map centred at `lng`, `lat`, or null where the centre is on neither national grid. */
+export function positionOf(lng: number, lat: number, zoom: number): MapPosition | null {
+  const grid = wgs84ToGrid(lng, lat);
+  return grid ? { square: formatGridRef(grid, 4), zoom: Math.round(zoom) } : null;
+}
+
+/**
+ * The pages, by pattern, on which a report may offer where the map was:
+ * those that show no finding, draft or investigation of their own. Any
+ * other page, one added later included, doesn't offer it.
+ */
+const POSITION_PAGES: ReadonlySet<string> = new Set([
+  "/",
+  "/help",
+  "/help/:kind",
+  "/activity",
+  "/account",
+  "/u/:handle",
+  "/signin/email",
+  "/r/:id",
+  "/records",
+  "/elsewhere",
+  "/profile",
+  "/mentions",
+  "/investigations",
+  "/guide",
+  "/about",
+  "/about/:notice",
+]);
+
+/** Whether a report made on a page with this pattern may offer where the map was. */
+export function offersPosition(page: string): boolean {
+  return POSITION_PAGES.has(page);
 }
 
 /** What a report says, gathered when the form opens. */
@@ -102,7 +145,7 @@ export interface ReportFacts {
 export interface ReportChoices {
   /** What the person says they were doing. */
   description: string;
-  /** Where the map was looking, only when the person chose to add it and the page allows it. */
+  /** Where the map was looking, only when the person chose to add it and the page offers it. */
   position: MapPosition | null;
 }
 
@@ -113,7 +156,14 @@ const TITLE_MAX = 70;
 export function reportTitle(facts: ReportFacts, choices: ReportChoices): string {
   const firstLine = choices.description.trim().split("\n", 1)[0]?.trim() ?? "";
   if (!firstLine) return `A problem on ${facts.page}`;
-  return firstLine.length > TITLE_MAX ? `${firstLine.slice(0, TITLE_MAX - 1).trimEnd()}…` : firstLine;
+  // By characters, so a cut never leaves half of one, which encodeURIComponent refuses.
+  const characters = Array.from(firstLine);
+  return characters.length > TITLE_MAX
+    ? `${characters
+        .slice(0, TITLE_MAX - 1)
+        .join("")
+        .trimEnd()}…`
+    : firstLine;
 }
 
 function time(at: string): string {
@@ -121,7 +171,8 @@ function time(at: string): string {
 }
 
 function failureLine(failure: KeptFailure): string {
-  if (failure.kind === "error") return `- ${time(failure.at)} An error: ${failure.message}`;
+  // As code, so nothing in an engine's words is read as Markdown.
+  if (failure.kind === "error") return `- ${time(failure.at)} An error: \`${failure.message.replaceAll("`", "")}\``;
   const answer = failure.status === 0 ? "no answer" : String(failure.status);
   const request = failure.requestId ? `, request ${failure.requestId}` : "";
   return `- ${time(failure.at)} ${failure.method} ${failure.path}: ${answer} ${failure.code}${request}`;
@@ -136,7 +187,7 @@ function mapLine(map: MapFacts | null): string {
 
 function positionLine(position: MapPosition | null): string {
   if (!position) return "not included";
-  return `${position.lat.toFixed(5)}, ${position.lng.toFixed(5)} at zoom ${position.zoom.toFixed(1)}`;
+  return `${position.square} at zoom ${position.zoom}`;
 }
 
 function signedInLine(signedIn: boolean | null): string {
@@ -174,35 +225,43 @@ export const ADDRESS_MAX = 6000;
 
 /** What ends a body cut to fit the address. */
 export const CUT_NOTE =
-  "\n\n[The report was cut here to fit GitHub's address. Paste the full text, from Copy the details, in place of this.]";
+  "\n\n[The report was cut here to fit the address. Paste the full text, from Copy the details, in place of this.]";
 
-function issueAddress(title: string, body: string): string {
-  return `${NEW_ISSUE_URL}?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+/** An address and whether its body had to be cut to fit. */
+export interface ReportAddress {
+  url: string;
+  cut: boolean;
 }
 
 /**
- * The address of a new issue with `title` and `body` filled in, under
- * `ADDRESS_MAX` characters. A body too long for that is cut, and says so,
- * and `cut` is true.
+ * The address `build` makes from `body`, under `ADDRESS_MAX` characters. A
+ * body too long for that is cut, by characters so no character is split,
+ * and ends with `CUT_NOTE`.
  */
-export function githubIssueUrl(title: string, body: string): { url: string; cut: boolean } {
-  const whole = issueAddress(title, body);
+function fitted(build: (body: string) => string, body: string): ReportAddress {
+  const whole = build(body);
   if (whole.length < ADDRESS_MAX) return { url: whole, cut: false };
-  // By characters, not code units, so a cut never splits one and leaves what encodeURIComponent refuses.
   const characters = Array.from(body);
   let low = 0;
   let high = characters.length;
   while (low < high) {
     const middle = Math.ceil((low + high) / 2);
-    if (issueAddress(title, characters.slice(0, middle).join("") + CUT_NOTE).length < ADDRESS_MAX) low = middle;
+    if (build(characters.slice(0, middle).join("") + CUT_NOTE).length < ADDRESS_MAX) low = middle;
     else high = middle - 1;
   }
-  const url = issueAddress(title, characters.slice(0, low).join("") + CUT_NOTE);
-  if (url.length >= ADDRESS_MAX) throw new Error("A report's title alone is too long for GitHub's address");
+  const url = build(characters.slice(0, low).join("") + CUT_NOTE);
+  if (url.length >= ADDRESS_MAX) throw new Error("A report's title alone is too long for an address");
   return { url, cut: true };
 }
 
-/** A `mailto:` address that writes the report to `address`. */
-export function emailUrl(address: string, title: string, body: string): string {
-  return `mailto:${address}?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+/** A new issue on the repository with `title` and `body` filled in. */
+export function githubIssueUrl(title: string, body: string): ReportAddress {
+  return fitted((text) => `${NEW_ISSUE_URL}?title=${encodeURIComponent(title)}&body=${encodeURIComponent(text)}`, body);
+}
+
+/** A `mailto:` address that writes the report to `address`, cut as the issue's is. */
+export function emailUrl(address: string, title: string, body: string): ReportAddress {
+  // Encoded whole, but for the "@", so nothing in the setting can add a recipient or a header.
+  const to = encodeURIComponent(address).replace("%40", "@");
+  return fitted((text) => `mailto:${to}?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(text)}`, body);
 }

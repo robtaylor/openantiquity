@@ -132,6 +132,25 @@ describe("a failed request", () => {
     expect(keptFailures()).toEqual([expect.objectContaining({ method: "POST", path: "/media", status: 413 })]);
   });
 
+  it("isn't kept when its caller expected that answer", async () => {
+    answer(json({ error: { code: "unauthorised", message: "Sign in." } }, 401));
+    await expect(apiFetch("/auth/me", { expected: [401] })).rejects.toMatchObject({ status: 401 });
+    expect(keptFailures()).toEqual([]);
+  });
+
+  it("isn't kept when it is stopped while its answer is read", async () => {
+    const controller = new AbortController();
+    const response = json({ ok: true });
+    vi.spyOn(response, "json").mockImplementation(async () => {
+      controller.abort();
+      throw new DOMException("The user aborted a request.", "AbortError");
+    });
+    answer(response);
+    // What the caller is thrown is as it was.
+    await expect(apiFetch("/meta", { signal: controller.signal })).rejects.toMatchObject({ code: "bad_response" });
+    expect(keptFailures()).toEqual([]);
+  });
+
   it("isn't kept when it worked", async () => {
     answer(json({ ok: true }));
     await apiFetch("/meta");
@@ -179,6 +198,28 @@ describe("an uncaught error", () => {
   it("loses any address and anything shaped like a public id", () => {
     keepError("No finding KQXMBW at /f/KQXMBW or https://openantiquity.org/f/KQXMBW, for RIDGE");
     expect(keptFailures()[0]).toMatchObject({ message: "No finding # at # or # for RIDGE" });
+  });
+
+  it("keeps no line breaks, ids beside other characters, @ or quoted input", () => {
+    keepError("Bad\n\n## Forged heading\n- [x] done");
+    keepError("No finding x_KQXMBW-there");
+    keepError("Ping @robtaylor please");
+    keepError('Unexpected token in JSON at "Low mound by the oak"');
+    const messages = keptFailures().map((failure) => failure.kind === "error" && failure.message);
+    expect(messages).toEqual([
+      "Bad ## Forged heading - [x] done",
+      "No finding x_#-there",
+      "Ping robtaylor please",
+      "Unexpected token in JSON at #",
+    ]);
+  });
+
+  it("is cut by characters, so a message of emoji keeps none in halves", () => {
+    keepError("😀".repeat(MESSAGE_MAX * 2));
+    const [kept] = keptFailures();
+    const message = kept?.kind === "error" ? kept.message : "";
+    expect(Array.from(message)).toHaveLength(MESSAGE_MAX);
+    expect(() => encodeURIComponent(message)).not.toThrow();
   });
 
   it("is kept from an unhandled rejection, but not twice for a failed request", () => {

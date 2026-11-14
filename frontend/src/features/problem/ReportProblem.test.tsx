@@ -12,7 +12,7 @@ import { json, mapReady, renderShell, setUpShellTests } from "../../test/shellHa
 import { EmptyState } from "../../ui/EmptyState.js";
 import { ErrorReportContext } from "../../ui/errorReport.js";
 import { ReportProblemButton } from "./ReportProblem.js";
-import { CUT_NOTE } from "./report.js";
+import { CUT_NOTE, positionOf } from "./report.js";
 
 vi.mock("maplibre-gl", async () => {
   const fake = await import("../../test/fakeMapLibre.js");
@@ -63,7 +63,7 @@ describe("Report a problem", () => {
     expect(text).toContain("- Signed in: no");
     expect(text).toContain("- Where the map was: not included");
     expect(text).toContain("GET /findings/{public_id}: 500 internal_error, request ab");
-    expect(text).toContain("An error: Cannot read properties of undefined");
+    expect(text).toContain("An error: `Cannot read properties of undefined`");
     expect(form.getByLabelText("What will be sent")).toHaveAttribute("readonly");
   });
 
@@ -77,7 +77,9 @@ describe("Report a problem", () => {
     expect(box).not.toBeChecked();
     await user.click(box);
     expect(box).toBeChecked();
-    expect(sent(form)).toContain(`- Where the map was: ${camera.lat.toFixed(5)}, ${camera.lng.toFixed(5)} at zoom`);
+    const square = positionOf(camera.lng, camera.lat, camera.zoom)?.square;
+    expect(square).toMatch(/^[A-Z]{2} \d\d \d\d$/);
+    expect(sent(form)).toContain(`- Where the map was: ${square} at zoom ${Math.round(camera.zoom)}`);
     await user.click(box);
     expect(sent(form)).toContain("- Where the map was: not included");
   });
@@ -126,12 +128,22 @@ describe("Report a problem", () => {
     await user.click(box);
     // Within the box's limit, but each of these is six characters once in an address.
     await user.paste("éèêë àâôö ".repeat(190));
-    expect(form.getByRole("note")).toHaveTextContent("too long for GitHub to take whole");
+    expect(form.getByRole("note")).toHaveTextContent("too long to send whole");
     const link = form.getByRole("link", { name: "Open a GitHub issue" });
     expect(new URL(link.getAttribute("href") ?? "").searchParams.get("body")?.endsWith(CUT_NOTE)).toBe(true);
     link.addEventListener("click", (event) => event.preventDefault());
     await user.click(link);
     await waitFor(async () => expect(await navigator.clipboard.readText()).toBe(sent(form)));
+  });
+
+  it("takes a description and a kept error made of emoji without breaking", async () => {
+    keepError("😀".repeat(400));
+    const { user, form } = await openFromAbout();
+    await user.click(form.getByLabelText("What were you doing, and what went wrong?"));
+    await user.paste("😀".repeat(36));
+    const address = new URL(form.getByRole("link", { name: "Open a GitHub issue" }).getAttribute("href") ?? "");
+    expect(address.searchParams.get("title")).toBe("😀".repeat(36));
+    expect(address.searchParams.get("body")).toBe(sent(form));
   });
 
   it("closes on Escape and on Close, and gives focus back to the button", async () => {

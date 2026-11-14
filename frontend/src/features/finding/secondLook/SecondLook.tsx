@@ -3,7 +3,6 @@ import type { Meta } from "../../../api/meta.js";
 import { toast } from "../../../ui/toastStore.js";
 import { accountIdentity, useSession } from "../../account/session.js";
 import { discardDraft, sendHeldDraft } from "../../drafts/store.js";
-import { useKeepsPlaceBack } from "../../problem/keptBack.js";
 import { giveAnswer, isShapeChanged, revealAsAsked, SHAPE_CHANGED_WORDS } from "../api.js";
 import type { ViewerPosition } from "../describe.js";
 import { toastFailureWithRetry, useSignedInFirst } from "../feedback.js";
@@ -56,7 +55,6 @@ export interface SecondLookProps {
  */
 export function SecondLook({ meta, finding, position, ready, onRevealed, onHeld, onRefresh, ref }: SecondLookProps) {
   const { public_id: publicId } = finding;
-  useKeepsPlaceBack(finding.location.obscured);
   const [reveal, setReveal] = useState<Reveal | null>(null);
   /** An answer pressed and on its way, shown at once, until the server has it. */
   const [sending, setSending] = useState<Visible | null>(null);

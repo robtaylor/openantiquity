@@ -52,7 +52,7 @@ The groundwork, useful to anyone debugging whether or not the button exists.
 
 **Status:** Built on 2026-11-14, on `feat/report-a-problem`, not yet deployed. The email link waits for `FIELDCLUB_REPORT_EMAIL` to be set once the forward works.
 
-What was built: `features/problem/`, with the button on the About page and in every `EmptyState` error, the form described in `docs/UI.md`, the tick box for the map's position, which a page showing a kept-back place turns off with what the server says (`keptBack.ts`, `places_kept_back` on an investigation), and `privacy.test.tsx`, which builds the report by every route beside a protected finding as a signed-out visitor and searches it. A section's own one-line failure inside a page, such as "The discussion couldn't be loaded", doesn't offer the button, and neither does a failure toast.
+What was built: `features/problem/`, with the button on the About page and in every `EmptyState` error, the form described in `docs/UI.md`, the tick box that adds the one-kilometre square the map was centred on and the zoom, which no page showing a finding, a draft or an investigation offers (`report.ts`, `offersPosition`), and `privacy.test.tsx`, which builds the report by every route beside a protected finding, signed out and as a member who sees it exactly, and searches it. Failures a page expects, the 401 that says nobody is signed in and the 404 of an endpoint probe, and aborted requests, aren't kept. A section's own one-line failure inside a page, such as "The discussion couldn't be loaded", doesn't offer the button, and neither does a failure toast.
 
 "Report a problem" sits in the About page and in every error state. It opens a short form that shows exactly what will be sent, and two ways to send it.
 
@@ -60,7 +60,7 @@ What was built: `features/problem/`, with the button on the About page and in ev
 
 **What is left out by default:** the map position, finding and investigation ids, the account, and the contents of drafts. The repository is public, and an address or a map position can say where a protected finding is.
 
-**Position by choice.** A tick box adds where the person was looking, since position is often what reproduces a terrain fault. It is unavailable while the page shows a finding whose place is kept back from that person, and on any page of an investigation that holds one.
+**Position by choice.** A tick box adds where the person was looking, since position is often what reproduces a terrain fault. It adds only the one-kilometre grid square the map was centred on and the zoom as a whole number, never coordinates: a signed-in member sees a protected finding exactly, and the tracker is public. It is unavailable to everyone on any page that shows a finding, a draft or an investigation, and where the map's centre is on neither national grid.
 
 **Routes:**
 

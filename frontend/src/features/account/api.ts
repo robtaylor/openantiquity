@@ -23,7 +23,8 @@ export const accountKeys = {
 /** `GET /auth/me`: the signed-in person, or null when nobody is. */
 export async function fetchMe(signal?: AbortSignal): Promise<Me | null> {
   try {
-    return await apiFetch<Me>("/auth/me", { signal });
+    // Signed out is an ordinary answer, so it isn't kept for a problem report.
+    return await apiFetch<Me>("/auth/me", { signal, expected: [401] });
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) return null;
     throw error;

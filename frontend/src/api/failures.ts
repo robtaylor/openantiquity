@@ -8,8 +8,9 @@
  * method, its path as a pattern with every id and number written as a
  * parameter, its status, its error code and the request id the server gave
  * it. It never keeps a body, a query string, a header or a message. An
- * uncaught error keeps its message, with every word that holds a figure or
- * a slash, and every word shaped like a public id, taken out, and cut short. Neither keeps a stack trace.
+ * uncaught error keeps its message, with anything quoted, every word that
+ * holds a figure or a slash, and anything shaped like a public id taken
+ * out, on one line, and cut short. Neither keeps a stack trace.
  */
 
 import type { ApiError } from "./client.js";
@@ -94,7 +95,7 @@ export function pathPattern(path: string): string {
   return `/${parts.join("/")}`;
 }
 
-/** Keep a request that failed. Called by the API client for every failure but one stopped on purpose. */
+/** Keep a request that failed. Called by the API client for every failure but those it was told to leave. */
 export function keepRequestFailure(method: string, path: string, error: ApiError): void {
   keep({
     kind: "request",
@@ -107,17 +108,28 @@ export function keepRequestFailure(method: string, path: string, error: ApiError
   });
 }
 
+/** Anything an engine quoted, which is where it puts the input it choked on. */
+const QUOTED = /"[^"]*"/g;
 /** A word that holds a figure or a slash: an address, a path, a tile's numbers, coordinates or a grid reference. */
 const PLACE_LIKE = /\S*[\d/]\S*/g;
-/** A word shaped like a public id: six letters and figures of Crockford's base32, such as "KQXMBW". */
-const ID_LIKE = /\b[0-9A-HJKMNP-TV-Z]{6}\b/g;
+/** Six letters and figures of Crockford's base32, such as "KQXMBW", touching no other figure or capital. */
+const ID_LIKE = /(?<![0-9A-Z])[0-9A-HJKMNP-TV-Z]{6}(?![0-9A-Z])/g;
 
 /**
- * A message with every word that could say where someone was or what they
- * were looking at written as "#", cut to `MESSAGE_MAX`.
+ * A message with whatever was quoted, every word that could say where
+ * someone was, and anything shaped like a public id written as "#", with
+ * no "@" to notify anyone, its white space run into single spaces so it
+ * can't make lines of its own, and cut to `MESSAGE_MAX` characters.
  */
 function scrubbed(message: string): string {
-  return message.replace(PLACE_LIKE, "#").replace(ID_LIKE, "#").slice(0, MESSAGE_MAX);
+  const plain = message
+    .replace(QUOTED, "#")
+    .replace(PLACE_LIKE, "#")
+    .replace(ID_LIKE, "#")
+    .replaceAll("@", "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return Array.from(plain).slice(0, MESSAGE_MAX).join("");
 }
 
 /** Keep an error nothing caught, by its message alone. */

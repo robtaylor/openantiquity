@@ -1,4 +1,4 @@
-import { apiFetch, apiUrl, type QueryParam } from "../../api/client.js";
+import { apiFetch, apiUrl, ENDPOINT_MISSING_STATUSES, type QueryParam } from "../../api/client.js";
 import type { components } from "../../api/schema.js";
 
 /**
@@ -107,7 +107,10 @@ export function recordsDownloadUrl(query: RecordQuery): string {
 }
 
 export async function fetchLiveSources(signal?: AbortSignal): Promise<LiveSourceOut[]> {
-  const body = await apiFetch<Schemas["LiveSources"]>("/context/live-sources", { signal });
+  const body = await apiFetch<Schemas["LiveSources"]>("/context/live-sources", {
+    signal,
+    expected: ENDPOINT_MISSING_STATUSES,
+  });
   return body.items;
 }
 

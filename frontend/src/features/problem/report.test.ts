@@ -7,8 +7,10 @@ import {
   CUT_NOTE,
   emailUrl,
   githubIssueUrl,
+  offersPosition,
   PAGE_PATTERNS,
   pagePattern,
+  positionOf,
   type ReportFacts,
   reportText,
   reportTitle,
@@ -134,14 +136,17 @@ describe("reportText", () => {
         "## What went wrong lately",
         "",
         "- 2026-11-14T10:21:03Z GET /findings/{public_id}/comments: 500 internal_error, request 0123456789abcdef",
-        "- 2026-11-14T10:21:09Z An error: Cannot read properties of undefined (reading 'tier')",
+        "- 2026-11-14T10:21:09Z An error: `Cannot read properties of undefined (reading 'tier')`",
       ].join("\n"),
     );
   });
 
-  it("gives where the map was only when it is chosen", () => {
-    const text = reportText(facts(), { description: "", position: { lng: -1.8542, lat: 51.4286, zoom: 14.25 } });
-    expect(text).toContain("- Where the map was: 51.42860, -1.85420 at zoom 14.3");
+  it("gives where the map was only when it is chosen, as its square and whole zoom", () => {
+    const position = positionOf(-1.8542, 51.4286, 14.6);
+    expect(position).toEqual({ square: "SU 10 69", zoom: 15 });
+    const text = reportText(facts(), { description: "", position });
+    expect(text).toContain("- Where the map was: SU 10 69 at zoom 15");
+    expect(text).not.toMatch(/\d\.\d{3,}/);
     expect(text).toContain("Not filled in.");
     expect(text).toContain("Nothing failed in this page.");
   });
@@ -164,6 +169,15 @@ describe("reportTitle", () => {
     );
     expect(reportTitle(facts(), { description: "x".repeat(100), position: null })).toHaveLength(70);
     expect(reportTitle(facts(), { description: "", position: null })).toBe("A problem on /f/:id");
+  });
+
+  it("never cuts a character in two, so an address can be made from it", () => {
+    const title = reportTitle(facts(), { description: "😀".repeat(36), position: null });
+    expect(title).toBe("😀".repeat(36));
+    const long = reportTitle(facts(), { description: "😀".repeat(80), position: null });
+    expect(Array.from(long)).toHaveLength(70);
+    expect(() => githubIssueUrl(long, "body")).not.toThrow();
+    expect(() => encodeURIComponent(long)).not.toThrow();
   });
 });
 
@@ -212,9 +226,51 @@ describe("githubIssueUrl", () => {
   });
 });
 
+describe("positionOf and offersPosition", () => {
+  it("gives no square off both national grids", () => {
+    expect(positionOf(2.35, 48.85, 12)).toBeNull();
+    expect(positionOf(-6.26, 53.35, 12)?.square).toMatch(/^O \d\d \d\d$/);
+  });
+
+  it.each([
+    "/f/:id",
+    "/review",
+    "/mark/:draftId?",
+    "/mark/finding/:publicId",
+    "/i/:id",
+    "/scan",
+    "/mod/:section?",
+    "/_ui",
+    "another page",
+  ])("isn't offered on %s", (page) => {
+    expect(offersPosition(page)).toBe(false);
+  });
+
+  it.each(["/", "/about", "/r/:id", "/investigations", "/u/:handle"])("is offered on %s", (page) => {
+    expect(offersPosition(page)).toBe(true);
+  });
+
+  it("is offered only on pages the shell knows", () => {
+    for (const page of ["/", "/about", "/r/:id"]) expect(PAGE_PATTERNS).toContain(page);
+  });
+});
+
 describe("emailUrl", () => {
+  it("cuts a body too long for the address, as the issue's is", () => {
+    const { url, cut } = emailUrl("reports@openantiquity.example", "Long", "éèêë àâôö ".repeat(400));
+    expect(cut).toBe(true);
+    expect(url.length).toBeLessThan(ADDRESS_MAX);
+    expect(new URLSearchParams(url.split("?")[1]).get("body")?.endsWith(CUT_NOTE)).toBe(true);
+  });
+
+  it("encodes the address, so it can't add a recipient or a header", () => {
+    const { url } = emailUrl("help@x.example?bcc=other%40y.example", "T", "B");
+    expect(url.startsWith("mailto:help@x.example%3Fbcc%3Dother%2540y.example?subject=")).toBe(true);
+  });
+
   it("writes the same title and text to the address", () => {
-    const url = emailUrl("reports@openantiquity.example", "The map went white", "Line one\nLine two");
+    const { url, cut } = emailUrl("reports@openantiquity.example", "The map went white", "Line one\nLine two");
+    expect(cut).toBe(false);
     expect(url.startsWith("mailto:reports@openantiquity.example?")).toBe(true);
     const query = new URLSearchParams(url.split("?")[1]);
     expect(query.get("subject")).toBe("The map went white");

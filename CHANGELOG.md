@@ -11,7 +11,7 @@ service, so entries are dated, not versioned.
 OpenAntiquity has been live at openantiquity.org since 12 November 2026. This is what it does for you.
 
 - The code is open. It is published at github.com/robtaylor/openantiquity under the GNU Affero General Public License, version 3, so anyone may read it, change it and run their own copy, and whoever runs a changed copy has to share its source.
-- "Report a problem", on the about page and wherever something fails to load, opens a short form that shows exactly what it will send and lets you open it as a GitHub issue or copy it. It never includes where the map is unless you tick for it, and it can't on a page showing a protected place.
+- "Report a problem", on the about page and wherever something fails to load, opens a short form that shows exactly what it will send and lets you open it as a GitHub issue or copy it. It never gives where the map is unless you tick for it, and then only the one-kilometre square and the zoom. A page showing a finding, a draft or an investigation doesn't offer it.
 - The about page links to the source code and the list of known problems, and says which build is running.
 - It is called OpenAntiquity, at openantiquity.org. While it was being built it was called Field Club, and two early letters to record holders carry that name.
 - You can look at England's LIDAR as slope, sky-view, relief and other views made for spotting earthworks, and light it from any direction you like. You don't need an account to look at anything.

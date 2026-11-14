@@ -145,7 +145,11 @@ describe("the notices", () => {
     serve();
     const panel = await openPanel("/about/privacy", "Privacy notice");
     expect(panel.getByText(/Each request is given a random number/)).toBeInTheDocument();
-    expect(panel.getByText(/kept by our host, Fly\.io, for seven days/)).toBeInTheDocument();
+    expect(panel.getByText(/Our host, Fly\.io, says it keeps the log for seven days/)).toBeInTheDocument();
+    expect(panel.getByText(/It isn't only a list of requests/)).toBeInTheDocument();
+    expect(panel.getByText(/some of them name an account/)).toBeInTheDocument();
+    expect(panel.getByText(/the words of an error the page didn't catch/)).toBeInTheDocument();
+    expect(panel.getByText(/the one-kilometre square the map was centred on/)).toBeInTheDocument();
     expect(panel.getByText(/sent nowhere unless you use "Report a problem"/)).toBeInTheDocument();
   });
 
