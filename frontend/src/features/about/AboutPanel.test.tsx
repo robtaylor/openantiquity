@@ -141,6 +141,14 @@ describe("the notices", () => {
     expect(panel.getAllByText(new RegExp(`within ${due?.due_hours} hours`)).length).toBeGreaterThan(0);
   });
 
+  it("says in the privacy notice what the server logs with each request's number, and what a report sends", async () => {
+    serve();
+    const panel = await openPanel("/about/privacy", "Privacy notice");
+    expect(panel.getByText(/Each request is given a random number/)).toBeInTheDocument();
+    expect(panel.getByText(/kept by our host, Fly\.io, for seven days/)).toBeInTheDocument();
+    expect(panel.getByText(/sent nowhere unless you use "Report a problem"/)).toBeInTheDocument();
+  });
+
   it("says in the privacy notice what is kept, including the age band and the email from a provider", async () => {
     serve();
     const panel = await openPanel("/about/privacy", "Privacy notice");

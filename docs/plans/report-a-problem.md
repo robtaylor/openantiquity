@@ -1,6 +1,6 @@
 # Plan — Report a problem: a button that captures what a fix needs
 
-**Status:** Proposed.
+**Status:** Active. WS1 and WS2 are built on the branch `feat/report-a-problem` and not yet deployed. WS3 hasn't started.
 
 ## Goal
 
@@ -25,7 +25,14 @@ Fly keeps only a short log. On 2026-11-12, when the owner reported that "Save fi
 
 ### WS1 — What a report needs from the app
 
-**Status:** Not started.
+**Status:** Built on 2026-11-14, on `feat/report-a-problem`, not yet deployed.
+
+What was built:
+
+- `/api/v1/meta` gives `app.commit`, read from Fly's `FLY_IMAGE_REF` (`config.commit_from_image`). Anything but `registry.fly.io/<app>:<40 hex>@sha256:<64 hex>`, or no variable, gives null. The About page shows the first seven characters beside the version.
+- `fieldclub/request_ids.py` gives each request a 16-hex-digit id of its own, sent in `X-Request-ID` on every response, repeated as `error.request_id` in an error body, and written on each log line made while the request is handled, uvicorn's access line and the tile threads included. A client's own `X-Request-ID` is ignored.
+- `frontend/src/api/failures.ts` keeps the last ten failures in memory, by the fields listed in `docs/ARCHITECTURE.md`. The path patterns come from `src/api/paths.ts`, which `pnpm gen:api` writes from the OpenAPI schema.
+- The About page links to the source and to the issue tracker.
 
 The groundwork, useful to anyone debugging whether or not the button exists.
 
@@ -43,7 +50,9 @@ The groundwork, useful to anyone debugging whether or not the button exists.
 
 ### WS2 — The button and the prefilled issue
 
-**Status:** Not started. Needs WS1.
+**Status:** Built on 2026-11-14, on `feat/report-a-problem`, not yet deployed. The email link waits for `FIELDCLUB_REPORT_EMAIL` to be set once the forward works.
+
+What was built: `features/problem/`, with the button on the About page and in every `EmptyState` error, the form described in `docs/UI.md`, the tick box for the map's position, which a page showing a kept-back place turns off with what the server says (`keptBack.ts`, `places_kept_back` on an investigation), and `privacy.test.tsx`, which builds the report by every route beside a protected finding as a signed-out visitor and searches it. A section's own one-line failure inside a page, such as "The discussion couldn't be loaded", doesn't offer the button, and neither does a failure toast.
 
 "Report a problem" sits in the About page and in every error state. It opens a short form that shows exactly what will be sent, and two ways to send it.
 

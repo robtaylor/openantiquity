@@ -79,7 +79,7 @@ Build these once in `src/ui/` and reuse them: `Button` (primary, secondary, ghos
 - Nothing that contributes data needs more than one tap after the first. Second look answers are single buttons, and the answer is sent with that one press. Optional detail appears after the answer, never before, and goes with the press that shows how the answer compares (Decision 0008). On a phone the sheet never covers the place the person is asked to look at while they answer.
 - Signed-out people can mark, answer and scan. Their work is a draft in the browser, shown with a "not saved yet" badge, and a quiet bar says how many drafts are waiting. Pressing save opens the sign-in sheet over what they were doing. After a sign-in from the same tab the drafts wait, without being re-entered, for one press to send them, since someone else may have used the tab first, and the page returns to the same view (Decision 0024). Drafts made in another tab or by an earlier visitor are shown by kind alone and saved only when the person says they're theirs (Decision 0022).
 - The sign-in sheet shows one button per provider in the provider's own style, with "email me a link" underneath. It says in one sentence why an account is needed.
-- Empty states say what to do next. Errors say what happened and offer a retry.
+- Empty states say what to do next. Errors say what happened and offer a retry, and after it "Report a problem".
 - Every control is reachable by keyboard and has a visible focus ring. Map features are also listed in the panel, so nothing depends on pointing at a canvas. Text contrast is at least 4.5 to 1.
 
 ## The drawing tool
@@ -100,6 +100,15 @@ One tool marks a finding, whether it is a spot, a line or a closed shape, and ch
 ## Choosing between findings
 
 A tap where several findings meet opens the one that is clearly most specific: markers beat lines, lines beat area edges, and the smaller of two alike wins only when it is under half the other's size. An area is picked by its edge, never its inside. A finger reaches 16 px from the tap and a mouse 6 px. Anything else opens the chooser, which says "2 findings here" and lists each with its title, tier badge and class, at most 8 and then "Show all in Explore". On a computer it is a popover beside the pointer, and on a phone a short sheet at the top or the bottom, whichever leaves the tap in sight. Hovering or focusing an entry highlights its shape on the map. The arrow keys, Home and End move through it, Enter opens one, and Escape closes it and puts focus back on the map. On a computer the pointer highlights what a click would open, or says "2 findings here" where it would open the chooser. Explore's list is the keyboard route to every finding in view.
+
+## Reporting a problem
+
+"Report a problem" is a secondary button on the about page, under "When something goes wrong", and after the action of every error state a page or panel shows. It opens a dialog of the usual kind, 640 px wide, titled "Report a problem", with focus on the title, Tab kept inside and focus returned to the button on closing.
+
+- **The box** "What were you doing, and what went wrong?" is the only thing the person types. Its hint asks them not to say where a protected finding is.
+- **The tick box** "Add where the map is looking" is off to begin with and adds the map's centre and zoom. On a page that shows a place kept back from the person it is unavailable, and its line says "Not on this page: it shows a place that is kept back from you."
+- **"What will be sent"** is a read-only box in the mono face holding the whole text, readable and selectable, which changes as the person types or ticks.
+- **The actions**, the main one last: "Copy the details", which copies the text and says "Copied." in a status line or, when the browser refuses, how to copy it by hand; "Email it", only when an address for reports is set; and "Open a GitHub issue", a link in another tab to a new issue with the title and text filled in. When the text is too long for GitHub's address, a note says the issue will hold the start of it and that the full text goes on the clipboard to paste over it.
 
 ## Words
 
