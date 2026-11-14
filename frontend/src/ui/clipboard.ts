@@ -6,13 +6,19 @@ import { toast } from "./toastStore.js";
  * or without permission.
  */
 export async function copyWithToast(text: string, done: string): Promise<boolean> {
+  const copied = await copyText(text);
+  if (copied) toast(done, { kind: "success" });
+  else toast(`This browser wouldn't copy it. Here it is to copy by hand: ${text}`, { kind: "error" });
+  return copied;
+}
+
+/** Copy text, and say whether the browser let it. */
+export async function copyText(text: string): Promise<boolean> {
   try {
     if (!navigator.clipboard) throw new Error("No clipboard");
     await navigator.clipboard.writeText(text);
-    toast(done, { kind: "success" });
     return true;
   } catch {
-    toast(`This browser wouldn't copy it. Here it is to copy by hand: ${text}`, { kind: "error" });
     return false;
   }
 }

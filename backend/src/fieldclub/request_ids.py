@@ -71,13 +71,16 @@ class RequestIdMiddleware:
     """
 
     def __init__(self, app: ASGIApp) -> None:
+        from starlette.datastructures import MutableHeaders
+
         self.app = app
+        self._headers = MutableHeaders
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        from starlette.datastructures import MutableHeaders
+        MutableHeaders = self._headers  # noqa: N806 - the class, kept from __init__
 
         request_id = new_id()
         scope[SCOPE_KEY] = request_id

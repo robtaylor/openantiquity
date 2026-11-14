@@ -24,6 +24,12 @@ const PARSED_SAFE = new Set([
   "map/attribution.tsx: href={part.href",
 ]);
 
+/** Addresses built here from a fixed origin, never taken from data. */
+const BUILT_HERE = new Set([
+  // The repository's new-issue form, with the report as its query (`problem/report.ts`, `githubIssueUrl`).
+  "features/problem/ReportProblem.tsx: href={issue.url",
+]);
+
 const RAW_HREF = /href=\{\s*[\w.?]*\.(url|homepage|licenceUrl|licence_url|canonical_url|href)\b(?!\()/g;
 
 describe("link sinks", () => {
@@ -32,6 +38,6 @@ describe("link sinks", () => {
     const raw = SOURCES.flatMap(({ path, text }) =>
       [...text.matchAll(RAW_HREF)].map((match) => `${path}: ${match[0]}`),
     );
-    expect(raw.filter((sink) => !PARSED_SAFE.has(sink))).toEqual([]);
+    expect(raw.filter((sink) => !PARSED_SAFE.has(sink) && !BUILT_HERE.has(sink))).toEqual([]);
   });
 });

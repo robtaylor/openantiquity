@@ -10,6 +10,7 @@ import { useFakeEventSource } from "../../test/fakeEventSource.js";
 import { metaFixture } from "../../test/fixtures/meta.js";
 import { json, mapReady, renderShell, setUpShellTests } from "../../test/shellHarness.js";
 import { EmptyState } from "../../ui/EmptyState.js";
+import { ErrorReportContext } from "../../ui/errorReport.js";
 import { ReportProblemButton } from "./ReportProblem.js";
 import { CUT_NOTE } from "./report.js";
 
@@ -158,12 +159,14 @@ describe("Report a problem", () => {
 });
 
 describe("an error state", () => {
-  it("offers Report a problem after its own action, even outside the app", async () => {
+  it("offers Report a problem after its own action, wherever the app provides it", async () => {
     const user = userEvent.setup();
     render(
-      <EmptyState tone="error" title="The list couldn't be loaded" action={<button type="button">Try again</button>}>
-        <p>The server isn't answering.</p>
-      </EmptyState>,
+      <ErrorReportContext.Provider value={ReportProblemButton}>
+        <EmptyState tone="error" title="The list couldn't be loaded" action={<button type="button">Try again</button>}>
+          <p>The server isn't answering.</p>
+        </EmptyState>
+      </ErrorReportContext.Provider>,
     );
     const alert = screen.getByRole("alert");
     const buttons = within(alert).getAllByRole("button");
@@ -177,9 +180,22 @@ describe("an error state", () => {
     expect(alert.contains(dialog)).toBe(false);
   });
 
-  it("isn't offered by an empty state that isn't an error", () => {
-    render(<EmptyState title="Nothing here yet" />);
+  it("isn't offered by an empty state that isn't an error, nor outside the app", () => {
+    render(
+      <ErrorReportContext.Provider value={ReportProblemButton}>
+        <EmptyState title="Nothing here yet" />
+      </ErrorReportContext.Provider>,
+    );
+    render(<EmptyState tone="error" title="The list couldn't be loaded" />);
     expect(screen.queryByRole("button", { name: "Report a problem" })).toBeNull();
+  });
+
+  it("is offered by the error shown before the map starts", async () => {
+    harness.answer("/meta", () => json({ error: { code: "invalid_cursor", message: "Broke." } }, 400));
+    renderShell("/");
+    const failed = await screen.findByRole("alert");
+    expect(within(failed).getByText("The map couldn't start")).toBeInTheDocument();
+    expect(within(failed).getByRole("button", { name: "Report a problem" })).toBeInTheDocument();
   });
 
   it("works as a button on its own", async () => {

@@ -21,6 +21,11 @@ function useMediaQuery(query: string): boolean {
   return matched;
 }
 
+/** Whether the window is under 720 px now, for code that reads it once rather than following it. */
+export function isPhoneNow(): boolean {
+  return matches(PHONE_QUERY);
+}
+
 /** True under 720 px, where the shell switches to the phone layout. */
 export function useIsPhone(): boolean {
   return useMediaQuery(PHONE_QUERY);

@@ -50,19 +50,19 @@ export function pagePattern(pathname: string): string {
   return PAGE_PATTERNS.find((pattern) => matchPath({ path: pattern, end: true }, pathname)) ?? "another page";
 }
 
+/** Browsers by the mark their user agent string carries, in the order to look for them. */
+const BROWSERS: ReadonlyArray<[RegExp, string]> = [
+  [/\bEdg(?:e|A|iOS)?\/(\d+)/, "Edge"],
+  [/\bOPR\/(\d+)/, "Opera"],
+  [/\bSamsungBrowser\/(\d+)/, "Samsung Internet"],
+  [/\b(?:Firefox|FxiOS)\/(\d+)/, "Firefox"],
+  [/\b(?:Chrome|CriOS)\/(\d+)/, "Chrome"],
+  [/\bVersion\/(\d+)[.\d]* (?:Mobile\/\S+ )?Safari\//, "Safari"],
+];
+
 /** The browser's name and major version from its user agent string, such as "Firefox 140". */
 export function browserName(userAgent: string): string {
-  const known: Array<[RegExp, string]> = [
-    [/\bEdg(?:e|A|iOS)?\/(\d+)/, "Edge"],
-    [/\bOPR\/(\d+)/, "Opera"],
-    [/\bSamsungBrowser\/(\d+)/, "Samsung Internet"],
-    [/\bFirefox\/(\d+)/, "Firefox"],
-    [/\bFxiOS\/(\d+)/, "Firefox"],
-    [/\bCriOS\/(\d+)/, "Chrome"],
-    [/\bChrome\/(\d+)/, "Chrome"],
-    [/\bVersion\/(\d+)[.\d]* (?:Mobile\/\S+ )?Safari\//, "Safari"],
-  ];
-  for (const [pattern, name] of known) {
+  for (const [pattern, name] of BROWSERS) {
     const found = pattern.exec(userAgent);
     if (found) return `${name} ${found[1]}`;
   }

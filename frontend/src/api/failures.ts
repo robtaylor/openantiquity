@@ -46,7 +46,7 @@ const kept: KeptFailure[] = [];
 
 function keep(failure: KeptFailure): void {
   kept.push(failure);
-  while (kept.length > MAX_KEPT) kept.shift();
+  if (kept.length > MAX_KEPT) kept.shift();
 }
 
 /** What has been kept, oldest first. A copy. */

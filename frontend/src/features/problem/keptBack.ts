@@ -11,12 +11,13 @@
  */
 
 import { useEffect } from "react";
-import { matchPath, useLocation } from "react-router";
+import { useLocation } from "react-router";
 import { create } from "zustand";
 import { onPersonChanged } from "../account/session.js";
+import { pagePattern } from "./report.js";
 
-/** The pages that show one finding, or an investigation that may hold one. */
-const PAGES_WITH_A_FINDING = ["/f/:id", "/mark/finding/:publicId", "/i/:id", "/review"];
+/** The pages, by their patterns in `report.ts`, that show one finding or an investigation that may hold one. */
+const PAGES_WITH_A_FINDING = new Set(["/f/:id", "/mark/finding/:publicId", "/i/:id", "/review"]);
 
 interface KeptBackState {
   /** What each page last said, by its path. */
@@ -27,7 +28,8 @@ interface KeptBackState {
 
 const useKeptBackStore = create<KeptBackState>()((set) => ({
   said: {},
-  say: (path, keptBack) => set((state) => ({ said: { ...state.said, [path]: keptBack } })),
+  say: (path, keptBack) =>
+    set((state) => (state.said[path] === keptBack ? state : { said: { ...state.said, [path]: keptBack } })),
   forget: () => set({ said: {} }),
 }));
 
@@ -47,7 +49,7 @@ export function useKeepsPlaceBack(keptBack: boolean | undefined): void {
 }
 
 function keptBackAt(said: Record<string, boolean>, pathname: string): boolean {
-  if (!PAGES_WITH_A_FINDING.some((pattern) => matchPath({ path: pattern, end: true }, pathname))) return false;
+  if (!PAGES_WITH_A_FINDING.has(pagePattern(pathname))) return false;
   return said[pathname] !== false;
 }
 

@@ -7,10 +7,11 @@ import { keptFailures } from "../../api/failures.js";
 import type { Meta } from "../../api/meta.js";
 import { useMapStore } from "../../map/store.js";
 import { Button, type ButtonSize, type ButtonVariant } from "../../ui/Button.js";
+import { copyText } from "../../ui/clipboard.js";
 import { Dialog } from "../../ui/Dialog.js";
 import { Field } from "../../ui/Field.js";
-import { PHONE_QUERY } from "../../ui/tokens.js";
 import { accountKeys, type Me } from "../account/api.js";
+import { isPhoneNow } from "../shell/useIsPhone.js";
 import { usePlaceKeptBack } from "./keptBack.js";
 import {
   browserName,
@@ -41,10 +42,6 @@ function mapFacts(): MapFacts | null {
   };
 }
 
-function isPhone(): boolean {
-  return typeof window.matchMedia === "function" && window.matchMedia(PHONE_QUERY).matches;
-}
-
 /**
  * What a report says about the page, read once when the form opens. The
  * session and `/meta` are read from wherever they are kept, so the button
@@ -55,7 +52,7 @@ function gatherFacts(pathname: string, meta: Meta | null, me: Me | null | undefi
     version: meta?.app.version ?? null,
     commit: meta?.app.commit ?? null,
     page: pagePattern(pathname),
-    layout: isPhone() ? "phone" : "desktop",
+    layout: isPhoneNow() ? "phone" : "desktop",
     browser: browserName(navigator.userAgent),
     window: { width: window.innerWidth, height: window.innerHeight },
     map: mapFacts(),
@@ -80,9 +77,7 @@ interface ReportFormProps {
 export function ReportProblemDialog({ pathname, onClose }: ReportFormProps) {
   const client = useContext(QueryClientContext);
   const meta = useMapStore((state) => state.meta);
-  const [facts] = useState(() =>
-    gatherFacts(pathname, useMapStore.getState().meta, client?.getQueryData<Me | null>(accountKeys.me)),
-  );
+  const [facts] = useState(() => gatherFacts(pathname, meta, client?.getQueryData<Me | null>(accountKeys.me)));
   const [camera] = useState(cameraNow);
   const keptBack = usePlaceKeptBack(pathname);
   const [description, setDescription] = useState("");
@@ -94,19 +89,11 @@ export function ReportProblemDialog({ pathname, onClose }: ReportFormProps) {
   const choices = { description, position };
   const text = reportText(facts, choices);
   const title = reportTitle(facts, choices);
-  // Our own address with the report in it, not an address from data.
-  const { url: issueAddress, cut } = githubIssueUrl(title, text);
-  const reportEmail = meta?.app.report_email?.trim();
+  const issue = githubIssueUrl(title, text);
+  // The server trims it, and sends null for none.
+  const reportEmail = meta?.app.report_email;
 
-  const copy = async (): Promise<void> => {
-    try {
-      if (!navigator.clipboard) throw new Error("No clipboard");
-      await navigator.clipboard.writeText(text);
-      setCopied("copied");
-    } catch {
-      setCopied("refused");
-    }
-  };
+  const copy = async (): Promise<void> => setCopied((await copyText(text)) ? "copied" : "refused");
 
   return (
     <Dialog
@@ -127,12 +114,12 @@ export function ReportProblemDialog({ pathname, onClose }: ReportFormProps) {
           ) : null}
           <a
             className="fc-button fc-button--primary fc-button--md"
-            href={issueAddress}
+            href={issue.url}
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => {
               // The issue will hold only the start, so the whole text goes on the clipboard to paste over it.
-              if (cut) void copy();
+              if (issue.cut) void copy();
             }}
           >
             <ExternalLink size={16} aria-hidden />
@@ -185,7 +172,7 @@ export function ReportProblemDialog({ pathname, onClose }: ReportFormProps) {
             <textarea className="fc-input fc-problem__text fc-mono" readOnly rows={12} value={text} {...control} />
           )}
         </Field>
-        {cut ? (
+        {issue.cut ? (
           <p className="fc-problem__note" role="note">
             This report is too long for GitHub to take whole, so the issue will hold the start of it. Opening the issue
             puts the full text on your clipboard as well: paste it over what the issue holds.

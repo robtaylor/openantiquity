@@ -252,7 +252,9 @@ test("reaches Report a problem and every control of its form by keyboard, each w
   await page.keyboard.press("Tab");
   await page.keyboard.press("Space");
   await expect(dialog.getByLabel("Add where the map is looking")).toBeChecked();
-  await expect(dialog.getByLabel("What will be sent")).toHaveValue(/The map went white\.[\s\S]*Where the map was: -?\d/);
+  await expect(dialog.getByLabel("What will be sent")).toHaveValue(
+    /The map went white\.[\s\S]*Where the map was: -?\d/,
+  );
 
   // The form fits the window, and nothing in it scrolls the page sideways.
   const box = await boxOf(dialog);

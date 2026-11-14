@@ -24,6 +24,7 @@ import { usePermalink } from "../../map/usePermalink.js";
 import { useMapCover } from "../../map/visibleArea.js";
 import { Button } from "../../ui/Button.js";
 import { EmptyState } from "../../ui/EmptyState.js";
+import { ErrorReportContext } from "../../ui/errorReport.js";
 import { IconButton } from "../../ui/IconButton.js";
 import { SHEET_PEEK_HEIGHT, type SheetStop, sheetHeights } from "../../ui/Sheet.js";
 import { Skeleton } from "../../ui/Skeleton.js";
@@ -59,6 +60,7 @@ import { MOD_ROUTE, ModerationPanel } from "../moderation/ModerationPanel.js";
 import { NotificationAnnouncer } from "../notifications/NotificationAnnouncer.js";
 import { ProfilePanel as PersonPanel, PROFILE_ROUTE } from "../people/ProfilePanel.js";
 import { APP_NAME, NotFoundPanel } from "../placeholders.js";
+import { ReportProblemButton } from "../problem/ReportProblem.js";
 import { OpenElsewherePanel } from "../records/OpenElsewherePanel.js";
 import { ELSEWHERE_PATH, RECORD_SEARCH_PATH } from "../records/paths.js";
 import { RecordPage } from "../records/RecordPage.js";
@@ -131,8 +133,16 @@ function BootScreen({ error, onRetry }: { error?: Error | null; onRetry?: () => 
   );
 }
 
-/** The app shell: the map, with every control and panel layered over it. */
+/** The app shell: the map, with every control and panel layered over it. Every error state in it offers "Report a problem". */
 export function Shell() {
+  return (
+    <ErrorReportContext.Provider value={ReportProblemButton}>
+      <ShellBody />
+    </ErrorReportContext.Provider>
+  );
+}
+
+function ShellBody() {
   const meta = useMeta();
   const ready = useMapStore((state) => state.meta !== null);
 
