@@ -141,11 +141,16 @@ export const MEMBER_ACTIONS: FindingDetail["actions"] = {
   answer: { allowed: true, reason: null },
   add_evidence: { allowed: true, reason: null },
   comment: { allowed: true, reason: null },
-  edit: { allowed: false, reason: "not_finder" },
+  edit: { allowed: false, reason: "not_keeper" },
   withdraw: { allowed: false, reason: "not_finder" },
   raise_level: { allowed: false, reason: "sensitivity_change_forbidden" },
   lower_level: { allowed: false, reason: "moderators_only" },
   verify: { allowed: false, reason: "verify_not_allowed" },
+  hand_on: { allowed: false, reason: "not_keeper" },
+  take_keeping: { allowed: false, reason: "not_offered" },
+  remove_marking: { allowed: false, reason: "admins_only" },
+  suggest: { allowed: true, reason: null },
+  decide_suggestions: { allowed: false, reason: "not_keeper" },
 };
 
 /** The shape facts of a finding with no line or shape, as its page carries them. */
@@ -180,6 +185,8 @@ export function findingDetail(summary: FindingSummary, overrides: Partial<Findin
     answers_visible: true,
     my_observation: null,
     following: true,
+    keeper: summary.author,
+    keeping: null,
     actions: MEMBER_ACTIONS,
     ...overrides,
   };

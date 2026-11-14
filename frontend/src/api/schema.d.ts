@@ -622,6 +622,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/findings/{public_id}/keeping/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take Keeping
+         * @description Take on the keeping offered to you. Its followers are told, and you follow it.
+         */
+        post: operations["findings_take_keeping"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/{public_id}/keeping/offer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Offer Keeping
+         * @description Offer the keeping of a marking to another member, replacing any offer standing.
+         *
+         *     Its keeper may, and an admin may for a marking whose keeper's account is
+         *     deleted or banned. An unknown, deleted or banned handle is
+         *     `user_not_found` alike. The person offered is told once.
+         */
+        put: operations["findings_offer_keeping"];
+        post?: never;
+        /**
+         * Withdraw Keeping Offer
+         * @description Take back the standing offer: its keeper, or the person offered, who declines it.
+         */
+        delete: operations["findings_withdraw_keeping_offer"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/findings/{public_id}/mentions": {
         parameters: {
             query?: never;
@@ -754,6 +802,93 @@ export interface paths {
         get: operations["records_suggested_records"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/{public_id}/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suggest Change
+         * @description Suggest a change to someone else's marking: the whole path, on the shape's revision now.
+         *
+         *     Held to what an edit is held to, so one that couldn't be accepted is
+         *     refused now. A pending suggestion of yours on the same finding is
+         *     withdrawn. Its keeper is told.
+         */
+        post: operations["findings_suggest_change"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/{public_id}/suggestions/{suggestion_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Withdraw Suggestion
+         * @description Take back a suggestion of yours that is still waiting.
+         */
+        delete: operations["findings_withdraw_suggestion"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/{public_id}/suggestions/{suggestion_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Suggestion
+         * @description The keeper accepts a suggestion, which changes the shape, credited to its suggester.
+         *
+         *     `shape_revision` is the revision the keeper saw it against. A suggestion
+         *     made on an older shape replaces the changes since.
+         */
+        post: operations["findings_accept_suggestion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/{public_id}/suggestions/{suggestion_id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decline Suggestion
+         * @description The keeper declines a suggestion. Talk about why goes in the finding's comments.
+         */
+        post: operations["findings_decline_suggestion"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1267,6 +1402,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/mod/findings/{public_id}/marking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Remove Marking
+         * @description Put an orphaned marking back to an earlier shape, or remove its shape. Admins only.
+         *
+         *     The finding, its answers, tier and evidence stay. The reason and the two
+         *     revisions go in the moderation log, and never a shape.
+         */
+        put: operations["moderation_remove_marking"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/mod/findings/{public_id}/sensitivity": {
         parameters: {
             query?: never;
@@ -1280,6 +1438,28 @@ export interface paths {
          * @description Set a finding's location level, lower as well as higher. The reason goes in the moderation log.
          */
         put: operations["moderation_set_sensitivity"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mod/findings/{public_id}/shapes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Earlier Shapes
+         * @description Every change to a finding's shape with the shape before it, newest first, 50 a page. Admins only.
+         *
+         *     The one route that sends the shape before a change.
+         */
+        get: operations["moderation_earlier_shapes"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1361,6 +1541,26 @@ export interface paths {
          * @description Show again a investigation a moderator hid.
          */
         post: operations["moderation_unhide_investigation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mod/markings/orphaned": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Orphaned Markings
+         * @description Findings whose keeper's account is deleted or banned, newest first. Admins only.
+         */
+        get: operations["moderation_orphaned_markings"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2122,11 +2322,15 @@ export interface components {
          *     until it is named here.
          */
         ActivityDetails: {
+            /** Accepted */
+            accepted?: boolean | null;
             /** Comment Id */
             comment_id?: number | null;
             /** Evidence Id */
             evidence_id?: number | null;
             evidence_kind?: components["schemas"]["EvidenceKind"] | null;
+            /** Markings */
+            markings?: number | null;
             /** Mention Id */
             mention_id?: number | null;
             state_from?: components["schemas"]["FindingState"] | null;
@@ -2160,7 +2364,7 @@ export interface components {
          * ActivityKind
          * @enum {string}
          */
-        ActivityKind: "finding_created" | "tier_changed" | "state_changed" | "observation_added" | "evidence_added" | "comment_added" | "mention_added" | "followup_logged" | "investigation_published" | "investigation_invitation" | "shape_extended";
+        ActivityKind: "finding_created" | "tier_changed" | "state_changed" | "observation_added" | "evidence_added" | "comment_added" | "mention_added" | "followup_logged" | "investigation_published" | "investigation_invitation" | "shape_extended" | "keeper_changed" | "keeping_offered" | "keeper_gone" | "shape_suggested" | "suggestion_decided";
         /**
          * ActivityOut
          * @description One event in the feed.
@@ -2591,6 +2795,27 @@ export interface components {
             weight: number;
         };
         /**
+         * EarlierShapeOut
+         * @description One change to a finding's shape, with the shape before it, for admins alone.
+         *
+         *     `to_revision` = `revision - 1` in `PUT /mod/findings/{public_id}/marking`
+         *     puts that shape back, when `restorable`.
+         */
+        EarlierShapeOut: {
+            by: components["schemas"]["PublicUser"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            kind: components["schemas"]["ShapeChangeKind"];
+            path_before: components["schemas"]["PathOut"] | null;
+            /** Restorable */
+            restorable: boolean;
+            /** Revision */
+            revision: number;
+        };
+        /**
          * Eligible
          * @description A member with fifty points or more who isn't trusted yet, and where the points came from.
          */
@@ -2884,9 +3109,14 @@ export interface components {
             add_evidence: components["schemas"]["ActionOut"];
             answer: components["schemas"]["ActionOut"];
             comment: components["schemas"]["ActionOut"];
+            decide_suggestions: components["schemas"]["ActionOut"];
             edit: components["schemas"]["ActionOut"];
+            hand_on: components["schemas"]["ActionOut"];
             lower_level: components["schemas"]["ActionOut"];
             raise_level: components["schemas"]["ActionOut"];
+            remove_marking: components["schemas"]["ActionOut"];
+            suggest: components["schemas"]["ActionOut"];
+            take_keeping: components["schemas"]["ActionOut"];
             verify: components["schemas"]["ActionOut"];
             withdraw: components["schemas"]["ActionOut"];
         };
@@ -2944,6 +3174,8 @@ export interface components {
             feature_class: components["schemas"]["FeatureClass"];
             /** Following */
             following: boolean;
+            keeper: components["schemas"]["PublicUser"];
+            keeping: components["schemas"]["KeepingOut"] | null;
             location: components["schemas"]["LocationDetail"];
             /** Mention Count */
             mention_count: number;
@@ -3415,6 +3647,26 @@ export interface components {
             view?: components["schemas"]["SavedView"] | null;
         };
         /**
+         * KeepingOfferIn
+         * @description Whom to offer a marking's keeping to, by handle.
+         */
+        KeepingOfferIn: {
+            /** Handle */
+            handle: string;
+        };
+        /**
+         * KeepingOut
+         * @description The standing offer of a marking's keeping, for its keeper, the person offered and moderators.
+         */
+        KeepingOut: {
+            /**
+             * Offered At
+             * Format: date-time
+             */
+            offered_at: string;
+            offered_to: components["schemas"]["PublicUser"];
+        };
+        /**
          * Ladder
          * @description The numbers of the confidence ladder, from the engine's own `Thresholds` and role weights.
          */
@@ -3658,6 +3910,20 @@ export interface components {
             marked: number;
             /** Unread Count */
             unread_count: number;
+        };
+        /**
+         * MarkingIn
+         * @description Put an orphaned marking back to an earlier shape (`to_revision`), or remove its shape (null).
+         *
+         *     `shape_revision` is the shape's revision the admin saw.
+         */
+        MarkingIn: {
+            /** Reason */
+            reason: string;
+            /** Shape Revision */
+            shape_revision: number;
+            /** To Revision */
+            to_revision: number | null;
         };
         /**
          * Me
@@ -3952,7 +4218,7 @@ export interface components {
          * @description What a moderator, or a trusted member approving photos, did. One row each in `moderation_actions`.
          * @enum {string}
          */
-        ModerationActionKind: "hide" | "unhide" | "resolve_report" | "change_role" | "ban" | "unban" | "change_sensitivity" | "approve_photo" | "reject_photo";
+        ModerationActionKind: "hide" | "unhide" | "resolve_report" | "change_role" | "ban" | "unban" | "change_sensitivity" | "approve_photo" | "reject_photo" | "remove_marking";
         /**
          * NearbyPlace
          * @description The nearest settlement in the gazetteer, for a suggested title such as "Enclosure near Avebury".
@@ -4184,6 +4450,19 @@ export interface components {
             square: string | null;
         };
         /**
+         * OrphanedMarking
+         * @description A finding whose keeper's account is deleted or banned, for admins alone.
+         */
+        OrphanedMarking: {
+            finding: components["schemas"]["FindingSummary"];
+            keeper: components["schemas"]["PublicUser"];
+            /**
+             * Keeper Gone
+             * @enum {string}
+             */
+            keeper_gone: "deleted" | "banned";
+        };
+        /**
          * Outcome
          * @enum {string}
          */
@@ -4224,6 +4503,13 @@ export interface components {
         Page_ContributionOut_: {
             /** Items */
             items: components["schemas"]["ContributionOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[EarlierShapeOut] */
+        Page_EarlierShapeOut_: {
+            /** Items */
+            items: components["schemas"]["EarlierShapeOut"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -4280,6 +4566,13 @@ export interface components {
         Page_ObservationOut_: {
             /** Items */
             items: components["schemas"]["ObservationOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[OrphanedMarking] */
+        Page_OrphanedMarking_: {
+            /** Items */
+            items: components["schemas"]["OrphanedMarking"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -5178,6 +5471,7 @@ export interface components {
              * Format: date
              */
             on: string;
+            suggested_by?: components["schemas"]["PublicUser"] | null;
         };
         /**
          * ShapeKind
@@ -5236,6 +5530,8 @@ export interface components {
             looked_at?: components["schemas"]["GeoJSONGeometry"] | null;
             /** Revision */
             revision: number | null;
+            /** Suggestions */
+            suggestions?: components["schemas"]["SuggestionOut"][];
         };
         /** SourceOut */
         SourceOut: {
@@ -5412,6 +5708,59 @@ export interface components {
             /** Url */
             url: string | null;
         };
+        /**
+         * SuggestionAccept
+         * @description The shape's `revision` the keeper saw the suggestion against.
+         */
+        SuggestionAccept: {
+            /** Shape Revision */
+            shape_revision: number;
+        };
+        /**
+         * SuggestionIn
+         * @description A proposed shape for someone else's marking: the whole path, and the revision it starts from.
+         */
+        SuggestionIn: {
+            path: components["schemas"]["Path"];
+            /** Path Revision */
+            path_revision?: number | null;
+        };
+        /**
+         * SuggestionOut
+         * @description A change to a marking's shape that someone other than its keeper proposed.
+         *
+         *     Sent only to signed-in members who see the finding exactly. `behind`
+         *     says it was made on a shape the finding has changed from since:
+         *     accepting it replaces those changes.
+         */
+        SuggestionOut: {
+            /** Base Revision */
+            base_revision: number;
+            /** Behind */
+            behind: boolean;
+            by: components["schemas"]["PublicUser"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided At */
+            decided_at: string | null;
+            /** Id */
+            id: number;
+            kind: components["schemas"]["ShapeChangeKind"];
+            /** Length M */
+            length_m: number;
+            outline: components["schemas"]["GeoJSONGeometry"];
+            path: components["schemas"]["PathOut"];
+            state: components["schemas"]["SuggestionState"];
+        };
+        /**
+         * SuggestionState
+         * @description Where a suggested change to a marking's shape stands (`services.suggestions`).
+         * @enum {string}
+         */
+        SuggestionState: "pending" | "accepted" | "declined" | "withdrawn";
         /** Suggestions */
         Suggestions: {
             /** Items */
@@ -6794,6 +7143,101 @@ export interface operations {
             };
         };
     };
+    findings_take_keeping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    findings_offer_keeping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KeepingOfferIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    findings_withdraw_keeping_offer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     mentions_list_mentions: {
         parameters: {
             query?: {
@@ -7051,6 +7495,139 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Suggestions"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    findings_suggest_change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SuggestionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuggestionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    findings_withdraw_suggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_id: string;
+                suggestion_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    findings_accept_suggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_id: string;
+                suggestion_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SuggestionAccept"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    findings_decline_suggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_id: string;
+                suggestion_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuggestionOut"];
                 };
             };
             /** @description Validation Error */
@@ -8021,6 +8598,41 @@ export interface operations {
             };
         };
     };
+    moderation_remove_marking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkingIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     moderation_set_sensitivity: {
         parameters: {
             query?: never;
@@ -8043,6 +8655,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FindingDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    moderation_earlier_shapes: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_EarlierShapeOut_"];
                 };
             };
             /** @description Validation Error */
@@ -8183,6 +8828,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Hidden"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    moderation_orphaned_markings: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_OrphanedMarking_"];
                 };
             };
             /** @description Validation Error */

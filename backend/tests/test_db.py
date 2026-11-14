@@ -13,7 +13,7 @@ from typing import cast
 
 import pytest
 from sqlalchemy import CheckConstraint, create_engine, inspect, select, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
@@ -22,7 +22,7 @@ from fieldclub import db as fieldclub_db
 from fieldclub.db import Base, _split_sql, create_schema, extras_statements, get_db
 from fieldclub.models import User
 from fieldclub.models.common import values_check_text
-from fieldclub.vocab import ActivityKind, FeatureClass, ShapeKind
+from fieldclub.vocab import ActivityKind, FeatureClass, ModerationActionKind, ShapeKind
 
 EXPECTED_TABLES = {
     "users",
@@ -33,6 +33,7 @@ EXPECTED_TABLES = {
     "reputation_events",
     "findings",
     "finding_shape_changes",
+    "shape_suggestions",
     "observations",
     "evidence",
     "evidence_votes",
@@ -256,6 +257,91 @@ def test_create_schema_brings_a_database_made_by_main_up_to_date_and_keeps_every
     assert tuple(old) == (None, None, None, 0, False, "LINESTRING(-1.85 51.43,-1.84 51.43)")
     assert answered is None
     assert unchecked == 0, "a check was left NOT VALID"
+
+
+# What lines and shapes, phase 2 added to a database `main` built: keeping, suggestions, and their words.
+_KEEPING_COLUMNS = ("keeper_id", "keeping_offered_to", "keeping_offered_at")
+_PHASE_2_TABLES = ("shape_suggestions",)
+_PHASE_2_KINDS = ("keeper_changed", "keeping_offered", "keeper_gone", "shape_suggested", "suggestion_decided")
+_PHASE_2_ACTIONS = ("remove_marking",)
+
+
+def _narrowed(
+    conn: Connection, table: str, column: str, enum: type[StrEnum], left_out: tuple[str, ...]
+) -> None:
+    """Make a vocabulary's check again without `left_out`, as `main` made it."""
+    name = f"ck_{table}_{column}_valid"
+    values = [member.value for member in enum if member.value not in left_out]
+    assert len(values) == len(enum) - len(left_out), f"{left_out} are all values of {enum.__name__}"
+    conn.execute(text(f"ALTER TABLE {table} DROP CONSTRAINT {name}"))
+    conn.execute(
+        text(f"ALTER TABLE {table} ADD CONSTRAINT {name} CHECK ({values_check_text(column, values)})")
+    )
+
+
+def _as_main_made_it_before_keeping(engine: Engine) -> None:
+    """Take out of a freshly built schema what phase 2 added, as `main` built it, and add a finding."""
+    with engine.begin() as conn:
+        for table in _PHASE_2_TABLES:
+            conn.execute(text(f"DROP TABLE {table}"))
+        conn.execute(
+            text("ALTER TABLE findings " + ", ".join(f"DROP COLUMN {name}" for name in _KEEPING_COLUMNS))
+        )
+        _narrowed(conn, "activity", "kind", ActivityKind, _PHASE_2_KINDS)
+        _narrowed(conn, "moderation_actions", "action", ModerationActionKind, _PHASE_2_ACTIONS)
+        finder = conn.scalar(
+            text("INSERT INTO users (handle, display_name) VALUES ('Old', 'Old') RETURNING id")
+        )
+        conn.execute(
+            text(
+                "INSERT INTO findings (public_id, author_id, title, feature_class, location, "
+                "location_public) VALUES ('OLD002', :user_id, 'An old finding', 'enclosure', "
+                "ST_GeomFromText('POINT(-1.85 51.43)', 4326), ST_GeomFromText('POINT(-1.85 51.43)', 4326))"
+            ),
+            {"user_id": finder},
+        )
+
+
+def test_create_schema_brings_keeping_to_a_database_made_by_main_and_a_second_run_changes_nothing(
+    database: Engine, scratch_database: Engine
+) -> None:
+    create_schema(scratch_database)
+    _as_main_made_it_before_keeping(scratch_database)
+    columns = {column["name"] for column in inspect(scratch_database).get_columns("findings")}
+    assert not columns & set(_KEEPING_COLUMNS), "the old database still has the keeping columns"
+
+    create_schema(scratch_database)
+    once = _snapshot(scratch_database)
+    create_schema(scratch_database)
+
+    assert _snapshot(scratch_database) == once, "a second run changed the schema"
+    assert _unordered(once) == _unordered(_snapshot(database)), "it ends as a new database begins"
+    with scratch_database.connect() as conn:
+        kept = conn.execute(
+            text(
+                "SELECT keeper_id, keeping_offered_to, keeping_offered_at FROM findings "
+                "WHERE public_id = 'OLD002'"
+            )
+        ).one()
+        unchecked = conn.scalar(text("SELECT count(*) FROM pg_constraint WHERE NOT convalidated"))
+        checks = dict(
+            conn.execute(
+                text(
+                    "SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint "
+                    "WHERE conname IN ('ck_activity_kind_valid', 'ck_moderation_actions_action_valid')"
+                )
+            ).all()
+        )
+    assert tuple(kept) == (None, None, None), (
+        "the finder keeps every finding there was: nothing is backfilled"
+    )
+    assert unchecked == 0, "a check was left NOT VALID"
+    for value in _PHASE_2_KINDS:
+        assert f"'{value}'" in checks["ck_activity_kind_valid"]
+    for value in _PHASE_2_ACTIONS:
+        assert f"'{value}'" in checks["ck_moderation_actions_action_valid"]
+    indexes = {index["name"] for index in inspect(scratch_database).get_indexes("findings")}
+    assert {"ix_findings_keeper_id", "ix_findings_keeping_offered_to"} <= indexes
 
 
 # A reader holds a table for longer than this, so a schema step that needs to
@@ -555,6 +641,7 @@ def test_geometry_columns_are_wgs84(database: Engine) -> None:
         ("places", "geom"): (4326, "POINT"),
         ("records", "centroid"): (4326, "POINT"),
         ("records", "geom"): (4326, "GEOMETRY"),
+        ("shape_suggestions", "outline_mid"): (4326, "GEOMETRY"),
         ("square_surveys", "geom"): (4326, "POLYGON"),
     }
 

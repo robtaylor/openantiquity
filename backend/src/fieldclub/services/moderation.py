@@ -293,6 +293,23 @@ def check_moderator(user: User) -> None:
         raise ModeratorsOnlyError()
 
 
+class AdminsOnlyError(ForbiddenError):
+    code = "admins_only"
+    message = "Only admins can do that."
+
+
+def is_admin(user: User | None) -> bool:
+    """Whether `user` is an admin whose account stands."""
+    active = sensitivity.active_viewer(user)
+    return active is not None and Role(active.role) is Role.ADMIN
+
+
+def check_admin(user: User) -> None:
+    """Refuse anyone who isn't an admin, as the routes for orphaned markings do, moderators included."""
+    if not is_admin(user):
+        raise AdminsOnlyError()
+
+
 def check_may_set_sensitivity(finding: Finding, moderator: User, level: Sensitivity) -> None:
     """Refuse what `set_sensitivity` refuses, once the route has let a moderator through."""
     if moderator.has_id(finding.author_id):
@@ -1112,6 +1129,9 @@ def ban(db: Session, handle: str, actor: User, reason: str, *, now: datetime | N
     target.banned_at = now or _now()
     db.flush()
     ended = revoke_all_sessions(db, target)
+    # Offers made to them go, as a deletion clears them, so to the keeper a ban reads as a refusal,
+    # and nothing comes back when the ban is lifted to say it was one.
+    findings.clear_offers_to(db, target)
     log_action(db, actor, ModerationActionKind.BAN, ReportTarget.USER, target.id, reason, {"sessions": ended})
     reassess_standing(db, target)
     return BanResult(target, ended)
@@ -1125,6 +1145,8 @@ def unban(db: Session, handle: str, actor: User, reason: str) -> BanResult:
         raise NotBannedError()
     target.banned_at = None
     db.flush()
+    # An offer made on what they keep while they were away goes, so lifting the ban gives it all back.
+    findings.clear_offers_kept_by(db, target)
     log_action(db, actor, ModerationActionKind.UNBAN, ReportTarget.USER, target.id, reason)
     reassess_standing(db, target)
     return BanResult(target, 0)

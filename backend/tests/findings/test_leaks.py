@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 from fieldclub import gridref
 from fieldclub.models import Activity, Finding, Notification, User
 from fieldclub.models.common import db_point
-from fieldclub.services import findings, sensitivity, shapes
+from fieldclub.services import findings, sensitivity, shape_edits, shapes, suggestions
 from fieldclub.services.findings import EvidenceFields
 from fieldclub.vocab import EvidenceKind, FeatureClass, Outcome, Relation, Sensitivity, Stance, Visible
 from tests import leak_record
@@ -371,12 +371,19 @@ def test_a_finding_page(world: World, viewer: str, level: Sensitivity, kind: str
             "revision": None,
             "extent": None,
             "changes": [
-                {"kind": "changed", "on": c["on"], "added_length_m": None, "added_view": None}
+                {
+                    "kind": "changed",
+                    "on": c["on"],
+                    "added_length_m": None,
+                    "added_view": None,
+                    "suggested_by": None,
+                }
                 for c in shape["changes"]
             ],
             "added_since_looked_m": None,
             "added_view": None,
             "looked_at": None,
+            "suggestions": [],
         }
         assert "look_at_new_part" not in [step["code"] for step in body["assessment"]["next_steps"]]
         assert '"line"' not in response.text
@@ -732,3 +739,239 @@ def test_a_saved_zoom_goes_only_to_those_who_see_the_finding_exactly(
     for item in (item for group in groups for item in group["items"]):
         if item["place"]["obscured"]:
             assert item["view_state"]["zoom"] is None, item["public_id"]
+
+
+# --------------------------------------------------------------------------
+# Keeping a marking, and suggestions to it
+# --------------------------------------------------------------------------
+
+
+def world_db(world: World) -> Session:
+    """The session the world was built in."""
+    session = Session.object_session(world.people["finder"])
+    assert session is not None, "the world's people are in its session"
+    return session
+
+
+@pytest.mark.parametrize("viewer", VIEWERS)
+@pytest.mark.parametrize("level", LEVELS)
+@pytest.mark.parametrize("kind", KINDS)
+def test_marking_writes_answer_with_what_the_writer_may_see(
+    world: World, viewer: str, level: Sensitivity, kind: str
+) -> None:
+    """Suggesting, deciding, offering and taking on a marking answer with what the writer may see.
+
+    The viewer suggests a change, which the finder declines, and suggests
+    again, which the finder accepts. Then the finder offers the marking to
+    the viewer, who takes it on. Everyone who isn't the keeper is refused the
+    offer with `not_keeper`, and a refusal says nothing of where the finding is.
+    """
+    finding = world.of(kind, level)
+    client = world.client(viewer)
+    allowed = {level} & SEES[viewer]
+    finder = world.client("finder")
+    on = f"{API}/findings/{finding.public_id}/suggestions"
+    for decided in ("decline", "accept"):
+        revision = findings.lock(world_db(world), finding).shape_revision
+        world_db(world).commit()
+        sent = {"path": nudged(finding).to_json(), "path_revision": revision}
+        made = client.post(on, json=sent)
+        where = f"a suggestion to the {level} {kind} as {viewer}"
+        # A line's points are among the strings checked for, so its suggestion must hold them.
+        present = allowed if kind == "line" and viewer not in ("signed_out", "finder") else None
+        check(made.text, allowed, present, where=where)
+        leak_record.checked_response(made, finding.public_id)
+        if viewer == "signed_out":
+            assert made.status_code == 401, where
+            break
+        if viewer == "finder":
+            assert (made.status_code, made.json()["error"]["code"]) == (422, "own_marking"), where
+            break
+        assert made.status_code == 201, made.text
+        body = {"shape_revision": revision} if decided == "accept" else None
+        answered = finder.post(f"{on}/{made.json()['id']}/{decided}", json=body)
+        assert answered.status_code == 200, answered.text
+        # Accepting answers with the page, which always holds the position. Declining answers
+        # with the suggestion, which holds a line's points but not an area's own point.
+        present = {level} if decided == "accept" or kind == "line" else None
+        check(answered.text, {level}, present, where=f"{decided} on the {level} {kind}")
+        world_db(world).expire_all()
+    page = f"{API}/findings/{finding.public_id}/keeping"
+    other = world.people["member" if viewer != "member" else "trusted"]
+    offered = client.put(f"{page}/offer", json={"handle": other.handle})
+    where = f"offer of the {level} {kind} as {viewer}"
+    check(offered.text, allowed if viewer == "finder" else set(), where=where)
+    leak_record.checked_response(offered, finding.public_id)
+    if viewer == "signed_out":
+        assert offered.status_code == 401, where
+    elif viewer == "finder":
+        assert offered.status_code == 200, offered.text
+        assert offered.json()["keeping"]["offered_to"]["handle"] == other.handle
+    else:
+        assert (offered.status_code, offered.json()["error"]["code"]) == (403, "not_keeper"), where
+    if viewer == "finder":
+        return
+    to_viewer = (
+        world.client("finder").put(f"{page}/offer", json={"handle": world.people[viewer].handle})
+        if (viewer != "signed_out")
+        else None
+    )
+    if to_viewer is not None:
+        assert to_viewer.status_code == 200, to_viewer.text
+    taken = client.post(f"{page}/accept")
+    where = f"taking on the {level} {kind} as {viewer}"
+    check(taken.text, allowed, allowed if viewer != "signed_out" else None, where=where)
+    leak_record.checked_response(taken, finding.public_id)
+    if viewer == "signed_out":
+        assert taken.status_code == 401, where
+        return
+    assert taken.status_code == 200, taken.text
+    assert taken.json()["keeper"]["handle"] == world.people[viewer].handle
+    assert taken.json()["author"]["handle"] == world.people["finder"].handle
+    withdrawn = client.delete(f"{page}/offer")
+    assert withdrawn.status_code == 204, withdrawn.text
+
+
+def nudged(finding: Finding) -> shapes.Path:
+    """The finding's path with its last point moved about 30 m north: a reshape every rule allows."""
+    path = shape_edits.stored_path(finding)
+    assert path is not None, f"{finding.public_id} has a path"
+    stored = path.to_json()
+    stored["points"][-1]["lat"] = round(stored["points"][-1]["lat"] + 0.0003, 7)
+    return shapes.read_path(stored)
+
+
+# Every route on a finding that this phase added, with a body each accepts. `{s}` is a suggestion on it.
+MARKING_ROUTES: list[tuple[str, str, dict | None]] = [
+    ("PUT", "/keeping/offer", {"handle": "Member"}),
+    ("DELETE", "/keeping/offer", None),
+    ("POST", "/keeping/accept", None),
+    ("POST", "/suggestions", {"path": {"points": []}, "path_revision": 0}),
+    ("DELETE", "/suggestions/{s}", None),
+    ("POST", "/suggestions/{s}/accept", {"shape_revision": 1}),
+    ("POST", "/suggestions/{s}/decline", None),
+]
+
+
+def test_a_hidden_finding_is_not_found_by_its_keeper_or_suggester(
+    world: World, db: Session, make_user: MakeUser, app: FastAPI, client_for: Callable[..., TestClient]
+) -> None:
+    """A keeper who isn't the finder sees a hidden finding no more than any member does.
+
+    So every route this phase added on `/findings/{id}` answers them, and a
+    suggester, `finding_not_found` with the body an unknown id gets, before
+    any other refusal, and never a code that says the finding is hidden.
+    """
+    finder = world.people["finder"]
+    keeper, suggester = make_user(handle="Keeper"), make_user(handle="Suggester")
+    made: dict[int, int] = {}
+    for _, finding in world.every():
+        world.client("finder").put(
+            f"{API}/findings/{finding.public_id}/keeping/offer", json={"handle": keeper.handle}
+        )
+        taken = client_for(app, keeper).post(f"{API}/findings/{finding.public_id}/keeping/accept")
+        assert taken.status_code == 200, taken.text
+        revision = findings.lock(db, finding).shape_revision
+        made[finding.id] = suggestions.suggest(
+            db, finding, suggester, path=nudged(finding), revision=revision
+        ).id
+        finding.hidden_at = datetime.now(UTC)
+        db.commit()
+    unknown = client_for(app, keeper).put(f"{API}/findings/NOSUCH1/keeping/offer", json={"handle": "Member"})
+    assert unknown.status_code == 404
+    for person in (keeper, suggester):
+        client = client_for(app, person)
+        for level, finding in world.every():
+            for method, tail, body in MARKING_ROUTES:
+                address = f"{API}/findings/{finding.public_id}{tail.format(s=made[finding.id])}"
+                response = client.request(method, address, json=body)
+                where = f"{method} {tail} on the hidden {level} finding as {person.handle}"
+                assert response.status_code == 404, where
+                assert response.json()["error"]["code"] == "finding_not_found", where
+                assert response.json()["error"]["message"] == unknown.json()["error"]["message"], where
+                check(response.text, set(), where=where)
+    # The finder still sees it, and is refused handing it on while it is hidden, as its keeper isn't them.
+    finding = world.lines[Sensitivity.PROTECTED]
+    refused = client_for(app, finder).put(
+        f"{API}/findings/{finding.public_id}/keeping/offer", json={"handle": "Member"}
+    )
+    assert (refused.status_code, refused.json()["error"]["code"]) == (403, "not_keeper")
+
+
+def _suggested(world: World, finding: Finding, by: User) -> int:
+    """`by` suggests the nudged shape on `finding`, on its revision now. Committed."""
+    db = world_db(world)
+    made = suggestions.suggest(
+        db, findings.lock(db, finding), by, path=nudged(finding), revision=finding.shape_revision
+    )
+    db.commit()
+    return made.id
+
+
+@pytest.mark.parametrize("viewer", VIEWERS)
+@pytest.mark.parametrize("level", LEVELS)
+def test_suggestions_go_only_to_signed_in_members(
+    world: World, make_user: MakeUser, viewer: str, level: Sensitivity
+) -> None:
+    """A pending suggestion is a member's drawing nobody accepted: no signed-out reader learns of it.
+
+    Each level's line has one suggestion accepted and one pending. Signed
+    out, the page holds no pending suggestion, no count and no suggester, on
+    the open line too, and the accepted one is only a change with its date
+    on the protected line.
+    """
+    db = world_db(world)
+    line = world.lines[level]
+    accepted_by, pending_by = make_user(handle="Accepted"), make_user(handle="Pending")
+    accepted = _suggested(world, line, accepted_by)
+    suggestions.accept(db, findings.lock(db, line), world.people["finder"], accepted, shape_revision=1)
+    db.commit()
+    _suggested(world, line, pending_by)
+
+    response = world.client(viewer).get(f"{API}/findings/{line.public_id}")
+    assert response.status_code == 200
+    allowed = {level} & SEES[viewer]
+    check(response.text, allowed, allowed, where=f"a {level} line with suggestions as {viewer}")
+    shape = response.json()["location"]["shape"]
+    if viewer == "signed_out":
+        assert shape["suggestions"] == []
+        assert "Pending" not in response.text, "nothing of a pending suggestion, not even who made it"
+        assert '"suggestions":[]' in response.text.replace(" ", ""), "an empty list, the same whatever waits"
+    else:
+        assert [s["by"]["handle"] for s in shape["suggestions"]] == ["Pending"]
+    newest = shape["changes"][-1]
+    if level not in SEES[viewer]:
+        assert newest == {
+            "kind": "changed",
+            "on": newest["on"],
+            "added_length_m": None,
+            "added_view": None,
+            "suggested_by": None,
+        }
+        assert "Accepted" not in response.text
+    else:
+        assert newest["kind"] == "reshaped"
+        assert newest["suggested_by"]["handle"] == "Accepted"
+
+
+@pytest.mark.parametrize("viewer", VIEWERS)
+@pytest.mark.parametrize("fmt", ["csv", "geojson"])
+@pytest.mark.parametrize("level", LEVELS)
+def test_a_members_download_carries_no_suggestion(
+    world: World, make_user: MakeUser, viewer: str, fmt: str, level: Sensitivity
+) -> None:
+    """A download is the finding as it stands, so no reader's download holds a pending suggestion.
+
+    Exports pass no suggestions to `visible_shape` at all, so this can't fail
+    today. It is here as a guard against a later change that passes them.
+    """
+    line = world.lines[level]
+    _suggested(world, line, make_user(handle="Pending"))
+    suggested_lat = f"{nudged(line).points[-1].lat:.6f}"
+    for address in (f"{API}/findings/{line.public_id}/export", f"{API}/findings/export"):
+        response = world.client(viewer).get(address, params={"format": fmt})
+        assert response.status_code == 200
+        allowed = {level} & DOWNLOADS[viewer] if "findings/export" not in address else DOWNLOADS[viewer]
+        check(response.text, allowed, where=f"{fmt} download of a {level} line as {viewer}")
+        assert suggested_lat not in response.text, "the suggested point"
+        assert "Pending" not in response.text

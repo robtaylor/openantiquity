@@ -36,7 +36,17 @@ from fieldclub.models import (
     User,
 )
 from fieldclub.models.common import to_db_geometry
-from fieldclub.services import activity, findings, investigations, media, mentions, moderation, shapes
+from fieldclub.services import (
+    activity,
+    findings,
+    investigations,
+    keeping,
+    media,
+    mentions,
+    moderation,
+    shapes,
+    suggestions,
+)
 from fieldclub.services.investigations import Need
 from fieldclub.vocab import (
     EvidenceKind,
@@ -79,8 +89,15 @@ WHAT_DELETION_DOES: dict[tuple[str, str], str] = {
     ("investigation_members", "user_id"): GOES,
     ("investigation_items", "added_by"): STAYS,
     ("findings", "author_id"): STAYS,
+    # What they kept stays kept by the account, orphaned, so the admins can see whose it was.
+    ("findings", "keeper_id"): STAYS,
+    # An offer of a marking to them goes, as does one on what they kept.
+    ("findings", "keeping_offered_to"): GOES,
     # A finding's shape changes stay with the finding, as its author does.
     ("finding_shape_changes", "user_id"): STAYS,
+    # Their suggestions stay as a record, the pending ones withdrawn, and so do those they decided.
+    ("shape_suggestions", "user_id"): STAYS,
+    ("shape_suggestions", "decided_by"): STAYS,
     ("observations", "user_id"): STAYS,
     ("evidence", "user_id"): STAYS,
     ("evidence", "verified_by"): STAYS,
@@ -174,6 +191,23 @@ def test_deleting_takes_personal_data_and_leaves_the_public_record(
     db.add(MagicLink(email="leaving@example.org", token_hash="leaving", user_id=gone.id, expires_at=NOW))
     sessions.create_session(db, gone)
     release_handle(db, "LeavingEarlier", gone)
+    # They took on the keeping of someone else's finding, and were offered another's.
+    keeping.offer(db, findings.lock(db, theirs_elsewhere), other, gone.handle)
+    keeping.take(db, theirs_elsewhere, gone)
+    offered = create(db, other, lon=-1.86, lat=51.43)
+    keeping.offer(db, findings.lock(db, offered), other, gone.handle)
+    # They suggested a line on someone else's finding, and declined one on the finding they keep.
+    line = shapes.read_path(
+        {"points": [{"lon": -1.86, "lat": 51.43 + d, "kind": "corner"} for d in (0, 0.002)]}
+    )
+    suggestions.suggest(db, findings.lock(db, offered), gone, path=line, revision=0)
+    theirs_line = shapes.read_path(
+        {"points": [{"lon": -1.85, "lat": 51.43 + d, "kind": "corner"} for d in (0, 0.002)]}
+    )
+    declined = suggestions.suggest(
+        db, findings.lock(db, theirs_elsewhere), other, path=theirs_line, revision=0
+    )
+    suggestions.decline(db, theirs_elsewhere, gone, declined.id)
     db.commit()
     blockers = {refused.id, hidden.id}
     stored = [shown.storage_key, waiting.storage_key, hidden.storage_key]

@@ -22,18 +22,21 @@ from fieldclub.schemas.moderation import (
     TARGET_REF_MAX,
     Action,
     Ban,
+    EarlierShapeOut,
     Eligible,
     Hidden,
+    MarkingIn,
     ModPerson,
     ModSensitivityIn,
     ModUser,
+    OrphanedMarking,
     ReasonIn,
     ReportOut,
     Resolved,
     ResolveIn,
     RoleIn,
 )
-from fieldclub.services import actions, moderation
+from fieldclub.services import actions, findings, keeping, moderation
 from fieldclub.vocab import ReportReason, ReportStatus, ReportTarget, Sensitivity
 
 
@@ -48,6 +51,15 @@ def require_moderator(user: Contributor) -> User:
 
 
 Moderator = Annotated[User, Depends(require_moderator)]
+
+
+def require_admin(user: Contributor) -> User:
+    """An admin who has finished the welcome step, or a 403 `admins_only`, moderators included."""
+    moderation.check_admin(user)
+    return user
+
+
+Admin = Annotated[User, Depends(require_admin)]
 
 router = APIRouter(prefix="/mod", tags=["moderation"], dependencies=[Depends(private)])
 
@@ -153,6 +165,58 @@ def set_sensitivity(
     db.commit()
     private(response)
     return detail(db, finding, moderator)
+
+
+# --------------------------------------------------------------------------
+# Orphaned markings, for admins
+# --------------------------------------------------------------------------
+
+
+@router.get("/markings/orphaned", response_model=Page[OrphanedMarking])
+def orphaned_markings(admin: Admin, db: Db, page: PageQuery) -> Page[OrphanedMarking]:
+    """Findings whose keeper's account is deleted or banned, newest first. Admins only."""
+    found, next_cursor = keeping.orphaned_markings(db, limit=page.limit, cursor=page.cursor)
+    return Page[OrphanedMarking](
+        items=[OrphanedMarking.build(item, admin) for item in found], next_cursor=next_cursor
+    )
+
+
+@router.get("/findings/{public_id}/shapes", response_model=Page[EarlierShapeOut])
+def earlier_shapes(
+    public_id: TargetRef, admin: Admin, db: Db, cursor: CursorQuery = None
+) -> Page[EarlierShapeOut]:
+    """Every change to a finding's shape with the shape before it, newest first, 50 a page. Admins only.
+
+    The one route that sends the shape before a change.
+    """
+    finding = findings.get_finding(db, public_id, admin)
+    found, next_cursor = keeping.shape_history(db, finding, cursor=cursor)
+    return Page[EarlierShapeOut](
+        items=[EarlierShapeOut.build(item) for item in found], next_cursor=next_cursor
+    )
+
+
+@router.put("/findings/{public_id}/marking", response_model=FindingDetail, dependencies=_writes)
+def remove_marking(
+    public_id: TargetRef, body: MarkingIn, admin: Admin, db: Db, response: Response
+) -> FindingDetail:
+    """Put an orphaned marking back to an earlier shape, or remove its shape. Admins only.
+
+    The finding, its answers, tier and evidence stay. The reason and the two
+    revisions go in the moderation log, and never a shape.
+    """
+    finding = findings.lock_finding(db, public_id, admin)
+    keeping.remove_marking(
+        db,
+        finding,
+        admin,
+        to_revision=body.to_revision,
+        shape_revision=body.shape_revision,
+        reason=body.reason,
+    )
+    db.commit()
+    private(response)
+    return detail(db, finding, admin)
 
 
 # --------------------------------------------------------------------------

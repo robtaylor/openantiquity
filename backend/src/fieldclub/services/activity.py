@@ -148,6 +148,44 @@ def notify_invitation(db: Session, invited: User, owner: User, investigation: In
     return notification
 
 
+def has_unread(
+    db: Session, to: User, kind: ActivityKind, finding: Finding, actor: User | None = None
+) -> bool:
+    """Whether `to` has an unread notification of `kind` about `finding`, from `actor` when given.
+
+    So a notification that could be asked for again and again, an offer or
+    a replaced suggestion, isn't sent again while the last one waits.
+    """
+    query = select(Notification.id).where(
+        Notification.user_id == to.id,
+        Notification.kind == kind.value,
+        Notification.finding_id == finding.id,
+        Notification.read_at.is_(None),
+    )
+    if actor is not None:
+        query = query.where(Notification.actor_id == actor.id)
+    return db.scalar(query.limit(1)) is not None
+
+
+def mark_read_about(
+    db: Session, to: User, kind: ActivityKind, finding: Finding, actor: User | None = None
+) -> None:
+    """Mark read `to`'s notifications of `kind` about `finding`, from `actor` when given.
+
+    For when the person has acted on what they were told, so `has_unread`
+    doesn't hold back the next one.
+    """
+    statement = update(Notification).where(
+        Notification.user_id == to.id,
+        Notification.kind == kind.value,
+        Notification.finding_id == finding.id,
+        Notification.read_at.is_(None),
+    )
+    if actor is not None:
+        statement = statement.where(Notification.actor_id == actor.id)
+    db.execute(statement.values(read_at=func.now()).execution_options(synchronize_session=False))
+
+
 def _square_point(finding: Finding) -> WKBElement | None:
     """The centre of the finding's 1 km square as a geometry value, or None off both grids.
 

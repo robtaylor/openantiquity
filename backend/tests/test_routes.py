@@ -84,6 +84,9 @@ class Expect:
 
 F = "/api/v1/findings/{finding}"
 CHANGES = "test_changes_to_a_finding_answer_with_what_the_writer_may_see"
+MARKING_WRITES = "test_marking_writes_answer_with_what_the_writer_may_see"
+ADMINS_MARKINGS = "tests.moderation.test_leaks:test_the_admins_marking_routes_answer_only_admins"
+ADMINS_HIDDEN = "tests.moderation.test_leaks:test_the_admins_marking_reads_leave_out_what_is_hidden"
 OWN_ACCOUNT = "changes only the caller's own account, which needs no welcome step"
 SIGN_IN = "signs someone in, before any welcome step"
 NOT_STORED = "stores nothing: a read that needs a body"
@@ -140,6 +143,18 @@ ROUTES: dict[tuple[str, str], Expect] = {
     ("GET", "/api/v1/findings/{public_id}/export"): Expect(
         "test_downloads_of_one_finding", sample=F + "/export", hidden_test=HIDDEN
     ),
+    # Suggestions to a marking, and keeping it
+    ("POST", "/api/v1/findings/{public_id}/suggestions"): Expect(MARKING_WRITES, CONTRIBUTOR),
+    ("DELETE", "/api/v1/findings/{public_id}/suggestions/{suggestion_id}"): Expect(writer=CONTRIBUTOR),
+    ("POST", "/api/v1/findings/{public_id}/suggestions/{suggestion_id}/accept"): Expect(
+        MARKING_WRITES, CONTRIBUTOR
+    ),
+    ("POST", "/api/v1/findings/{public_id}/suggestions/{suggestion_id}/decline"): Expect(
+        MARKING_WRITES, CONTRIBUTOR
+    ),
+    ("PUT", "/api/v1/findings/{public_id}/keeping/offer"): Expect(MARKING_WRITES, CONTRIBUTOR),
+    ("DELETE", "/api/v1/findings/{public_id}/keeping/offer"): Expect(writer=CONTRIBUTOR),
+    ("POST", "/api/v1/findings/{public_id}/keeping/accept"): Expect(MARKING_WRITES, CONTRIBUTOR),
     # Second looks
     ("PUT", "/api/v1/findings/{public_id}/observation"): Expect(
         "test_writes_answer_with_what_the_writer_may_see", CONTRIBUTOR
@@ -343,6 +358,17 @@ ROUTES: dict[tuple[str, str], Expect] = {
     ("POST", "/api/v1/mod/users/{handle}/ban"): Expect(writer=CONTRIBUTOR),
     ("POST", "/api/v1/mod/users/{handle}/unban"): Expect(writer=CONTRIBUTOR),
     ("GET", "/api/v1/mod/actions"): Expect(sample="/api/v1/mod/actions", hidden_test=HIDDEN, welcome=True),
+    # Orphaned markings, for admins
+    ("GET", "/api/v1/mod/markings/orphaned"): Expect(
+        ADMINS_MARKINGS, sample="/api/v1/mod/markings/orphaned", hidden_test=ADMINS_HIDDEN, welcome=True
+    ),
+    ("GET", "/api/v1/mod/findings/{public_id}/shapes"): Expect(
+        ADMINS_MARKINGS,
+        sample="/api/v1/mod/findings/{finding}/shapes",
+        hidden_test=ADMINS_HIDDEN,
+        welcome=True,
+    ),
+    ("PUT", "/api/v1/mod/findings/{public_id}/marking"): Expect(ADMINS_MARKINGS, CONTRIBUTOR),
     # The app itself
     ("GET", "/healthz"): Expect(sample="/healthz", nothing_hidden="the process is up"),
 }

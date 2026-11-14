@@ -79,6 +79,10 @@ class ActivityDetails(ApiModel):
     evidence_kind: EvidenceKind | None = None
     comment_id: int | None = None
     mention_id: int | None = None
+    # For `keeper_gone`, to an admin: how many markings the deleted account left without a keeper.
+    markings: int | None = None
+    # For `suggestion_decided`, to the suggester: whether the keeper accepted the suggestion.
+    accepted: bool | None = None
 
     @classmethod
     def from_data(cls, kind: ActivityKind | str, data: dict[str, Any] | None) -> ActivityDetails:
@@ -101,6 +105,10 @@ class ActivityDetails(ApiModel):
             return cls(comment_id=data.get("comment_id"))
         if kind is ActivityKind.MENTION_ADDED:
             return cls(mention_id=data.get("mention_id"))
+        if kind is ActivityKind.KEEPER_GONE:
+            return cls(markings=data.get("markings"))
+        if kind is ActivityKind.SUGGESTION_DECIDED:
+            return cls(accepted=data.get("accepted"))
         return cls()
 
 

@@ -116,7 +116,7 @@ def stored_kind(finding: Finding) -> ShapeKind | None:
     return shapes.kind_of(to_shape(finding.outline))
 
 
-def _check_revision(finding: Finding, revision: int | None) -> None:
+def check_revision(finding: Finding, revision: int | None) -> None:
     """Refuse a change to the shape that didn't start from the shape as it is now. Hold the lock."""
     if revision is None:
         raise PathRevisionRequiredError()
@@ -217,6 +217,11 @@ def _record_shape_change(
 # --------------------------------------------------------------------------
 
 
+def current_anchor(finding: Finding) -> Point:
+    """The finding's anchor as it is stored."""
+    return Point(point_lon_lat(finding.location))
+
+
 def move_anchor(db: Session, finding: Finding, location: Point) -> None:
     """Put the finding's anchor at `location`. The ORM keeps `grid_ref` and the public position in step."""
     finding.location = to_db_geometry(location)
@@ -232,11 +237,12 @@ def change_shape(
     outline: BaseGeometry | None = None,
     revision: int | None,
     placed: Point | None = None,
+    held_to_looked_at: bool = True,
 ) -> ShapeChangeKind | None:
     """Apply a change to a finding's shape made by `by`, and say what kind it was. Hold the lock.
 
     This doesn't decide who may change the finding: the caller does, with
-    `check_finder`. `by` is recorded as the person who made the change.
+    `check_keeper`. `by` is recorded as the person who made the change.
 
     `path` (or `outline`, read as one) replaces the whole shape, and None for
     both removes it. `revision` must be the shape's revision now. A shape
@@ -246,21 +252,27 @@ def change_shape(
     the change must keep most of what second looks were given on
     (`looked_at.check`), the change row is written and the revision raised.
 
+    `held_to_looked_at` False skips that last check, for an admin putting
+    an orphaned marking back to an earlier shape, which may lie outside
+    ground looked at since. `looked_at` is kept, and still measures what
+    lies beyond it.
+
     Every answer stands, at the weight it was given with. The length lying
     beyond what was looked at is worked out again (`looked_at.refresh_added`).
     The caller reassesses when it changed, so the finding asks, or stops
     asking, for a look at the new part, and records `shape_extended` after
     an extension: `services.findings.update_finding` does both.
     """
-    _check_revision(finding, revision)
+    check_revision(finding, revision)
     new_shape = shape_from_request(path, outline)
     old_path = stored_path(finding)
     kind = _classify(finding, old_path, new_shape)
     if kind is None:
         return None
-    current = Point(point_lon_lat(finding.location))
+    current = current_anchor(finding)
     anchor = place_anchor(new_shape, placed=placed, current=current, derived=finding.location_derived)
-    looked = looked_at.check(db, finding, new_shape.geometry if new_shape is not None else anchor)
+    target = new_shape.geometry if new_shape is not None else anchor
+    looked = looked_at.check(db, finding, target) if held_to_looked_at else looked_at.current(db, finding)
     _record_shape_change(db, finding, by, kind, old_path, new_shape)
     for name, value in shape_columns(new_shape).items():
         setattr(finding, name, value)

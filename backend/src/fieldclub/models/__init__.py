@@ -21,6 +21,7 @@ from fieldclub.models.findings import (
     Media,
     Mention,
     Observation,
+    ShapeSuggestion,
 )
 from fieldclub.models.moderation import ModerationAction
 from fieldclub.models.people import (
@@ -60,6 +61,7 @@ __all__ = [
     "ReleasedHandle",
     "Report",
     "ReputationEvent",
+    "ShapeSuggestion",
     "Source",
     "SquareSurvey",
     "User",

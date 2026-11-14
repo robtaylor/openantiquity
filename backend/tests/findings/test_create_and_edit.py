@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from fieldclub import gridref
 from fieldclub.models import Activity, Finding, Follow
 from fieldclub.services import findings, ids
-from fieldclub.services.findings import NotFinderError
+from fieldclub.services.findings import NotFinderError, NotKeeperError
 from fieldclub.services.geo import OutsideBritishIslesError
 from fieldclub.vocab import FeatureClass, Sensitivity
 from tests.findings.support import API, LAT, LON, create, point, square_around
@@ -86,7 +86,7 @@ def test_moving_a_finding_keeps_the_grid_reference_and_public_position_in_step(
 def test_only_the_finder_edits_or_withdraws(db: Session, make_user: MakeUser) -> None:
     finding = create(db, make_user())
     stranger = make_user("moderator")
-    with pytest.raises(NotFinderError):
+    with pytest.raises(NotKeeperError):
         findings.update_finding(db, findings.lock(db, finding), stranger, {"title": "Mine now"})
     with pytest.raises(NotFinderError):
         findings.withdraw_finding(db, findings.lock(db, finding), stranger)
@@ -249,7 +249,7 @@ def test_edit_over_http(client_as: ClientAs, make_user: MakeUser, db: Session) -
     assert (body["title"], body["description"]) == ("Better title", None)
     assert body["location"]["grid_ref"] == gridref.to_gridref(-1.8263, 51.4110)
     other = client_as(make_user()).patch(f"{API}/findings/{finding.public_id}", json={"title": "Nope"})
-    assert error_code(other) == "not_finder"
+    assert error_code(other) == "not_keeper"
     assert error_code(
         client_as(finder).patch(f"{API}/findings/{finding.public_id}", json={"location": None})
     ) == ("location_required")

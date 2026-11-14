@@ -12,9 +12,9 @@ from pydantic import Field
 
 from fieldclub.models import Finding, User
 from fieldclub.schemas.common import ApiModel, PublicUser, RequestModel
-from fieldclub.schemas.findings import ActionOut
+from fieldclub.schemas.findings import ActionOut, FindingSummary, PathOut
 from fieldclub.schemas.media import REASON_MAX, media_url
-from fieldclub.services import moderation
+from fieldclub.services import keeping, moderation
 from fieldclub.services.actions import PersonActions
 from fieldclub.vocab import (
     ModerationActionKind,
@@ -23,6 +23,7 @@ from fieldclub.vocab import (
     ReportTarget,
     Role,
     Sensitivity,
+    ShapeChangeKind,
 )
 
 NOTE_MAX = 2000
@@ -328,3 +329,67 @@ class Action(ApiModel):
             reason=entry.reason,
             data=entry.data,
         )
+
+
+# --------------------------------------------------------------------------
+# Orphaned markings, for admins
+# --------------------------------------------------------------------------
+
+
+class OrphanedMarking(ApiModel):
+    """A finding whose keeper's account is deleted or banned, for admins alone."""
+
+    finding: FindingSummary
+    keeper: PublicUser
+    # Which it is, so an admin knows whether lifting a ban would give it back.
+    keeper_gone: Literal["deleted", "banned"]
+
+    @classmethod
+    def build(cls, found: keeping.OrphanedMarking, admin: User) -> OrphanedMarking:
+        assert keeping.is_orphaned(found.keeper), "only an orphaned marking is listed"
+        return cls(
+            finding=FindingSummary.build(found.finding, found.author, admin),
+            keeper=PublicUser.from_user(found.keeper),
+            keeper_gone="deleted" if found.keeper.is_deleted else "banned",
+        )
+
+
+class EarlierShapeOut(ApiModel):
+    """One change to a finding's shape, with the shape before it, for admins alone.
+
+    `to_revision` = `revision - 1` in `PUT /mod/findings/{public_id}/marking`
+    puts that shape back, when `restorable`.
+    """
+
+    # The revision the change made.
+    revision: int
+    kind: ShapeChangeKind
+    created_at: datetime
+    by: PublicUser
+    # The path before the change. Null when there was no shape, or an old outline no path can hold.
+    path_before: PathOut | None
+    restorable: bool
+
+    @classmethod
+    def build(cls, earlier: keeping.EarlierShape) -> EarlierShapeOut:
+        change = earlier.change
+        return cls(
+            revision=change.revision,
+            kind=ShapeChangeKind(change.kind),
+            created_at=change.created_at,
+            by=PublicUser.from_user(earlier.by),
+            path_before=PathOut.model_validate(earlier.path_before.to_json())
+            if earlier.path_before is not None
+            else None,
+            restorable=earlier.restorable,
+        )
+
+
+class MarkingIn(ReasonIn):
+    """Put an orphaned marking back to an earlier shape (`to_revision`), or remove its shape (null).
+
+    `shape_revision` is the shape's revision the admin saw.
+    """
+
+    to_revision: int | None = Field(ge=0)
+    shape_revision: int = Field(ge=0)

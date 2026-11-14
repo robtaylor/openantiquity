@@ -73,6 +73,25 @@ describe("moderation in words", () => {
         }),
       ),
     ).toBe("Morag Kerr changed the level of the finding “Barrow” from open to restricted.");
+    // An admin's removal of an orphaned marking: the log holds the revisions, never a shape.
+    expect(
+      actionSentence(
+        actionFixture({
+          action: "remove_marking",
+          target: targetFixture({ kind: "finding", title: "Road", finding: null }),
+          data: { from_revision: 3, to_revision: 1 },
+        }),
+      ),
+    ).toBe("Morag Kerr took back the marking of the finding “Road” to its shape at revision 1.");
+    expect(
+      actionSentence(
+        actionFixture({
+          action: "remove_marking",
+          target: targetFixture({ kind: "finding", title: "Road", finding: null }),
+          data: { from_revision: 3, to_revision: null },
+        }),
+      ),
+    ).toBe("Morag Kerr took back the marking of the finding “Road” and removed its line or shape.");
     expect(actionSentence(actionFixture({ action: "resolve_report", data: { outcome: "dismissed" } }))).toMatch(
       /^Morag Kerr dismissed a report on a comment/,
     );

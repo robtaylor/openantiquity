@@ -50,7 +50,7 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session, aliased, undefer
 
 from fieldclub import gridref
 from fieldclub.errors import (
@@ -72,6 +72,7 @@ from fieldclub.models import (
     Media,
     Observation,
     Record,
+    ShapeSuggestion,
     Source,
     User,
 )
@@ -119,6 +120,7 @@ from fieldclub.vocab import (
     ShapeChangeKind,
     ShapeKind,
     Stance,
+    SuggestionState,
     Tier,
     stored_class,
     tier_rank,
@@ -143,6 +145,19 @@ class PositionInTextError(ValidationFailedError):
 class NotFinderError(ForbiddenError):
     code = "not_finder"
     message = "Only the person who marked this finding can do that."
+
+
+class NotKeeperError(ForbiddenError):
+    code = "not_keeper"
+    message = "Only the person who keeps this marking can change it."
+
+
+class OwnMarkingError(ValidationFailedError):
+    code = "own_marking"
+    message = (
+        "You keep this marking, so you change it yourself. Its keeper can't suggest a change to it "
+        "or take a second look at it."
+    )
 
 
 class LocationHiddenError(ForbiddenError):
@@ -278,9 +293,51 @@ def check_open(finding: Finding) -> None:
 
 
 def check_finder(finding: Finding, actor: User) -> None:
-    """Refuse anyone but the finder: editing and withdrawing are theirs alone."""
+    """Refuse anyone but the finder: withdrawing takes back their claim, which is the credit."""
     if not actor.has_id(finding.author_id):
         raise NotFinderError()
+
+
+def keeper_of(finding: Finding) -> int:
+    """The id of whoever keeps the marking and may change it: its keeper, or its finder when null."""
+    return finding.keeper_id if finding.keeper_id is not None else finding.author_id
+
+
+def check_keeper(finding: Finding, actor: User) -> None:
+    """Refuse anyone but the keeper: editing, deciding suggestions and handing on are theirs."""
+    if not actor.has_id(keeper_of(finding)):
+        raise NotKeeperError()
+
+
+def clear_offers_kept_by(db: Session, user: User) -> None:
+    """Clear every standing offer of the keeping of a marking `user` keeps.
+
+    For a deleted account, and for a ban lifted, so an offer made while the
+    keeper was away can't take the marking from them once they are back.
+    """
+    kept = func.coalesce(Finding.keeper_id, Finding.author_id) == user.id
+    db.execute(
+        update(Finding)
+        .where(kept, Finding.keeping_offered_to.is_not(None))
+        .values(keeping_offered_to=None, keeping_offered_at=None)
+        .execution_options(synchronize_session="fetch")
+    )
+
+
+def clear_offers_to(db: Session, user: User) -> None:
+    """Clear every standing offer of a marking's keeping made to `user`, when they are banned or deleted."""
+    db.execute(
+        update(Finding)
+        .where(Finding.keeping_offered_to == user.id)
+        .values(keeping_offered_to=None, keeping_offered_at=None)
+        .execution_options(synchronize_session="fetch")
+    )
+
+
+def check_not_keeper(finding: Finding, actor: User) -> None:
+    """Refuse the keeper what is for others: a suggestion, or a second look on what they keep."""
+    if actor.has_id(keeper_of(finding)):
+        raise OwnMarkingError()
 
 
 def require_exact(finding: Finding, user: User) -> None:
@@ -704,7 +761,7 @@ _EDITABLE = frozenset(
 
 
 def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str, Any]) -> Finding:
-    """Apply the finder's edits. Hold the lock. Keys are `_EDITABLE`; values are already parsed.
+    """Apply the keeper's edits. Hold the lock. Keys are `_EDITABLE`; values are already parsed.
 
     A move keeps `grid_ref`, `nation` and the public position in step. A new
     feature class can raise the level (`sensitivity.level_after_class_change`,
@@ -712,10 +769,12 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
     A title that is still the `suggested_title` follows a move or a new class
     when no title is sent, so it never names a square the finding has left.
 
-    A `path` (or an `outline`, read as one) with its `path_revision` goes to
-    `apply_shape_change`, with the finder as the one who made the change.
+    Only the keeper edits (`check_keeper`), who is the finder until the
+    marking is handed on (`services.keeping`). A `path` (or an `outline`,
+    read as one) with its `path_revision` goes to `apply_shape_change`, with
+    the keeper as the one who made the change.
     """
-    check_finder(finding, actor)
+    check_keeper(finding, actor)
     unknown = set(changes) - _EDITABLE
     assert not unknown, f"not editable: {sorted(unknown)}"
     before = point_lon_lat(finding.location)
@@ -763,7 +822,8 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
     if chosen is not None and FeatureClass(chosen) is not stored_class(finding.feature_class):
         finding.feature_class = FeatureClass(chosen).value
         class_changed = True
-    if suggested and changes.get("title") is None and (moved or class_changed):
+    # A change of shape that moved the anchor took a default title with it already.
+    if suggested and changes.get("title") is None and ((moved and not changed_shape) or class_changed):
         finding.title = suggested_title(finding.feature_class, *after)
     level_before = finding.sensitivity
     db.flush()
@@ -789,6 +849,8 @@ def apply_shape_change(
     outline: BaseGeometry | None = None,
     revision: int | None,
     placed: Point | None = None,
+    held_to_looked_at: bool = True,
+    unannounced: bool = False,
 ) -> ShapeChangeKind | None:
     """Change a finding's shape for `by`, and everything that follows it. Hold the lock.
 
@@ -801,16 +863,32 @@ def apply_shape_change(
     `shape_extended`, which tells the followers. The length before is
     `shape_edits.stored_length`, which measures an old outline the backfill
     hasn't reached. When the anchor moved, the finding's activity moves to
-    its new square (`activity.relocate`). Returns the kind of change, or
-    None when the shape sent is the shape it has.
+    its new square (`activity.relocate`), and a title that is still the
+    `suggested_title` follows it, so it never names a square the finding
+    has left. `held_to_looked_at` is
+    `shape_edits.change_shape`'s, False only for an admin's removal of an
+    orphaned marking. `unannounced`, for that removal too, records no
+    `shape_extended` and reassesses with no actor: a removal is possible only
+    on an orphaned marking, so naming the admin to anyone would say its
+    keeper is banned or gone. The finding still asks for a look at a new
+    part. Returns the kind of change, or None when the shape sent is the
+    shape it has.
     """
     added_before = (finding.added_since_looked_m, finding.added_view)
     anchor_before = point_lon_lat(finding.location)
+    default_title = finding.title == suggested_title(finding.feature_class, *anchor_before)
     line_before = (
         shape_edits.stored_length(finding) if shape_edits.stored_kind(finding) is ShapeKind.LINE else None
     )
     kind = shape_edits.change_shape(
-        db, finding, by, path=path, outline=outline, revision=revision, placed=placed
+        db,
+        finding,
+        by,
+        path=path,
+        outline=outline,
+        revision=revision,
+        placed=placed,
+        held_to_looked_at=held_to_looked_at,
     )
     if kind is None:
         return None
@@ -818,7 +896,7 @@ def apply_shape_change(
         # Only so that the finding asks, or stops asking, for a look at
         # the new part: nothing the ladder weighs has changed.
         db.flush()
-        result = reassess(db, finding, by)
+        result = reassess(db, finding, None if unannounced else by)
         if result.tier_after is not result.tier_before:
             # Only an assessment stored before the engine last changed can move here.
             logger.warning(
@@ -834,9 +912,14 @@ def apply_shape_change(
         and finding.shape_length_m is not None
         and finding.shape_length_m - line_before >= NEW_PART_LOOK_M
     )
-    if kind is ShapeChangeKind.EXTENDED or carried_on:
+    if (kind is ShapeChangeKind.EXTENDED or carried_on) and not unannounced:
         activity.record(db, ActivityKind.SHAPE_EXTENDED, by, finding)
-    if point_lon_lat(finding.location) != anchor_before:
+    anchor_after = point_lon_lat(finding.location)
+    if anchor_after != anchor_before:
+        # The title the finding took by default names its square, so it follows the anchor,
+        # or it would name a second square for anyone to read. A title a person wrote stays.
+        if default_title:
+            finding.title = suggested_title(finding.feature_class, *anchor_after)
         activity.relocate(db, finding)
     return kind
 
@@ -1431,6 +1514,10 @@ class FindingView:
 
     finding: Finding
     author: User
+    # Who keeps the marking, whatever their account's standing: the author until it is handed on.
+    keeper: User
+    # Whom the keeping is offered to, if anyone. Who may be told is `keeping.sees_offer`'s to say.
+    offered_to: User | None
     assessment: Assessment
     evidence: list[EvidenceView]
     # Everyone named in the credits.
@@ -1442,6 +1529,10 @@ class FindingView:
     nation: str | None
     # The newest `SHAPE_CHANGES_SHOWN` changes to the shape, oldest first, for `sensitivity.visible_shape`.
     shape_changes: list[FindingShapeChange]
+    # The listed pending suggestions, newest first, each with its suggester, for `visible_shape` to give.
+    suggestions: list[tuple[ShapeSuggestion, User]]
+    # Who suggested each of `shape_changes` an accepted suggestion made, by revision.
+    suggested_by: dict[int, User]
 
 
 # How many changes of shape a finding's page holds: the newest, served oldest first.
@@ -1452,9 +1543,16 @@ def finding_view(db: Session, finding: Finding, viewer: User | None) -> FindingV
     assessment = current_assessment(finding)
     mine = my_observation(db, finding, viewer)
     people = users_by_id(db, {credit.user_id for credit in assessment.credits} | {finding.author_id})
+    changes = newest_shape_changes(db, finding)
+    kept_by = people.get(keeper_of(finding)) or db.get(User, keeper_of(finding))
+    assert kept_by is not None, f"finding {finding.public_id} has no keeper"
     return FindingView(
         finding=finding,
         author=people[finding.author_id],
+        keeper=kept_by,
+        offered_to=db.get(User, finding.keeping_offered_to)
+        if finding.keeping_offered_to is not None
+        else None,
         assessment=assessment,
         evidence=evidence_for(db, finding, viewer, known=people),
         people=people,
@@ -1462,8 +1560,56 @@ def finding_view(db: Session, finding: Finding, viewer: User | None) -> FindingV
         my_observation=mine,
         following=is_following(db, viewer, finding),
         nation=sensitivity.visible_nation(db, finding, viewer),
-        shape_changes=newest_shape_changes(db, finding),
+        shape_changes=changes,
+        suggestions=pending_suggestions(db, finding)
+        if sensitivity.may_see_suggestions(finding, viewer)
+        else [],
+        suggested_by=accepted_suggesters(db, finding, [change.revision for change in changes]),
     )
+
+
+def suggestions_listed_clause() -> ColumnElement[bool]:
+    """Suggestions that are shown and counted: not by a banned or deleted account.
+
+    As `standing_evidence_clause` has it for evidence. A banned person's
+    pending suggestions come back when the ban is lifted. A deleted
+    account's are withdrawn when it goes, and left out here as well, for a
+    deletion that crossed a suggestion.
+    """
+    gone = select(User.id).where(or_(User.banned_at.is_not(None), User.deleted_at.is_not(None)))
+    return ShapeSuggestion.user_id.not_in(gone)
+
+
+def pending_suggestions(db: Session, finding: Finding) -> list[tuple[ShapeSuggestion, User]]:
+    """The finding's listed pending suggestions, newest first, with their paths and suggesters."""
+    rows = db.execute(
+        select(ShapeSuggestion, User)
+        .join(User, User.id == ShapeSuggestion.user_id)
+        .options(undefer(ShapeSuggestion.path), undefer(ShapeSuggestion.outline_mid))
+        .where(
+            ShapeSuggestion.finding_id == finding.id,
+            ShapeSuggestion.state == SuggestionState.PENDING.value,
+            suggestions_listed_clause(),
+        )
+        .order_by(ShapeSuggestion.id.desc())
+    ).all()
+    return [(suggestion, by) for suggestion, by in rows]
+
+
+def accepted_suggesters(db: Session, finding: Finding, revisions: Sequence[int]) -> dict[int, User]:
+    """Who suggested each of `revisions` that accepting a suggestion made, by revision."""
+    if not revisions:
+        return {}
+    rows = db.execute(
+        select(ShapeSuggestion.applied_revision, User)
+        .join(User, User.id == ShapeSuggestion.user_id)
+        .where(
+            ShapeSuggestion.finding_id == finding.id,
+            ShapeSuggestion.state == SuggestionState.ACCEPTED.value,
+            ShapeSuggestion.applied_revision.in_(list(revisions)),
+        )
+    ).all()
+    return {revision: user for revision, user in rows if revision is not None}
 
 
 def newest_shape_changes(db: Session, finding: Finding) -> list[FindingShapeChange]:

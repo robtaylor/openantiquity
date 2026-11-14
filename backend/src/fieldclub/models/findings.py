@@ -57,6 +57,7 @@ from fieldclub.vocab import (
     ShapeKind,
     Stance,
     StateReason,
+    SuggestionState,
     Tier,
     Visible,
 )
@@ -95,6 +96,12 @@ class Finding(Base):
     created_at: Mapped[CreatedAt]
     public_id: Mapped[str] = mapped_column(Text, unique=True)
     author_id: Mapped[int] = fk("users.id", index=True)
+    # Who keeps the marking, and so may change it (`services.findings.keeper_of`). Null while the
+    # finder keeps it, so nothing is backfilled and a version without the column goes on working.
+    keeper_id: Mapped[int | None] = fk("users.id", index=True)
+    # The one standing offer of the keeping, and when it was made (`services.keeping`).
+    keeping_offered_to: Mapped[int | None] = fk("users.id", index=True)
+    keeping_offered_at: Mapped[datetime | None] = mapped_column(TimestampTz)
     title: Mapped[str] = mapped_column(Text)
     # The title with every position written in it replaced (`services.text_positions`),
     # which a search for someone who doesn't see the exact position matches. Written
@@ -307,6 +314,50 @@ class FindingShapeChange(Base):
     path_before: Mapped[JsonDict | None] = json_column(deferred=True)
 
 
+class ShapeSuggestion(Base):
+    """A change to a marking's shape that someone other than its keeper proposed (`services.suggestions`).
+
+    Its path and outline are shape: served only through `sensitivity.visible_shape`.
+    """
+
+    __tablename__ = "shape_suggestions"
+    __table_args__ = (
+        enum_check("kind", ShapeChangeKind),
+        enum_check("state", SuggestionState),
+        # One pending suggestion per person per finding: a new one withdraws the old.
+        Index(
+            "uq_shape_suggestions_pending",
+            "finding_id",
+            "user_id",
+            unique=True,
+            postgresql_where=text("state = 'pending'"),
+        ),
+    )
+
+    id: Mapped[IdPk]
+    created_at: Mapped[CreatedAt]
+    finding_id: Mapped[int] = fk("findings.id", ondelete="CASCADE", index=True)
+    # Who suggested it, credited on the change row if it is accepted.
+    user_id: Mapped[int] = fk("users.id", index=True)
+    # The finding's `shape_revision` it was made on.
+    base_revision: Mapped[int] = mapped_column(Integer)
+    # The whole proposed path, as `services.shapes.Path.to_json` writes it.
+    path: Mapped[JsonDict] = json_column(deferred=True)
+    # The derived shape simplified as `findings.outline_mid` is, for drawing.
+    outline_mid: Mapped[WKBElement] = mapped_column(any_geometry(spatial_index=False), deferred=True)
+    # `shapes.classify_change` against the shape it was made on, and the new length.
+    kind: Mapped[str] = mapped_column(Text)
+    length_m: Mapped[float] = mapped_column(REAL)
+    state: Mapped[str] = mapped_column(
+        Text, default=SuggestionState.PENDING.value, server_default=SuggestionState.PENDING.value
+    )
+    # The keeper who accepted or declined it, and when. When it was withdrawn, too.
+    decided_by: Mapped[int | None] = fk("users.id")
+    decided_at: Mapped[datetime | None] = mapped_column(TimestampTz)
+    # The revision accepting it made, which names its `finding_shape_changes` row.
+    applied_revision: Mapped[int | None] = mapped_column(Integer)
+
+
 class Evidence(Base):
     """Something that bears on a finding: a map, a photo, a record, a visit, a publication."""
 
@@ -486,4 +537,5 @@ __all__ = [
     "Media",
     "Mention",
     "Observation",
+    "ShapeSuggestion",
 ]

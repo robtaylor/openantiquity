@@ -7,8 +7,16 @@
 
 import type { ActivityKind } from "./api.js";
 
-/** A notification only, never in the feed (docs/ARCHITECTURE.md, "Events"). */
-export type FeedKind = Exclude<ActivityKind, "investigation_invitation">;
+/** The kinds that are notifications to one person only, never in the feed (docs/ARCHITECTURE.md, "Events"). */
+export const NOTIFICATION_ONLY = [
+  "investigation_invitation",
+  "keeping_offered",
+  "keeper_gone",
+  "shape_suggested",
+  "suggestion_decided",
+] as const satisfies readonly ActivityKind[];
+
+export type FeedKind = Exclude<ActivityKind, (typeof NOTIFICATION_ONLY)[number]>;
 
 export type KindGroupId = "findings" | "steps" | "looks" | "evidence" | "comments" | "mentions" | "investigations";
 
@@ -29,10 +37,11 @@ const GROUP_OF = {
   mention_added: "mentions",
   investigation_published: "investigations",
   shape_extended: "findings",
+  keeper_changed: "findings",
 } as const satisfies Record<FeedKind, KindGroupId>;
 
 const GROUP_LABELS: Record<KindGroupId, string> = {
-  findings: "Findings marked or drawn further",
+  findings: "Findings marked, drawn further or handed on",
   steps: "Steps and states",
   looks: "Second looks",
   evidence: "Evidence and visits",
@@ -59,5 +68,8 @@ export function isKindGroupId(value: string): value is KindGroupId {
 
 /** Whether this build knows a kind the server sent. */
 export function isActivityKind(value: unknown): value is ActivityKind {
-  return typeof value === "string" && (Object.hasOwn(GROUP_OF, value) || value === "investigation_invitation");
+  return (
+    typeof value === "string" &&
+    (Object.hasOwn(GROUP_OF, value) || (NOTIFICATION_ONLY as readonly string[]).includes(value))
+  );
 }

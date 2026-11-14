@@ -121,7 +121,7 @@ def test_editing_refuses_a_stale_or_missing_revision_and_anyone_but_the_finder(
     missing = client.patch(at, json={"path": up(0, 0.01, 0.03)})
     assert (missing.status_code, error_code(missing)) == (422, "path_revision_required")
     stranger = client_as(make_user()).patch(at, json={"path": up(0, 0.01, 0.03), "path_revision": 1})
-    assert (stranger.status_code, error_code(stranger)) == (403, "not_finder")
+    assert (stranger.status_code, error_code(stranger)) == (403, "not_keeper")
     too_far = client.patch(at, json={"location": point(east(3000), LAT)})
     assert (too_far.status_code, error_code(too_far)) == (422, "outline_too_far")
 
@@ -214,10 +214,19 @@ def test_someone_who_sees_only_the_square_learns_only_that_the_shape_changed_and
         "length_m": None,
         "revision": None,
         "extent": None,
-        "changes": [{"kind": "changed", "on": change["on"], "added_length_m": None, "added_view": None}],
+        "changes": [
+            {
+                "kind": "changed",
+                "on": change["on"],
+                "added_length_m": None,
+                "added_view": None,
+                "suggested_by": None,
+            }
+        ],
         "added_since_looked_m": None,
         "added_view": None,
         "looked_at": None,
+        "suggestions": [],
     }
     listed = client.get(f"{API}/findings").json()["items"]
     assert [item["location"]["shape_kind"] for item in listed] == [None]

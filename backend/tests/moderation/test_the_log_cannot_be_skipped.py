@@ -30,7 +30,7 @@ FOR_THE_CALLER = {
     ("POST", f"{API}/auth/email/start"): "signs in",
     ("POST", f"{API}/auth/email/verify"): "signs in",
     ("POST", f"{API}/findings"): "marks a finding as the caller",
-    ("PATCH", f"{API}/findings/{{public_id}}"): "the finder only: not_finder",
+    ("PATCH", f"{API}/findings/{{public_id}}"): "the keeper only: not_keeper",
     ("POST", f"{API}/findings/{{public_id}}/withdraw"): "the finder only: not_finder",
     ("PUT", f"{API}/findings/{{public_id}}/sensitivity"): "raises only, as any trusted member may",
     ("POST", f"{API}/findings/{{public_id}}/comments"): "comments as the caller",
@@ -62,6 +62,13 @@ FOR_THE_CALLER = {
     ("POST", f"{API}/findings/{{public_id}}/mentions"): "adds a mention as the caller",
     ("POST", f"{API}/mentions/preview"): "fetches an address, stores nothing",
     ("DELETE", f"{API}/mentions/{{mention_id}}"): "the person who added it only: mention_forbidden",
+    ("PUT", f"{API}/findings/{{public_id}}/keeping/offer"): "the keeper, or an admin: not_keeper",
+    ("DELETE", f"{API}/findings/{{public_id}}/keeping/offer"): "the keeper, or the one offered",
+    ("POST", f"{API}/findings/{{public_id}}/keeping/accept"): "the one offered only: not_offered",
+    ("POST", f"{API}/findings/{{public_id}}/suggestions"): "suggests as the caller",
+    ("DELETE", f"{API}/findings/{{public_id}}/suggestions/{{suggestion_id}}"): "its suggester only",
+    ("POST", f"{API}/findings/{{public_id}}/suggestions/{{suggestion_id}}/accept"): "the keeper only",
+    ("POST", f"{API}/findings/{{public_id}}/suggestions/{{suggestion_id}}/decline"): "the keeper only",
 }
 
 
@@ -111,7 +118,7 @@ def test_a_moderator_cannot_skip_the_log_through_the_members_routes(
         ("DELETE", f"/evidence/{evidence.id}", None, "evidence_forbidden"),
         ("DELETE", f"/mentions/{talked.id}", None, "mention_forbidden"),
         ("DELETE", f"/mentions/{scanned.id}", None, "mention_forbidden"),
-        ("PATCH", f"/findings/{pid}", {"title": "Renamed by a moderator"}, "not_finder"),
+        ("PATCH", f"/findings/{pid}", {"title": "Renamed by a moderator"}, "not_keeper"),
         ("POST", f"/findings/{pid}/withdraw", None, "not_finder"),
     ]
     for method, path, body, code in refusals:

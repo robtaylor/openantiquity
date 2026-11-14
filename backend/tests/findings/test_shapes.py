@@ -19,7 +19,7 @@ from fieldclub.errors import BadRequestError, ConflictError, ValidationFailedErr
 from fieldclub.models import Activity, Finding, User
 from fieldclub.models.common import to_db_geometry
 from fieldclub.services import findings, geo, sensitivity, shape_edits, shapes
-from fieldclub.services.findings import NotFinderError
+from fieldclub.services.findings import NotKeeperError
 from fieldclub.vocab import ShapeChangeKind
 from tests.findings.support import (
     GEOD,
@@ -245,7 +245,7 @@ def test_a_stale_or_missing_revision_is_refused(db: Session, make_user: MakeUser
 
 def test_only_the_finder_changes_a_shape(db: Session, make_user: MakeUser) -> None:
     finding = drawn(db, make_user(), meridian(0, 0.012))
-    with pytest.raises(NotFinderError):
+    with pytest.raises(NotKeeperError):
         edit(db, finding, make_user("moderator"), path=meridian(0, 0.012, 0.02), path_revision=0)
 
 

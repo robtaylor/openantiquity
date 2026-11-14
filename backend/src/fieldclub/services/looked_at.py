@@ -314,6 +314,15 @@ class Looked:
         return self.to_grid(self.geometry)
 
 
+def current(db: Session, finding: Finding) -> Looked | None:
+    """What was looked at, seeded first as `check` seeds it, without holding any change to it.
+
+    For a change that isn't held to `looked_at`, an admin's removal of a
+    marking, which still needs it for `refresh_added`.
+    """
+    return seed(db, finding, _shape(finding))
+
+
 def check(db: Session, finding: Finding, target: BaseGeometry) -> Looked | None:
     """Refuse an edit whose shape, or point when it has none, is `target`, if too little of `looked_at` stays.
 

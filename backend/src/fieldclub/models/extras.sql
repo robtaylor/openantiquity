@@ -63,6 +63,26 @@ BEGIN
 END
 $$;
 
+-- Who keeps a marking, and the one standing offer of it (services.keeping). Null
+-- while the finder keeps it, so nothing is backfilled. The names are the ones
+-- create_all gives, so an old database ends as a new one begins.
+DO $$
+BEGIN
+    IF NOT fieldclub_has_columns('findings', ARRAY['keeper_id', 'keeping_offered_to', 'keeping_offered_at']) THEN
+        ALTER TABLE findings
+            ADD COLUMN IF NOT EXISTS keeper_id bigint
+                CONSTRAINT fk_findings_keeper_id_users REFERENCES users (id),
+            ADD COLUMN IF NOT EXISTS keeping_offered_to bigint
+                CONSTRAINT fk_findings_keeping_offered_to_users REFERENCES users (id),
+            ADD COLUMN IF NOT EXISTS keeping_offered_at timestamptz;
+    END IF;
+END
+$$;
+
+CREATE INDEX IF NOT EXISTS ix_findings_keeper_id ON findings (keeper_id);
+
+CREATE INDEX IF NOT EXISTS ix_findings_keeping_offered_to ON findings (keeping_offered_to);
+
 -- Map views match a finding's shape as well as its point, for viewers who see it exactly.
 CREATE INDEX IF NOT EXISTS idx_findings_outline ON findings USING gist (outline);
 

@@ -61,7 +61,7 @@ from enum import StrEnum
 from typing import Any
 
 from geoalchemy2 import Geography
-from sqlalchemy import ColumnElement, Select, Text, cast, column, exists, func, not_, select, true
+from sqlalchemy import ColumnElement, Select, Text, cast, column, exists, func, not_, or_, select, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
@@ -226,11 +226,14 @@ def check_may_answer(finding: Finding, user: User) -> None:
     findings.check_open(finding)
     if user.has_id(finding.author_id):
         raise OwnFindingError()
+    # Whoever can change a shape shouldn't also confirm it. An answer given
+    # before they took the marking on stands.
+    findings.check_not_keeper(finding, user)
     findings.require_exact(finding, user)
 
 
 def check_shape_seen(finding: Finding, revision: int | None) -> None:
-    """Refuse an answer given on a shape the finder has since changed. Hold the lock.
+    """Refuse an answer given on a shape the keeper has since changed. Hold the lock.
 
     Otherwise the answer would be credited to ground the person never saw:
     `looked_at` would grow by it and `look_at_new_part` would clear. An
@@ -239,7 +242,7 @@ def check_shape_seen(finding: Finding, revision: int | None) -> None:
     """
     if revision is not None and revision != finding.shape_revision:
         raise shape_edits.ShapeChangedError(
-            "The finder changed the shape since you opened it. Look at it again and give your answer."
+            "The keeper changed the shape since you opened it. Look at it again and give your answer."
         )
 
 
@@ -486,6 +489,7 @@ def _answerable(viewer: User | None) -> ColumnElement[bool]:
     if active is not None:
         answered = exists().where(Observation.finding_id == Finding.id, Observation.user_id == active.id)
         clause &= (Finding.author_id != active.id) & not_(answered)
+        clause &= or_(Finding.keeper_id.is_(None), Finding.keeper_id != active.id)
     return clause
 
 

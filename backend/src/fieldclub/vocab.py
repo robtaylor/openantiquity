@@ -1140,6 +1140,9 @@ class ModerationActionKind(StrEnum):
     CHANGE_SENSITIVITY = "change_sensitivity"
     APPROVE_PHOTO = "approve_photo"
     REJECT_PHOTO = "reject_photo"
+    # An admin took an orphaned marking back to an earlier shape, or removed its shape.
+    # Its data holds the two revisions and never a shape.
+    REMOVE_MARKING = "remove_marking"
 
 
 class PointKind(StrEnum):
@@ -1181,6 +1184,25 @@ class ActivityKind(StrEnum):
     INVESTIGATION_INVITATION = "investigation_invitation"
     # The finder added to an end of the finding's line. Listed only to those who see it exactly.
     SHAPE_EXTENDED = "shape_extended"
+    # Someone took on the keeping of a marking: who may change it. It names them and no shape.
+    KEEPER_CHANGED = "keeper_changed"
+    # A notification only, to the person offered: a marking's keeping was offered to them.
+    KEEPING_OFFERED = "keeping_offered"
+    # A notification only, to each admin: a deleted account left markings without a keeper.
+    KEEPER_GONE = "keeper_gone"
+    # A notification only, to the keeper: someone suggested a change to the marking's shape.
+    SHAPE_SUGGESTED = "shape_suggested"
+    # A notification only, to the suggester: the keeper accepted or declined their suggestion.
+    SUGGESTION_DECIDED = "suggestion_decided"
+
+
+class SuggestionState(StrEnum):
+    """Where a suggested change to a marking's shape stands (`services.suggestions`)."""
+
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    DECLINED = "declined"
+    WITHDRAWN = "withdrawn"
 
 
 # --------------------------------------------------------------------------

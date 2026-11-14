@@ -430,7 +430,14 @@ def test_enumerations_from_the_contract() -> None:
         # A notification only: see services.activity.notify_invitation.
         "investigation_invitation",
         "shape_extended",
+        "keeper_changed",
+        # Notifications only, each to one person: see services.keeping and services.suggestions.
+        "keeping_offered",
+        "keeper_gone",
+        "shape_suggested",
+        "suggestion_decided",
     ]
+    assert [item.value for item in vocab.SuggestionState] == ["pending", "accepted", "declined", "withdrawn"]
     assert [item.value for item in vocab.NextStepCode] == [
         "need_observers",
         "need_strand",

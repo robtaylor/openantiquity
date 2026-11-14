@@ -91,7 +91,7 @@ test("the feed says what happened in plain sentences and opens each finding", as
   // Narrowing to a kind asks the server for that kind.
   const asked = page.waitForRequest((request) => new URL(request.url()).searchParams.get("kind") === "finding_created");
   await panel.getByRole("button", { name: "Filters" }).click();
-  await panel.getByRole("button", { name: "Findings marked or drawn further" }).click();
+  await panel.getByRole("button", { name: "Findings marked, drawn further or handed on" }).click();
   await asked;
   await panel.getByRole("button", { name: "Clear filters" }).click();
 

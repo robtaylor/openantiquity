@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -24,14 +25,16 @@ from shapely.geometry import box
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from fieldclub import gridref
 from fieldclub.models import Activity, Evidence, Finding, ReputationEvent, User
-from fieldclub.services import events, findings, sensitivity
+from fieldclub.services import activity as activity_service
+from fieldclub.services import events, feed, findings, keeping, sensitivity, shapes, suggestions
 from fieldclub.services.events import Announcement, EventHub, StreamFilter
 from fieldclub.vocab import FeatureClass, Sensitivity, Visible
 from tests import leak_record
 from tests.activity.support import API, TIMEOUT_S, add_map, comment, follow, next_activity, read_event
 from tests.findings.support import answer, create
-from tests.findings.test_leaks import LEVELS, POINTS, SEES, check, draw_line, extend_line
+from tests.findings.test_leaks import LEVELS, LINES, POINTS, SEES, check, draw_line, extend_line
 from tests.helpers import ClientFor, MakeUser, lon_lat
 
 VIEWERS = ("signed_out", "member", "finder", "trusted", "moderator")
@@ -294,3 +297,63 @@ def test_a_withdrawn_finding_leaves_every_list(world: World, db: Session) -> Non
     for viewer in VIEWERS:
         for path in ("/activity", "/users/Finder/findings", "/users/Helper1/contributions"):
             assert finding.public_id not in get(world, viewer, path), f"{viewer} still sees it in {path}"
+
+
+# Each level's line runs east-south-east, so these move it square to itself, by 230 m.
+SHIFTS = {Sensitivity.OPEN: (-115.0, -199.0), Sensitivity.PROTECTED: (115.0, 199.0)}
+
+
+@pytest.mark.parametrize("viewer", VIEWERS)
+@pytest.mark.parametrize("level", LEVELS)
+def test_keeping_and_a_moved_anchor_in_the_feed(
+    world: World, db: Session, viewer: str, level: Sensitivity
+) -> None:
+    """`keeper_changed` names a person and no shape, and a moved anchor takes its events with it.
+
+    The finder hands the line on to a member, who accepts a suggestion that moves it far enough away
+    that its anchor moves into another square. Every reader's feed lists the
+    change of keeper, the event stream announces it with ids alone, and a box
+    over the square the line left holds none of its events for anyone.
+    """
+    line = world.lines[level]
+    member = world.people["member"]
+    keeping.offer(db, findings.lock(db, line), world.people["finder"], member.handle)
+    keeping.take(db, line, member)
+    db.commit()
+    (changed,) = db.scalars(
+        select(Activity).where(Activity.kind == "keeper_changed", Activity.finding_id == line.id)
+    ).all()
+    text = get(world, viewer, "/activity", finding=line.public_id)
+    check(text, SEES[viewer] & {level}, where=f"the feed after keeper_changed as {viewer}")
+    assert "keeper_changed" in text
+    assert feed.public_event(db, changed.id) is not None, "the stream announces it to visitors"
+    payload = json.loads(activity_service.event_payload(changed, member, line, None))
+    assert set(payload) == {"id", "kind", "finding", "investigation", "actor"}
+    check(json.dumps(payload), set(), where="the stream's keeper_changed")
+
+    old_square = gridref.gridref_at(*lon_lat(line.location), 4)
+    # Moved 230 m square to the line, within what was looked at, towards the nearest edge of the
+    # anchor's square, so the anchor leaves it for the nearest point of the moved line.
+    east_m, north_m = SHIFTS[level]
+    path = shapes.read_path(
+        {
+            "points": [
+                {
+                    "lon": lon + east_m / (111_320 * math.cos(math.radians(lat))),
+                    "lat": lat + north_m / 110_574,
+                }
+                | {"kind": "corner"}
+                for lon, lat in LINES[level]
+            ]
+        }
+    )
+    # Moved by a suggestion the keeper accepts, which goes through the same tail as an edit.
+    made = suggestions.suggest(
+        db, findings.lock(db, line), world.people["trusted"], path=path, revision=line.shape_revision
+    )
+    suggestions.accept(db, line, member, made.id, shape_revision=line.shape_revision)
+    db.commit()
+    assert gridref.gridref_at(*lon_lat(line.location), 4) != old_square, "the anchor moved square"
+    box_text = get(world, viewer, "/activity", bbox=",".join(str(v) for v in old_square.polygon().bounds))
+    check(box_text, SEES[viewer] & {level}, where=f"a box over the old square as {viewer}")
+    assert line.public_id not in box_text, "no event of the line is left in the square it left"

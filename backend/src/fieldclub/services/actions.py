@@ -11,8 +11,21 @@ is the code the route would answer with:
   restores it, and any other answer is `answer_final`.
 - `add_evidence`: `POST /findings/{id}/evidence`. `findings.check_may_add_evidence`.
 - `comment`: `POST /findings/{id}/comments`. Any contributor.
-- `edit`: `PATCH /findings/{id}`. `findings.check_finder`.
-- `withdraw`: `POST /findings/{id}/withdraw`. `findings.check_may_withdraw`.
+- `edit`: `PATCH /findings/{id}`. `findings.check_keeper`.
+- `withdraw`: `POST /findings/{id}/withdraw`. `findings.check_may_withdraw`,
+  which is the finder's alone.
+- `hand_on`: `PUT /findings/{id}/keeping/offer`. `keeping.check_may_offer`,
+  which lets the keeper through and, only for an admin, an orphaned marking,
+  so a member is refused with `not_keeper` whatever the keeper's standing.
+  Then `keeping.check_not_hidden`.
+- `take_keeping`: `POST /findings/{id}/keeping/accept`. `keeping.check_offered`,
+  then not withdrawn and not hidden, as `keeping.take` checks.
+- `suggest`: `POST /findings/{id}/suggestions`. `suggestions.check_may_suggest`:
+  not withdrawn, and not the keeper (`own_marking`).
+- `decide_suggestions`: accepting and declining them. `findings.check_keeper`.
+- `remove_marking`: `PUT /mod/findings/{id}/marking`. `moderation.check_admin`
+  first, then `keeping.check_orphaned`, so a member only ever learns
+  `admins_only`.
 - `raise_level`: `PUT /findings/{id}/sensitivity` to the next level up.
   `sensitivity.may_change_sensitivity`.
 - `lower_level`: `PUT /mod/findings/{id}/sensitivity` to the next level down.
@@ -53,7 +66,7 @@ from fieldclub.auth import onboarding
 from fieldclub.config import get_settings
 from fieldclub.errors import AppError, UnauthorisedError, UserNotFoundError
 from fieldclub.models import Evidence, Finding, Observation, User
-from fieldclub.services import findings, moderation, review, sensitivity
+from fieldclub.services import findings, keeping, moderation, review, sensitivity, suggestions
 from fieldclub.vocab import SENSITIVITY_ORDER, Role, Sensitivity, sensitivity_rank
 
 ALREADY_ANSWERED = "already_answered"
@@ -81,6 +94,11 @@ class FindingActions:
     raise_level: Action
     lower_level: Action
     verify: Action
+    hand_on: Action
+    take_keeping: Action
+    remove_marking: Action
+    suggest: Action
+    decide_suggestions: Action
 
 
 @dataclass(frozen=True)
@@ -139,13 +157,20 @@ def _nothing(code: str) -> Callable[[], None]:
 
 
 def finding_actions(
-    finding: Finding, viewer: User | None, mine: Observation | None, evidence: Sequence[Evidence]
+    finding: Finding,
+    viewer: User | None,
+    mine: Observation | None,
+    evidence: Sequence[Evidence],
+    *,
+    keeper: User,
 ) -> FindingActions:
     """What `viewer` may do on `finding`.
 
     `mine` is the viewer's own answer, if any, and `evidence` the standing
-    items the page shows, which `verify` looks through.
+    items the page shows, which `verify` looks through. `keeper` is the
+    account that keeps the marking, whatever its standing.
     """
+    assert keeper.has_id(findings.keeper_of(finding)), "the keeper passed is the finding's"
     user, refused = _contributor(viewer)
     if user is None:
         return FindingActions(*(refused for _ in fields(FindingActions)))
@@ -170,7 +195,7 @@ def finding_actions(
         answer=_action(lambda: review.check_may_answer(finding, user), unanswered),
         add_evidence=_action(lambda: findings.check_may_add_evidence(finding, user)),
         comment=Action(True),
-        edit=_action(lambda: findings.check_finder(finding, user)),
+        edit=_action(lambda: findings.check_keeper(finding, user)),
         withdraw=_action(lambda: findings.check_may_withdraw(finding, user)),
         raise_level=_action(
             _nothing(HIGHEST_LEVEL) if higher is None else lambda: raise_to(higher),
@@ -182,6 +207,17 @@ def finding_actions(
             else lambda: moderation.check_may_set_sensitivity(finding, user, lower),
         ),
         verify=_action(lambda: findings.check_may_verify(finding, user), something_to_verify),
+        hand_on=_action(
+            lambda: keeping.check_may_offer(finding, keeper, user), lambda: keeping.check_not_hidden(finding)
+        ),
+        take_keeping=_action(
+            lambda: keeping.check_offered(finding, user),
+            lambda: findings.check_open(finding),
+            lambda: keeping.check_not_hidden(finding),
+        ),
+        remove_marking=_action(lambda: moderation.check_admin(user), lambda: keeping.check_orphaned(keeper)),
+        suggest=_action(lambda: suggestions.check_may_suggest(finding, user)),
+        decide_suggestions=_action(lambda: findings.check_keeper(finding, user)),
     )
 
 

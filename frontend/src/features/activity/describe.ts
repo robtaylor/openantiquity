@@ -72,6 +72,26 @@ function stateSentence(meta: Meta, event: EventFacts): Part[] {
   return [subject, ` is now marked “${labelOf(meta.vocab.states, to)}”${why ? ` (${why})` : ""}`, ...by];
 }
 
+/** To an admin: how many markings a deleted account left without a keeper. */
+function keeperGoneSentence(markings: number | null | undefined): Part[] {
+  if (!markings) return ["A deleted account left markings without a keeper"];
+  return [`A deleted account left ${markings} ${markings === 1 ? "marking" : "markings"} without a keeper`];
+}
+
+function suggestionDecidedSentence(event: EventFacts): Part[] {
+  const finding = findingPart(event);
+  const accepted = event.details.accepted;
+  if (accepted === true)
+    return event.actor
+      ? [person(event.actor), " accepted your suggested change to ", finding]
+      : ["Your suggested change to ", finding, " was accepted"];
+  if (accepted === false)
+    return event.actor
+      ? [person(event.actor), " declined your suggested change to ", finding]
+      : ["Your suggested change to ", finding, " was declined"];
+  return ["Your suggested change to ", finding, " was answered"];
+}
+
 /** Capitalised and with its full stop, so it reads as a sentence however it starts and ends. */
 function finish(parts: Part[]): Part[] {
   const [first, ...rest] = parts;
@@ -126,6 +146,20 @@ function sentenceFor(meta: Meta, event: EventFacts): Part[] {
       return actor
         ? [person(actor), " invited you to join an investigation"]
         : ["You've been invited to join an investigation"];
+    case "keeper_changed":
+      // Names the new keeper, who may now change the marking. The finder stays its credit.
+      return actor ? [person(actor), " now keeps ", finding] : [finding, " has a new keeper"];
+    case "keeping_offered":
+      // Never names who offered it, so an admin's offer reads as a keeper's.
+      return ["You've been asked to keep ", finding];
+    case "keeper_gone":
+      return keeperGoneSentence(event.details.markings);
+    case "shape_suggested":
+      return actor
+        ? [person(actor), " suggested a change to the shape of ", finding]
+        : ["Someone suggested a change to the shape of ", finding];
+    case "suggestion_decided":
+      return suggestionDecidedSentence(event);
   }
 }
 

@@ -62,7 +62,7 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
@@ -78,7 +78,7 @@ from sqlalchemy.orm import Session, aliased, undefer
 
 from fieldclub import gridref
 from fieldclub.errors import DataIntegrityError, ForbiddenError
-from fieldclub.models import Finding, FindingShapeChange, User
+from fieldclub.models import Finding, FindingShapeChange, ShapeSuggestion, User
 from fieldclub.models.common import db_point, point_lon_lat
 from fieldclub.services import geo, shapes, text_positions
 from fieldclub.vocab import (
@@ -298,6 +298,47 @@ class VisibleShapeChange:
     on: date
     added_length_m: float | None = None
     added_view: dict[str, Any] | None = None
+    # Whose accepted suggestion made the change. None for a viewer who sees only the square.
+    suggested_by: User | None = None
+
+
+@dataclass(frozen=True)
+class VisibleSuggestion:
+    """A pending or decided suggestion to a finding's shape, for a reader `may_see_suggestions` allows."""
+
+    suggestion: ShapeSuggestion
+    by: User
+    # Made on a shape the finding has changed from since.
+    behind: bool
+    path: dict[str, Any]
+    outline: BaseGeometry
+
+
+def may_see_suggestions(finding: Finding, viewer: User | None) -> bool:
+    """Whether `viewer` may be sent suggestions to `finding`'s shape: a signed-in member who sees it exactly.
+
+    A suggestion is a member's drawing nobody has accepted, so it goes to
+    nobody signed out, on an open finding too. Once accepted it is part of
+    the shape, which goes to whoever sees the finding exactly.
+    """
+    return active_viewer(viewer) is not None and sees_exact(finding, viewer)
+
+
+def visible_suggestion(
+    finding: Finding, viewer: User | None, suggestion: ShapeSuggestion, by: User
+) -> VisibleSuggestion | None:
+    """A suggestion as `viewer` may know it: whole for `may_see_suggestions`, otherwise nothing at all."""
+    assert suggestion.finding_id == finding.id, "a suggestion to another finding"
+    assert by.has_id(suggestion.user_id), "the suggester passed is not the suggestion's"
+    if not may_see_suggestions(finding, viewer):
+        return None
+    return VisibleSuggestion(
+        suggestion=suggestion,
+        by=by,
+        behind=suggestion.base_revision < finding.shape_revision,
+        path=suggestion.path,
+        outline=to_shape(suggestion.outline_mid),
+    )
 
 
 @dataclass(frozen=True)
@@ -326,6 +367,8 @@ class VisibleShape:
     added_view: dict[str, Any] | None = None
     # What second looks were given on, for someone who may change the shape.
     looked_at: BaseGeometry | None = None
+    # Pending suggestions to the shape, newest first, for `may_see_suggestions` alone.
+    suggestions: tuple[VisibleSuggestion, ...] = ()
 
 
 def visible_shape(
@@ -335,6 +378,8 @@ def visible_shape(
     *,
     may_change: bool = False,
     whole: bool = False,
+    suggestions: Sequence[tuple[ShapeSuggestion, User]] = (),
+    suggested_by: Mapping[int, User] | None = None,
 ) -> VisibleShape:
     """The shape of `finding` and its `changes`, oldest first, as `viewer` may know them.
 
@@ -344,8 +389,18 @@ def visible_shape(
     to draw under the path while they change it. `whole` gives the whole shape
     as `outline`, for a download, in place of the page's simplified one: pass
     a download's reader only when `downloads_exact`, and None otherwise.
+    `suggestions`, each with its suggester, are the pending ones, given only
+    to `may_see_suggestions`, so a signed-out reader learns not even how many
+    there are. A download passes none. `suggested_by` names, by revision, who
+    suggested each change an accepted suggestion made, which goes only to
+    someone who sees the finding exactly: to anyone else a change is a date.
     """
     assert all(change.finding_id == finding.id for change in changes), "a change of another finding"
+    shown_suggestions = tuple(
+        shown
+        for suggestion, by in suggestions
+        if (shown := visible_suggestion(finding, viewer, suggestion, by)) is not None
+    )
     if not sees_exact(finding, viewer):
         return VisibleShape(
             changes=tuple(
@@ -362,6 +417,7 @@ def visible_shape(
                 on=change.created_at.date(),
                 added_length_m=change.added_length_m,
                 added_view=change.added_view,
+                suggested_by=(suggested_by or {}).get(change.revision),
             )
             for change in changes
         ),
@@ -374,6 +430,7 @@ def visible_shape(
         added_since_looked_m=finding.added_since_looked_m,
         added_view=finding.added_view,
         looked_at=to_shape(finding.looked_at) if may_change and finding.looked_at is not None else None,
+        suggestions=shown_suggestions,
     )
 
 

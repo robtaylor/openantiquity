@@ -26,7 +26,7 @@ from fieldclub.auth.handles import (
 )
 from fieldclub.errors import AppError
 from fieldclub.models import AuthIdentity, Follow, MagicLink, Notification, ReleasedHandle, User
-from fieldclub.services import ids, investigations, media
+from fieldclub.services import ids, investigations, keeping, media
 from fieldclub.vocab import Role
 
 logger = logging.getLogger(__name__)
@@ -149,7 +149,9 @@ def delete_account(db: Session, user: User, *, now: datetime | None = None) -> l
     the person's follows and notifications, which were only ever for them to
     read, and every photo they uploaded. Their private investigations go
     too, and their memberships and invitations elsewhere
-    (`investigations.forget_account`).
+    (`investigations.forget_account`). The markings they kept stay kept by
+    the account, so they are orphaned, the offers on them and to the person
+    go, and each admin is told how many (`keeping.forget_keeping`).
 
     The public record of their contributions stays, because it was published
     under an open licence and other people's work builds on it (Decisions
@@ -184,6 +186,8 @@ def delete_account(db: Session, user: User, *, now: datetime | None = None) -> l
     db.execute(delete(Notification).where(Notification.user_id == user.id))
     # Private investigations go; shared ones pass to an editor (see `forget_account`).
     investigations.forget_account(db, user)
+    # What they kept stays theirs, orphaned, and the admins are told (see `forget_keeping`).
+    keeping.forget_keeping(db, user, now=now)
     # A photo is personal data: the evidence it was on stays without it.
     files = media.forget_account(db, user)
 

@@ -16,6 +16,7 @@ tier does, so the people who answered aren't credited to this viewer at all
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
@@ -23,7 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl, UrlConstraints, mode
 from shapely.geometry.base import BaseGeometry
 
 from fieldclub import gridref
-from fieldclub.models import Comment, Finding, FindingShapeChange, Observation, User
+from fieldclub.models import Comment, Finding, FindingShapeChange, Observation, ShapeSuggestion, User
 from fieldclub.schemas.common import (
     ApiModel,
     GeoJSONFeatureCollection,
@@ -34,7 +35,7 @@ from fieldclub.schemas.common import (
     geojson_geometry,
     geojson_point,
 )
-from fieldclub.services import actions, review, sensitivity, shapes
+from fieldclub.services import actions, keeping, review, sensitivity, shapes
 from fieldclub.services.actions import Action
 from fieldclub.services.confidence import (
     ANSWER_CREDIT_KINDS,
@@ -61,6 +62,7 @@ from fieldclub.vocab import (
     ShapeKind,
     Stance,
     Strand,
+    SuggestionState,
     Tier,
     Visible,
     stored_class,
@@ -208,6 +210,63 @@ class ShapeChangeOut(ApiModel):
     on: date
     added_length_m: float | None = None
     added_view: AddedView | None = None
+    # Who suggested it, when the keeper accepted someone's suggestion. Null for a square-only viewer.
+    suggested_by: PublicUser | None = None
+
+    @classmethod
+    def build(cls, change: sensitivity.VisibleShapeChange) -> ShapeChangeOut:
+        return cls(
+            kind=change.kind,  # pyright: ignore[reportArgumentType]
+            on=change.on,
+            added_length_m=change.added_length_m,
+            added_view=AddedView.model_validate(change.added_view) if change.added_view is not None else None,
+            suggested_by=PublicUser.from_user(change.suggested_by)
+            if change.suggested_by is not None
+            else None,
+        )
+
+
+class SuggestionOut(ApiModel):
+    """A change to a marking's shape that someone other than its keeper proposed.
+
+    Sent only to signed-in members who see the finding exactly. `behind`
+    says it was made on a shape the finding has changed from since:
+    accepting it replaces those changes.
+    """
+
+    id: int
+    by: PublicUser
+    created_at: datetime
+    # The shape's `revision` it was made on.
+    base_revision: int
+    behind: bool
+    kind: ShapeChangeKind
+    # The suggested shape's length, or an area's perimeter.
+    length_m: float
+    path: PathOut
+    # The suggested shape simplified for the page, as `location.outline` is.
+    outline: GeoJSONGeometry
+    state: SuggestionState
+    decided_at: datetime | None
+
+    @classmethod
+    def build(cls, shown: sensitivity.VisibleSuggestion) -> SuggestionOut:
+        suggestion = shown.suggestion
+        outline = geojson_geometry(shown.outline, decimals=shapes.DECIMALS)
+        assert outline is not None, "a suggestion has a shape"
+        return cls(
+            id=suggestion.id,
+            by=PublicUser.from_user(shown.by),
+            created_at=suggestion.created_at,
+            base_revision=suggestion.base_revision,
+            behind=shown.behind,
+            kind=ShapeChangeKind(suggestion.kind),
+            length_m=suggestion.length_m,
+            path=PathOut.model_validate(shown.path),
+            outline=outline,
+            state=SuggestionState(suggestion.state),
+            decided_at=suggestion.decided_at,
+        )
 
 
 class ShapeOut(ApiModel):
@@ -237,6 +296,9 @@ class ShapeOut(ApiModel):
     # (`/meta` `shapes.looked_at_max_move_m` and `looked_at_min_kept`). Only for
     # someone who may change the finding (`actions.edit`), and null before any second look.
     looked_at: GeoJSONGeometry | None = None
+    # The pending suggestions, newest first. Only for a signed-in member who sees the finding exactly:
+    # for anyone else it is empty, whatever is pending.
+    suggestions: list[SuggestionOut] = Field(default_factory=list)
 
 
 class LocationDetail(Location):
@@ -256,9 +318,13 @@ def location_detail(
     changes: list[FindingShapeChange],
     *,
     may_change: bool = False,
+    suggestions: Sequence[tuple[ShapeSuggestion, User]] = (),
+    suggested_by: Mapping[int, User] | None = None,
 ) -> LocationDetail:
     """The page's `location`, through `sensitivity.visible_location` and `visible_shape`."""
-    shape = sensitivity.visible_shape(finding, viewer, changes, may_change=may_change)
+    shape = sensitivity.visible_shape(
+        finding, viewer, changes, may_change=may_change, suggestions=suggestions, suggested_by=suggested_by
+    )
     where = location_out(finding, viewer)
     return LocationDetail(
         **where.model_dump(exclude={"outline"}),
@@ -269,10 +335,11 @@ def location_detail(
             length_m=shape.length_m,
             revision=shape.revision,
             extent=list(shape.extent) if shape.extent is not None else None,
-            changes=[ShapeChangeOut.model_validate(change) for change in shape.changes],
+            changes=[ShapeChangeOut.build(change) for change in shape.changes],
             added_since_looked_m=shape.added_since_looked_m,
             added_view=AddedView.model_validate(shape.added_view) if shape.added_view is not None else None,
             looked_at=geojson_geometry(shape.looked_at, decimals=shapes.DECIMALS),
+            suggestions=[SuggestionOut.build(shown) for shown in shape.suggestions],
         ),
     )
 
@@ -351,6 +418,25 @@ class FindingUpdate(RequestModel):
 
 class SensitivityChange(RequestModel):
     level: Sensitivity
+
+
+class SuggestionIn(RequestModel):
+    """A proposed shape for someone else's marking: the whole path, and the revision it starts from."""
+
+    path: Path
+    path_revision: int | None = Field(default=None, ge=0)
+
+
+class SuggestionAccept(RequestModel):
+    """The shape's `revision` the keeper saw the suggestion against."""
+
+    shape_revision: int = Field(ge=0)
+
+
+class KeepingOfferIn(RequestModel):
+    """Whom to offer a marking's keeping to, by handle."""
+
+    handle: str = Field(min_length=1, max_length=64)
 
 
 # --------------------------------------------------------------------------
@@ -492,6 +578,23 @@ class FindingActionsOut(ApiModel):
     lower_level: ActionOut
     # An official item someone else added. Each item's own `actions.verify` says which.
     verify: ActionOut
+    # Offering the keeping to someone, through `PUT /findings/{public_id}/keeping/offer`.
+    hand_on: ActionOut
+    # Taking up an offer made to this viewer, through `POST /findings/{public_id}/keeping/accept`.
+    take_keeping: ActionOut
+    # An admin taking back an orphaned marking's shape, through `PUT /mod/findings/{public_id}/marking`.
+    remove_marking: ActionOut
+    # Suggesting a change to the shape, through `POST /findings/{public_id}/suggestions`.
+    suggest: ActionOut
+    # Accepting and declining suggestions: `POST .../suggestions/{suggestion_id}/accept` and `decline`.
+    decide_suggestions: ActionOut
+
+
+class KeepingOut(ApiModel):
+    """The standing offer of a marking's keeping, for its keeper, the person offered and moderators."""
+
+    offered_to: PublicUser
+    offered_at: datetime
 
 
 class EvidenceActionsOut(ApiModel):
@@ -593,6 +696,9 @@ class FindingDetail(FindingSummary):
     answers_visible: bool
     my_observation: ObservationOut | None
     following: bool
+    # Who may change the marking: the same as `author` until it is handed on. `author` is the credit.
+    keeper: PublicUser
+    keeping: KeepingOut | None
     actions: FindingActionsOut
 
     @classmethod
@@ -604,7 +710,11 @@ class FindingDetail(FindingSummary):
             Tallies.from_assessment(assessment, finding.observation_count) if view.answers_visible else None
         )
         allowed = actions.finding_actions(
-            finding, viewer, view.my_observation, [item.evidence for item in view.evidence]
+            finding,
+            viewer,
+            view.my_observation,
+            [item.evidence for item in view.evidence],
+            keeper=view.keeper,
         )
         fields = _summary_fields(finding, view.author, viewer)
         fields["location"] = location_detail(
@@ -612,6 +722,8 @@ class FindingDetail(FindingSummary):
             viewer,
             view.shape_changes,
             may_change=allowed.edit.allowed,
+            suggestions=view.suggestions,
+            suggested_by=view.suggested_by,
         )
         # Asking for a look at what was added to a line says it is a line.
         steps = [
@@ -646,8 +758,20 @@ class FindingDetail(FindingSummary):
                 else None
             ),
             following=view.following,
+            keeper=PublicUser.from_user(view.keeper),
+            keeping=_keeping(view, viewer),
             actions=_finding_actions(allowed),
         )
+
+
+def _keeping(view: FindingView, viewer: User | None) -> KeepingOut | None:
+    """The standing offer, for those `keeping.sees_offer` lets see it."""
+    finding = view.finding
+    if not keeping.sees_offer(finding, view.keeper, viewer, view.offered_to):
+        return None
+    assert view.offered_to is not None, "a standing offer is to someone"
+    assert finding.keeping_offered_at is not None, "an offer says when it was made"
+    return KeepingOut(offered_to=PublicUser.from_user(view.offered_to), offered_at=finding.keeping_offered_at)
 
 
 def _credits(view: FindingView) -> list[CreditOut]:

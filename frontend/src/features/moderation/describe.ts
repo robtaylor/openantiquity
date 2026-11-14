@@ -62,6 +62,7 @@ const VERBS: Record<ActionKind, string> = {
   change_sensitivity: "changed the level of",
   approve_photo: "approved",
   reject_photo: "refused",
+  remove_marking: "took back the marking of",
 };
 
 function text(value: unknown): string | null {
@@ -79,12 +80,19 @@ function levelWord(level: string): string {
 
 /** What changed, from the action's data: "from Member to Trusted member", "from protected to open". */
 function change(action: Action): string | null {
+  if (action.action === "remove_marking") return markingWords(action.data?.to_revision);
   const from = text(action.data?.from);
   const to = text(action.data?.to);
   if (from === null || to === null) return null;
   if (action.action === "change_role") return `from ${roleWords(from).label} to ${roleWords(to).label}`;
   if (action.action === "change_sensitivity") return `from ${levelWord(from)} to ${levelWord(to)}`;
   return null;
+}
+
+/** Where an admin put an orphaned marking back to: an earlier shape, or none. */
+function markingWords(toRevision: unknown): string | null {
+  if (toRevision === null) return "and removed its line or shape";
+  return typeof toRevision === "number" ? `to its shape at revision ${toRevision}` : null;
 }
 
 /** One entry of the log in a sentence: "Ada Lovelace hid a comment on “Ring ditch”." */

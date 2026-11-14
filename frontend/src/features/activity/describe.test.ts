@@ -3,7 +3,7 @@ import { parseMeta } from "../../api/meta.js";
 import { metaFixture } from "../../test/fixtures/meta.js";
 import type { ActivityFinding, PublicUser } from "./api.js";
 import { describeEvent, type EventFacts, sentenceText } from "./describe.js";
-import { KIND_GROUPS, kindsFor } from "./kinds.js";
+import { isActivityKind, KIND_GROUPS, kindsFor } from "./kinds.js";
 import { whenWords } from "./time.js";
 
 const meta = parseMeta(metaFixture);
@@ -73,6 +73,28 @@ describe("what happened, in a sentence", () => {
     expect(said({ kind: "comment_added", finding: null })).toBe("A finding has a new comment.");
   });
 
+  it("says who keeps a marking, who suggested a change to it and what its keeper said, and no more", () => {
+    expect(said({ kind: "keeper_changed", actor: ada })).toBe("Ada Lovelace now keeps Enclosure in SU 10 69.");
+    expect(said({ kind: "keeper_changed" })).toBe("Enclosure in SU 10 69 has a new keeper.");
+    // Who offered it is never said, so an admin's offer reads as a keeper's.
+    expect(said({ kind: "keeping_offered" })).toBe("You've been asked to keep Enclosure in SU 10 69.");
+    expect(said({ kind: "shape_suggested", actor: ada })).toBe(
+      "Ada Lovelace suggested a change to the shape of Enclosure in SU 10 69.",
+    );
+    expect(said({ kind: "suggestion_decided", actor: ada, details: { accepted: true } })).toBe(
+      "Ada Lovelace accepted your suggested change to Enclosure in SU 10 69.",
+    );
+    expect(said({ kind: "suggestion_decided", details: { accepted: false } })).toBe(
+      "Your suggested change to Enclosure in SU 10 69 was declined.",
+    );
+    expect(said({ kind: "keeper_gone", finding: null, details: { markings: 3 } })).toBe(
+      "A deleted account left 3 markings without a keeper.",
+    );
+    expect(said({ kind: "keeper_gone", finding: null, details: { markings: 1 } })).toBe(
+      "A deleted account left 1 marking without a keeper.",
+    );
+  });
+
   it("says who carried a line or shape further, and nothing of how far", () => {
     expect(said({ kind: "shape_extended", actor: ada })).toBe("Ada Lovelace drew more of Enclosure in SU 10 69.");
     expect(said({ kind: "shape_extended" })).toBe("More of Enclosure in SU 10 69 was drawn.");
@@ -88,8 +110,15 @@ describe("the feed's kinds", () => {
     expect(kinds).not.toContain("investigation_invitation");
     expect(kindsFor(["steps"])).toEqual(["tier_changed", "state_changed"]);
     // A line drawn further is listed and filtered with the findings marked, which the filter says.
-    expect(kindsFor(["findings"])).toEqual(["finding_created", "shape_extended"]);
-    expect(KIND_GROUPS.find((group) => group.id === "findings")?.label).toBe("Findings marked or drawn further");
+    // A line drawn further, and a marking handed on, are listed and filtered with the findings marked.
+    expect(kindsFor(["findings"])).toEqual(["finding_created", "shape_extended", "keeper_changed"]);
+    expect(KIND_GROUPS.find((group) => group.id === "findings")?.label).toBe(
+      "Findings marked, drawn further or handed on",
+    );
+    for (const kind of ["keeping_offered", "keeper_gone", "shape_suggested", "suggestion_decided"] as const) {
+      expect(kinds).not.toContain(kind);
+      expect(isActivityKind(kind)).toBe(true);
+    }
     expect(kindsFor([])).toEqual([]);
   });
 });

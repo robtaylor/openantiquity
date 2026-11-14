@@ -2,6 +2,9 @@ import {
   CircleDot,
   Eye,
   Footprints,
+  GitPullRequestArrow,
+  Handshake,
+  KeyRound,
   type LucideIcon,
   MapPinPlus,
   Megaphone,
@@ -11,6 +14,7 @@ import {
   PenLine,
   TrendingUp,
   UserPlus,
+  UserX,
 } from "lucide-react";
 import { Fragment, type ReactNode, type Ref } from "react";
 import { useNavigate } from "react-router";
@@ -34,6 +38,11 @@ const KIND_ICONS: Record<ActivityKind, LucideIcon> = {
   investigation_published: NotebookText,
   investigation_invitation: UserPlus,
   shape_extended: PenLine,
+  keeper_changed: KeyRound,
+  keeping_offered: Handshake,
+  keeper_gone: UserX,
+  shape_suggested: GitPullRequestArrow,
+  suggestion_decided: GitPullRequestArrow,
 };
 
 /** The path of an investigation's page. */
