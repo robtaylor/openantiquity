@@ -70,7 +70,7 @@ Colour never carries meaning alone. Tier is also shown as a label in every list 
 
 ## Components
 
-Build these once in `src/ui/` and reuse them: `Button` (primary, secondary, ghost, danger), `IconButton`, `Chip` and `ChipGroup` (single and multiple choice), `Panel` and `Sheet`, `Tabs`, `Field` with label and hint, `Slider`, `Meter` (the confidence meter with tier ticks), `TierBadge`, `Avatar`, `Toast`, `Dialog`, `EmptyState`, `Skeleton`. Icons come from `lucide-react`. Feature classes have their own small plan-view pictograms in `src/ui/featureIcons.tsx`.
+Build these once in `src/ui/` and reuse them: `Button` (primary, secondary, ghost, danger), `IconButton`, `Chip` and `ChipGroup` (single and multiple choice), `Panel` and `Sheet`, `Tabs`, `Field` with label and hint, `Slider`, `Meter` (the confidence meter with tier ticks), `TierBadge`, `Avatar`, `Toast`, `Dialog`, `EmptyState`, `Skeleton`. Icons come from `lucide-react`. The one exception is GitHub's mark on the link to the project's repository, which that library no longer carries and which is drawn in `src/ui/GitHubMark.tsx`. Feature classes have their own small plan-view pictograms in `src/ui/featureIcons.tsx`.
 
 ## Behaviour
 

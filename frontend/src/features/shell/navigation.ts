@@ -78,6 +78,15 @@ export const REFERENCE: Mode[] = [
   { id: "about", label: "About", shortLabel: "About", to: "/about", icon: Info },
 ];
 
+/** The project's public repository: its code, and where problems are reported. */
+export const SOURCE_URL = "https://github.com/robtaylor/openantiquity";
+
+/** What the link to it is called, with the words every link that leaves the app carries for a screen reader. */
+export const SOURCE_LABEL = "Source code on GitHub";
+export const SOURCE_NAME = `${SOURCE_LABEL} (opens in a new tab)`;
+/** In the phone's menu, where the mark beside it says whose site it is and the full name would wrap. */
+export const SOURCE_SHORT_LABEL = "Source code";
+
 /** How many modes the phone tab bar shows before "More". */
 export const TAB_BAR_MODES = 4;
 

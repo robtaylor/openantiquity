@@ -1,11 +1,12 @@
 import { Ellipsis } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router";
+import { GitHubMark } from "../../ui/GitHubMark.js";
 import { useDismiss } from "../../ui/useDismiss.js";
 import { AccountModeIcon } from "../account/AccountModeIcon.js";
 import { NotificationCount } from "../notifications/NotificationCount.js";
 import { unreadWords, useUnreadCount } from "../notifications/useNotifications.js";
-import { isModeActive, MODES, REFERENCE, TAB_BAR_MODES } from "./navigation.js";
+import { isModeActive, MODES, REFERENCE, SOURCE_SHORT_LABEL, SOURCE_URL, TAB_BAR_MODES } from "./navigation.js";
 
 /** The phone tab bar: four modes and "More", which holds the rest. */
 export function TabBar() {
@@ -85,6 +86,18 @@ export function TabBar() {
                 </NavLink>
               );
             })}
+            <a
+              className="fc-tabbar__item"
+              href={SOURCE_URL}
+              target="_blank"
+              rel="noopener noreferrer external"
+              // It opens in another tab and this page doesn't move, so nothing else would close the menu.
+              onClick={() => setMoreOpen(false)}
+            >
+              <GitHubMark size={20} />
+              {SOURCE_SHORT_LABEL}
+              <span className="fc-visually-hidden"> on GitHub (opens in a new tab)</span>
+            </a>
           </div>
         ) : null}
       </div>

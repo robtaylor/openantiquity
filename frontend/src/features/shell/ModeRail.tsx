@@ -1,8 +1,9 @@
 import { NavLink, useLocation } from "react-router";
+import { GitHubMark } from "../../ui/GitHubMark.js";
 import { AccountModeIcon } from "../account/AccountModeIcon.js";
 import { NotificationCount } from "../notifications/NotificationCount.js";
 import { unreadWords, useUnreadCount } from "../notifications/useNotifications.js";
-import { isModeActive, MODES, type Mode, REFERENCE } from "./navigation.js";
+import { isModeActive, MODES, type Mode, REFERENCE, SOURCE_LABEL, SOURCE_NAME, SOURCE_URL } from "./navigation.js";
 
 function RailLink({
   mode,
@@ -81,6 +82,20 @@ export function ModeRail({ compact = false }: { compact?: boolean }) {
         {REFERENCE.map((mode) => (
           <RailLink key={mode.id} mode={mode} pathname={pathname} compact={compact} />
         ))}
+        {/* Not a page of the app: it leaves for the repository, in another tab so the map stays open. */}
+        <a
+          className="fc-rail__link"
+          href={SOURCE_URL}
+          target="_blank"
+          rel="noopener noreferrer external"
+          aria-label={SOURCE_NAME}
+          title={compact ? SOURCE_LABEL : undefined}
+        >
+          <GitHubMark size={22} />
+          <span className="fc-rail__tip" aria-hidden="true">
+            {SOURCE_LABEL}
+          </span>
+        </a>
         {account.map((mode) => (
           <RailLink key={mode.id} mode={mode} pathname={pathname} compact={compact} unread={unread} />
         ))}

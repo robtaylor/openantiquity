@@ -26,6 +26,7 @@ OpenAntiquity has been live at openantiquity.org since 12 November 2026. This is
 - The map zooms in two levels further, so something a couple of metres across can be drawn round without its points crowding each other. The terrain itself is no sharper there: the survey is one-metre data.
 - "Change the shape" on something small now brings it up to a size you can work on, where it used to stop while the shape was still a few pixels across.
 - A right-click on the map, which on a Mac is also a two-finger click or a Ctrl-click, no longer leaves a drawing for "Open elsewhere". While you are marking or changing a shape it does nothing.
+- The code is one press away: a GitHub link sits at the foot of the left-hand rail with Guide and About, and under "More" on a phone.
 - The map opens on Multi-direction shade, lit from three sides so that nothing hides by running along the light. Composite and the other views are a press away in the Layers panel.
 - Zoomed out, the map names its cities and towns again, with smaller places appearing as you go in. The record counts used to crowd them out.
 - Opening the Layers panel and closing it no longer takes the map back to the record, finding or investigation whose page is open. The map stays where you had moved it.

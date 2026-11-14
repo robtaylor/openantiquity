@@ -381,6 +381,7 @@ describe("Shell", () => {
       "Account",
       "Guide",
       "About",
+      "Source code on GitHub (opens in a new tab)",
     ]);
     await user.click(within(tabs).getByRole("link", { name: "Activity" }));
     const sheet = screen.getByRole("complementary", { name: "Activity" });
