@@ -713,14 +713,7 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
     when no title is sent, so it never names a square the finding has left.
 
     A `path` (or an `outline`, read as one) with its `path_revision` goes to
-    `shape_edits.change_shape`, with the finder as the one who made the
-    change. When that moves the length lying beyond what was looked at, the
-    finding is reassessed, which can only change its open steps. An
-    extension, or a reshape of an open line that leaves it an open line at
-    least `confidence.NEW_PART_LOOK_M` longer, records `shape_extended`,
-    which tells the followers. The length before is
-    `shape_edits.stored_length`, which measures an old outline the backfill
-    hasn't reached.
+    `apply_shape_change`, with the finder as the one who made the change.
     """
     check_finder(finding, actor)
     unknown = set(changes) - _EDITABLE
@@ -734,11 +727,7 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
 
     changed_shape = False
     if "path" in changes or "outline" in changes:
-        added_before = (finding.added_since_looked_m, finding.added_view)
-        line_before = (
-            shape_edits.stored_length(finding) if shape_edits.stored_kind(finding) is ShapeKind.LINE else None
-        )
-        kind = shape_edits.change_shape(
+        kind = apply_shape_change(
             db,
             finding,
             actor,
@@ -748,28 +737,6 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
             placed=location if placed else None,
         )
         changed_shape = kind is not None
-        if (finding.added_since_looked_m, finding.added_view) != added_before:
-            # Only so that the finding asks, or stops asking, for a look at
-            # the new part: nothing the ladder weighs has changed.
-            db.flush()
-            result = reassess(db, finding, actor)
-            if result.tier_after is not result.tier_before:
-                # Only an assessment stored before the engine last changed can move here.
-                logger.warning(
-                    "Finding %s moved from %s on a change of shape", finding.public_id, result.tier_before
-                )
-        # A point nudged and 20 km added is a reshape to the classifier and an
-        # extension to everyone else, so the followers are told of that too.
-        # Only a line is carried on: an area's longer edge isn't news of that.
-        carried_on = (
-            kind is ShapeChangeKind.RESHAPED
-            and line_before is not None
-            and finding.shape_kind == ShapeKind.LINE
-            and finding.shape_length_m is not None
-            and finding.shape_length_m - line_before >= NEW_PART_LOOK_M
-        )
-        if kind is ShapeChangeKind.EXTENDED or carried_on:
-            activity.record(db, ActivityKind.SHAPE_EXTENDED, actor, finding)
     if placed and not changed_shape:
         if finding.outline is not None:
             shapes.check_shape(to_shape(finding.outline), location)
@@ -805,11 +772,73 @@ def update_finding(db: Session, finding: Finding, actor: User, changes: dict[str
     raised = finding.sensitivity != level_before
     checked = [name for name in _CHECKED_TEXT if raised or name in changes]
     check_text_for_level(finding.sensitivity, {name: getattr(finding, name) for name in checked})
-    if moved:
+    if moved and not changed_shape:
+        # A change of shape moved the activity with the anchor already.
         activity.relocate(db, finding)
     if class_changed:
         reassess(db, finding, actor)
     return finding
+
+
+def apply_shape_change(
+    db: Session,
+    finding: Finding,
+    by: User,
+    *,
+    path: shapes.Path | None,
+    outline: BaseGeometry | None = None,
+    revision: int | None,
+    placed: Point | None = None,
+) -> ShapeChangeKind | None:
+    """Change a finding's shape for `by`, and everything that follows it. Hold the lock.
+
+    This doesn't decide who may: the caller does. `by` is credited with the
+    change and is the actor of what it records. The change itself is
+    `shape_edits.change_shape`. When that moves the length lying beyond what
+    was looked at, the finding is reassessed, which can only change its open
+    steps. An extension, or a reshape of an open line that leaves it an open
+    line at least `confidence.NEW_PART_LOOK_M` longer, records
+    `shape_extended`, which tells the followers. The length before is
+    `shape_edits.stored_length`, which measures an old outline the backfill
+    hasn't reached. When the anchor moved, the finding's activity moves to
+    its new square (`activity.relocate`). Returns the kind of change, or
+    None when the shape sent is the shape it has.
+    """
+    added_before = (finding.added_since_looked_m, finding.added_view)
+    anchor_before = point_lon_lat(finding.location)
+    line_before = (
+        shape_edits.stored_length(finding) if shape_edits.stored_kind(finding) is ShapeKind.LINE else None
+    )
+    kind = shape_edits.change_shape(
+        db, finding, by, path=path, outline=outline, revision=revision, placed=placed
+    )
+    if kind is None:
+        return None
+    if (finding.added_since_looked_m, finding.added_view) != added_before:
+        # Only so that the finding asks, or stops asking, for a look at
+        # the new part: nothing the ladder weighs has changed.
+        db.flush()
+        result = reassess(db, finding, by)
+        if result.tier_after is not result.tier_before:
+            # Only an assessment stored before the engine last changed can move here.
+            logger.warning(
+                "Finding %s moved from %s on a change of shape", finding.public_id, result.tier_before
+            )
+    # A point nudged and 20 km added is a reshape to the classifier and an
+    # extension to everyone else, so the followers are told of that too.
+    # Only a line is carried on: an area's longer edge isn't news of that.
+    carried_on = (
+        kind is ShapeChangeKind.RESHAPED
+        and line_before is not None
+        and finding.shape_kind == ShapeKind.LINE
+        and finding.shape_length_m is not None
+        and finding.shape_length_m - line_before >= NEW_PART_LOOK_M
+    )
+    if kind is ShapeChangeKind.EXTENDED or carried_on:
+        activity.record(db, ActivityKind.SHAPE_EXTENDED, by, finding)
+    if point_lon_lat(finding.location) != anchor_before:
+        activity.relocate(db, finding)
+    return kind
 
 
 def check_may_withdraw(finding: Finding, actor: User) -> None:
