@@ -170,9 +170,10 @@ def test_the_server_s_own_line_for_a_response_is_written_with_the_id(
     tagged: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Uvicorn writes its access line when the response starts, inside the request, as this server does."""
-    # A test that started uvicorn with its own configuration stops its access lines reaching the root.
+    # A test that started uvicorn with its own configuration can stop its access lines, or raise their level.
     monkeypatch.setattr(logging.getLogger("uvicorn.access"), "propagate", True)
     monkeypatch.setattr(logging.getLogger("uvicorn.access"), "disabled", False)
+    tagged.set_level("INFO", logger="uvicorn.access")
 
     async def answer(scope: Scope, receive: Receive, send: Send) -> None:
         await send({"type": "http.response.start", "status": 204, "headers": []})
@@ -192,8 +193,9 @@ def test_the_server_s_own_line_for_a_response_is_written_with_the_id(
     scope: Scope = {"type": "http", "method": "GET", "path": "/", "headers": []}
     asyncio.run(middleware(scope, receive, server_send))
     header = dict(sent[0]["headers"])[request_ids.HEADER.lower().encode()].decode()
-    (line,) = [record for record in tagged.records if record.name == "uvicorn.access"]
-    assert line.request_id == header  # type: ignore[attr-defined]
+    lines = [record for record in tagged.records if record.getMessage() == '"GET / HTTP/1.1" 204']
+    assert lines
+    assert {line.request_id for line in lines} == {header}  # type: ignore[attr-defined]
     assert request_ids.current() is None
 
 
