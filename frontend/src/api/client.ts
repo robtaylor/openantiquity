@@ -8,6 +8,7 @@
  * listeners, which is how it learns the welcome step is still owed.
  */
 
+import { keepRequestFailure } from "./failures.js";
 import { isRecord } from "./guards.js";
 
 export const API_BASE = "/api/v1";
@@ -25,12 +26,18 @@ export class ApiError extends Error {
    * request's path to it, such as `body.title`. Empty otherwise.
    */
   readonly fields: readonly FieldProblem[];
+  /** The id the server gave the request, from the envelope or `X-Request-ID`, or null when no answer came. */
+  readonly requestId: string | null;
 
   constructor(
     status: number,
     code: string,
     message: string,
-    options?: ErrorOptions & { details?: Record<string, unknown>; fields?: readonly FieldProblem[] },
+    options?: ErrorOptions & {
+      details?: Record<string, unknown>;
+      fields?: readonly FieldProblem[];
+      requestId?: string | null;
+    },
   ) {
     super(message, options);
     this.name = "ApiError";
@@ -38,6 +45,7 @@ export class ApiError extends Error {
     this.code = code;
     this.details = options?.details ?? {};
     this.fields = options?.fields ?? [];
+    this.requestId = options?.requestId ?? null;
   }
 }
 
@@ -115,6 +123,9 @@ export function apiUrl(path: string, query: Record<string, QueryParam> = {}): st
   return `${API_BASE}${path}${search ? `?${search}` : ""}`;
 }
 
+/** The header the server names each request's id in. */
+export const REQUEST_ID_HEADER = "X-Request-ID";
+
 async function errorFrom(response: Response): Promise<ApiError> {
   let payload: unknown;
   try {
@@ -122,21 +133,22 @@ async function errorFrom(response: Response): Promise<ApiError> {
   } catch {
     payload = undefined;
   }
-  return errorFromPayload(response.status, response.statusText, payload);
+  return errorFromPayload(response.status, response.statusText, payload, response.headers.get(REQUEST_ID_HEADER));
 }
 
-function errorFromPayload(status: number, statusText: string, payload: unknown): ApiError {
+function errorFromPayload(status: number, statusText: string, payload: unknown, header: string | null): ApiError {
   const envelope = isRecord(payload) && isRecord(payload.error) ? payload.error : undefined;
+  const requestId = envelope && typeof envelope.request_id === "string" ? envelope.request_id : header;
   if (envelope && typeof envelope.code === "string" && typeof envelope.message === "string") {
     const details = isRecord(envelope.details) ? envelope.details : undefined;
     const fields = fieldProblems(envelope.details);
-    return new ApiError(status, envelope.code, envelope.message, { details, fields });
+    return new ApiError(status, envelope.code, envelope.message, { details, fields, requestId });
   }
   const reason = statusText ? `${status} ${statusText}` : String(status);
   const message = GATEWAY_STATUSES.has(status)
     ? `The server isn't answering right now (${reason}). It may be restarting.`
     : `The server answered ${reason}.`;
-  return new ApiError(status, `http_${status}`, message);
+  return new ApiError(status, `http_${status}`, message, { requestId });
 }
 
 /**
@@ -156,6 +168,16 @@ export function isTransient(error: unknown): boolean {
 /** Call the API and return the decoded JSON body, or undefined for 204. */
 export async function apiFetch<T>(path: string, request: ApiRequest = {}): Promise<T> {
   const method = request.method ?? "GET";
+  try {
+    return await send<T>(method, path, request);
+  } catch (error) {
+    // Kept for a problem report: every failure but one stopped on purpose (`failures.ts`).
+    if (error instanceof ApiError) keepRequestFailure(method, path, error);
+    throw error;
+  }
+}
+
+async function send<T>(method: NonNullable<ApiRequest["method"]>, path: string, request: ApiRequest): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   if (!SAFE_METHODS.has(method)) headers["X-OpenAntiquity-Client"] = "web";
   const init: RequestInit = { method, headers, credentials: "include", signal: request.signal };
@@ -187,7 +209,10 @@ export async function apiFetch<T>(path: string, request: ApiRequest = {}): Promi
   try {
     return (await response.json()) as T;
   } catch (cause) {
-    throw new ApiError(response.status, "bad_response", "The server sent a reply that wasn't JSON.", { cause });
+    throw new ApiError(response.status, "bad_response", "The server sent a reply that wasn't JSON.", {
+      cause,
+      requestId: response.headers.get(REQUEST_ID_HEADER),
+    });
   }
 }
 
@@ -227,9 +252,14 @@ export function apiUpload<T>(path: string, file: Blob, request: UploadRequest = 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && event.total > 0) request.onProgress?.(Math.min(1, event.loaded / event.total));
     };
+    /** Reject with a failure, kept for a problem report as `apiFetch` keeps its own. */
+    const fail = (error: ApiError) => {
+      keepRequestFailure("POST", path, error);
+      reject(error);
+    };
     xhr.onerror = () => {
       finish();
-      reject(networkError());
+      fail(networkError());
     };
     xhr.onabort = () => {
       finish();
@@ -244,14 +274,15 @@ export function apiUpload<T>(path: string, file: Blob, request: UploadRequest = 
         payload = undefined;
       }
       if (xhr.status === 401) for (const listener of [...unauthorisedListeners]) listener(path);
+      const requestId = xhr.getResponseHeader(REQUEST_ID_HEADER);
       if (xhr.status < 200 || xhr.status >= 300) {
-        const error = errorFromPayload(xhr.status, xhr.statusText, payload);
+        const error = errorFromPayload(xhr.status, xhr.statusText, payload, requestId);
         if (xhr.status === 403) for (const listener of [...forbiddenListeners]) listener(error, path);
-        reject(error);
+        fail(error);
         return;
       }
       if (payload === undefined) {
-        reject(new ApiError(xhr.status, "bad_response", "The server sent a reply that wasn't JSON."));
+        fail(new ApiError(xhr.status, "bad_response", "The server sent a reply that wasn't JSON.", { requestId }));
         return;
       }
       request.onProgress?.(1);

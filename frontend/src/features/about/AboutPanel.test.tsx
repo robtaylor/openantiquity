@@ -56,6 +56,33 @@ describe("the about page", () => {
     );
   });
 
+  it("links to the source and the issue tracker, each in another tab", async () => {
+    serve();
+    const panel = await openPanel("/about", "About OpenAntiquity");
+    for (const [name, href] of [
+      ["the source code", "https://github.com/robtaylor/openantiquity"],
+      ["the list of known problems", "https://github.com/robtaylor/openantiquity/issues"],
+    ] as const) {
+      const link = panel.getByRole("link", { name });
+      expect(link).toHaveAttribute("href", href);
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    }
+  });
+
+  it("gives the commit the running build was made from beside the version", async () => {
+    const commit = "0123456789abcdef0123456789abcdef01234567";
+    serve({ ...metaFixture, app: { ...metaFixture.app, commit } });
+    const panel = await openPanel("/about", "About OpenAntiquity");
+    expect(panel.getByText("Version 0.1.0, commit 0123456")).toBeInTheDocument();
+  });
+
+  it("gives the version alone when the server can't tell its commit", async () => {
+    serve({ ...metaFixture, app: { ...metaFixture.app, commit: null } });
+    const panel = await openPanel("/about", "About OpenAntiquity");
+    expect(panel.getByText("Version 0.1.0")).toBeInTheDocument();
+  });
+
   it("credits every source the API lists, grouped, and finds them by search", async () => {
     const routes = serve();
     const user = userEvent.setup();

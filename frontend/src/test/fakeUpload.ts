@@ -56,6 +56,11 @@ export function fakeUploads(): FakeUploads {
       this.url = url;
     }
 
+    /** The fake answers with no headers. */
+    getResponseHeader(_name: string): string | null {
+      return null;
+    }
+
     setRequestHeader(name: string, value: string): void {
       this.headers[name] = value;
     }

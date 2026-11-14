@@ -6,11 +6,15 @@ import "./ui/base.css";
 import "./map/maplibreWorker.js";
 import "./map/tileProtocol.js";
 import { App } from "./App.js";
+import { watchUncaughtErrors } from "./api/failures.js";
 import { captureEmailLinkToken } from "./features/account/emailLink.js";
 
 // Before anything else can read or copy the address: an emailed link's token
 // leaves the address bar at once.
 captureEmailLinkToken();
+
+// Errors nothing caught are kept in memory for a problem report, and sent nowhere until the person reports.
+watchUncaughtErrors(window);
 
 // Fixture mode has no backend and no real draft savers, so the end-to-end
 // tests get a stand-in kind of draft to prove the machinery with.

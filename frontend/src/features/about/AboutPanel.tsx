@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { GUIDE_PATH } from "../guide/GuidePanel.js";
 import { NotFoundPanel, useDocumentTitle } from "../placeholders.js";
+import { ISSUES_URL, SOURCE_URL, shortCommit } from "../problem/repository.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { Credits } from "./Credits.js";
 import { minimumAge } from "./facts.js";
@@ -129,7 +130,27 @@ export function AboutPanel({ meta }: { meta: Meta }) {
           <Credits meta={meta} />
         </section>
 
-        <p className="fc-about__muted">Version {meta.app.version}</p>
+        <section className="fc-guide__section" aria-labelledby="about-code">
+          <h3 className="fc-guide__heading" id="about-code">
+            The code
+          </h3>
+          <p>
+            {name}'s code is free software under the GNU Affero General Public License, version 3. You can read{" "}
+            <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer">
+              the source code
+            </a>{" "}
+            and{" "}
+            <a href={ISSUES_URL} target="_blank" rel="noopener noreferrer">
+              the list of known problems
+            </a>{" "}
+            on GitHub.
+          </p>
+        </section>
+
+        <p className="fc-about__muted">
+          Version {meta.app.version}
+          {meta.app.commit ? `, commit ${shortCommit(meta.app.commit)}` : null}
+        </p>
       </div>
     </PanelFrame>
   );
