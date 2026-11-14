@@ -28,7 +28,7 @@ cd backend && uv run pytest -q tests/infra tests/test_config.py tests/test_stora
 fly apps list --org openantiquity
 # Expect: openantiquity and openantiquity-jobs alone
 fly machine list --app openantiquity
-# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit 170f381 or later
+# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit 0eab403 or later
 fly ips list --app openantiquity
 # Expect: the private address, the shared IPv4 address 66.241.124.216 and the IPv6 address 2a09:8280:1::1fe:8e38:0
 fly machine list --app openantiquity-jobs
@@ -37,7 +37,7 @@ fly mpg list --org openantiquity
 # Expect: the cluster openantiquity, d2gznoqz2n8opkm8, ready, attached to both apps
 fly storage list --org openantiquity
 # Expect: openantiquity-elevation, openantiquity-cache and openantiquity-photos
-uv run infra/fly_jobs.py --commit 770cadce6433294ac401290e65457194dd7bc421 run fieldclub-terrain info
+uv run infra/fly_jobs.py --commit 0eab403704ba6a8ba226634ea516ce7e9c802d1c run fieldclub-terrain info
 fly logs --app openantiquity-jobs --no-tail | grep -e mirrored -e overview
 # Expect: mirrored 5877 tiles (100.00%), and overview c2a8a0e49f2f, 5877 tiles
 ```
@@ -67,12 +67,13 @@ The last pair names the jobs image that exists. `fly_jobs.py` looks for the imag
 | `d8f42e0` | Large records passed over, and pages that arrive once | Frontend only |
 | `416f8f7` | Towns named again, Multi-direction shade as the view the map opens on, and a linked record that opens its source | A record of a source with no page for each record is served with the address of the viewer that holds its material |
 | `d82679f` | Read a stored class this version has no name for as "Not sure" | Decision 0035, released by itself. The schema step now only widens a vocabulary's check, so going back to this commit or a later one doesn't narrow one. Both apps ran it before the next release |
-| `770cadc` | A "Building or ruin" class | The commit the hourly machine runs since 2026-11-13. Its release added the value to the three class checks |
+| `770cadc` | A "Building or ruin" class | Its release added the value to the three class checks |
 | `ac70989` | Zoom in to 22, and a right-click left alone while a tool has the map | Frontend only |
 | `3fd51cb` | An unfinished marking kept in sight and asked about, not jumped to | Frontend only |
 | `06bbdc6` | The map puts findings first, and record counts are a switch | Decision 0036. Frontend only. With counts off, no record tile is asked for further out than zoom 12 |
 | `0f16806` | "Change the shape" asks before it discards something unsaved, and focus is left where it has moved to | Frontend only |
-| `170f381` | A link to the code on GitHub at the foot of the rail and under "More" | The commit the web app runs since 2026-11-14. Frontend only |
+| `170f381` | A link to the code on GitHub at the foot of the rail and under "More" | Frontend only |
+| `0eab403` | "Report a problem": a form that shows what it sends, a request id on every answer and log line, and the running commit in `/meta` | The commit both apps run since 2026-11-14. Decision 0037. The hourly machine ran once on it at 04:14 UTC and exited 0. The web app's log lines now come in the app's own format, each with its request's id |
 
 ## Open follow-ups (priority-ordered)
 
@@ -82,7 +83,7 @@ The first refresh of every bulk source from Fly ran on 2026-11-13 from 03:41 to 
 
 Commit `7175a31` keeps the lock's connection in use, and the hourly machine has run an image with it since that day. Both sources were then run by hand on that image and completed, in 54 and 56 minutes. Neither run lasted the 62 minutes at which a lock's connection was seen closed, so they don't show the fix by themselves. The 78-minute test in the runbook does, and no run of over an hour has completed on Fly yet.
 
-The two fall due again at the 03:41 UTC refresh of 2026-11-21, with the other sources refreshed weekly. Read that night with `fly logs --app openantiquity-jobs`, or ask the database for the runs. To run a source by hand: `uv run infra/fly_jobs.py --commit 770cadce6433294ac401290e65457194dd7bc421 ingest <key>`.
+The two fall due again at the 03:41 UTC refresh of 2026-11-21, with the other sources refreshed weekly. Read that night with `fly logs --app openantiquity-jobs`, or ask the database for the runs. To run a source by hand: `uv run infra/fly_jobs.py --commit 0eab403704ba6a8ba226634ea516ce7e9c802d1c ingest <key>`.
 
 Still to look at: how much of the 10 GB volume the downloads took. `fly volumes list` doesn't say, so it needs `df` from a machine with the volume mounted.
 

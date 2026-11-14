@@ -1,6 +1,6 @@
 # Plan — Report a problem: a button that captures what a fix needs
 
-**Status:** Active. WS1 and WS2 are built on the branch `feat/report-a-problem` and not yet deployed. WS3 hasn't started.
+**Status:** Active. WS1 and WS2 are live since 2026-11-14, from commit `0eab403`. WS3 hasn't started.
 
 ## Goal
 
@@ -25,7 +25,7 @@ Fly keeps only a short log. On 2026-11-12, when the owner reported that "Save fi
 
 ### WS1 — What a report needs from the app
 
-**Status:** Built on 2026-11-14, on `feat/report-a-problem`, not yet deployed.
+**Status:** Live since 2026-11-14. Checked on the live site: `/meta` gave the deployed commit, every answer tried carried a request id, and the log's lines for those requests carried the same ids.
 
 What was built:
 
@@ -50,7 +50,7 @@ The groundwork, useful to anyone debugging whether or not the button exists.
 
 ### WS2 — The button and the prefilled issue
 
-**Status:** Built on 2026-11-14, on `feat/report-a-problem`, not yet deployed. The email link waits for `FIELDCLUB_REPORT_EMAIL` to be set once the forward works.
+**Status:** Live since 2026-11-14. Checked on the live site, signed out: the form opened from the about page, showed the running commit, and with the position added gave a four-figure square and no coordinates. The email link waits for `FIELDCLUB_REPORT_EMAIL` to be set once the forward works.
 
 What was built: `features/problem/`, with the button on the About page and in every `EmptyState` error, the form described in `docs/UI.md`, the tick box that adds the one-kilometre square the map was centred on and the zoom, which no page showing a finding, a draft or an investigation offers (`report.ts`, `offersPosition`), and `privacy.test.tsx`, which builds the report by every route beside a protected finding, signed out and as a member who sees it exactly, and searches it. The 401 that says nobody is signed in, which the page expects, and aborted requests aren't kept. An endpoint the interface was once built ahead of answering as though it were missing is kept, since every such endpoint exists now and that answer is a fault. A section's own one-line failure inside a page, such as "The discussion couldn't be loaded", doesn't offer the button, and neither does a failure toast.
 
