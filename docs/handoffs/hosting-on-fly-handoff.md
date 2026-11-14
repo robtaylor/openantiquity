@@ -28,7 +28,7 @@ cd backend && uv run pytest -q tests/infra tests/test_config.py tests/test_stora
 fly apps list --org openantiquity
 # Expect: openantiquity and openantiquity-jobs alone
 fly machine list --app openantiquity
-# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit 64fbb0b or later
+# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit 464d7ef or later
 fly ips list --app openantiquity
 # Expect: the private address, the shared IPv4 address 66.241.124.216 and the IPv6 address 2a09:8280:1::1fe:8e38:0
 fly machine list --app openantiquity-jobs
@@ -37,7 +37,7 @@ fly mpg list --org openantiquity
 # Expect: the cluster openantiquity, d2gznoqz2n8opkm8, ready, attached to both apps
 fly storage list --org openantiquity
 # Expect: openantiquity-elevation, openantiquity-cache and openantiquity-photos
-uv run infra/fly_jobs.py --commit 64fbb0b975b08b59221f2f75e283e4a4fa12a146 run fieldclub-terrain info
+uv run infra/fly_jobs.py --commit 464d7ef8d92a0d0e7094d813df9c957a0c7b332e run fieldclub-terrain info
 fly logs --app openantiquity-jobs --no-tail | grep -e mirrored -e overview
 # Expect: mirrored 5877 tiles (100.00%), and overview c2a8a0e49f2f, 5877 tiles
 ```
@@ -74,7 +74,8 @@ The last pair names the jobs image that exists. `fly_jobs.py` looks for the imag
 | `0f16806` | "Change the shape" asks before it discards something unsaved, and focus is left where it has moved to | Frontend only |
 | `170f381` | A link to the code on GitHub at the foot of the rail and under "More" | Frontend only |
 | `0eab403` | "Report a problem": a form that shows what it sends, a request id on every answer and log line, and the running commit in `/meta` | Decision 0037. The web app's log lines now come in the app's own format, each with its request's id |
-| `64fbb0b` | The moderation log leaves out a row a later version wrote | The commit both apps run since 2026-11-14. The first step of lines phase 2, released by itself ahead of the action that phase adds. The hourly machine ran once on it at 04:52 UTC and exited 0 |
+| `64fbb0b` | The moderation log leaves out a row a later version wrote | The first step of lines phase 2, released by itself ahead of the action that phase adds |
+| `464d7ef` | Lines phase 2, the backend: keepers, suggestions and an admin's removal of an orphaned marking | The commit both apps run since 2026-11-14. Decisions 0038 to 0041. Its release added three columns to `findings` and the table `shape_suggestions`, and widened two vocabulary checks. The step was rehearsed first on a database built by the version before, and took half a second. The interface for it isn't released yet, so nobody is a keeper but a finder and no suggestion exists. The hourly machine ran once on it at 07:45 UTC and exited 0 |
 
 ## Open follow-ups (priority-ordered)
 
@@ -84,7 +85,7 @@ The first refresh of every bulk source from Fly ran on 2026-11-13 from 03:41 to 
 
 Commit `7175a31` keeps the lock's connection in use, and the hourly machine has run an image with it since that day. Both sources were then run by hand on that image and completed, in 54 and 56 minutes. Neither run lasted the 62 minutes at which a lock's connection was seen closed, so they don't show the fix by themselves. The 78-minute test in the runbook does, and no run of over an hour has completed on Fly yet.
 
-The two fall due again at the 03:41 UTC refresh of 2026-11-21, with the other sources refreshed weekly. Read that night with `fly logs --app openantiquity-jobs`, or ask the database for the runs. To run a source by hand: `uv run infra/fly_jobs.py --commit 64fbb0b975b08b59221f2f75e283e4a4fa12a146 ingest <key>`.
+The two fall due again at the 03:41 UTC refresh of 2026-11-21, with the other sources refreshed weekly. Read that night with `fly logs --app openantiquity-jobs`, or ask the database for the runs. To run a source by hand: `uv run infra/fly_jobs.py --commit 464d7ef8d92a0d0e7094d813df9c957a0c7b332e ingest <key>`.
 
 Still to look at: how much of the 10 GB volume the downloads took. `fly volumes list` doesn't say, so it needs `df` from a machine with the volume mounted.
 
@@ -150,6 +151,12 @@ How long Fly keeps backups wasn't found, and no restore has been tried. `fly mpg
 - The outline of the island of Ireland is drawn twice, in `services/gridref.py` and in the frontend's `map/gridref.ts`, and the two differ by a few hundredths of a degree along edges that look like open sea. A report's square and a protected finding's public square should come from one outline, with a test that sets them side by side.
 - Nothing fails when `frontend/src/api/schema.d.ts` is stale against the backend. `paths.ts` has a test now. A step in CI that runs `pnpm gen:api` and fails on a difference would cover both.
 - Finding duplicates among reports is the plan's third workstream, and waits on whether GitHub's own suggestions are on for the repository.
+
+### 12. What lines phase 2 left for hosting (minutes each)
+
+- Going back a version from `464d7ef` or later: the version before doesn't know keepers, so a finder could again edit a marking they handed on and a keeper who isn't the finder couldn't. Nothing is sent to anyone who shouldn't see it, and the earlier version's schema step leaves the new columns and table alone. This was rehearsed on a scratch database on 2026-11-14.
+- The hourly limits on suggestions and offers are counted on each machine, so with three machines serving the real ceiling is three times the figure.
+- The owner's answer on whether a keeper who isn't the finder may give a second look is still open in `docs/plans/lines-phase-2.md`. It is built as "no".
 
 ## Critical context
 
