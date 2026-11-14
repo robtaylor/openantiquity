@@ -1,0 +1,49 @@
+/* The report form: wider than other dialogs, so the text that will be sent can be read. */
+.fc-dialog.fc-problem {
+  width: min(640px, calc(100vw - 24px));
+}
+
+.fc-problem__body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.fc-problem textarea.fc-input {
+  height: auto;
+  padding: 8px 12px;
+  resize: vertical;
+}
+
+.fc-problem__text {
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre;
+  overflow: auto;
+}
+
+.fc-problem__check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.fc-problem__check input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.fc-problem__check:has(input:disabled) {
+  color: var(--text-muted);
+}
+
+.fc-problem__note {
+  padding: 10px 12px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}

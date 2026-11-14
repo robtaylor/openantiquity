@@ -31,6 +31,7 @@ import { Settings, showArea } from "./Settings.js";
 import { isNotFound, type Notebook, useInvestigation, useItems, useMembers, useNotebook } from "./useInvestigation.js";
 import { useLiveInvestigations } from "./useLiveInvestigations.js";
 import "./investigations.css";
+import { useKeepsPlaceBack } from "../problem/keptBack.js";
 
 function EditDialog({
   detail,
@@ -267,6 +268,7 @@ export function InvestigationPage({ meta }: { meta: Meta }) {
   const panelKey = investigationPath(id);
   const detail = query.data;
   useDocumentTitle(detail?.title ?? "Investigation");
+  useKeepsPlaceBack(detail?.places_kept_back);
   useLiveInvestigations();
 
   let body: ReactNode;

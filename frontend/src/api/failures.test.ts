@@ -176,6 +176,11 @@ describe("an uncaught error", () => {
     expect(JSON.stringify(keptFailures())).not.toContain("at Object.");
   });
 
+  it("loses any address and anything shaped like a public id", () => {
+    keepError("No finding KQXMBW at /f/KQXMBW or https://openantiquity.org/f/KQXMBW, for RIDGE");
+    expect(keptFailures()[0]).toMatchObject({ message: "No finding # at # or # for RIDGE" });
+  });
+
   it("is kept from an unhandled rejection, but not twice for a failed request", () => {
     const stop = watchUncaughtErrors(window);
     try {

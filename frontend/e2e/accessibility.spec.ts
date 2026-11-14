@@ -219,6 +219,51 @@ test("reaches the switch for record counts by keyboard, names it, explains it, a
   await expect(page).toHaveURL(/&rc=1/);
 });
 
+test("reaches Report a problem and every control of its form by keyboard, each with a focus ring", async ({
+  page,
+  viewport,
+}) => {
+  await openMap(page, "/about");
+  const about = page.getByRole("complementary", { name: "About OpenAntiquity" });
+  const button = about.getByRole("button", { name: "Report a problem" });
+  await button.focus();
+  expect(await ringOf(page)).toEqual(HAS_RING);
+  await page.keyboard.press("Enter");
+
+  const dialog = page.getByRole("dialog", { name: "Report a problem" });
+  await expect(dialog.getByRole("heading", { name: "Report a problem" })).toBeFocused();
+  // Tab goes through the controls in order, then back round to the first.
+  const controls = [
+    dialog.getByRole("button", { name: "Close" }),
+    dialog.getByLabel("What were you doing, and what went wrong?"),
+    dialog.getByLabel("Add where the map is looking"),
+    dialog.getByLabel("What will be sent"),
+    dialog.getByRole("button", { name: "Copy the details" }),
+    dialog.getByRole("link", { name: "Open a GitHub issue" }),
+    dialog.getByRole("button", { name: "Close" }),
+  ];
+  for (const control of controls) {
+    await page.keyboard.press("Tab");
+    await expect(control).toBeFocused();
+    expect(await ringOf(page), `focus ring on ${await describeFocus(page)}`).toEqual(HAS_RING);
+  }
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("The map went white.");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Space");
+  await expect(dialog.getByLabel("Add where the map is looking")).toBeChecked();
+  await expect(dialog.getByLabel("What will be sent")).toHaveValue(/The map went white\.[\s\S]*Where the map was: -?\d/);
+
+  // The form fits the window, and nothing in it scrolls the page sideways.
+  const box = await boxOf(dialog);
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(viewport?.width ?? 0);
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(button).toBeFocused();
+});
+
 test.describe("forced colours", () => {
   test.skip(({ viewport }) => (viewport?.width ?? 0) < 720, "one layout is enough for this");
   test.use({ forcedColors: "active" });

@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { GUIDE_PATH } from "../guide/GuidePanel.js";
 import { NotFoundPanel, useDocumentTitle } from "../placeholders.js";
+import { ReportProblemButton } from "../problem/ReportProblem.js";
 import { ISSUES_URL, SOURCE_URL, shortCommit } from "../problem/repository.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { Credits } from "./Credits.js";
@@ -145,6 +146,17 @@ export function AboutPanel({ meta }: { meta: Meta }) {
             </a>{" "}
             on GitHub.
           </p>
+        </section>
+
+        <section className="fc-guide__section" aria-labelledby="about-problem">
+          <h3 className="fc-guide__heading" id="about-problem">
+            When something goes wrong
+          </h3>
+          <p>
+            Tell us what you were doing. The form shows everything that goes with your report before anything is sent,
+            and you choose whether it goes as a GitHub issue or another way.
+          </p>
+          <ReportProblemButton />
         </section>
 
         <p className="fc-about__muted">

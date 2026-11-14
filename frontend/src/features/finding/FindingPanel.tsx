@@ -30,6 +30,7 @@ import { FollowUpTimeline } from "./timeline/FollowUpTimeline.js";
 import type { FindingDetail, Observation, Reveal } from "./types.js";
 import { isNotFound, useApplyFinding, useFinding, useOptimisticFinding } from "./useFinding.js";
 import "./finding.css";
+import { useKeepsPlaceBack } from "../problem/keptBack.js";
 
 function BackToExplore() {
   return (
@@ -238,6 +239,7 @@ export function FindingPanel({ meta }: { meta: Meta }) {
   const { id = "" } = useParams();
   const query = useFinding(id);
   const panelKey = `/f/${id}`;
+  useKeepsPlaceBack(query.data?.location.obscured);
   useDocumentTitle(query.data?.title ?? "Finding");
 
   if (query.data) {

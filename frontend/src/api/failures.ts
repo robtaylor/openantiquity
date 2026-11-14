@@ -8,8 +8,8 @@
  * method, its path as a pattern with every id and number written as a
  * parameter, its status, its error code and the request id the server gave
  * it. It never keeps a body, a query string, a header or a message. An
- * uncaught error keeps its message, with every word that holds a figure
- * taken out and cut short. Neither keeps a stack trace.
+ * uncaught error keeps its message, with every word that holds a figure or
+ * a slash, and every word shaped like a public id, taken out, and cut short. Neither keeps a stack trace.
  */
 
 import type { ApiError } from "./client.js";
@@ -107,13 +107,17 @@ export function keepRequestFailure(method: string, path: string, error: ApiError
   });
 }
 
+/** A word that holds a figure or a slash: an address, a path, a tile's numbers, coordinates or a grid reference. */
+const PLACE_LIKE = /\S*[\d/]\S*/g;
+/** A word shaped like a public id: six letters and figures of Crockford's base32, such as "KQXMBW". */
+const ID_LIKE = /\b[0-9A-HJKMNP-TV-Z]{6}\b/g;
+
 /**
- * A message with every word that holds a figure written as "#", cut to
- * `MESSAGE_MAX`. An address, a tile's numbers, coordinates, a grid reference
- * and an id all hold figures, and any of them could say where someone was.
+ * A message with every word that could say where someone was or what they
+ * were looking at written as "#", cut to `MESSAGE_MAX`.
  */
 function scrubbed(message: string): string {
-  return message.replace(/\S*\d\S*/g, "#").slice(0, MESSAGE_MAX);
+  return message.replace(PLACE_LIKE, "#").replace(ID_LIKE, "#").slice(0, MESSAGE_MAX);
 }
 
 /** Keep an error nothing caught, by its message alone. */
