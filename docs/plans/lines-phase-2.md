@@ -1,6 +1,6 @@
 # Plan — Lines and shapes, phase 2: suggestions, handing a marking on, and removing orphaned markings
 
-**Status:** Proposed.
+**Status:** Active. Every workstream is live since 2026-11-14. One question for the owner is open, under "Open questions for the owner".
 
 ## Goal
 
@@ -191,7 +191,7 @@ Build in this order. Each step is test first, against real PostGIS.
 
 ### WS-A — Backend
 
-**Status:** Built on branch `feat/lines-phase-2-backend`, 2026-11-14, not deployed. Step 1 ships alone first.
+**Status:** Live since 2026-11-14. Step 1 was released by itself from `64fbb0b`, and steps 2 to 6 from `464d7ef`.
 
 1. **Moderation action kinds passed over.** The log list leaves out a kind it doesn't know. Deployed alone, before step 6. Test: a row with an unknown action doesn't break `GET /mod/actions`. Built on 2026-11-14: `moderation.list_actions` leaves out, in its query, a row whose action or kind of target has no name here, and `tests/moderation/test_the_log_passes_over_later_actions.py` proves it with the pages still full.
 2. **Moving the tail of an edit.** `findings.apply_shape_change` takes today's shape code out of `update_finding` unchanged: `change_shape`, the reassessment, `shape_extended`, and `activity.relocate` when the anchor moved. Exit: the whole existing suite passes with no test edited. Built on 2026-11-14: `findings.apply_shape_change`, and the suite passed unedited. After review, a default title follows the anchor there, so an accepted suggestion and a removal take it to the new square as an edit does.
@@ -211,7 +211,7 @@ Build in this order. Each step is test first, against real PostGIS.
 
 ### WS-B — Frontend
 
-**Status:** Built on branch `feat/lines-phase-2-frontend`, 2026-11-14, not deployed.
+**Status:** Live since 2026-11-14, from `4aba94d`.
 
 1. `pnpm gen:api` once WS-A step 5 lands. Done with WS-A.
 2. **Byline.** `FindingHead.tsx` reads "Found by X on date" and adds "Kept by Y" when they differ. `NotYours` says only the keeper changes the shape and offers "Suggest a change". Built: `features/finding/Keeping.test.tsx` ("the byline", "the tool's address for someone who isn't the keeper"). The editing key names its kind, `finding:` or `suggest:`.
@@ -224,7 +224,7 @@ Build in this order. Each step is test first, against real PostGIS.
 
 ### WS-C — End-to-end checks and documents
 
-**Status:** Built on branch `feat/lines-phase-2-frontend`, 2026-11-14, not deployed. `frontend/e2e/keeping.spec.ts` covers the same flows in fixture mode on both projects, and `frontend/e2e/accessibility.spec.ts` reaches the new controls by keyboard.
+**Status:** Live since 2026-11-14, from `4aba94d`. `frontend/e2e/keeping.spec.ts` covers the same flows in fixture mode on both projects, and `frontend/e2e/accessibility.spec.ts` reaches the new controls by keyboard.
 
 1. `frontend/e2e-full/suggestions.spec.ts`: a second member suggests an extension, the keeper accepts it, the timeline names the suggester; a hand-over is offered and taken up; a signed-out reader of a protected line sees no suggestion.
 2. Documents: the findings area doc ("Changing a shape", "Constraints", "Implementation status"), `docs/ARCHITECTURE.md` routes and codes, `docs/UI.md`, `CHANGELOG.md` `[Unreleased]`, and the records below. `uv run docs/scripts/doctool.py lint` passes.
@@ -233,11 +233,11 @@ Build in this order. Each step is test first, against real PostGIS.
 
 ## Phase exit criteria
 
-- [ ] A member who isn't the keeper can suggest a change, and only the keeper can accept or decline it.
-- [ ] A marking can be handed on, and "found by" never changes.
-- [ ] An admin can take back an orphaned marking's shape, and nothing else on the finding changes.
-- [ ] No pending suggestion reaches a signed-out reader of any finding.
-- [ ] All workstreams shipped or deferred to a successor plan.
+- [x] A member who isn't the keeper can suggest a change, and only the keeper can accept or decline it.
+- [x] A marking can be handed on, and "found by" never changes.
+- [x] An admin can take back an orphaned marking's shape, and nothing else on the finding changes.
+- [x] No pending suggestion reaches a signed-out reader of any finding.
+- [x] All workstreams shipped or deferred to a successor plan.
 
 ## Decisions written
 

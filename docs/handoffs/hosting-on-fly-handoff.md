@@ -28,7 +28,7 @@ cd backend && uv run pytest -q tests/infra tests/test_config.py tests/test_stora
 fly apps list --org openantiquity
 # Expect: openantiquity and openantiquity-jobs alone
 fly machine list --app openantiquity
-# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit 464d7ef or later
+# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit 4aba94d or later
 fly ips list --app openantiquity
 # Expect: the private address, the shared IPv4 address 66.241.124.216 and the IPv6 address 2a09:8280:1::1fe:8e38:0
 fly machine list --app openantiquity-jobs
@@ -75,7 +75,8 @@ The last pair names the jobs image that exists. `fly_jobs.py` looks for the imag
 | `170f381` | A link to the code on GitHub at the foot of the rail and under "More" | Frontend only |
 | `0eab403` | "Report a problem": a form that shows what it sends, a request id on every answer and log line, and the running commit in `/meta` | Decision 0037. The web app's log lines now come in the app's own format, each with its request's id |
 | `64fbb0b` | The moderation log leaves out a row a later version wrote | The first step of lines phase 2, released by itself ahead of the action that phase adds |
-| `464d7ef` | Lines phase 2, the backend: keepers, suggestions and an admin's removal of an orphaned marking | The commit both apps run since 2026-11-14. Decisions 0038 to 0041. Its release added three columns to `findings` and the table `shape_suggestions`, and widened two vocabulary checks. The step was rehearsed first on a database built by the version before, and took half a second. The interface for it isn't released yet, so nobody is a keeper but a finder and no suggestion exists. The hourly machine ran once on it at 07:45 UTC and exited 0 |
+| `464d7ef` | Lines phase 2, the backend: keepers, suggestions and an admin's removal of an orphaned marking | The commit the hourly machine runs since 2026-11-14. Decisions 0038 to 0041. Its release added three columns to `findings` and the table `shape_suggestions`, and widened two vocabulary checks. The step was rehearsed first on a database built by the version before, and took half a second. The interface for it isn't released yet, so nobody is a keeper but a finder and no suggestion exists. The hourly machine ran once on it at 07:45 UTC and exited 0 |
+| `4aba94d` | Lines phase 2, the interface: the keeper's byline, suggesting and deciding a change, handing a marking on, and the admins' list and removal | The commit the web app runs since 2026-11-14. Decision 0042: nothing drawn and not sent is replaced without asking, which also changed "Change the shape". Its one backend change is a comment, so the jobs image wasn't rebuilt |
 
 ## Open follow-ups (priority-ordered)
 
