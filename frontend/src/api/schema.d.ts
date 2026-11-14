@@ -2221,6 +2221,8 @@ export interface components {
         };
         /** AppInfo */
         AppInfo: {
+            /** Commit */
+            commit: string | null;
             /** Contact */
             contact: string | null;
             /** Contribution Licence */
@@ -2229,6 +2231,8 @@ export interface components {
             contribution_licence_url: string;
             /** Name */
             name: string;
+            /** Report Email */
+            report_email: string | null;
             /** Version */
             version: string;
         };
@@ -3286,6 +3290,8 @@ export interface components {
             /** Notes */
             notes: string | null;
             owner: components["schemas"]["PublicUser"];
+            /** Places Kept Back */
+            places_kept_back: boolean;
             /** Public Id */
             public_id: string;
             /** Summary */

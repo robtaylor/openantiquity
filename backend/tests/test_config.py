@@ -564,8 +564,17 @@ def test_env_example_documents_every_setting() -> None:
         for line in text.splitlines()
         if line.lstrip("# ").startswith("FIELDCLUB_") and "=" in line
     }
-    expected = {f"FIELDCLUB_{name.upper()}" for name in Settings.model_fields} | {"FIELDCLUB_ENV_FILE"}
-    assert documented == expected
+    # A setting read from a platform's own variable alone, such as Fly's
+    # FLY_IMAGE_REF, is documented under that name.
+    own_names = {
+        name: field.validation_alias
+        for name, field in Settings.model_fields.items()
+        if isinstance(field.validation_alias, str)
+    }
+    expected = {f"FIELDCLUB_{name.upper()}" for name in Settings.model_fields if name not in own_names}
+    assert documented == expected | {"FIELDCLUB_ENV_FILE"}
+    lines = {line.lstrip("# ").split("=", 1)[0] for line in text.splitlines() if "=" in line}
+    assert set(own_names.values()) <= lines
 
 
 def test_env_example_documents_every_bulk_supply_setting() -> None:
@@ -667,3 +676,61 @@ def test_one_address_can_hold_at_most_a_quarter_of_the_streams(clean_env: pytest
         settings()
     clean_env.setenv("FIELDCLUB_EVENTS_MAX_PER_ADDRESS", "4")
     assert settings().events_max_per_address == 4
+
+
+# --- The commit the build was made from ------------------------------------------------
+
+COMMIT = "0123456789abcdef0123456789abcdef01234567"
+DIGEST = "sha256:" + "ab" * 32
+
+
+@pytest.mark.parametrize(
+    "image",
+    [
+        f"registry.fly.io/openantiquity:{COMMIT}@{DIGEST}",
+        f"registry.fly.io/openantiquity-jobs:{COMMIT}@{DIGEST}",
+    ],
+)
+def test_the_commit_is_read_from_the_image_fly_started(clean_env: pytest.MonkeyPatch, image: str) -> None:
+    clean_env.setenv("FLY_IMAGE_REF", image)
+    assert settings().commit == COMMIT
+
+
+@pytest.mark.parametrize(
+    "image",
+    [
+        "",
+        "registry.fly.io/openantiquity:deployment-01JABCDEFGHJKMNPQRSTVWXYZ0",
+        f"registry.fly.io/openantiquity:{COMMIT[:7]}@{DIGEST}",
+        f"registry.fly.io/openantiquity:{COMMIT.upper()}@{DIGEST}",
+        f"registry.fly.io/openantiquity@{DIGEST}",
+        f"elsewhere.example/openantiquity:{COMMIT}@{DIGEST}",
+        f"registry.fly.io/openantiquity:{COMMIT}@{DIGEST} and more",
+        "not an image at all",
+    ],
+)
+def test_any_other_image_reference_gives_no_commit(clean_env: pytest.MonkeyPatch, image: str) -> None:
+    clean_env.setenv("FLY_IMAGE_REF", image)
+    assert settings().commit is None
+
+
+def test_without_fly_s_variable_there_is_no_commit(clean_env: pytest.MonkeyPatch) -> None:
+    assert settings().commit is None
+
+
+def test_the_report_address_is_unset_by_default(clean_env: pytest.MonkeyPatch) -> None:
+    assert settings().report_email is None
+
+
+def test_the_report_address_is_trimmed(clean_env: pytest.MonkeyPatch) -> None:
+    clean_env.setenv("FIELDCLUB_REPORT_EMAIL", "  reports@openantiquity.example ")
+    assert settings().report_email == "reports@openantiquity.example"
+
+
+@pytest.mark.parametrize(
+    "value", ["not-an-address", "two@@example.org", "https://openantiquity.example/help"]
+)
+def test_a_report_address_that_isn_t_one_is_refused(clean_env: pytest.MonkeyPatch, value: str) -> None:
+    clean_env.setenv("FIELDCLUB_REPORT_EMAIL", value)
+    with pytest.raises(ValueError, match="FIELDCLUB_REPORT_EMAIL"):
+        settings()

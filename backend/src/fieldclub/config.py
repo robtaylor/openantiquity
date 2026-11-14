@@ -80,6 +80,25 @@ def on_fly() -> bool:
     return all(os.environ.get(name) for name in _FLY_MARKERS)
 
 
+# What Fly sets on each machine to the image it started from:
+# `registry.fly.io/<app>:<tag>@sha256:<digest>`. The deploy tags the image
+# with the 40-character commit it was built from (`--image-label`, in
+# `.github/workflows/deploy.yml` and `infra/fly_jobs.py`), so the commit is
+# read from there and no build step has to pass it in.
+_FLY_IMAGE = re.compile(r"registry\.fly\.io/[a-z0-9-]+:(?P<commit>[0-9a-f]{40})@sha256:[0-9a-f]{64}")
+
+
+def commit_from_image(reference: str) -> str | None:
+    """The commit in an image reference Fly gives, or None for any other form, such as a deploy's own tag."""
+    found = _FLY_IMAGE.fullmatch(reference.strip())
+    return found.group("commit") if found else None
+
+
+# Enough to catch a value that isn't an email address at all. Whether the
+# address takes mail is the owner's to check.
+_EMAIL = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+
+
 # SQLAlchemy's own pattern for a URL (`sqlalchemy.engine.url._parse_url` in
 # 2.1), so the host found here is the host it connects to, whatever the
 # password holds. A test checks the two agree.
@@ -281,6 +300,14 @@ class Settings(BaseSettings):
     # so uploads and caches can have different lifecycles. Others use s3_bucket.
     s3_namespace_buckets: dict[str, str] = {}
 
+    # Fly's own variable, not a FIELDCLUB_ one: Fly sets it on every machine
+    # to the image the machine started from, and the commit is read from it
+    # (`commit`). Unset anywhere but on Fly.
+    fly_image_ref: str = Field(default="", validation_alias="FLY_IMAGE_REF")
+    # Where a problem report may be emailed. Unset, the report form offers
+    # GitHub and copying the text, and no email link.
+    report_email: str | None = None
+
     # Outbound HTTP
     contact: str = ""
     user_agent: str | None = None
@@ -349,6 +376,16 @@ class Settings(BaseSettings):
         if isinstance(data, dict) and "database_url" not in data and attached and on_fly():
             return {**data, "database_url": attached}
         return data
+
+    @field_validator("report_email")
+    @classmethod
+    def _report_email(cls, value: str | None) -> str | None:
+        value = (value or "").strip()
+        if not value:
+            return None
+        if not _EMAIL.fullmatch(value):
+            raise ValueError("FIELDCLUB_REPORT_EMAIL must be an email address, or unset.")
+        return value
 
     @field_validator("database_url")
     @classmethod
@@ -512,6 +549,11 @@ class Settings(BaseSettings):
         if self.auto_create_schema is not None:
             return self.auto_create_schema
         return self.is_dev
+
+    @property
+    def commit(self) -> str | None:
+        """The commit the running image was built from, or None when it can't be told."""
+        return commit_from_image(self.fly_image_ref)
 
     @property
     def outbound_user_agent(self) -> str:

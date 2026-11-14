@@ -45,6 +45,8 @@ def test_app(meta: dict) -> None:
         "contribution_licence": "CC BY 4.0",
         "contribution_licence_url": "https://creativecommons.org/licenses/by/4.0/",
         "contact": None,
+        "commit": None,
+        "report_email": None,
     }
 
 
@@ -53,6 +55,22 @@ def test_app_gives_the_public_contact_from_settings(client: TestClient, env: Cal
     assert client.get("/api/v1/meta").json()["app"]["contact"] == "hello@openantiquity.example"
     env(CONTACT="   ")
     assert client.get("/api/v1/meta").json()["app"]["contact"] is None
+
+
+def test_app_gives_the_commit_of_the_running_image(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, env: Callable[..., None]
+) -> None:
+    commit = "0123456789abcdef0123456789abcdef01234567"
+    monkeypatch.setenv("FLY_IMAGE_REF", f"registry.fly.io/openantiquity:{commit}@sha256:{'ab' * 32}")
+    env()
+    assert client.get("/api/v1/meta").json()["app"]["commit"] == commit
+
+
+def test_app_gives_the_address_for_problem_reports_only_once_it_is_set(
+    client: TestClient, env: Callable[..., None]
+) -> None:
+    env(REPORT_EMAIL="reports@openantiquity.example")
+    assert client.get("/api/v1/meta").json()["app"]["report_email"] == "reports@openantiquity.example"
 
 
 def test_the_contribution_licence_address_is_the_one_the_layers_use_for_it() -> None:

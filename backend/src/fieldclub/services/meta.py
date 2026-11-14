@@ -195,6 +195,8 @@ def build_meta(
             contribution_licence=vocab.CONTRIBUTION_LICENCE,
             contribution_licence_url=vocab.CONTRIBUTION_LICENCE_URL,
             contact=settings.contact.strip() or None,
+            commit=settings.commit,
+            report_email=settings.report_email,
         ),
         auth=schema.AuthInfo(
             providers=[

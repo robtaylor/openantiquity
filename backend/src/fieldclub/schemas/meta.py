@@ -315,6 +315,12 @@ class AppInfo(BaseModel):
     # Who to write to about this service (`FIELDCLUB_CONTACT`): an email
     # address or a web address. Null when it isn't set.
     contact: str | None
+    # The commit the running build was made from, 40 hex digits, or null
+    # when it can't be told, as anywhere but on Fly.
+    commit: str | None
+    # Where a problem report may be emailed (`FIELDCLUB_REPORT_EMAIL`), or
+    # null when it isn't set, and then the report form offers no email link.
+    report_email: str | None
 
 
 class Provider(BaseModel):

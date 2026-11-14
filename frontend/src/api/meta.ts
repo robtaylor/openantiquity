@@ -285,6 +285,10 @@ export interface Meta {
      * where it will be given until it appears.
      */
     contact?: string | null;
+    /** The commit the running build was made from, 40 hex digits, or null when the server can't tell. */
+    commit?: string | null;
+    /** Where a problem report may be emailed, or null, and then the report form offers no email link. */
+    report_email?: string | null;
   };
   /** Every provider, in the order the sign-in sheet shows them. Offer only the enabled ones. Saving anything needs an account. */
   auth: {
