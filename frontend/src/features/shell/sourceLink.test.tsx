@@ -2,7 +2,7 @@ import { screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { mapReady, renderShell, setUpShellTests, usePhoneLayout } from "../../test/shellHarness.js";
-import { SOURCE_URL } from "./navigation.js";
+import { SOURCE_URL } from "../problem/repository.js";
 
 vi.mock("maplibre-gl", async () => {
   const fake = await import("../../test/fakeMapLibre.js");

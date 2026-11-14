@@ -6,7 +6,8 @@ import { useDismiss } from "../../ui/useDismiss.js";
 import { AccountModeIcon } from "../account/AccountModeIcon.js";
 import { NotificationCount } from "../notifications/NotificationCount.js";
 import { unreadWords, useUnreadCount } from "../notifications/useNotifications.js";
-import { isModeActive, MODES, REFERENCE, SOURCE_SHORT_LABEL, SOURCE_URL, TAB_BAR_MODES } from "./navigation.js";
+import { SOURCE_URL } from "../problem/repository.js";
+import { isModeActive, MODES, REFERENCE, SOURCE_SHORT_LABEL, TAB_BAR_MODES } from "./navigation.js";
 
 /** The phone tab bar: four modes and "More", which holds the rest. */
 export function TabBar() {

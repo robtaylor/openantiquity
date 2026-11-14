@@ -3,7 +3,8 @@ import { GitHubMark } from "../../ui/GitHubMark.js";
 import { AccountModeIcon } from "../account/AccountModeIcon.js";
 import { NotificationCount } from "../notifications/NotificationCount.js";
 import { unreadWords, useUnreadCount } from "../notifications/useNotifications.js";
-import { isModeActive, MODES, type Mode, REFERENCE, SOURCE_LABEL, SOURCE_NAME, SOURCE_URL } from "./navigation.js";
+import { SOURCE_URL } from "../problem/repository.js";
+import { isModeActive, MODES, type Mode, REFERENCE, SOURCE_LABEL, SOURCE_NAME } from "./navigation.js";
 
 function RailLink({
   mode,
