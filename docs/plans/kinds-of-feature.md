@@ -22,6 +22,7 @@ Someone marking a finding first says what it looks like, as now, and can then sa
 
 - A class for buildings is wanted now: "we also need to add 'civil construction' for 'what it looks like' - e.g. old houses." It is being added as "Building or ruin", ahead of this plan.
 - The list should become a hierarchy: "I'm thinking 'what it looks like' may end up being more of a hierarchical structure, 'building' -> 'civil', 'Barrow'->'Long Barrow', 'Bell Barrow', 'Bowl Barrow'... etc".
+- Kinds use the terms archaeology already has. On 2026-11-14, of this plan's questions: "we should err on the side of standard archeological terms". The terms for each class are being collated from the Thesaurus of Monument Types for him to choose from.
 
 ## Design
 
@@ -39,7 +40,7 @@ Two levels and no more. The thesaurus goes deeper, and someone reading LIDAR rar
 
 Kinds live in `vocab.py` beside the classes, each with an id, a label in plain words, the class it belongs to, and the thesaurus term or terms it stands for. `/meta` serves each class with its kinds. A kind is added when someone needs it, starting with the classes the owner named.
 
-Labels are ours and plain: "House or cottage", not the thesaurus's capitals. The thesaurus term is kept for matching, not for show.
+A kind's label is the standard term, as the thesaurus has it, in ordinary capitals: "Bell barrow", "Farmhouse". Where the thesaurus has no term for something often seen in LIDAR, or two terms that can't be told apart from above, the plan for that class says so and the owner chooses. Each kind's hint says in plain words what tells it from its neighbours on the ground.
 
 ### Marking, and reading
 
@@ -117,8 +118,8 @@ A real-browser test of marking with a kind, the findings area doc, `DESIGN.md`, 
 
 ## Open questions for the owner
 
-1. **Which classes get kinds first, and which kinds?** Recommended: "Round barrow or mound" (bell, bowl, disc, saucer, pond, and "ring ditch" for one ploughed flat) and "Building or ruin" (house or cottage, farm building, chapel or church, mill, other), then others as you meet the need.
-2. **Is a building's kind what it was for, or what it is?** You wrote "building -> civil". In the thesaurus "Civil" is public buildings and a house is "Domestic", and both are functions that LIDAR seldom shows. Recommended: kinds in plain words for what can be recognised, each tied to its thesaurus term behind the scenes.
+1. **Which classes get kinds first, and which kinds?** To be chosen from the collated terms. Recommended to start with "Round barrow or mound" and "Building or ruin", then others as you meet the need.
+2. **Is a building's kind what it was for, or what it is?** Answered in part on 2026-11-14: the standard terms. The thesaurus sorts buildings by what they were for (a house is "Domestic", a public building "Civil"), so a building's kinds will be terms of function such as "Farmhouse" or "Chapel", which LIDAR seldom shows by itself. Whether to offer those, or only the kinds that can be told apart from above, is still to choose once the terms are laid out.
 3. **May we keep the thesaurus's term names?** Its publisher says it is free to use and names no licence. Every outside dataset here needs a `sources` row with its licence. Recommended: ask Historic England's data standards team to confirm the terms, and until they answer keep only the names of the few terms the kinds point to.
 4. **Should a second look ask for the kind?** Recommended: not at first.
 
