@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from fieldclub import security
+from fieldclub import ratelimit, security
 from fieldclub.config import Environment, get_settings
 from fieldclub.main import create_app
 from fieldclub.services import context
@@ -220,13 +220,17 @@ def test_an_answer_that_sets_a_cookie_is_never_stored(client: TestClient) -> Non
 
 
 def test_one_address_can_ask_for_only_so_many_tiles_a_minute(
-    app: FastAPI, client_for: ClientFor, limits_on: None
+    app: FastAPI, client_for: ClientFor, limits_on: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from fieldclub.api import record_tiles
 
+    # The bucket would refill as the test runs, and on a busy machine faster
+    # than the test can ask, so its clock stands still.
+    limiter = ratelimit.get_limiter("record_tiles", record_tiles.TILES_PER_MINUTE, 60)
+    standing = limiter._clock()
+    monkeypatch.setattr(limiter, "_clock", lambda: standing)
     caller = client_for(app)
     caller.headers["X-Forwarded-For"] = "203.0.113.9"
-    # The bucket refills as the test runs, so ask until it is refused.
     allowed = 0
     while (refused := caller.get("/tiles/records/0/0/0.mvt")).status_code == 200:
         allowed += 1
