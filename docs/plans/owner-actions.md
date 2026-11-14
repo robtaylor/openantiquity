@@ -917,6 +917,7 @@ Decision 0009 admits 16 and 17 year olds and accepts the children's risk assessm
 
 - Complete and keep a written illegal content risk assessment, considering each kind of priority illegal content separately. Ofcom provides templates and a digital toolkit.
 - Complete the children's access assessment and the children's risk assessment.
+- Complete and keep a data protection impact assessment against the standards of the Information Commissioner's Children's code, and name the lawful basis in the privacy notice, which names none. Read on 2026-11-14 ([the spike](../architecture/decisions/spikes/what-the-children-s-code-the-law-and-the-sign-in-providers-ask-of-junior-accounts.md)): the code asks for the assessment before a service children are likely to use is launched, and the Commissioner's guidance treats a service that allows users under 18 as offered to children, which this one does at 16. Whether a free, non-commercial site falls under the code at all is open, and is a question for advice.
 - Watch for the under-16 regulations. A gov.uk fact sheet of 18 September 2026 said "The first set of Regulations will be laid before the end of the year". Decision 0009 reviews the minimum age when they're published. Whether a citizen-science map counts as social media wasn't defined.
 
 **Suggested use.** Complete all three assessments before public launch rather than in the three months after.

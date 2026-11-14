@@ -33,6 +33,20 @@ A child of 13 to 15 can take part with an account of their own, made from a link
   - One adult holds at most four junior accounts.
   - At 16 either of them can move the account to the 16 to 17 band, which ends the tie.
 
+## What the readings changed (2026-11-14)
+
+The three readings WS1 asked for were done first-hand and are in [the spike](../architecture/decisions/spikes/what-the-children-s-code-the-law-and-the-sign-in-providers-ask-of-junior-accounts.md). They are a reading of sources and not legal advice. The outline stands: the Children's code names an adult account holder vouching for a child among the ways to establish age, and a 13 year old may hold a Google sign-in or an emailed link. The law doesn't ask for a parent's agreement at 13 to 15, so the tie is a safeguard this site chooses.
+
+This plan now differs from the one the owner agreed in these ways:
+
+- A junior account can't sign in with OpenStreetMap.
+- The junior account shows, for as long as the tie lasts, that a parent can see what it does.
+- A data protection impact assessment is written before the band is switched on, beside the children's risk assessment.
+- The privacy information is written for 13 to 15 year olds and for parents as well.
+- What is public about a junior's findings is put to the owner, since the code's high-privacy defaults reach past the profile.
+
+None of the regulations announced for under-16s had been laid on 14 November 2026. The government's response of July 2026 expected the first by the end of the year and in force in spring 2027, and said it would not change the age of consent "at this stage".
+
 ## Design
 
 Proposed. Nothing here is built.
@@ -41,13 +55,13 @@ Proposed. Nothing here is built.
 
 - An account in the 18 and over band makes an invite from its account page. Making one means saying, in words that are kept with the date, that they are the child's parent or guardian and answer for the account.
 - The invite is a link holding a random token. It works once, stops working after two days, and can be cancelled. The parent hands it over themselves. The site never sends it to anyone.
-- The child opens the link and signs in with a sign-in of their own. The account is made in a third band, 13 to 15, tied to the parent's. No date of birth is kept.
+- The child opens the link and signs in with a sign-in of their own, which is Google or an emailed link. OpenStreetMap isn't offered: its terms ask a person registering to be 16, and at 13 to 15 allow only an account a parent makes that holds nothing about the child. The account is made in a third band, 13 to 15, tied to the parent's. No date of birth is kept.
 - Sign-up without an invite is as it is today. The third band can't be chosen there.
 - An adult can hold at most four junior accounts. Moderators can see every tie.
 
 ### What the tie gives a parent
 
-- A page listing their junior accounts and everything each has done and keeps, private notebooks included. Both are told so when the account is made.
+- A page listing their junior accounts and everything each has done and keeps, private notebooks included. Both are told so when the account is made, and the junior account shows it for as long as the tie lasts: a plain sign on its account page and beside each private notebook that a parent can see this. The Children's code asks for a sign the child can see whenever a parent can monitor them, and for words for each of them about the child's own right to privacy.
 - Two controls: pause the account, which stops it contributing, and close it.
 - What others write to the child, to approve before anyone sees it (see below).
 - No channel between them. Nothing is sent from one to the other through the site, which keeps Decision 0009's rule that there is no private messaging.
@@ -77,7 +91,7 @@ If regulations bar under-16s from a service like this, junior accounts are pause
 
 ### WS1 — Read before building
 
-**Status:** Not started.
+**Status:** Done on 2026-11-14. The three readings are in [the spike](../architecture/decisions/spikes/what-the-children-s-code-the-law-and-the-sign-in-providers-ask-of-junior-accounts.md), and "What the readings changed" below says what they did to this plan.
 
 Three things the research of 2026-11-10 didn't cover, each to be read first-hand and recorded in the spike or a new one:
 
@@ -115,9 +129,9 @@ Making and cancelling an invite, the child's welcome, the parent's page with wha
 
 **Status:** Not started. The owner writes the assessment.
 
-The children's risk assessment written to cover 13 to 15, the decision record that replaces 0009, the terms and the guide.
+The children's risk assessment written to cover 13 to 15, the data protection impact assessment the Children's code asks for before launch, which covers each of the code's standards and the lawful basis, the decision record that replaces 0009, the terms and the guide. The privacy information is written three times: for someone of 13 to 15, for a parent, and as short notices where a junior's data is used.
 
-**Exit criteria:** the assessment is dated and kept, the decision is accepted, and only then is the band switched on.
+**Exit criteria:** both assessments are dated and kept, the privacy notice names its lawful basis, the decision is accepted, and only then is the band switched on.
 
 ## Phase exit criteria
 
@@ -141,6 +155,8 @@ The children's risk assessment written to cover 13 to 15, the decision record th
 | A parent doesn't look, and comments wait for ever | Low | The writer is told it is waiting, and a moderator can approve it |
 | An adult who isn't the parent approves their own way to the child | High | Everything they write to the child is public, moderators see every tie, and the tie itself is made only by a link handed over in person |
 | A child gives a false age to join without an invite | Medium | As today: the band is declared. The assessment says so |
+| The rules for 2027 treat a map of places a child marked as showing a stranger where the child is | Medium | The power behind them names that kind of feature. A junior's findings aren't listed on their profile, and junior accounts can be paused in one step |
+| The adult who invites isn't an adult | Medium | Only an account in the 18 and over band can invite, moderators see every tie, and the impact assessment says why a declared age is in proportion |
 
 ## Left out
 
@@ -152,7 +168,13 @@ The children's risk assessment written to cover 13 to 15, the decision record th
 
 ## Open questions for the owner
 
-None. The five this plan first asked were answered on 2026-11-13 and are under "Decided by the owner". WS1 may raise more.
+The five this plan first asked were answered on 2026-11-13 and are under "Decided by the owner". The readings of 2026-11-14 raised these:
+
+1. **No OpenStreetMap sign-in for a junior account.** OpenStreetMap's own terms rule it out, so this is less a choice than a thing to know: a child signs in with Google or an emailed link. Recommended: accept it.
+2. **How sure must the site be that the adult who invites is an adult?** The code's method rests on "an existing account holder who you know to be an adult", and here the adult's age is declared. Recommended: keep it declared, limit invites to accounts in the 18 and over band, and say in the impact assessment why that is in proportion to what a junior account can do. The other choice is a paid check of the adult's age, which gathers documents the site doesn't otherwise hold.
+3. **What of a junior's findings is public?** A finding is a place the child marked, and several together can say where they live. Recommended: a finding still says who found it by handle, as for a 16 or 17 year old, and a junior's profile lists their findings to nobody but themselves, their parent and moderators.
+4. **Which lawful basis does the privacy notice name?** It names none today, and the choice decides whether the law on a child's consent applies at all. This is for you with advice. What the Commissioner's guidance says about each basis is in the spike.
+5. **Who writes the impact assessment?** Recommended: you, as with the Online Safety Act assessments, from a skeleton I can draft against the code's standards. On the readings' view one may be owed for the site as it is now, since it admits 16 and 17 year olds.
 
 ## References
 
