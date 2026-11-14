@@ -80,12 +80,14 @@ def on_fly() -> bool:
     return all(os.environ.get(name) for name in _FLY_MARKERS)
 
 
-# What Fly sets on each machine to the image it started from:
-# `registry.fly.io/<app>:<tag>@sha256:<digest>`. The deploy tags the image
-# with the 40-character commit it was built from (`--image-label`, in
+# Fly sets `FLY_IMAGE_REF` on a machine to the image it started from:
+# `registry.fly.io/<app>:<tag>`, with `@sha256:<digest>` after it on a machine
+# made from a pinned image, as the hourly one is. A web machine started by a
+# deploy carries the tag alone. The deploy tags the image with the
+# 40-character commit it was built from (`--image-label`, in
 # `.github/workflows/deploy.yml` and `infra/fly_jobs.py`), so the commit is
 # read from there and no build step has to pass it in.
-_FLY_IMAGE = re.compile(r"registry\.fly\.io/[a-z0-9-]+:(?P<commit>[0-9a-f]{40})@sha256:[0-9a-f]{64}")
+_FLY_IMAGE = re.compile(r"registry\.fly\.io/[a-z0-9-]+:(?P<commit>[0-9a-f]{40})(?:@sha256:[0-9a-f]{64})?")
 
 
 def commit_from_image(reference: str) -> str | None:

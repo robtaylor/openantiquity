@@ -29,7 +29,7 @@ Fly keeps only a short log. On 2026-11-12, when the owner reported that "Save fi
 
 What was built:
 
-- `/api/v1/meta` gives `app.commit`, read from Fly's `FLY_IMAGE_REF` (`config.commit_from_image`). Anything but `registry.fly.io/<app>:<40 hex>@sha256:<64 hex>`, or no variable, gives null. The About page shows the first seven characters beside the version.
+- `/api/v1/meta` gives `app.commit`, read from Fly's `FLY_IMAGE_REF` (`config.commit_from_image`). Anything but `registry.fly.io/<app>:<40 hex>`, with or without `@sha256:<64 hex>` after it, gives null, as does no variable. The About page shows the first seven characters beside the version.
 - `fieldclub/request_ids.py` gives each request a 16-hex-digit id of its own, sent in `X-Request-ID` on every response, repeated as `error.request_id` in an error body, and written on each log line made while the request is handled, uvicorn's access line and the tile threads included. A client's own `X-Request-ID` is ignored.
 - `frontend/src/api/failures.ts` keeps the last ten failures in memory, by the fields listed in `docs/ARCHITECTURE.md`. The path patterns come from `src/api/paths.ts`, which `pnpm gen:api` writes from the OpenAPI schema.
 - The About page links to the source and to the issue tracker.
@@ -103,7 +103,7 @@ Asked on 2026-11-13 with a recommendation for each, the owner replied: "sounds g
 
 - **What GitHub does about duplicates.** Since June 2026, in public preview, GitHub's new-issue form shows up to three possible matches among the repository's issues while it is being filled in ([changelog](https://github.blog/changelog/2026-06-18-duplicate-detection-and-issue-fields-mcp-support-for-github-issues)). The announcement doesn't say which plans or repositories have it, and it wasn't tried on this one. If it is on here, WS3 isn't needed.
 - **GitHub's limit on a prefilled address.** Measured signed out, with an unencoded body: 6,500 characters were accepted, 7,000 got an error page, and from about 8,150 the answer was 414. WS2 keeps the whole encoded address under 6,000 characters, and falls back to "Copy the details" with a short address when a report is longer.
-- **How the build learns its commit.** A Fly machine has `FLY_IMAGE_REF` in its environment, and on a jobs machine it read `registry.fly.io/openantiquity-jobs:<commit>@sha256:…`, the label the deploy gives the image. `/meta` can read the commit from it, with no build argument.
+- **How the build learns its commit.** A Fly machine has `FLY_IMAGE_REF` in its environment, and on a jobs machine it read `registry.fly.io/openantiquity-jobs:<commit>@sha256:…`, the label the deploy gives the image. On a web machine, read on 2026-11-14, it was `registry.fly.io/openantiquity:<commit>` with no digest. `/meta` can read the commit from it, with no build argument.
 
 ## Phase exit criteria
 

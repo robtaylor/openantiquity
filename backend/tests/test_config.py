@@ -689,6 +689,9 @@ DIGEST = "sha256:" + "ab" * 32
     [
         f"registry.fly.io/openantiquity:{COMMIT}@{DIGEST}",
         f"registry.fly.io/openantiquity-jobs:{COMMIT}@{DIGEST}",
+        # A machine started by a deploy carries the label alone, with no digest.
+        # Read from a live web machine on 2026-11-14.
+        f"registry.fly.io/openantiquity:{COMMIT}",
     ],
 )
 def test_the_commit_is_read_from_the_image_fly_started(clean_env: pytest.MonkeyPatch, image: str) -> None:
@@ -702,6 +705,9 @@ def test_the_commit_is_read_from_the_image_fly_started(clean_env: pytest.MonkeyP
         "",
         "registry.fly.io/openantiquity:deployment-01JABCDEFGHJKMNPQRSTVWXYZ0",
         f"registry.fly.io/openantiquity:{COMMIT[:7]}@{DIGEST}",
+        f"registry.fly.io/openantiquity:{COMMIT[:7]}",
+        f"registry.fly.io/openantiquity:{COMMIT}@",
+        f"registry.fly.io/openantiquity:{COMMIT}@sha256:abc",
         f"registry.fly.io/openantiquity:{COMMIT.upper()}@{DIGEST}",
         f"registry.fly.io/openantiquity@{DIGEST}",
         f"elsewhere.example/openantiquity:{COMMIT}@{DIGEST}",
