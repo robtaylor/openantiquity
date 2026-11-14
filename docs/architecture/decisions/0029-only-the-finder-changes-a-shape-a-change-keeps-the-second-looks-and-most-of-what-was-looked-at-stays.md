@@ -1,6 +1,6 @@
 # Decision 0029 — Only the finder changes a shape, a change keeps the second looks, and most of what was looked at stays
 
-**Status:** Proposed.
+**Status:** Proposed. Point 1 is replaced by Decision 0038.
 
 **Current architecture:** [Findings, "Changing a shape"](../findings.md#changing-a-shape).
 

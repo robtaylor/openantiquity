@@ -75,6 +75,10 @@ Write all three in the same present tense and a reader can't tell *why we did it
 | [0035](0035-a-version-reads-a-stored-class-it-has-no-name-for-as-not-sure.md) | A version reads a stored class it has no name for as not sure | Proposed |
 | [0036](0036-the-map-puts-findings-first-and-record-counts-are-a-choice.md) | The map puts findings first, and record counts are a choice | Proposed |
 | [0037](0037-a-problem-report-is-public-so-it-carries-no-place-finer-than-a-one-kilometre-square.md) | A problem report is public, so it carries no place finer than a one-kilometre square | Proposed |
+| [0038](0038-found-by-is-the-credit-kept-by-is-who-may-change-a-marking-and-keeping-passes-by-offer-and-acceptance.md) | Found by is the credit, kept by is who may change a marking, and keeping passes by offer and acceptance | Proposed |
+| [0039](0039-other-people-s-changes-to-a-marking-are-suggestions-its-keeper-accepts-or-declines.md) | Other people's changes to a marking are suggestions its keeper accepts or declines | Proposed |
+| [0040](0040-an-admin-takes-back-an-orphaned-marking-s-shape-and-never-deletes-the-finding.md) | An admin takes back an orphaned marking's shape and never deletes the finding | Proposed |
+| [0041](0041-the-admins-shapes-route-alone-sends-the-shape-before-a-change.md) | The admins' shapes route alone sends the shape before a change | Proposed |
 
 (`new decision` appends rows for you. `uv run docs/scripts/doctool.py lint` checks this table against the files.)
 

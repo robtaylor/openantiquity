@@ -239,12 +239,12 @@ Build in this order. Each step is test first, against real PostGIS.
 - [ ] No pending suggestion reaches a signed-out reader of any finding.
 - [ ] All workstreams shipped or deferred to a successor plan.
 
-## Decisions to write
+## Decisions written
 
-- **Found by is the credit, kept by is who may change a finding, and keeping passes by offer and acceptance.** `keeper_id`, `check_keeper` against `check_finder`, what stays with the finder, and that a deleted keeper's markings are orphaned and the admins told. Replaces point 1 of Decision 0029.
-- **Other people's changes are suggestions the keeper accepts or declines, held to the looked-at rule when accepted.** The separate table, the base revision, accepting behind the shape, credit to the suggester, the limits, and what each reader is sent.
-- **An admin takes back an orphaned marking's shape and never deletes the finding.** What orphaned means, why not hide, withdraw or delete, and why the looked-at rule is set aside for it.
-- **The admins' shapes route is the first to send `path_before`, and only to admins.** Until it, no route sent the shape before a change. Admins see every finding exactly and need the earlier shapes to choose one to put back, so the route serves them alone, under `admins_only`, and no other reader of a change gains it.
+- [Decision 0038](../architecture/decisions/0038-found-by-is-the-credit-kept-by-is-who-may-change-a-marking-and-keeping-passes-by-offer-and-acceptance.md): found by is the credit, kept by is who may change a marking, and keeping passes by offer and acceptance. It replaces point 1 of Decision 0029.
+- [Decision 0039](../architecture/decisions/0039-other-people-s-changes-to-a-marking-are-suggestions-its-keeper-accepts-or-declines.md): other people's changes are suggestions the keeper accepts or declines.
+- [Decision 0040](../architecture/decisions/0040-an-admin-takes-back-an-orphaned-marking-s-shape-and-never-deletes-the-finding.md): an admin takes back an orphaned marking's shape and never deletes the finding.
+- [Decision 0041](../architecture/decisions/0041-the-admins-shapes-route-alone-sends-the-shape-before-a-change.md): the admins' shapes route alone sends the shape before a change.
 
 ## Going back a version
 
