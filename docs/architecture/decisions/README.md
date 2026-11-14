@@ -79,6 +79,7 @@ Write all three in the same present tense and a reader can't tell *why we did it
 | [0039](0039-other-people-s-changes-to-a-marking-are-suggestions-its-keeper-accepts-or-declines.md) | Other people's changes to a marking are suggestions its keeper accepts or declines | Proposed |
 | [0040](0040-an-admin-takes-back-an-orphaned-marking-s-shape-and-never-deletes-the-finding.md) | An admin takes back an orphaned marking's shape and never deletes the finding | Proposed |
 | [0041](0041-the-admins-shapes-route-alone-sends-the-shape-before-a-change.md) | The admins' shapes route alone sends the shape before a change | Proposed |
+| [0042](0042-nothing-drawn-and-not-sent-is-replaced-or-thrown-away-without-asking.md) | Nothing drawn and not sent is replaced or thrown away without asking | Proposed |
 
 (`new decision` appends rows for you. `uv run docs/scripts/doctool.py lint` checks this table against the files.)
 
