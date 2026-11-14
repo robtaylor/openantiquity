@@ -28,7 +28,7 @@ cd backend && uv run pytest -q tests/infra tests/test_config.py tests/test_stora
 fly apps list --org openantiquity
 # Expect: openantiquity and openantiquity-jobs alone
 fly machine list --app openantiquity
-# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit 0f16806 or later
+# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit 170f381 or later
 fly ips list --app openantiquity
 # Expect: the private address, the shared IPv4 address 66.241.124.216 and the IPv6 address 2a09:8280:1::1fe:8e38:0
 fly machine list --app openantiquity-jobs
@@ -71,7 +71,8 @@ The last pair names the jobs image that exists. `fly_jobs.py` looks for the imag
 | `ac70989` | Zoom in to 22, and a right-click left alone while a tool has the map | Frontend only |
 | `3fd51cb` | An unfinished marking kept in sight and asked about, not jumped to | Frontend only |
 | `06bbdc6` | The map puts findings first, and record counts are a switch | Decision 0036. Frontend only. With counts off, no record tile is asked for further out than zoom 12 |
-| `0f16806` | "Change the shape" asks before it discards something unsaved, and focus is left where it has moved to | The commit the web app runs since 2026-11-14. Frontend only |
+| `0f16806` | "Change the shape" asks before it discards something unsaved, and focus is left where it has moved to | Frontend only |
+| `170f381` | A link to the code on GitHub at the foot of the rail and under "More" | The commit the web app runs since 2026-11-14. Frontend only |
 
 ## Open follow-ups (priority-ordered)
 
