@@ -112,7 +112,7 @@ export interface ApiRequest {
 }
 
 /** What an endpoint the interface was built ahead of answers when the server lacks it (`isEndpointMissing`). */
-export const ENDPOINT_MISSING_STATUSES: readonly number[] = [404, 405, 501];
+const ENDPOINT_MISSING_STATUSES: readonly number[] = [404, 405, 501];
 
 const SAFE_METHODS = new Set(["GET", "HEAD"]);
 /** Statuses that come from a proxy in front of a backend that is down. */

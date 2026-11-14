@@ -320,11 +320,11 @@ function Privacy({ meta }: { meta: Meta }) {
           report of a problem can be matched to them. Our host, Fly.io, says it keeps the log for seven days. While a
           page is open, your browser also keeps in memory the last ten things that went wrong in it: when, what kind of
           address failed but never which one, the answer and that number, and the words of an error the page didn't
-          catch, with anything that looks like a place, an id or a quoted value taken out. They go when you close the
-          page, and are sent nowhere unless you use "Report a problem", which shows you everything it would send first.
-          It adds where the map was only if you ask, and then only the one-kilometre square the map was centred on and
-          how far in it was zoomed. A report you open as a GitHub issue is public, and GitHub's own privacy terms cover
-          it.
+          catch, with every word that holds a figure, looks like an id or was quoted taken out. They go when you close
+          the page, and are sent nowhere unless you use "Report a problem", which shows you everything it would send
+          first. It adds where the map was only if you ask, and then only the one-kilometre square the map was centred
+          on and how far in it was zoomed. A report you open as a GitHub issue is public, and GitHub's own privacy terms
+          cover it.
         </p>
       </More>
 

@@ -9,10 +9,11 @@ import { forgetFailures, keptFailures } from "./failures.js";
 import { fetchGeoPoint } from "./geo.js";
 
 /**
- * The answers a page expects as a matter of course aren't kept for a
- * problem report, or every signed-out visit would fill the ten slots: the
- * 401 that says nobody is signed in, and the 404 of an endpoint the
- * interface was built ahead of.
+ * An answer a page expects as a matter of course isn't kept for a problem
+ * report, or every signed-out visit would fill the ten slots with the 401
+ * that says nobody is signed in. The endpoints the interface was once built
+ * ahead of all exist now, so one of them answering as though it were missing
+ * is a fault. The page passes over it quietly, and a report must still hold it.
  */
 
 const BOX = [-1.86, 51.42, -1.84, 51.43] as const;
@@ -43,10 +44,10 @@ describe("an expected answer", () => {
     ["the live sources", () => fetchLiveSources()],
     ["the live sources for the credits", () => fetchCreditSources()],
     ["what is at a point", () => fetchGeoPoint(-1.85, 51.43)],
-  ])("isn't kept when the server has no endpoint for %s", async (_name, probe) => {
+  ])("is kept when the server answers as though it had no endpoint for %s", async (_name, probe) => {
     answerAll(404);
     await expect(probe()).rejects.toMatchObject({ status: 404 });
-    expect(keptFailures()).toEqual([]);
+    expect(keptFailures()).toMatchObject([{ kind: "request", status: 404 }]);
   });
 
   it("is kept when it isn't what the caller expected", async () => {

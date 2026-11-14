@@ -39,6 +39,7 @@ A report also carries the id of each request that failed. The server's log holds
 - A fault that depends on the exact spot and fails no request, such as a tile that draws wrongly, is narrowed only to a square.
 - The list of pages has to be kept: a new page that is safe doesn't offer the option until it is added.
 - The map's centre can lie in the square next to a finding's own, since a panel shifts what is in view. A report from a page on the list isn't tied to any finding, so this was accepted.
+- The map stays where it was when someone leaves a page. A report made from the bare map just after leaving a draft, or a finding the public map doesn't show, can carry that square. Nothing in the report ties the square to it, so this was accepted too.
 
 ## Walk-back options
 

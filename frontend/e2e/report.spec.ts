@@ -4,9 +4,11 @@ import { expect, test } from "./support/fixtures.js";
 /**
  * A report too long for GitHub's address leaves part of itself out of the
  * issue, so pressing "Open a GitHub issue" also puts the whole text on the
- * clipboard. The copy starts in the click that opens another tab, and a
- * browser may refuse it once that tab has focus, which only a real browser
- * shows.
+ * clipboard. This shows the copy is made in that press and holds the whole
+ * text, and that the address is cut. It can't show the copy outliving the
+ * move to the other tab: a page under test always counts as focused. Where
+ * a browser does refuse it, the form's status line says so and the issue's
+ * own text says it was cut.
  */
 
 test("puts the whole of a report too long for the address on the clipboard as the issue opens", async ({

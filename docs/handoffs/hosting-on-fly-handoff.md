@@ -140,6 +140,15 @@ Decision 0033 passes over an activity kind or a next step this version has no na
 
 How long Fly keeps backups wasn't found, and no restore has been tried. `fly mpg backup list d2gznoqz2n8opkm8`, then restore one into a new cluster, look, and destroy it. The owner kept Managed Postgres for its backups and failover, so this is worth doing before the site holds anything a member wrote.
 
+### 11. What the report form left (minutes to hours each)
+
+- The email link stays hidden until `FIELDCLUB_REPORT_EMAIL` is set on the web app, which waits for `help@openantiquity.org` to take mail.
+- Fly's seven days of searchable log is its documented figure and hasn't been tried on this account. The first real report is the test: search the log for one of its request ids.
+- A report too long for an address is also copied as the issue opens. No automated test can show that copy outliving the move to the other tab, since a page under test always counts as focused. Try it once by hand in Chrome, Firefox and Safari.
+- The outline of the island of Ireland is drawn twice, in `services/gridref.py` and in the frontend's `map/gridref.ts`, and the two differ by a few hundredths of a degree along edges that look like open sea. A report's square and a protected finding's public square should come from one outline, with a test that sets them side by side.
+- Nothing fails when `frontend/src/api/schema.d.ts` is stale against the backend. `paths.ts` has a test now. A step in CI that runs `pnpm gen:api` and fails on a difference would cover both.
+- Finding duplicates among reports is the plan's third workstream, and waits on whether GitHub's own suggestions are on for the repository.
+
 ## Critical context
 
 - The Fly organisation is `openantiquity` and the region `lhr`. The `personal` organisation holds the owner's unrelated apps: never list, name or touch them, and pass `--app` or `--org openantiquity` on every command.

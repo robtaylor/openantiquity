@@ -249,6 +249,11 @@ describe("a report made beside a protected finding by a signed-in member, who se
   });
 });
 
+it("works out the same square the server shows the finding as", () => {
+  // Were the two to differ, a report's square and the public one would cross and narrow the place.
+  expect(SQUARE).toBe(squareFixture().location.grid_ref);
+});
+
 describe("a report made beside a protected finding by someone who sees only its square", () => {
   it("holds nothing that places it, by any route, on the finding's page", async () => {
     const finding = squareFixture({ public_id: FINDING_ID });

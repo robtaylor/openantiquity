@@ -5,7 +5,7 @@
  * a release, so it is kept for the life of the page.
  */
 
-import { apiFetch, ENDPOINT_MISSING_STATUSES } from "../../api/client.js";
+import { apiFetch } from "../../api/client.js";
 import type { components } from "../../api/schema.js";
 import type { LiveSource } from "./creditList.js";
 
@@ -17,6 +17,6 @@ export const aboutKeys = {
 };
 
 export async function fetchLiveSources(signal?: AbortSignal): Promise<LiveSource[]> {
-  const answer = await apiFetch<LiveSources>("/context/live-sources", { signal, expected: ENDPOINT_MISSING_STATUSES });
+  const answer = await apiFetch<LiveSources>("/context/live-sources", { signal });
   return answer.items;
 }
