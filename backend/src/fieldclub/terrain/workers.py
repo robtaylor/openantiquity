@@ -20,6 +20,7 @@ So the shared pool is never taken by tiles, and tile work in hand is bounded.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -48,7 +49,9 @@ class TileWorkers:
                 raise TilesBusyError()
             self._in_hand += 1
         try:
-            return await asyncio.wrap_future(self._pool.submit(draw, *args))
+            # In a copy of the request's context, so what the drawing logs carries the request's id.
+            context = contextvars.copy_context()
+            return await asyncio.wrap_future(self._pool.submit(context.run, draw, *args))
         finally:
             with self._guard:
                 self._in_hand -= 1

@@ -24,7 +24,7 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 import fieldclub.api
-from fieldclub import APP_NAME, __version__, http, safe_fetch, security
+from fieldclub import APP_NAME, __version__, http, request_ids, safe_fetch, security
 from fieldclub.api.deps import PRIVATE_CACHE
 from fieldclub.auth.csrf import ClientHeaderMiddleware
 from fieldclub.auth.oauth import FORM_POST_CALLBACK_PATHS
@@ -304,7 +304,8 @@ def create_app(settings: Settings | None = None, *, include_dev_routes: bool | N
         app.add_middleware(CanonicalHostMiddleware, hosts=settings.redirect_hosts, target=settings.public_url)
     https = settings.public_url.startswith("https://")
     index = settings.frontend_dist / "index.html"
-    # Added last, so it runs first: its headers go on every response, a redirect from another name included.
+    # Added after the rest, so it runs before them: its headers go on every response, a redirect from another
+    # name included.
     app.add_middleware(
         security.SecurityHeadersMiddleware,
         policy=security.content_security_policy(index if index.is_file() else None, https),
@@ -312,6 +313,9 @@ def create_app(settings: Settings | None = None, *, include_dev_routes: bool | N
         # The development docs page loads Swagger UI from its CDN, which the policy refuses.
         exempt=frozenset(path for path in (app.docs_url, app.swagger_ui_oauth2_redirect_url) if path),
     )
+    # Outermost of all, so that every answer above carries the request's id
+    # and every line they log is written with it (`request_ids.py`).
+    app.add_middleware(request_ids.RequestIdMiddleware)
 
     for found in discover_routers():
         if found.dev_only and not include_dev_routes:
@@ -347,7 +351,11 @@ def run() -> None:
                 await super().shutdown(sockets)
 
     settings = get_settings()
-    logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    # One handler for every logger, uvicorn's included, and on it the filter
+    # that writes the request's id into each line (`request_ids.py`).
+    handler = logging.StreamHandler()
+    handler.addFilter(request_ids.RequestIdFilter())
+    logging.basicConfig(level=settings.log_level, format=request_ids.LOG_FORMAT, handlers=[handler])
     logger.info("The database is %s", describe(settings.database_url))
     config = uvicorn.Config(
         "fieldclub.main:create_app",
@@ -355,6 +363,9 @@ def run() -> None:
         host=settings.host,
         port=settings.port,
         log_level=settings.log_level.lower(),
+        # Uvicorn's own configuration would give its loggers handlers of their
+        # own without the filter. Without one they write through the handler above.
+        log_config=None,
         # The client address comes from X-Forwarded-For under our own rules
         # (see fieldclub.auth.deps.client_ip), not uvicorn's.
         proxy_headers=False,

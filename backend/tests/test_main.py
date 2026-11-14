@@ -17,11 +17,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 import fieldclub.api
-from fieldclub import __version__, main
+from fieldclub import __version__, main, request_ids
 from fieldclub.config import get_settings
 from fieldclub.errors import ConflictError, NotFoundError, RateLimitedError
 from fieldclub.main import create_app, discover_routers, mount_frontend
-from tests.helpers import BASE_URL, WEB, settings
+from tests.helpers import BASE_URL, WEB, envelope, settings
 
 # --------------------------------------------------------------------------
 # Router discovery
@@ -196,14 +196,14 @@ def test_app_errors_use_the_json_envelope(extra_modules: None, db: Session) -> N
     client = TestClient(create_app(), base_url=BASE_URL)
     response = client.get("/api/v1/things/clash")
     assert response.status_code == 409
-    assert response.json() == {"error": {"code": "thing_exists", "message": "Already there."}}
+    assert envelope(response) == {"error": {"code": "thing_exists", "message": "Already there."}}
 
 
 def test_unknown_api_paths_are_json_404s(client: TestClient) -> None:
     for path in ("/api/v1/nope", "/api/nope", "/tiles/nope/1/2/3.png", "/nope"):
         response = client.get(path)
         assert response.status_code == 404, path
-        assert response.json() == {"error": {"code": "not_found", "message": "Not Found"}}
+        assert envelope(response) == {"error": {"code": "not_found", "message": "Not Found"}}
 
 
 def test_wrong_method_is_a_json_405(client: TestClient) -> None:
@@ -227,7 +227,7 @@ def test_unexpected_errors_are_a_plain_500_that_leaks_nothing(
     client = TestClient(create_app(), base_url=BASE_URL, raise_server_exceptions=False)
     response = client.get("/api/v1/things/crash")
     assert response.status_code == 500
-    assert response.json() == {"error": {"code": "internal_error", "message": "Something went wrong."}}
+    assert envelope(response) == {"error": {"code": "internal_error", "message": "Something went wrong."}}
     assert "secret internal detail" not in response.text
     assert any(
         "secret internal detail" in str(record.exc_info) for record in caplog.records if record.exc_info
@@ -243,7 +243,7 @@ def test_http_exceptions_keep_their_status_and_headers(db: Session) -> None:
 
     response = TestClient(app, base_url=BASE_URL).get("/teapot")
     assert response.status_code == 418
-    assert response.json() == {"error": {"code": "http_error", "message": "Short and stout"}}
+    assert envelope(response) == {"error": {"code": "http_error", "message": "Short and stout"}}
     assert response.headers["x-kind"] == "tea"
 
 
@@ -391,7 +391,11 @@ def test_the_api_answers_the_same_with_and_without_a_built_frontend(
         if code is not None:
             assert response.headers["content-type"] == "application/json", name
             assert response.json()["error"]["code"] == code, name
-    assert mounted.content == without.content, "the same body, byte for byte"
+    if code is None:
+        assert mounted.content == without.content, "the same body, byte for byte"
+    else:
+        # The same body but for each request's own id.
+        assert envelope(mounted) == envelope(without)
     assert mounted.headers.get("allow") == without.headers.get("allow")
 
 
@@ -641,6 +645,25 @@ def test_run_starts_uvicorn_with_the_configured_host_and_port(monkeypatch: pytes
     with pytest.raises(RuntimeError, match="the hub went wrong"):
         asyncio.run(started["server"].shutdown())
     assert started["shut_down"] is True
+
+
+def test_run_writes_every_log_line_through_one_handler_that_adds_the_request_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started: dict = {}
+    logged: dict = {}
+    fake = types.ModuleType("uvicorn")
+    fake.Config = lambda app, **options: started.update(options)  # type: ignore[attr-defined]
+    fake.Server = type("Server", (), {"__init__": lambda self, config: None, "run": lambda self: None})  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "uvicorn", fake)
+    monkeypatch.setattr(main.logging, "basicConfig", lambda **options: logged.update(options))
+    monkeypatch.setattr(main, "get_settings", lambda: settings())
+    main.run()
+    # Uvicorn's loggers get no handlers of their own, so they write through this one.
+    assert started["log_config"] is None
+    assert logged["format"] == request_ids.LOG_FORMAT
+    (handler,) = logged["handlers"]
+    assert any(isinstance(each, request_ids.RequestIdFilter) for each in handler.filters)
 
 
 def test_run_logs_the_database_it_will_use_without_the_password(

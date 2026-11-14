@@ -17,7 +17,7 @@ from fieldclub.config import SESSION_COOKIE, get_settings
 from fieldclub.main import create_app
 from fieldclub.models import AuthIdentity, User, UserSession
 from tests.findings.support import create
-from tests.helpers import WEB, ClientAs, ClientFor, MakeFinding, MakeUser, count, error_code, nested
+from tests.helpers import WEB, ClientAs, ClientFor, MakeFinding, MakeUser, count, envelope, error_code, nested
 
 ME_KEYS = {
     "id",
@@ -214,7 +214,7 @@ def test_dev_login_signs_nobody_in_when_mounted_by_mistake(
 def test_me_is_a_401_when_signed_out(client: TestClient) -> None:
     response = client.get("/api/v1/auth/me")
     assert response.status_code == 401
-    assert response.json() == {
+    assert envelope(response) == {
         "error": {"code": "unauthorised", "message": "You need to sign in to do that."}
     }
 
@@ -310,7 +310,9 @@ def test_patch_me_refuses_a_taken_handle(client_as: ClientAs, make_user: MakeUse
     user = make_user(handle="QuietBarrow42")
     response = client_as(user).patch("/api/v1/auth/me", json={"handle": "RIDGEWAYROB", "bio": "Hello"})
     assert response.status_code == 409
-    assert response.json() == {"error": {"code": "handle_taken", "message": "Someone already has that name."}}
+    assert envelope(response) == {
+        "error": {"code": "handle_taken", "message": "Someone already has that name."}
+    }
     db.refresh(user)
     assert (user.handle, user.bio) == ("QuietBarrow42", None)
 

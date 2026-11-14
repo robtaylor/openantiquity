@@ -1,7 +1,8 @@
 """The error hierarchy and the JSON error handler.
 
 Every error raised on purpose is a subclass of `AppError` with a stable `code`.
-The handler turns them into `{"error": {"code": ..., "message": ...}}`.
+The handler turns them into `{"error": {"code": ..., "message": ...}}`, with
+the request's id beside them as `request_id` (`fieldclub.request_ids`).
 
 This module is imported by services, so it keeps FastAPI and Starlette imports
 inside `install_error_handlers`.
@@ -11,6 +12,8 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any
+
+from fieldclub import request_ids
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -56,10 +59,18 @@ class AppError(Exception):
         super().__init__(self.message)
 
     def to_body(self) -> dict[str, Any]:
-        error: dict[str, Any] = {"code": self.code, "message": self.message}
-        if self.details is not None:
-            error["details"] = self.details
-        return {"error": error}
+        """The envelope, with the id of the request being handled when there is one."""
+        return error_body(self.code, self.message, self.details)
+
+
+def error_body(code: str, message: str, details: Any = None) -> dict[str, Any]:
+    """`{"error": {"code", "message", "details"?, "request_id"?}}` for the request being handled."""
+    error: dict[str, Any] = {"code": code, "message": message}
+    if details is not None:
+        error["details"] = details
+    if (request_id := request_ids.current()) is not None:
+        error["request_id"] = request_id
+    return {"error": error}
 
 
 class BadRequestError(AppError):
@@ -220,7 +231,7 @@ _STATUS_CODES = {
 
 
 def install_error_handlers(app: FastAPI) -> None:
-    """Make every error leave the app as `{"error": {"code", "message"}}`.
+    """Make every error leave the app as `{"error": {"code", "message"}}`, with the request's id beside them.
 
     The handlers are `async` because they do no blocking work. Starlette would
     run a plain function in the thread pool, beside the sync endpoints.
@@ -251,12 +262,18 @@ def install_error_handlers(app: FastAPI) -> None:
     async def http_error(_: Request, exc: Exception) -> JSONResponse:
         assert isinstance(exc, StarletteHTTPException)
         code = _STATUS_CODES.get(exc.status_code, "http_error" if exc.status_code < 500 else "internal_error")
-        body = {"error": {"code": code, "message": str(exc.detail)}}
+        body = error_body(code, str(exc.detail))
         return JSONResponse(body, status_code=exc.status_code, headers=exc.headers)
 
-    async def unexpected_error(_: Request, exc: Exception) -> JSONResponse:
-        logger.error("Unhandled error", exc_info=exc)
-        return JSONResponse(AppError().to_body(), status_code=500)
+    async def unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+        # Starlette runs this outermost, after the request id middleware has
+        # returned, so the id is taken back from the request's scope.
+        request_id = request_ids.from_scope(request.scope)
+        with request_ids.bound(request_id):
+            logger.error("Unhandled error", exc_info=exc)
+            body = AppError().to_body()
+        headers = {request_ids.HEADER: request_id} if request_id else None
+        return JSONResponse(body, status_code=500, headers=headers)
 
     app.add_exception_handler(AppError, app_error)
     app.add_exception_handler(RequestValidationError, validation_error)

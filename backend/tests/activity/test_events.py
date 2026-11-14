@@ -744,3 +744,13 @@ def test_shutting_down_closes_open_streams(server: str, db: Session) -> None:
         assert hub is not None
         asyncio.run_coroutine_threadsafe(events.stop_hub(), hub.loop).result(TIMEOUT_S)
         assert read_event(lines) == {"event": "closed", "data": "{}"}
+
+
+def test_a_stream_carries_its_request_id(server: str, env: Any, db: Session) -> None:
+    env(EVENTS_HEARTBEAT_S="0.1")
+    with (
+        httpx.Client(base_url=server, timeout=TIMEOUT_S) as browser,
+        browser.stream("GET", "/api/v1/events/stream") as stream,
+    ):
+        assert len(stream.headers["x-request-id"]) == 16
+        read_event(stream.iter_lines())

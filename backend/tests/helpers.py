@@ -48,6 +48,7 @@ __all__ = [
     "add_source",
     "admin_area",
     "count",
+    "envelope",
     "error_code",
     "lon_lat",
     "nested",
@@ -60,9 +61,21 @@ class _JsonResponse(Protocol):
     def json(self, **kwargs: Any) -> Any: ...
 
 
+class _Response(_JsonResponse, Protocol):
+    @property
+    def headers(self) -> Mapping[str, str]: ...
+
+
 def error_code(response: _JsonResponse) -> str:
     """The `error.code` of an error response."""
     return response.json()["error"]["code"]
+
+
+def envelope(response: _Response) -> dict[str, Any]:
+    """An error response's body without its `request_id`, which must be there and match the header."""
+    body = response.json()
+    assert body["error"].pop("request_id") == response.headers["x-request-id"]
+    return body
 
 
 def count(db: Session, model: type) -> int:
