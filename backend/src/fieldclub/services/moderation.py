@@ -598,6 +598,10 @@ class LoggedAction:
     target: TargetSummary
 
 
+_KNOWN_ACTIONS = tuple(action.value for action in ModerationActionKind)
+_KNOWN_TARGETS = tuple(target.value for target in ReportTarget)
+
+
 def list_actions(
     db: Session,
     *,
@@ -606,8 +610,17 @@ def list_actions(
     limit: int,
     cursor: str | None = None,
 ) -> tuple[list[LoggedAction], str | None]:
-    """The moderation log, newest first, optionally for one target."""
-    query = select(ModerationAction).order_by(ModerationAction.id.desc())
+    """The moderation log, newest first, optionally for one target.
+
+    A row whose action or kind of target this version has no name for is
+    left out in the query, so a page is still full (Decision 0033). A later
+    version wrote it, and it is there to be read once that version runs.
+    """
+    query = (
+        select(ModerationAction)
+        .where(ModerationAction.action.in_(_KNOWN_ACTIONS), ModerationAction.target_kind.in_(_KNOWN_TARGETS))
+        .order_by(ModerationAction.id.desc())
+    )
     if kind is not None:
         query = query.where(ModerationAction.target_kind == kind.value)
         if ref is not None:
