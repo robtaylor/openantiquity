@@ -19,14 +19,35 @@ import { findingDrafts, useSavedDrafts } from "./findingDrafts.js";
 import { MarkForm, markInSight, uncoveredBox } from "./MarkForm.js";
 import { MARK_PATH, wasToldToCarryOn } from "./markPaths.js";
 import { useMarkReturn } from "./markReturn.js";
-import { EMPTY_MARK, isUnsavedNewMark, type MarkFields, useMarkStore } from "./markStore.js";
+import {
+  EMPTY_MARK,
+  isUnsavedNewMark,
+  type MarkFields,
+  type Unsaved,
+  unsavedInHand,
+  unsavedKey,
+  useMarkStore,
+} from "./markStore.js";
 import { type LngLat, placesOf } from "./path.js";
+import { inTheWayWords, wayBackTo } from "./savedShape.js";
 import { focusPanelTitle, TakeOverNotice } from "./TakeOverNotice.js";
 import { useLeaveOnEscape } from "./useLeaveOnEscape.js";
 import { openSavedFinding } from "./useSaveMark.js";
 import "./mark.css";
 
 export { MARK_PATH };
+
+/**
+ * What a marking page would replace that hasn't been sent: anything unsent
+ * in hand, except a new marking at `/mark`, which it carries on with, and
+ * at `/mark/:draftId` that draft itself.
+ */
+export function inTheWayOfMarking(state: MarkFields, draftId: string | undefined): Unsaved | null {
+  const held = unsavedInHand(state);
+  if (held === null) return null;
+  if (draftId === undefined) return held.kind === "marking" ? null : held;
+  return held.kind === "draft" && held.draftId === draftId ? null : held;
+}
 
 /** A draft that was saved since the page loaded opens the finding it became. */
 function useOpenSavedDraft(draftId: string | undefined): boolean {
@@ -36,7 +57,8 @@ function useOpenSavedDraft(draftId: string | undefined): boolean {
   useEffect(() => {
     if (!saved || draftId === undefined) return;
     useSavedDrafts.getState().forget(draftId);
-    openSavedFinding(client, navigate, saved);
+    // The tool lets go of the draft that became the finding, and of nothing else it holds.
+    openSavedFinding(client, navigate, saved, useMarkStore.getState().draftId === draftId);
   }, [saved, draftId, client, navigate]);
   return saved !== undefined;
 }
@@ -126,7 +148,11 @@ export function MarkPanel({ meta }: { meta: Meta }) {
     const mark = useMarkStore.getState();
     // The Layers panel opens over this one and closes back onto it. That isn't opening the tool.
     const arriving = firstArrival(pathname, "open the marking tool");
-    if (draftId === undefined) {
+    if (inTheWayOfMarking(mark, draftId) !== null) {
+      // Something unsent that this page would replace is asked about first, as every panel that
+      // takes the tool asks. Until it is answered the tool isn't open on it, and a tap adds nothing.
+      if (!mark.setAside) useMarkStore.setState({ setAside: true });
+    } else if (draftId === undefined) {
       const ownToTool = mark.editing === null && mark.draftId === null;
       if (!begun.current && !arriving && ownToTool) {
         // Back from under the Layers panel: everything is as it was left.
@@ -148,7 +174,8 @@ export function MarkPanel({ meta }: { meta: Meta }) {
     setLooked(true);
   }, [draftId, draft, pathname]);
   useEffect(() => {
-    if (draftId !== undefined && draft && loaded === null) useMarkStore.getState().load(draftId, draft.data);
+    if (draftId === undefined || !draft || loaded !== null) return;
+    if (inTheWayOfMarking(useMarkStore.getState(), draftId) === null) useMarkStore.getState().load(draftId, draft.data);
   }, [draftId, draft, loaded]);
 
   // Marking opened over a mode, such as a scan, closes back to it.
@@ -157,6 +184,10 @@ export function MarkPanel({ meta }: { meta: Meta }) {
   const missingDraft = draftId !== undefined && draft === null && !opening;
   const placed = useMarkStore((state) => state.shape.present.points.length > 0);
   const setAside = useMarkStore((state) => state.setAside) && draftId === undefined;
+  // Something unsent in hand that this page would replace, followed as text.
+  const heldKey = useMarkStore((state) => (inTheWayOfMarking(state, draftId) === null ? null : unsavedKey(state)));
+  const held = heldKey === null ? null : inTheWayOfMarking(useMarkStore.getState(), draftId);
+  const asking = held !== null;
 
   function goToIt(): void {
     bringIntoView(placesOf(useMarkStore.getState().shape.present));
@@ -171,13 +202,15 @@ export function MarkPanel({ meta }: { meta: Meta }) {
 
   const subtitle = missingDraft
     ? undefined
-    : setAside
-      ? "An unfinished marking is waiting"
-      : !placed
-        ? "Put the mark where you see it"
-        : draftId !== undefined
-          ? "Not saved yet"
-          : "Say what it looks like, then save";
+    : asking
+      ? "Something you haven't sent is waiting"
+      : setAside
+        ? "An unfinished marking is waiting"
+        : !placed
+          ? "Put the mark where you see it"
+          : draftId !== undefined
+            ? "Not saved yet"
+            : "Say what it looks like, then save";
 
   return (
     <PanelFrame panelKey={MARK_PATH} title="Mark a finding" subtitle={subtitle} onClose={leave}>
@@ -192,8 +225,30 @@ export function MarkPanel({ meta }: { meta: Meta }) {
         >
           <p>It may have been saved or discarded in another tab.</p>
         </EmptyState>
-      ) : !looked || (draftId !== undefined && loaded !== draftId) ? null : setAside ? (
-        // The form isn't shown yet: it would bring the marking into view, and taps would add to it.
+      ) : !looked ? null : held ? (
+        <TakeOverNotice
+          words={inTheWayWords(draftId === undefined ? "Marking a finding" : "Opening this draft")[held.kind]}
+          back={{
+            label: "Go back to it",
+            onClick: () => {
+              const way = wayBackTo(held);
+              useMarkStore.setState({ setAside: false });
+              navigate(way.to, { state: way.state });
+            },
+          }}
+          on={
+            draftId === undefined
+              ? { label: "Discard it and start here", onClick: () => useMarkStore.getState().start() }
+              : {
+                  label: "Discard it and open the draft",
+                  onClick: () => {
+                    useMarkStore.getState().start();
+                    if (draft) useMarkStore.getState().load(draftId, draft.data);
+                  },
+                }
+          }
+        />
+      ) : draftId !== undefined && loaded !== draftId ? null : setAside ? (
         // The form isn't shown yet: it would bring the marking into view, and taps would add to it.
         <TakeOverNotice
           words="You have an unfinished marking somewhere else on the map."

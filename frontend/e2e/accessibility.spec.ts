@@ -1,7 +1,17 @@
 import type { Page } from "@playwright/test";
-import { answerJson } from "./support/account.js";
+import {
+  FINDER,
+  FINDER_ACTIONS,
+  lineFixture,
+  MODERATOR_ACTIONS,
+  OTHER,
+  shapeSuggestionFixture,
+} from "../src/test/fixtures/findingPage.js";
+import { answerJson, fakeSession, meWith } from "./support/account.js";
 import { boxOf, describeFocus, openMap, overlaps, SLOW_MAP, tabTo } from "./support/app.js";
+import { fakeFindingPage } from "./support/findingPage.js";
 import { expect, test } from "./support/fixtures.js";
+import { fakeKeeping } from "./support/keeping.js";
 import { finding, line, onScreen, openWithFindings, VIEW } from "./support/shapes.js";
 
 /**
@@ -264,6 +274,59 @@ test("reaches Report a problem and every control of its form by keyboard, each w
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(button).toBeFocused();
+});
+
+test("reaches the controls for keeping and suggestions by keyboard, each with a focus ring", async ({ page }) => {
+  const keeper = meWith({ handle: FINDER.handle, display_name: FINDER.display_name });
+  await fakeSession(page, keeper);
+  const fake = await fakeFindingPage(
+    page,
+    lineFixture({ actions: FINDER_ACTIONS }, { suggestions: [shapeSuggestionFixture()] }),
+    {
+      me: keeper,
+    },
+  );
+  await fakeKeeping(page, fake, { me: FINDER });
+  await openMap(page, `/f/f-ring${VIEW}`);
+  const panel = page.getByRole("complementary", { name: "Ring ditch by the long barrow" });
+  for (const control of [
+    panel.getByRole("button", { name: "Accept" }),
+    panel.getByRole("button", { name: "Decline" }),
+    panel.getByRole("button", { name: "Show on the map" }),
+    panel.getByRole("button", { name: "Hand it on" }),
+  ]) {
+    await tabTo(page, control, 150);
+    expect(await ringOf(page), `focus ring on ${await describeFocus(page)}`).toEqual(HAS_RING);
+  }
+  await page.keyboard.press("Enter");
+  const dialog = page.getByRole("dialog", { name: "Hand it on" });
+  await tabTo(page, dialog.getByLabel("Their handle"), 10);
+  expect(await ringOf(page)).toEqual(HAS_RING);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "Hand it on" })).toBeFocused();
+});
+
+test("reaches an admin's removal of a marking by keyboard, each control with a focus ring", async ({ page }) => {
+  await fakeSession(page, meWith({ handle: "AdminAnwen", display_name: "Anwen Price", role: "admin" }));
+  const orphaned = lineFixture({
+    actions: {
+      ...MODERATOR_ACTIONS,
+      hand_on: { allowed: true, reason: null },
+      remove_marking: { allowed: true, reason: null },
+    },
+  });
+  const fake = await fakeFindingPage(page, orphaned);
+  await fakeKeeping(page, fake, { me: OTHER, earlier: [] });
+  await openMap(page, `/mod/markings/f-ring${VIEW}`);
+  const panel = page.getByRole("complementary", { name: "Remove the marking" });
+  const none = panel.getByRole("radio", { name: /No line or shape/ });
+  await tabTo(page, none, 40);
+  expect(await ringOf(page), `focus ring on ${await describeFocus(page)}`).toEqual(HAS_RING);
+  for (const control of [panel.getByLabel("Why"), panel.getByRole("button", { name: "Put this shape back" })]) {
+    await tabTo(page, control, 10);
+    expect(await ringOf(page), `focus ring on ${await describeFocus(page)}`).toEqual(HAS_RING);
+  }
 });
 
 test.describe("forced colours", () => {

@@ -27,6 +27,10 @@ export type ActionPage = Schemas["Page_Action_"];
 export type ActionKind = Schemas["ModerationActionKind"];
 export type Resolved = Schemas["Resolved"];
 export type ReportReasonId = Schemas["ReportReason"];
+export type OrphanedMarking = Schemas["OrphanedMarking"];
+export type OrphanedPage = Schemas["Page_OrphanedMarking_"];
+export type EarlierShape = Schemas["EarlierShapeOut"];
+export type EarlierShapePage = Schemas["Page_EarlierShapeOut_"];
 
 /** How many reports, members or log entries a page holds. */
 export const MOD_PAGE_SIZE = 20;
@@ -105,5 +109,39 @@ export function fetchActions(
   return apiFetch<ActionPage>("/mod/actions", {
     query: { cursor, limit: MOD_PAGE_SIZE, target_kind: target?.kind, target_id: target?.ref },
     signal,
+  });
+}
+
+/** `GET /mod/markings/orphaned`: findings whose keeper's account is deleted or banned, newest first. Admins only. */
+export function fetchOrphaned(cursor: string | null, signal?: AbortSignal): Promise<OrphanedPage> {
+  return apiFetch<OrphanedPage>("/mod/markings/orphaned", { query: { cursor, limit: MOD_PAGE_SIZE }, signal });
+}
+
+/** `GET /mod/findings/{id}/shapes`: each change to the shape with the shape before it, newest first. Admins only. */
+export function fetchEarlierShapes(
+  publicId: string,
+  cursor: string | null,
+  signal?: AbortSignal,
+): Promise<EarlierShapePage> {
+  return apiFetch<EarlierShapePage>(`/mod/findings/${encodeURIComponent(publicId)}/shapes`, {
+    query: { cursor },
+    signal,
+  });
+}
+
+/**
+ * Put an orphaned marking back to the shape at `toRevision`, or take its
+ * shape away with null, naming the revision the admin saw, with a reason for
+ * the log.
+ */
+export function putMarking(
+  publicId: string,
+  toRevision: number | null,
+  shapeRevision: number,
+  reason: string,
+): Promise<FindingDetail> {
+  return apiFetch<FindingDetail>(`/mod/findings/${encodeURIComponent(publicId)}/marking`, {
+    method: "PUT",
+    body: { to_revision: toRevision, shape_revision: shapeRevision, reason },
   });
 }

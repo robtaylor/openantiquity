@@ -48,6 +48,11 @@ export type RecordSummary = Schemas["RecordSummary"];
 export type RecordPage = Schemas["RecordPage"];
 export type RecordOut = Schemas["RecordOut"];
 export type Media = Schemas["MediaOut"];
+/** A change to a marking's shape someone other than its keeper proposed, sent only to signed-in members. */
+export type ShapeSuggestion = Schemas["SuggestionOut"];
+export type SuggestionIn = Schemas["SuggestionIn"];
+/** The standing offer of a marking's keeping, sent to its keeper, the person offered and moderators. */
+export type KeepingOffer = Schemas["KeepingOut"];
 
 /** The three answers to a second look, in the order they are offered. */
 export const ANSWERS = ["yes", "unsure", "no"] as const satisfies readonly Visible[];

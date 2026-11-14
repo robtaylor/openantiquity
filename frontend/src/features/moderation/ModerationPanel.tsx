@@ -12,26 +12,34 @@ import { PhotoQueue } from "../photos/PhotoQueue.js";
 import { useDocumentTitle } from "../placeholders.js";
 import { PanelFrame } from "../shell/PanelFrame.js";
 import { ActionLog } from "./ActionLog.js";
-import { isModerator, mayApprovePhotos } from "./access.js";
+import { isAdmin, isModerator, mayApprovePhotos } from "./access.js";
 import { Members } from "./Members.js";
+import { OrphanedMarkings } from "./OrphanedMarkings.js";
+import { MOD_PATH, MOD_ROUTE } from "./paths.js";
 import { ReportQueue } from "./ReportQueue.js";
 import "./moderation.css";
 
-export const MOD_PATH = "/mod";
-export const MOD_ROUTE = `${MOD_PATH}/:section?`;
+export { MOD_PATH, MOD_ROUTE };
 
-type SectionId = "reports" | "photos" | "members" | "log";
+type SectionId = "reports" | "photos" | "members" | "markings" | "log";
 
-const SECTIONS: Array<{ id: SectionId; label: string; moderatorsOnly: boolean }> = [
-  { id: "reports", label: "Reports", moderatorsOnly: true },
-  { id: "photos", label: "Photos", moderatorsOnly: false },
-  { id: "members", label: "Members", moderatorsOnly: true },
-  { id: "log", label: "Log", moderatorsOnly: true },
+const SECTIONS: Array<{ id: SectionId; label: string }> = [
+  { id: "reports", label: "Reports" },
+  { id: "photos", label: "Photos" },
+  { id: "members", label: "Members" },
+  { id: "markings", label: "No keeper" },
+  { id: "log", label: "Log" },
 ];
 
-/** The sections this role may open, in order. Trusted members and archaeologists get the photo queue alone. */
+/**
+ * The sections this role may open, in order. Trusted members and
+ * archaeologists get the photo queue alone, and only admins the markings
+ * without a keeper, as the server allows.
+ */
 export function sectionsFor(role: string | null): SectionId[] {
-  if (isModerator(role)) return SECTIONS.map((section) => section.id);
+  if (isModerator(role)) {
+    return SECTIONS.map((section) => section.id).filter((id) => id !== "markings" || isAdmin(role));
+  }
   return mayApprovePhotos(role) ? ["photos"] : [];
 }
 
@@ -50,7 +58,7 @@ function Frame({ title = "Moderation", children }: { title?: string; children: R
 /**
  * `/mod`: moderation, for the people whose role allows it. Moderators get
  * the report queue, the photo queue, the members who could be trusted, and
- * the log; trusted members and archaeologists get the photo queue alone.
+ * the log, and admins also the markings without a keeper; trusted members and archaeologists get the photo queue alone.
  * Everyone else is told it isn't for them. Every part needs the welcome step
  * finished, because that is where the terms are accepted (Decision 0013).
  */
@@ -153,6 +161,7 @@ export function ModerationPanel({ meta }: { meta: Meta }) {
       {asked === "reports" ? <ReportQueue meta={meta} /> : null}
       {asked === "photos" ? <PhotoQueue /> : null}
       {asked === "members" ? <Members meta={meta} /> : null}
+      {asked === "markings" ? <OrphanedMarkings /> : null}
       {asked === "log" ? <ActionLog /> : null}
     </div>
   );

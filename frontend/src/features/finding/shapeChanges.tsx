@@ -2,7 +2,8 @@
  * What the finding's page says about changes to its shape (Decision 0029):
  * how much has been added since the last second look, from the ground
  * (`location.shape.added_since_looked_m`, framed by `added_view`), and each
- * change as a timeline entry (`location.shape.changes`). Someone who sees
+ * change as a timeline entry (`location.shape.changes`), naming who
+ * suggested it when the keeper accepted someone's suggestion. Someone who sees
  * only the square gets `changed` entries alone: that the shape changed, and
  * when.
  */
@@ -76,6 +77,7 @@ export function ShapeChangeEntry({ change }: { change: ShapeChange }) {
       <p className="fc-timeline__what">
         <strong>{shapeChangeWords(change)}</strong>
       </p>
+      {change.suggested_by ? <p className="fc-timeline__who">Suggested by {change.suggested_by.display_name}</p> : null}
       {view ? (
         <Button size="sm" variant="ghost" icon={<MapPinned size={15} aria-hidden />} onClick={() => showView(view)}>
           Show what was added

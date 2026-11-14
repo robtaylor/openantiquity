@@ -107,6 +107,12 @@ export interface MarkState extends MarkFields {
   keptAs: (draftId: string) => void;
   /** Take up a path to change, named `editing` by the caller, with nothing selected and no points being added. */
   edit: (editing: string, path: Path) => void;
+  /**
+   * Name what the tool holds `editing` instead, keeping the path, its undo
+   * and everything else: a change carried over to a newer revision of the
+   * shape, or from a suggestion to a change, at the person's word.
+   */
+  rename: (editing: string) => void;
   /** A tap on the map, or "Add a point at the cross": a point of the chosen kind, or the other with `otherKind`. */
   add: (point: LngLat, limits: ShapeLimits, otherKind?: boolean) => void;
   /** "Add a point at the cross": a point of the chosen kind, noted as placed by the button. */
@@ -230,6 +236,8 @@ export const useMarkStore = create<MarkState>()((set, get) => {
 
     edit: (editing, path) => set({ ...EMPTY_MARK, editing, shape: history(path), kept: path, drawing: false }),
 
+    rename: (editing) => set({ editing }),
+
     keptAs: (draftId) => set((state) => ({ draftId, kept: state.shape.present })),
 
     add: (point, limits, otherKind = false) => addAtEnd(point, limits, otherKind, false),
@@ -334,26 +342,43 @@ export function hasUnkeptLine(state: MarkFields): boolean {
 
 /**
  * Something unsaved the tool holds: a new marking, a change to a saved
- * finding's shape, or a draft whose line has changed since it was kept. A
- * panel that would take the tool over asks before it does, and one that
- * closes without having taken it over leaves it alone.
+ * finding's shape, a suggested change to someone else's that isn't sent, or
+ * a draft whose line has changed since it was kept. A panel that would take
+ * the tool over asks before it does, and one that closes without having
+ * taken it over leaves it alone.
  */
-export type Unsaved = { kind: "marking" } | { kind: "change"; publicId: string } | { kind: "draft"; draftId: string };
+export type Unsaved =
+  | { kind: "marking" }
+  | { kind: "change"; publicId: string }
+  | { kind: "suggestion"; publicId: string }
+  | { kind: "draft"; draftId: string };
 
 export function unsavedInHand(state: MarkFields): Unsaved | null {
   if (isUnsavedNewMark(state)) return { kind: "marking" };
   const publicId = editedFinding(state.editing);
   if (publicId !== null) return state.shape.past.length > 0 ? { kind: "change", publicId } : null;
+  const suggested = unsentSuggestion(state);
+  if (suggested !== null) return { kind: "suggestion", publicId: suggested };
   // A draft as it was kept is safe where it is kept. Its title and note aren't looked at: only its line.
   if (state.draftId !== null && hasUnkeptLine(state)) return { kind: "draft", draftId: state.draftId };
   return null;
+}
+
+/**
+ * The finding a suggested change in hand is for, once something has been
+ * changed: a suggestion taken up and left as it was loses nothing. Like a
+ * new marking, it is kept in sight while the tool isn't on it.
+ */
+export function unsentSuggestion(state: MarkFields): string | null {
+  const publicId = editedFinding(state.editing, "suggest");
+  return publicId !== null && state.shape.past.length > 0 ? publicId : null;
 }
 
 /** `unsavedInHand` as text, so a component can follow it without a new object each time. */
 export function unsavedKey(state: MarkFields): string | null {
   const held = unsavedInHand(state);
   if (held === null) return null;
-  return held.kind === "marking" ? "marking" : `${held.kind}:${held.kind === "change" ? held.publicId : held.draftId}`;
+  return held.kind === "marking" ? "marking" : `${held.kind}:${held.kind === "draft" ? held.draftId : held.publicId}`;
 }
 
 /** The path being marked, for components. */

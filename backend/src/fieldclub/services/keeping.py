@@ -128,8 +128,8 @@ def check_may_offer(finding: Finding, kept_by: User, user: User) -> None:
 def offer_stands(finding: Finding, offered_to: User | None) -> bool:
     """Whether the finding's offer stands: one is made, to an account that is neither deleted nor banned.
 
-    Deleting an account and lifting a ban clear offers, so this is for the
-    moment one of those crossed an offer.
+    Deleting an account and banning one clear the offers made to it, so this
+    is for the moment one of those crossed an offer.
     """
     if finding.keeping_offered_to is None:
         return False

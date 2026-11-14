@@ -18,6 +18,8 @@ import type {
   RecordOut,
   RecordPage,
   Reveal,
+  ShapeSuggestion,
+  SuggestionIn,
   Suggestions,
   Visible,
 } from "./types.js";
@@ -181,6 +183,48 @@ export function searchRecords(q: string, signal?: AbortSignal): Promise<RecordPa
 
 export function fetchRecord(recordId: number, signal?: AbortSignal): Promise<RecordOut> {
   return apiFetch<RecordOut>(`/records/${recordId}`, { signal });
+}
+
+/** Suggest a change to someone else's marking: the whole path, and the revision it was made on. */
+export function suggestChange(publicId: string, body: SuggestionIn): Promise<ShapeSuggestion> {
+  return apiFetch<ShapeSuggestion>(findingUrl(publicId, "/suggestions"), { method: "POST", body });
+}
+
+/** The suggester takes back a suggestion of their own that is still waiting. */
+export function withdrawSuggestion(publicId: string, suggestionId: number): Promise<void> {
+  return apiFetch<void>(findingUrl(publicId, `/suggestions/${suggestionId}`), { method: "DELETE" });
+}
+
+/** The keeper accepts a suggestion, naming the shape's revision they saw it against. */
+export function acceptSuggestion(
+  publicId: string,
+  suggestionId: number,
+  shapeRevision: number,
+): Promise<FindingDetail> {
+  return apiFetch<FindingDetail>(findingUrl(publicId, `/suggestions/${suggestionId}/accept`), {
+    method: "POST",
+    body: { shape_revision: shapeRevision },
+  });
+}
+
+/** The keeper declines a suggestion. There is no reason to give: talk goes in the comments. */
+export function declineSuggestion(publicId: string, suggestionId: number): Promise<ShapeSuggestion> {
+  return apiFetch<ShapeSuggestion>(findingUrl(publicId, `/suggestions/${suggestionId}/decline`), { method: "POST" });
+}
+
+/** Offer the keeping of a marking to the member with this handle, replacing any offer standing. */
+export function offerKeeping(publicId: string, handle: string): Promise<FindingDetail> {
+  return apiFetch<FindingDetail>(findingUrl(publicId, "/keeping/offer"), { method: "PUT", body: { handle } });
+}
+
+/** Take back the standing offer, as its keeper, or turn it down, as the person offered. */
+export function withdrawKeepingOffer(publicId: string): Promise<void> {
+  return apiFetch<void>(findingUrl(publicId, "/keeping/offer"), { method: "DELETE" });
+}
+
+/** Take on the keeping offered to you. */
+export function takeKeeping(publicId: string): Promise<FindingDetail> {
+  return apiFetch<FindingDetail>(findingUrl(publicId, "/keeping/accept"), { method: "POST" });
 }
 
 /** The address that downloads one finding as GeoJSON or as a spreadsheet a records officer can use. */

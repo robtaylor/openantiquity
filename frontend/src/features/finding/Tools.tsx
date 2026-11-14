@@ -1,4 +1,4 @@
-import { Download, Link2, Pencil, ShieldMinus, ShieldPlus, Spline, Undo2 } from "lucide-react";
+import { Download, Eraser, Handshake, Link2, Pencil, ShieldMinus, ShieldPlus, Spline, Undo2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import type { Meta } from "../../api/meta.js";
@@ -12,10 +12,12 @@ import { findingPath } from "../findings/selection.js";
 import { levelsBeside, type Sensitivity } from "../findings/types.js";
 import { AddToInvestigation } from "../investigations/AddToInvestigation.js";
 import { savedPath } from "../mark/ChangeShapePanel.js";
-import { changeShapePath } from "../mark/editingKey.js";
+import { changeShapePath, suggestPath } from "../mark/editingKey.js";
+import { removeMarkingPath } from "../moderation/paths.js";
 import { changeSensitivity, exportUrl, lowerSensitivity, updateFinding, withdrawFinding } from "./api.js";
 import { shownClass, type ViewerPosition, whoSees } from "./describe.js";
 import { reasonOf, toastFailure } from "./feedback.js";
+import { OfferDialog, OfferStanding } from "./Keeping.js";
 import { type PositionField, positionFields, positionWords } from "./positionInText.js";
 import type { FindingDetail, FindingUpdate } from "./types.js";
 
@@ -349,15 +351,17 @@ export interface ToolsProps {
 
 /**
  * The controls for whoever the server lets use them: edit, change the shape
- * and withdraw for the finder, raising the level for the finder, trusted members and
+ * and hand it on for the keeper, withdraw for the finder, raising the level for the finder, trusted members and
  * moderators, lowering it for moderators; and everyone's: copy a link,
  * download as GeoJSON or as a spreadsheet.
  */
 export function Tools({ meta, finding, position, onApplied }: ToolsProps) {
-  const [dialog, setDialog] = useState<"edit" | "raise" | "lower" | "withdraw" | null>(null);
+  const [dialog, setDialog] = useState<"edit" | "raise" | "lower" | "withdraw" | "hand-on" | "offer" | null>(null);
   const navigate = useNavigate();
   const close = () => setDialog(null);
-  const own = position.isFinder || position.mayEdit || position.mayWithdraw;
+  // The keeper hands it on from here. An admin offers a marking with no keeper from the admins' own section.
+  const handsOn = position.mayHandOn && !position.mayRemoveMarking;
+  const own = position.isFinder || position.mayEdit || position.mayWithdraw || handsOn;
 
   async function withdraw(): Promise<void> {
     close();
@@ -390,6 +394,16 @@ export function Tools({ meta, finding, position, onApplied }: ToolsProps) {
                 Change the shape
               </Button>
             ) : null}
+            {handsOn ? (
+              <Button
+                size="sm"
+                icon={<Handshake size={15} aria-hidden />}
+                data-hand-on=""
+                onClick={() => setDialog("hand-on")}
+              >
+                Hand it on
+              </Button>
+            ) : null}
             {position.mayRaise ? (
               <Button size="sm" icon={<ShieldPlus size={15} aria-hidden />} onClick={() => setDialog("raise")}>
                 Protect it
@@ -411,12 +425,61 @@ export function Tools({ meta, finding, position, onApplied }: ToolsProps) {
               </Button>
             ) : null}
           </div>
+          {handsOn ? <OfferStanding finding={finding} /> : null}
           {position.mayEdit && savedPath(finding) === null ? (
             <p className="fc-finding__hint">
               Its shape was drawn before the drawing tool and can't be changed point by point. You can draw a new one to
               replace it.
             </p>
           ) : null}
+        </section>
+      ) : null}
+
+      {finding.actions.suggest.allowed ? (
+        <section className="fc-finding__section" aria-labelledby="fc-suggest-title">
+          <h3 id="fc-suggest-title">Its shape</h3>
+          <p className="fc-finding__hint">
+            Only its keeper changes its line or shape. You can suggest a change, which its keeper accepts or declines.
+          </p>
+          <div className="fc-finding__tools">
+            <Button
+              size="sm"
+              icon={<Spline size={15} aria-hidden />}
+              onClick={() => navigate(suggestPath(finding.public_id))}
+            >
+              Suggest a change
+            </Button>
+          </div>
+        </section>
+      ) : null}
+
+      {position.mayRemoveMarking ? (
+        // Only an admin is ever allowed this, and only for a marking with no keeper (Decision 0040).
+        <section className="fc-finding__section" aria-labelledby="fc-no-keeper-title">
+          <h3 id="fc-no-keeper-title">No keeper</h3>
+          <p className="fc-finding__hint">
+            Its keeper's account is deleted or banned, so nobody can change it. Only admins see this.
+          </p>
+          <div className="fc-finding__tools">
+            {position.mayHandOn ? (
+              <Button
+                size="sm"
+                icon={<Handshake size={15} aria-hidden />}
+                data-hand-on=""
+                onClick={() => setDialog("offer")}
+              >
+                Offer it to someone
+              </Button>
+            ) : null}
+            <Button
+              size="sm"
+              icon={<Eraser size={15} aria-hidden />}
+              onClick={() => navigate(removeMarkingPath(finding.public_id))}
+            >
+              Remove the marking
+            </Button>
+          </div>
+          {position.mayHandOn ? <OfferStanding finding={finding} /> : null}
         </section>
       ) : null}
 
@@ -453,6 +516,12 @@ export function Tools({ meta, finding, position, onApplied }: ToolsProps) {
       </section>
 
       {dialog === "edit" ? <EditDialog meta={meta} finding={finding} open onClose={close} onSaved={onApplied} /> : null}
+      {dialog === "offer" ? (
+        <OfferDialog finding={finding} title="Offer it to someone" open onClose={close} onSaved={onApplied} />
+      ) : null}
+      {dialog === "hand-on" ? (
+        <OfferDialog finding={finding} title="Hand it on" open onClose={close} onSaved={onApplied} />
+      ) : null}
       {dialog === "raise" ? <RaiseDialog finding={finding} open onClose={close} onSaved={onApplied} /> : null}
       {dialog === "lower" ? <LowerDialog finding={finding} open onClose={close} onSaved={onApplied} /> : null}
       <Dialog

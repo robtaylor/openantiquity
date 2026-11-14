@@ -95,6 +95,10 @@ export interface ViewerPosition {
   /** A moderator may lower it, through the moderation route. */
   mayLower: boolean;
   mayVerify: boolean;
+  /** Offer the keeping to someone and take an offer back: the keeper, or an admin for a marking with no keeper. */
+  mayHandOn: boolean;
+  /** Put an orphaned marking's shape back or take it away. Only ever an admin, and only for a marking with no keeper. */
+  mayRemoveMarking: boolean;
 }
 
 /**
@@ -127,6 +131,8 @@ export function positionOf(finding: FindingDetail, viewer: Viewer): ViewerPositi
     mayRaise: actions.raise_level.allowed,
     mayLower: actions.lower_level.allowed,
     mayVerify: actions.verify.allowed,
+    mayHandOn: actions.hand_on.allowed,
+    mayRemoveMarking: actions.remove_marking.allowed,
   };
 }
 

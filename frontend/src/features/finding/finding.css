@@ -839,3 +839,48 @@
   background: var(--raised);
   font-size: 14px;
 }
+
+/* Suggested changes to the shape, each a card with its actions under it. */
+.fc-suggestions {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.fc-suggestion {
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.fc-suggestion p {
+  margin: 0;
+}
+
+.fc-suggestion__behind {
+  color: var(--warn);
+}
+
+/* A standing offer of the keeping, under the keeper's tools. */
+.fc-keeping-offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.fc-keeping-offer p {
+  margin: 0;
+}
+
+/* The offer, to the person asked: set apart, since it waits on them. */
+.fc-keeping-ask {
+  border-left: 3px solid var(--accent);
+  padding-left: 12px;
+}

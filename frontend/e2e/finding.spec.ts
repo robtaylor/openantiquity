@@ -53,7 +53,7 @@ test("a member sees the step, what would move it up, and the map goes to the fin
   const panel = await openFinding(page, finding);
   await expect(panel.locator(".fc-tier-badge")).toHaveText("Seen by others");
   await expect(panel.getByRole("meter", { name: "Confidence" })).toHaveAttribute("aria-valuenow", "36");
-  await expect(panel.getByText("Spotted by Ada Lovelace on 1 November 2026")).toBeVisible();
+  await expect(panel.getByText("Found by Ada Lovelace on 1 November 2026")).toBeVisible();
   await expect(
     panel.getByText("It needs two more kinds of evidence, such as an old map or an aerial photo."),
   ).toBeVisible();

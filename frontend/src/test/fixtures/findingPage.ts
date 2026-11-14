@@ -4,6 +4,7 @@ import type {
   FindingDetail,
   Observation,
   Reveal,
+  ShapeSuggestion,
   SuggestedRecord,
   Suggestions,
 } from "../../features/finding/types.js";
@@ -69,6 +70,10 @@ export const FINDER_ACTIONS: Actions = {
   edit: { allowed: true, reason: null },
   withdraw: { allowed: true, reason: null },
   raise_level: { allowed: true, reason: null },
+  // The finder keeps it until it is handed on: they change it themselves, and decide what others suggest.
+  suggest: { allowed: false, reason: "own_marking" },
+  decide_suggestions: { allowed: true, reason: null },
+  hand_on: { allowed: true, reason: null },
 };
 
 /** What a signed-out visitor may do: nothing until they sign in. */
@@ -294,4 +299,69 @@ export function suggestionFixture(overrides: Partial<SuggestedRecord> = {}): Sug
 
 export function suggestionsFixture(items: SuggestedRecord[] = [suggestionFixture()]): Suggestions {
   return { origin: { lon: AT.lon, lat: AT.lat, obscured: false, square: null }, items };
+}
+
+const LINE_POINTS = [offset(-100, 0), offset(0, 20), offset(100, 0)];
+
+/**
+ * The finding's page for a line of three points at shape revision `revision`,
+ * kept by its finder, as `actions` says. Pending suggestions go in
+ * `suggestions`, as the server sends them to signed-in members.
+ */
+export function lineFixture(
+  overrides: Partial<FindingDetail> = {},
+  { revision = 3, suggestions = [] }: { revision?: number; suggestions?: ShapeSuggestion[] } = {},
+): FindingDetail {
+  const base = pageFixture();
+  const coordinates = LINE_POINTS.map(({ lon, lat }) => [lon, lat]);
+  return {
+    ...base,
+    location: {
+      ...base.location,
+      outline: { type: "LineString", coordinates },
+      path: {
+        closed: false,
+        curve: "catmull-rom-centripetal-1",
+        points: LINE_POINTS.map(({ lon, lat }) => ({ lon, lat, kind: "corner" as const })),
+      },
+      shape: {
+        kind: "line",
+        length_m: 205,
+        revision,
+        extent: [
+          LINE_POINTS[0]?.lon ?? 0,
+          LINE_POINTS[0]?.lat ?? 0,
+          LINE_POINTS[2]?.lon ?? 0,
+          LINE_POINTS[1]?.lat ?? 0,
+        ],
+        changes: [{ kind: "drawn", on: "2026-11-01" }],
+        added_since_looked_m: null,
+        suggestions,
+      },
+    },
+    ...overrides,
+  };
+}
+
+/** A pending suggestion that carries the line of `lineFixture` on 150 m to the east, made on revision 3 by `OTHER`. */
+export function shapeSuggestionFixture(overrides: Partial<ShapeSuggestion> = {}): ShapeSuggestion {
+  const points = [...LINE_POINTS, offset(250, 10)];
+  return {
+    id: 71,
+    by: OTHER,
+    created_at: "2026-11-10T09:30:00Z",
+    base_revision: 3,
+    behind: false,
+    kind: "extended",
+    length_m: 355,
+    path: {
+      closed: false,
+      curve: "catmull-rom-centripetal-1",
+      points: points.map(({ lon, lat }) => ({ lon, lat, kind: "corner" as const })),
+    },
+    outline: { type: "LineString", coordinates: points.map(({ lon, lat }) => [lon, lat]) },
+    state: "pending",
+    decided_at: null,
+    ...overrides,
+  };
 }

@@ -147,7 +147,7 @@ function sentenceFor(meta: Meta, event: EventFacts): Part[] {
         ? [person(actor), " invited you to join an investigation"]
         : ["You've been invited to join an investigation"];
     case "keeper_changed":
-      // Names the new keeper, who may now change the marking. The finder stays its credit.
+      // Names the new keeper, who may now change the marking. The finder is still named as its finder.
       return actor ? [person(actor), " now keeps ", finding] : [finding, " has a new keeper"];
     case "keeping_offered":
       // Never names who offered it, so an admin's offer reads as a keeper's.

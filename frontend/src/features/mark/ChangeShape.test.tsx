@@ -338,7 +338,7 @@ describe("opening the tool on a saved finding", () => {
     renderShell(`/mark/finding/${finding.public_id}`);
     await mapReady();
     const panel = within(await screen.findByRole("complementary", { name: "Change the shape" }));
-    expect(await panel.findByText(/Only the person who marked a finding can change its shape/)).toBeInTheDocument();
+    expect(await panel.findByText(/Only the keeper of a marking can change its shape/)).toBeInTheDocument();
     expect(handles()).toHaveLength(0);
   });
 
@@ -405,7 +405,28 @@ describe("saving a changed shape", () => {
     expect((body.path as { points: unknown[] }).points).toHaveLength(2);
   });
 
-  it("shows the finding again as it now is when the shape was changed elsewhere, and says so", async () => {
+  it("says so, and keeps the change, when the shape as it now is can't be loaded either", async () => {
+    const user = userEvent.setup();
+    const finding = lineFinding();
+    const { routes } = await openChange(finding);
+    routes.on(`PATCH /findings/${finding.public_id}`, () =>
+      apiError(409, "shape_changed", "The shape was changed after you opened it."),
+    );
+    // The connection drops before the finding can be asked for again.
+    routes.on(`GET /findings/${finding.public_id}`, () => apiError(503, "unavailable", "Try again."));
+    await user.click(screen.getByRole("button", { name: /^Point 2 of 3/ }));
+    await user.click(changePanel().getByRole("button", { name: "Delete point" }));
+    await user.click(changePanel().getByRole("button", { name: "Save the shape" }));
+
+    // Nothing on the page knows the new shape, so the notice can't show. The person is still told.
+    expect(await screen.findByText(/your change wasn't saved\. Your drawing is still here/)).toBeInTheDocument();
+    expect(handles()).toHaveLength(2);
+    expect(changePanel().getByRole("button", { name: "Undo" })).toBeEnabled();
+    expect(changePanel().getByRole("button", { name: "Save the shape" })).toBeEnabled();
+    expect(address()).toBe(`/mark/finding/${finding.public_id}`);
+  });
+
+  it("keeps the change and its undo when the shape was changed elsewhere, says it wasn't saved, and saves it over at the person's word", async () => {
     const user = userEvent.setup();
     const finding = lineFinding();
     const { routes } = await openChange(finding);
@@ -421,20 +442,21 @@ describe("saving a changed shape", () => {
     await user.click(changePanel().getByRole("button", { name: "Delete point" }));
     expect(handles()).toHaveLength(2);
     await user.click(changePanel().getByRole("button", { name: "Save the shape" }));
-    expect(
-      await changePanel().findByText(
-        "The shape was changed somewhere else while you had it open. This is it as it is now.",
-      ),
-    ).toBeInTheDocument();
-    await waitFor(() => expect(handles()).toHaveLength(4));
+    expect(await changePanel().findByText(/Your change hasn't been saved, and it is still here/)).toBeInTheDocument();
+    expect(handles()).toHaveLength(2);
+    expect(changePanel().getByRole("button", { name: "Undo" })).toBeEnabled();
     expect(address()).toBe(`/mark/finding/${finding.public_id}`);
 
-    // The next save starts from the revision now shown.
+    // Saved over the shape as it is now, from the revision now shown.
     routes.on(`PATCH /findings/${finding.public_id}`, () => json(moved));
-    await user.click(changePanel().getByRole("button", { name: "Save the shape" }));
+    await user.click(changePanel().getByRole("button", { name: "Save it over the shape as it is now" }));
     await waitFor(() => expect(routes.callsTo(`PATCH /findings/${finding.public_id}`)).toHaveLength(2));
-    const second = routes.callsTo(`PATCH /findings/${finding.public_id}`)[1]?.body as { path_revision?: number };
+    const second = routes.callsTo(`PATCH /findings/${finding.public_id}`)[1]?.body as {
+      path_revision?: number;
+      path?: { points: unknown[] };
+    };
     expect(second?.path_revision).toBe(4);
+    expect(second?.path?.points).toHaveLength(2);
   });
 
   it("says beside the path why a change that moves what others looked at is refused, and keeps the change", async () => {
@@ -487,7 +509,7 @@ describe("the finding changing elsewhere while its shape is open", () => {
     expect(changePanel().getByRole("button", { name: "Save the shape" })).toBeEnabled();
   });
 
-  it("keeps a change in progress with its undo, says it can't be saved over the newer shape, and offers to take that up", async () => {
+  it("keeps a change in progress with its undo when a newer shape arrives, and asks before taking that up", async () => {
     const user = userEvent.setup();
     const finding = lineFinding();
     const { routes } = await openChange(finding);
@@ -498,19 +520,17 @@ describe("the finding changing elsewhere while its shape is open", () => {
     routes.on(`GET /findings/${finding.public_id}`, () => json(extendedElsewhere()));
     refocus();
     await waitFor(() => expect(routes.callsTo(`GET /findings/${finding.public_id}`).length).toBeGreaterThan(fetched));
-    expect(
-      await changePanel().findByText(
-        "The shape was changed somewhere else while you had it open, so what is here can't be saved over it.",
-      ),
-    ).toBeInTheDocument();
+    expect(await changePanel().findByText(/Your change hasn't been saved, and it is still here/)).toBeInTheDocument();
     expect(handles()).toHaveLength(2);
     expect(changePanel().getByRole("button", { name: "Undo" })).toBeEnabled();
     expect(changePanel().getByRole("button", { name: "Save the shape" })).toBeDisabled();
     expect(routes.callsTo(`PATCH /findings/${finding.public_id}`)).toHaveLength(0);
 
-    await user.click(changePanel().getByRole("button", { name: "Show it as it is now" }));
+    await user.click(changePanel().getByRole("button", { name: "Start again from the shape as it is now" }));
+    expect(handles()).toHaveLength(2);
+    await user.click(changePanel().getByRole("button", { name: "Discard it and start again" }));
     await waitFor(() => expect(handles()).toHaveLength(4));
-    expect(changePanel().queryByText(/can't be saved over it/)).toBeNull();
+    expect(changePanel().queryByText(/hasn't been saved/)).toBeNull();
     expect(changePanel().getByRole("button", { name: "Undo" })).toBeDisabled();
 
     // A save from here starts from the revision now shown.
@@ -600,9 +620,7 @@ describe("the exact path and signing out", () => {
     routes.on("GET /auth/me", () => signedOutResponse());
     routes.on(`GET /findings/${finding.public_id}`, () => json(lineFinding({ actions: pageFixture().actions })));
     await user.click(screen.getByRole("button", { name: "Sign out for the test" }));
-    expect(
-      await changePanel().findByText(/Only the person who marked a finding can change its shape/),
-    ).toBeInTheDocument();
+    expect(await changePanel().findByText(/Only the keeper of a marking can change its shape/)).toBeInTheDocument();
     expect(useMarkStore.getState().shape.present.points).toHaveLength(0);
     expect(useMarkStore.getState().editing).toBeNull();
     expect(handles()).toHaveLength(0);
@@ -620,9 +638,7 @@ describe("the exact path and signing out", () => {
     serve(finding, meFixture());
     renderShell(`/mark/finding/${finding.public_id}`);
     const map = await mapReady();
-    expect(
-      await changePanel().findByText(/Only the person who marked a finding can change its shape/),
-    ).toBeInTheDocument();
+    expect(await changePanel().findByText(/Only the keeper of a marking can change its shape/)).toBeInTheDocument();
     expect(handles()).toHaveLength(0);
     expect(screen.queryByTestId("mark-path")).toBeNull();
     expect(screen.queryByTestId("reticle")).toBeNull();

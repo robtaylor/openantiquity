@@ -54,9 +54,12 @@ import { MarkButton } from "../mark/MarkButton.js";
 import { isMarkPath, MarkLayer } from "../mark/MarkLayer.js";
 import { MARK_PATH, MarkPanel } from "../mark/MarkPanel.js";
 import { SearchOrGuide } from "../mark/SearchOrGuide.js";
+import { SuggestPanel } from "../mark/SuggestPanel.js";
 import { RECENT_MENTIONS_PATH } from "../mentions/paths.js";
 import { RecentMentionsPanel } from "../mentions/RecentMentionsPanel.js";
 import { MOD_ROUTE, ModerationPanel } from "../moderation/ModerationPanel.js";
+import { REMOVE_MARKING_ROUTE } from "../moderation/paths.js";
+import { RemoveMarkingPanel } from "../moderation/RemoveMarkingPanel.js";
 import { NotificationAnnouncer } from "../notifications/NotificationAnnouncer.js";
 import { ProfilePanel as PersonPanel, PROFILE_ROUTE } from "../people/ProfilePanel.js";
 import { APP_NAME, NotFoundPanel } from "../placeholders.js";
@@ -375,6 +378,7 @@ function ReadyShell({ meta }: { meta: Meta }) {
           <Routes>
             <Route path="/" element={bareMap ? null : <ExplorePanel meta={meta} />} />
             <Route path="/mark/finding/:publicId" element={<ChangeShapePanel meta={meta} />} />
+            <Route path="/mark/suggest/:publicId" element={<SuggestPanel />} />
             <Route path="/mark/:draftId?" element={<MarkPanel meta={meta} />} />
             <Route path="/f/:id" element={<FindingPanel meta={meta} />} />
             <Route path={REVIEW_PATH} element={<ReviewPanel meta={meta} />} />
@@ -385,6 +389,7 @@ function ReadyShell({ meta }: { meta: Meta }) {
             <Route path="/account" element={<AccountPage />} />
             <Route path={PROFILE_ROUTE} element={<PersonPanel meta={meta} />} />
             <Route path={MOD_ROUTE} element={<ModerationPanel meta={meta} />} />
+            <Route path={REMOVE_MARKING_ROUTE} element={<RemoveMarkingPanel />} />
             <Route path={EMAIL_LINK_PATH} element={<EmailLinkPage />} />
             <Route path="/r/:id" element={<RecordPage />} />
             <Route path={RECORD_SEARCH_PATH} element={<RecordSearchPanel />} />

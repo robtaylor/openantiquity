@@ -19,6 +19,11 @@ export function isModerator(role: string | null): boolean {
   return known === "moderator" || known === "admin";
 }
 
+/** Admins alone see the markings without a keeper and remove them (Decision 0040). */
+export function isAdmin(role: string | null): boolean {
+  return asRole(role) === "admin";
+}
+
 /** Trusted members, archaeologists, moderators and admins approve photos (Decision 0009). */
 export function mayApprovePhotos(role: string | null): boolean {
   const known = asRole(role);

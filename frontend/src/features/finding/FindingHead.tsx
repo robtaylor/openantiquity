@@ -10,6 +10,7 @@ import { TierBadge } from "../../ui/TierBadge.js";
 import { tierVar } from "../../ui/tokens.js";
 import { useAccountUi } from "../account/requireAccount.js";
 import { whereRef } from "../findings/square.js";
+import { profilePath } from "../people/api.js";
 import {
   classLabel,
   distanceWords,
@@ -76,7 +77,8 @@ export interface FindingHeadProps {
 
 /**
  * The top of a finding's page: its step and confidence, its state when it
- * isn't open, who found it and when, what it is and when from, and where.
+ * isn't open, who found it and when, who keeps it when someone else does,
+ * what it is and when from, and where.
  * Someone who may not see the exact place sees the square and why.
  */
 export function FindingHead({ meta, finding, signedIn, change }: FindingHeadProps) {
@@ -113,10 +115,19 @@ export function FindingHead({ meta, finding, signedIn, change }: FindingHeadProp
       <p className="fc-finding__byline">
         <Avatar name={finding.author.display_name} handle={finding.author.handle} size={24} />
         <span>
-          Spotted by <Link to={`/u/${encodeURIComponent(finding.author.handle)}`}>{finding.author.display_name}</Link>{" "}
-          on {formatDate(finding.created_at)}
+          Found by <Link to={profilePath(finding.author.handle)}>{finding.author.display_name}</Link> on{" "}
+          {formatDate(finding.created_at)}
         </span>
       </p>
+      {/* The keeper is who the server says may change it. Found by never changes, and keeping is handed on. */}
+      {finding.keeper.handle !== finding.author.handle ? (
+        <p className="fc-finding__byline">
+          <Avatar name={finding.keeper.display_name} handle={finding.keeper.handle} size={24} />
+          <span>
+            Kept by <Link to={profilePath(finding.keeper.handle)}>{finding.keeper.display_name}</Link>
+          </span>
+        </p>
+      ) : null}
 
       <dl className="fc-finding__facts">
         <div>

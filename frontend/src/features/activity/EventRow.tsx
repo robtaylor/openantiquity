@@ -21,6 +21,7 @@ import { useNavigate } from "react-router";
 import type { Meta } from "../../api/meta.js";
 import { findingPath, useSelectedFinding } from "../findings/selection.js";
 import { whereRef } from "../findings/square.js";
+import { MARKINGS_PATH } from "../moderation/paths.js";
 import type { ActivityFinding, ActivityKind } from "./api.js";
 import { describeEvent, type EventFacts, type Part } from "./describe.js";
 import { fullTime, whenWords } from "./time.js";
@@ -95,7 +96,8 @@ function isPlainClick(event: React.MouseEvent): boolean {
 
 /**
  * One thing that happened: what, in a sentence, and when. It opens its
- * finding, marked on the map as Explore marks it, or its investigation. A
+ * finding, marked on the map as Explore marks it, or its investigation, or
+ * for `keeper_gone` the admins' list of markings without a keeper. A
  * finding whose place this viewer may not see is given by its square.
  */
 export function EventRow({ meta, facts, createdAt, investigation, badge, rowRef, onOpen, now }: EventRowProps) {
@@ -103,7 +105,15 @@ export function EventRow({ meta, facts, createdAt, investigation, badge, rowRef,
   const select = useSelectedFinding((state) => state.select);
   const Icon = KIND_ICONS[facts.kind];
   const finding: ActivityFinding | null = facts.finding;
-  const href = finding ? findingPath(finding.public_id) : investigation ? investigationPath(investigation) : null;
+  // An admin told an account that kept markings is gone goes to the list of markings without a keeper.
+  const href =
+    facts.kind === "keeper_gone"
+      ? MARKINGS_PATH
+      : finding
+        ? findingPath(finding.public_id)
+        : investigation
+          ? investigationPath(investigation)
+          : null;
   const square = finding?.location.obscured ? whereRef(finding.location) : null;
 
   const body = (

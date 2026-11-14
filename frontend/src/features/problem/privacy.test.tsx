@@ -186,6 +186,16 @@ const PAGES: Array<{ name: string; path: string; routes: Record<string, () => Re
     routes: { [`GET /findings/${FINDING_ID}`]: () => json(EXACT_FINDING) },
   },
   {
+    name: "a suggested change to its shape",
+    path: `/mark/suggest/${FINDING_ID}`,
+    routes: { [`GET /findings/${FINDING_ID}`]: () => json(EXACT_FINDING) },
+  },
+  {
+    name: "an admin's removal of its marking",
+    path: `/mod/markings/${FINDING_ID}`,
+    routes: { [`GET /findings/${FINDING_ID}`]: () => json(EXACT_FINDING) },
+  },
+  {
     name: "an investigation holding it",
     path: `/i/${INVESTIGATION_ID}`,
     routes: {

@@ -289,3 +289,69 @@
   font-size: 13px;
   font-weight: 400;
 }
+
+/* Removing an orphaned marking: the earlier shapes to choose from. */
+.fc-removal {
+  display: grid;
+  gap: 12px;
+}
+
+.fc-removal p {
+  margin: 0;
+}
+
+.fc-removal__legend {
+  font-weight: 600;
+}
+
+.fc-removal__choices {
+  display: grid;
+  gap: 6px;
+}
+
+.fc-removal__choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  min-height: 44px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.fc-removal__choice:has(input:checked) {
+  border-color: var(--accent);
+}
+
+.fc-removal__choice[data-disabled="true"] {
+  cursor: not-allowed;
+  color: var(--text-muted);
+}
+
+.fc-removal__choice input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+
+.fc-removal__detail {
+  color: var(--text-muted);
+}
+
+.fc-removal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* An admin has five tabs. Each keeps its whole name, closer together, and they wrap rather than cut a name short. */
+.fc-mod .fc-tabs {
+  flex-wrap: wrap;
+}
+
+.fc-mod .fc-tab {
+  flex: 1 1 auto;
+  padding: 4px 6px;
+  overflow: visible;
+}

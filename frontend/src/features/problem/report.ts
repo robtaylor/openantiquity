@@ -27,6 +27,7 @@ import { NEW_ISSUE_URL } from "./repository.js";
 export const PAGE_PATTERNS: readonly string[] = [
   "/",
   "/mark/finding/:publicId",
+  "/mark/suggest/:publicId",
   "/mark/:draftId?",
   "/f/:id",
   "/review",
@@ -37,6 +38,7 @@ export const PAGE_PATTERNS: readonly string[] = [
   "/account",
   "/u/:handle",
   "/mod/:section?",
+  "/mod/markings/:publicId",
   "/signin/email",
   "/r/:id",
   "/records",

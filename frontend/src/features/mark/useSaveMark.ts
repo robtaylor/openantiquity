@@ -25,9 +25,15 @@ import { usePendingFindings } from "./pending.js";
  * a mode that carries on, such as a scan, goes back to it instead, with the
  * finding's page a press away in the toast.
  */
-export function openSavedFinding(client: QueryClient, navigate: NavigateFunction, finding: FindingDetail): void {
+export function openSavedFinding(
+  client: QueryClient,
+  navigate: NavigateFunction,
+  finding: FindingDetail,
+  forget = true,
+): void {
   client.setQueryData(findingKeys.detail(finding.public_id), finding);
-  useMarkStore.getState().start();
+  // With `forget` false the tool holds something else, which is the person's to keep or discard.
+  if (forget) useMarkStore.getState().start();
   const back = useMarkReturn.getState().to;
   if (back) {
     navigate(back.path, { replace: true });

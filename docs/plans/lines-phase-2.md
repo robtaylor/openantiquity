@@ -211,20 +211,20 @@ Build in this order. Each step is test first, against real PostGIS.
 
 ### WS-B — Frontend
 
-**Status:** Not started.
+**Status:** Built on branch `feat/lines-phase-2-frontend`, 2026-11-14, not deployed.
 
-1. `pnpm gen:api` once WS-A step 5 lands.
-2. **Byline.** `FindingHead.tsx` reads "Found by X on date" and adds "Kept by Y" when they differ. `NotYours` says only the keeper changes the shape and offers "Suggest a change".
-3. **Suggesting.** The drawing tool opens at `/mark/suggest/:publicId` for `actions.suggest`, with its own editing key so a suggestion and an edit never share a path. A panel beside `ChangeShapePanel` sends `POST …/suggestions`. It draws no `looked_at`, and has no looked-at refusal to show: the keeper's accept meets that rule, and shows its message beside the suggestion. The tool itself is untouched.
-4. **Deciding.** A "Suggested changes" section for the keeper: each with who, when, what it does, "behind the current shape" when it is, "Show on the map" drawing it dashed over the shape, Accept and Decline. A refusal is said beside the suggestion.
-5. **Handing on.** "Hand it on" in `Tools.tsx`, a handle field, the offer shown to the person offered with "Take it on" and "No thanks", and notification copy for the four new kinds.
-6. **Admin.** A list of markings without a keeper, opened from the `keeper_gone` notification. On an orphaned finding, "Offer it to someone" and "Remove the marking", the second listing earlier revisions drawn on the map, with a reason.
+1. `pnpm gen:api` once WS-A step 5 lands. Done with WS-A.
+2. **Byline.** `FindingHead.tsx` reads "Found by X on date" and adds "Kept by Y" when they differ. `NotYours` says only the keeper changes the shape and offers "Suggest a change". Built: `features/finding/Keeping.test.tsx` ("the byline", "the tool's address for someone who isn't the keeper"). The editing key names its kind, `finding:` or `suggest:`.
+3. **Suggesting.** The drawing tool opens at `/mark/suggest/:publicId` for `actions.suggest`, with its own editing key so a suggestion and an edit never share a path. A panel beside `ChangeShapePanel` sends `POST …/suggestions`. It draws no `looked_at`, and has no looked-at refusal to show: the keeper's accept meets that rule, and shows its message beside the suggestion. The tool itself is untouched. Built: `SuggestPanel.tsx`, with what both panels share moved to `savedShape.ts`, and `features/mark/Suggest.test.tsx`. An unfinished suggestion is a kind of `Unsaved` in `markStore.ts`, kept in hand on Close and Escape, drawn dashed by `MarkLayer.tsx`, and asked about by "Mark a finding", "Change the shape" and another suggestion. The finding page offers "Suggest a change" under "Its shape", which the plan didn't name.
+4. **Deciding.** A "Suggested changes" section for the keeper: each with who, when, what it does, "behind the current shape" when it is, "Show on the map" drawing it dashed over the shape, Accept and Decline. A refusal is said beside the suggestion. Built: `SuggestedChanges.tsx` and `dashedShape.ts`. The section is shown to every signed-in member the server sends suggestions to, with Accept and Decline only where `actions.decide_suggestions` allows, and "Withdraw it" on the viewer's own. Accepting one that is behind asks first.
+5. **Handing on.** "Hand it on" in `Tools.tsx`, a handle field, the offer shown to the person offered with "Take it on" and "No thanks", and notification copy for the four new kinds. Built: `Keeping.tsx`. The copy for the notifications came with WS-A.
+6. **Admin.** A list of markings without a keeper, opened from the `keeper_gone` notification. On an orphaned finding, "Offer it to someone" and "Remove the marking", the second listing earlier revisions drawn on the map, with a reason. Built: the "No keeper" tab at `/mod/markings` (`OrphanedMarkings.tsx`), and `/mod/markings/:publicId` (`RemoveMarkingPanel.tsx`), tested in `features/moderation/Markings.test.tsx`.
 
 **Exit criteria:** `pnpm test && pnpm typecheck && pnpm lint` and `pnpm build` pass. Every new control is reachable by keyboard with a visible focus ring.
 
 ### WS-C — End-to-end checks and documents
 
-**Status:** Not started.
+**Status:** Built on branch `feat/lines-phase-2-frontend`, 2026-11-14, not deployed. `frontend/e2e/keeping.spec.ts` covers the same flows in fixture mode on both projects, and `frontend/e2e/accessibility.spec.ts` reaches the new controls by keyboard.
 
 1. `frontend/e2e-full/suggestions.spec.ts`: a second member suggests an extension, the keeper accepts it, the timeline names the suggester; a hand-over is offered and taken up; a signed-out reader of a protected line sees no suggestion.
 2. Documents: the findings area doc ("Changing a shape", "Constraints", "Implementation status"), `docs/ARCHITECTURE.md` routes and codes, `docs/UI.md`, `CHANGELOG.md` `[Unreleased]`, and the records below. `uv run docs/scripts/doctool.py lint` passes.

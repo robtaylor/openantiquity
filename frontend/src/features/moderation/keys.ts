@@ -14,4 +14,7 @@ export const moderationKeys = {
   actions: (target: { kind: string; ref: string } | null) =>
     ["moderation", "actions", target?.kind ?? null, target?.ref ?? null] as const,
   actionsAll: ["moderation", "actions"] as const,
+  orphaned: ["moderation", "orphaned"] as const,
+  /** One finding's earlier shapes, for an admin putting one back. */
+  shapes: (publicId: string) => ["moderation", "shapes", publicId] as const,
 };

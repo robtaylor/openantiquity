@@ -12,11 +12,11 @@ import { useKindDrafts } from "../drafts/savers.js";
 import { findingQuery } from "../finding/useFinding.js";
 import { findingKeys } from "../findings/keys.js";
 import { EMPTY_COLLECTION, type FeatureCollection } from "../records/geojson.js";
-import { baseRevision, changeShapeId } from "./editingKey.js";
+import { baseRevision, changeShapeId, suggestId, suggestPath } from "./editingKey.js";
 import { findingDrafts, useSavedDrafts } from "./findingDrafts.js";
 import { MidpointDots } from "./MidpointDots.js";
 import { isMarkPath, MARK_PATH } from "./markPaths.js";
-import { hasUnkeptLine, isUnsavedNewMark, useMarkPath, useMarkStore } from "./markStore.js";
+import { hasUnkeptLine, isUnsavedNewMark, unsentSuggestion, useMarkPath, useMarkStore } from "./markStore.js";
 import { PathHandles } from "./PathHandles.js";
 import { closesAt, geometryVertices, type LngLat, type Path, pathGeometry, segmentNear } from "./path.js";
 import { usePendingFindings } from "./pending.js";
@@ -196,13 +196,14 @@ function NotSavedRing() {
 }
 
 /**
- * A new marking that was never saved, while the tool isn't working on it:
- * its line or shape dashed, and at its first point the ring and "not saved"
- * sign a draft has, which takes the tool back to it. Without this it was
- * held out of sight, and "Mark a finding" brought it back from wherever it
- * had been left.
+ * A new marking that was never saved, or a suggested change that wasn't
+ * sent (`suggestion`, the finding it is for), while the tool isn't working
+ * on it: its line or shape dashed, and at its first point the ring and "not
+ * saved" sign a draft has, which takes the tool back to it. Without this it
+ * was held out of sight, and "Mark a finding" brought it back from wherever
+ * it had been left.
  */
-function UnfinishedMark({ map, path }: { map: MapLibreMap; path: Path }) {
+function UnfinishedMark({ map, path, suggestion }: { map: MapLibreMap; path: Path; suggestion: string | null }) {
   const navigate = useNavigate();
   const [first] = path.points;
   if (first === undefined) return null;
@@ -216,11 +217,11 @@ function UnfinishedMark({ map, path }: { map: MapLibreMap; path: Path }) {
         type="button"
         className="fc-draft-mark"
         style={{ transform: `translate(${x}px, ${y}px)` }}
-        aria-label="Carry on with your unfinished marking"
-        title="Your unfinished marking: not saved yet"
+        aria-label={suggestion ? "Carry on with your suggested change" : "Carry on with your unfinished marking"}
+        title={suggestion ? "Your suggested change: not sent yet" : "Your unfinished marking: not saved yet"}
         onClick={() => {
           useMarkStore.setState({ setAside: false });
-          navigate(MARK_PATH);
+          navigate(suggestion ? suggestPath(suggestion) : MARK_PATH);
         }}
       >
         <NotSavedRing />
@@ -369,18 +370,23 @@ function useAskBeforeLeaving(marking: boolean): void {
 }
 
 /**
- * At "Change the shape", whether the path in the tool is this finding's and
- * the reader may change it, as the finding's page last said: nothing is
- * drawn otherwise, so a reader who may not see the shape exactly never sees
- * one left in the tool. Null on any other page.
+ * At "Change the shape" or "Suggest a change", whether the path in the tool
+ * is this finding's, taken up for that panel, and the reader may change it
+ * or suggest a change, as the finding's page last said: nothing is drawn
+ * otherwise, so a reader who may not see the shape exactly never sees one
+ * left in the tool. Null on any other page.
  */
-function useChangeShapeAllowed(pathname: string): boolean | null {
-  const publicId = changeShapeId(pathname);
+function useSavedShapeAllowed(pathname: string): boolean | null {
+  const changing = changeShapeId(pathname);
+  const suggesting = suggestId(pathname);
+  const publicId = changing ?? suggesting;
   // The panel asks for the finding. This only reads the answer.
   const finding = useQuery({ ...findingQuery(publicId ?? ""), enabled: false }).data;
   const editing = useMarkStore((state) => state.editing);
   if (publicId === null) return null;
-  return finding?.actions.edit.allowed === true && baseRevision(editing, publicId) !== null;
+  const kind = changing !== null ? "finding" : "suggest";
+  const allowed = kind === "finding" ? finding?.actions.edit.allowed : finding?.actions.suggest.allowed;
+  return allowed === true && baseRevision(editing, publicId, kind) !== null;
 }
 
 /**
@@ -399,11 +405,12 @@ function useForgetSetAsideOnLeaving(): void {
 
 /**
  * True while the drawing tool is open: on any page of the marking panel,
- * except "Change the shape" for a finding the reader may not change.
+ * except "Change the shape" or "Suggest a change" for a finding the reader
+ * may not change or suggest a change to.
  */
 export function useMarkingOpen(): boolean {
   const { pathname } = useLocation();
-  const changing = useChangeShapeAllowed(pathname);
+  const changing = useSavedShapeAllowed(pathname);
   // A marking set aside isn't being worked on until the person goes back to it.
   const setAside = useMarkStore((state) => state.setAside);
   return isMarkPath(pathname) && changing !== false && !setAside;
@@ -418,7 +425,8 @@ export function MarkLayer() {
   const map = useMainMap();
   const marking = useMarkingOpen();
   const drawn = useKindDrafts(findingDrafts).length + usePendingFindings((state) => state.pending.length);
-  const unfinished = useMarkStore(isUnsavedNewMark) && !marking;
+  const suggestion = useMarkStore(unsentSuggestion);
+  const unfinished = (useMarkStore(isUnsavedNewMark) || suggestion !== null) && !marking;
   useForgetSetAsideOnLeaving();
   // Follow the map only while there is something on it to keep in place.
   useMapFrame(marking || unfinished || drawn > 0 ? map : null);
@@ -438,7 +446,7 @@ export function MarkLayer() {
           <PathShape map={map} path={path} />
         </svg>
       ) : null}
-      {unfinished ? <UnfinishedMark map={map} path={path} /> : null}
+      {unfinished ? <UnfinishedMark map={map} path={path} suggestion={suggestion} /> : null}
       <DraftMarks map={map} openDraft={marking ? draftId : null} />
       <PendingMarks map={map} />
       {marking && path.points.length > 1 ? <MidpointDots map={map} path={path} /> : null}

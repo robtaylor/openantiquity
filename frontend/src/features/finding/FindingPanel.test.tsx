@@ -96,7 +96,7 @@ describe("a finding's head", () => {
     ).toEqual(["Spotted", "Seen by others", "Corroborated", "Probable", "Checked on the ground", "On record"]);
     expect(within(ladder).getByText("Seen by others")).toHaveAttribute("aria-current", "step");
     expect(panel.queryByText("30")).toBeNull();
-    expect(panel.getByText(/Spotted by/)).toHaveTextContent("Spotted by Ada Lovelace on 1 November 2026");
+    expect(panel.getByText(/Found by/)).toHaveTextContent("Found by Ada Lovelace on 1 November 2026");
     expect(panel.getByText("Round barrow or mound")).toBeInTheDocument();
     expect(panel.getByText("SU 1025 6996")).toBeInTheDocument();
     expect(panel.getByRole("button", { name: "See it as the finder did" })).toBeInTheDocument();

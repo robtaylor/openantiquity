@@ -18,10 +18,12 @@ import { changeMessage, positionOf, type StepAction, type Viewer } from "./descr
 import { EvidenceSection, type OpenForm, openForm } from "./evidence/EvidenceSection.js";
 import { RecordSuggestions } from "./evidence/RecordSuggestions.js";
 import { FindingHead } from "./FindingHead.js";
+import { OfferToYou } from "./Keeping.js";
 import { findingPageKeys } from "./keys.js";
 import { panIntoView, useFindingOnMap, whenStageSettled } from "./mapView.js";
 import { NextSteps } from "./NextSteps.js";
 import { Answers, Credits } from "./People.js";
+import { SuggestedChanges } from "./SuggestedChanges.js";
 import { SecondLook } from "./secondLook/SecondLook.js";
 import { AddedSince } from "./shapeChanges.js";
 import { actionForStep, STEP_PARAM, STRAND_PARAM, stepFromAddress } from "./stepLink.js";
@@ -175,8 +177,10 @@ function FindingPage({ meta, finding }: { meta: Meta; finding: FindingDetail }) 
   return (
     <div className="fc-finding">
       <FindingHead meta={meta} finding={finding} signedIn={viewer.signedIn} change={change} />
+      <OfferToYou finding={finding} onApplied={apply} />
       <NextSteps meta={meta} finding={finding} position={position} onAction={act} />
       <AddedSince finding={finding} />
+      <SuggestedChanges finding={finding} viewerHandle={viewer.handle} onApplied={apply} />
       <SecondLook
         ref={secondLook}
         meta={meta}
