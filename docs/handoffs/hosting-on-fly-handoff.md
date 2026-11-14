@@ -28,7 +28,7 @@ cd backend && uv run pytest -q tests/infra tests/test_config.py tests/test_stora
 fly apps list --org openantiquity
 # Expect: openantiquity and openantiquity-jobs alone
 fly machine list --app openantiquity
-# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit 3fd51cb or later
+# Expect: three machines in lhr, shared-cpu-2x with 2 GB, stopped, suspended or started, on the image of commit 0f16806 or later
 fly ips list --app openantiquity
 # Expect: the private address, the shared IPv4 address 66.241.124.216 and the IPv6 address 2a09:8280:1::1fe:8e38:0
 fly machine list --app openantiquity-jobs
@@ -69,7 +69,9 @@ The last pair names the jobs image that exists. `fly_jobs.py` looks for the imag
 | `d82679f` | Read a stored class this version has no name for as "Not sure" | Decision 0035, released by itself. The schema step now only widens a vocabulary's check, so going back to this commit or a later one doesn't narrow one. Both apps ran it before the next release |
 | `770cadc` | A "Building or ruin" class | The commit the hourly machine runs since 2026-11-13. Its release added the value to the three class checks |
 | `ac70989` | Zoom in to 22, and a right-click left alone while a tool has the map | Frontend only |
-| `3fd51cb` | An unfinished marking kept in sight and asked about, not jumped to | The commit the web app runs since 2026-11-13. Frontend only |
+| `3fd51cb` | An unfinished marking kept in sight and asked about, not jumped to | Frontend only |
+| `06bbdc6` | The map puts findings first, and record counts are a switch | Decision 0036. Frontend only. With counts off, no record tile is asked for further out than zoom 12 |
+| `0f16806` | "Change the shape" asks before it discards something unsaved, and focus is left where it has moved to | The commit the web app runs since 2026-11-14. Frontend only |
 
 ## Open follow-ups (priority-ordered)
 
@@ -124,6 +126,7 @@ Decision 0033 passes over an activity kind or a next step this version has no na
 
 - Multi-direction shade is three colour channels where Composite is one, so its tiles are about two and a half times the bytes: 360 to 450 KB against 140 to 170 KB, measured on the live site on 2026-11-13. It is now the view the map opens on. A palette or WebP encoding would cut that, and changes the pixels, so the style's version goes up with it.
 - Marking a finding doesn't record itself as the tool that has the map (`map/tool.ts`), so each handler asks about marking in its own way: the records hook, the findings layer and the scan layer. Having the marking pages set the tool would leave one question to ask.
+- A view zoomed out that holds more than 500 findings draws 500 and says so (Decision 0036). When that becomes usual, have the server count findings by area as the record tiles do.
 - Terrain past zoom 16 was tried and gives a modest gain for Composite alone ([the spike](../architecture/decisions/spikes/deeper-terrain-tiles.md)).
 
 ### 9. What the security review left for hosting
