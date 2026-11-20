@@ -159,6 +159,12 @@ How long Fly keeps backups wasn't found, and no restore has been tried. `fly mpg
 - The hourly limits on suggestions and offers are counted on each machine, so with three machines serving the real ceiling is three times the figure.
 - The owner's answer on whether a keeper who isn't the finder may give a second look is still open in `docs/plans/lines-phase-2.md`. It is built as "no".
 
+### 13. Making an admin is done by hand (an hour, if a command is wanted)
+
+- The live site had no admin or moderator until 2026-11-20, so nobody could open the moderation screens or the admins' list of markings without a keeper. The owner asked for their account to be made an admin that day, and it was. It was the only account: nobody else had signed in.
+- Admins are made outside the API (`services.moderation.check_role_change`), and no command does it. The change was made on a web machine through `fly ssh console`, in one transaction: set the role, then run `services.moderation.reassess_standing` for that account, as a role change through the API does, because a person's role weighs in the confidence of what they found. Setting the role alone would leave their findings scored at the old weight until each is next reassessed. It moved no score and added nothing to the feed.
+- A second admin, or taking the role away, needs the same two steps. A `fieldclub-jobs` command with tests would make that one line.
+
 ## Critical context
 
 - The Fly organisation is `openantiquity` and the region `lhr`. The `personal` organisation holds the owner's unrelated apps: never list, name or touch them, and pass `--app` or `--org openantiquity` on every command.
