@@ -251,7 +251,7 @@ A deploy token is limited to one app ([access tokens](https://docs.fly.io/securi
 ## A deploy
 
 1. Merge to `main`. CI runs both check suites, the docs lint, the scripts' tests and shellcheck, the Terraform checks while it stays, and an image build that is started and stopped as a Fly machine would be.
-2. In GitHub, Actions, "Deploy", run the workflow on `main`. It runs `flyctl deploy --remote-only --no-public-ips --image-label <commit>`, which builds the image, runs the release command once and moves the three machines onto the new image one at a time (`strategy = "rolling"`). The release command checks the elevation mirror, then creates what the schema lacks.
+2. In GitHub, Actions, "Deploy", run the workflow on `main`. It runs `flyctl deploy --remote-only --no-public-ips --image-label <commit>`, which builds the image, runs the release command once and moves the three machines onto the new image one at a time (`strategy = "rolling"`). The release command checks the elevation mirror, then creates what the schema lacks. Its last step asks `https://openantiquity.org/healthz` once, which wakes a machine, and the run fails if the site doesn't answer.
 3. Build the jobs app's image of the same commit and move the hourly machine to it, from a clean checkout of that commit, with the commands the run's summary prints:
 
    ```
@@ -263,9 +263,9 @@ A deploy token is limited to one app ([access tokens](https://docs.fly.io/securi
 
 If the mirror check fails, the deploy stops before anything is replaced, and the release machine's log says which tiles are missing or why one couldn't be read (`fly logs --app openantiquity`). Add missing tiles with `uv run infra/fly_jobs.py mirror 1 2 3 4`, which fetches only what the bucket lacks, and deploy again. To deploy knowing tiles are missing, set `FIELDCLUB_TERRAIN_CHECK_ALLOW_MISSING` in `fly.toml` to their number. To deploy with no check at all, as when Tigris can't be listed, set `release_command` back to `python -m fieldclub.db` for that deploy.
 
-A deploy leaves the three machines stopped, not suspended, and the first request afterwards waits for one to start from cold: 32 seconds on 2026-11-12, of which Fly's start is about 20. Ask for `/healthz` once after a deploy. A machine started that way is suspended when it next idles, and then answers in under a second.
+A deploy leaves the three machines stopped, not suspended, and the first request afterwards waits for one to start from cold: 32 seconds on 2026-11-12, of which Fly's start is about 20. The workflow asks for `/healthz` as its last step, so a visitor doesn't wait. A machine started that way is suspended when it next idles, and then answers in under a second.
 
-A deploy by hand is the same command as the workflow's, from the repository root: `fly deploy --no-public-ips --image-label "$(git rev-parse HEAD)"`.
+A deploy by hand is the same command as the workflow's, from the repository root: `fly deploy --no-public-ips --image-label "$(git rev-parse HEAD)"`. Then ask for `/healthz` once, as the workflow does: `curl --fail https://openantiquity.org/healthz`.
 
 The schema command waits at most five seconds for a lock on any table (`SCHEMA_LOCK_TIMEOUT_MS` in `backend/src/fieldclub/db.py`). If something holds a table longer, the release fails, the schema is as it was and the machines keep their image: deploy again.
 

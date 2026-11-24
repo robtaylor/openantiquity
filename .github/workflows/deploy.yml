@@ -75,3 +75,10 @@ jobs:
             echo "uv run infra/fly_jobs.py --commit ${GITHUB_SHA} schedule"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # A deploy leaves every machine stopped, and the first request waits for one to
+      # start from cold, about half a minute (infra/README.md, "A deploy"). Asking here
+      # means a visitor doesn't, and a site that doesn't answer fails the run. It is last,
+      # so the summary above is written either way.
+      - name: Wake a machine
+        run: curl --fail --silent --show-error --max-time 60 --retry 2 --retry-delay 5 https://openantiquity.org/healthz
