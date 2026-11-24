@@ -14,9 +14,9 @@ See docs/handoff-discipline.md for the migration table.
 
 ## Goal & next-up
 
-**Goal of this thread:** move the deployment from Google Cloud to Fly.io (Decision 0018). On 2026-11-12 steps 1 to 11 of the runbook were carried out. The web app runs on Fly and answers on `openantiquity.org`, with Managed Postgres, the whole elevation mirror and the national overview, and it draws terrain. The hourly machine runs, and its first nightly refresh, on 2026-11-13, loaded every bulk source but two. Since 2026-11-21 the nightly refresh fails, because the machine's volume is full (follow-up 1). OpenStreetMap and Google sign-in are on.
+**Goal of this thread:** move the deployment from Google Cloud to Fly.io (Decision 0018). On 2026-11-12 steps 1 to 11 of the runbook were carried out. The web app runs on Fly and answers on `openantiquity.org`, with Managed Postgres, the whole elevation mirror and the national overview, and it draws terrain. The hourly machine runs, and its first nightly refresh, on 2026-11-13, loaded every bulk source but two. From 2026-11-21 to 2026-11-24 the nightly refresh failed, because the machine's volume was full. The fix is on the hourly machine since 2026-11-24, and the refresh of 2026-11-25 is the first to try it (follow-up 1). OpenStreetMap and Google sign-in are on.
 
-**Next session should pick up:** follow-up 1 first, which is a fault on the live site and waits for the owner to choose a remedy, then 2 and 3. Do every cloud step in the main session: sub-agents and workflow agents don't touch Fly, Google or Gandi and don't read `.env`.
+**Next session should pick up:** follow-up 1 first, which is to read the refresh of 2026-11-25 and see that the volume mended, then 2 and 3. Do every cloud step in the main session: sub-agents and workflow agents don't touch Fly, Google or Gandi and don't read `.env`.
 
 **Verification command:**
 
@@ -32,12 +32,12 @@ fly machine list --app openantiquity
 fly ips list --app openantiquity
 # Expect: the private address, the shared IPv4 address 66.241.124.216 and the IPv6 address 2a09:8280:1::1fe:8e38:0
 fly machine list --app openantiquity-jobs
-# Expect: one machine, `due`, stopped, with the schedule hourly and the volume jobs_var at /data
+# Expect: one machine, `due`, stopped, on the image of commit 53493cf, with the schedule hourly and the volume jobs_var at /data
 fly mpg list --org openantiquity
 # Expect: the cluster openantiquity, d2gznoqz2n8opkm8, ready, attached to both apps
 fly storage list --org openantiquity
 # Expect: openantiquity-elevation, openantiquity-cache and openantiquity-photos
-uv run infra/fly_jobs.py --commit 464d7ef8d92a0d0e7094d813df9c957a0c7b332e run fieldclub-terrain info
+uv run infra/fly_jobs.py --commit 53493cfc7548cf72d996ff37684a1390cae21114 run fieldclub-terrain info
 fly logs --app openantiquity-jobs --no-tail | grep -e mirrored -e overview
 # Expect: mirrored 5877 tiles (100.00%), and overview c2a8a0e49f2f, 5877 tiles
 ```
@@ -77,35 +77,35 @@ The last pair names the jobs image that exists. `fly_jobs.py` looks for the imag
 | `64fbb0b` | The moderation log leaves out a row a later version wrote | The first step of lines phase 2, released by itself ahead of the action that phase adds |
 | `464d7ef` | Lines phase 2, the backend: keepers, suggestions and an admin's removal of an orphaned marking | The commit the hourly machine runs since 2026-11-14. Decisions 0038 to 0041. Its release added three columns to `findings` and the table `shape_suggestions`, and widened two vocabulary checks. The step was rehearsed first on a database built by the version before, and took half a second. The interface for it isn't released yet, so nobody is a keeper but a finder and no suggestion exists. The hourly machine ran once on it at 07:45 UTC and exited 0 |
 | `4aba94d` | Lines phase 2, the interface: the keeper's byline, suggesting and deciding a change, handing a marking on, and the admins' list and removal | The commit the web app runs since 2026-11-14. Decision 0042: nothing drawn and not sent is replaced without asking, which also changed "Change the shape". Its one backend change is a comment, so the jobs image wasn't rebuilt |
-| `8be0564` | The long line's save is timed as the fastest of five | A test alone, after one red run of the Backend job on `main`. Nothing was released: the web app still runs `4aba94d` and the hourly machine `464d7ef` |
+| `8be0564` | The long line's save is timed as the fastest of five | A test alone, after one red run of the Backend job on `main`. Nothing was released |
+| `0f33f0f` | A download removes the copy it replaces before it fetches, and what it fetched when the disk fills | Decision 0043, the owner's choice of remedy for the full volume. Jobs code alone |
+| `53493cf` | The deploy workflow asks `/healthz` as its last step | The commit the hourly machine runs since 21:54 UTC on 2026-11-24. One source was run from its image first, on a machine of its own, and completed. The web app wasn't deployed and still runs `4aba94d`: nothing it serves changed |
 
 ## Open follow-ups (priority-ordered)
 
-### 1. The nightly refresh fails since 2026-11-21: the hourly machine's volume is full (hours)
+### 1. Read the refresh of 2026-11-25, the first on the fix for the full volume (minutes)
 
-The first refresh of every bulk source from Fly ran on 2026-11-13: 27 sources refreshed, 1 already current, 4 skipped and 2 failed. The two that failed, `he-aim-detailed-mapping` and `he-aim-monument-extents`, stored every record and then stopped at their last step, because the connection holding each run's lock had been closed. Commit `7175a31` keeps the lock's connection in use. The runbook's "What can only be checked on the real platform" has what was measured.
+The nightly refresh failed from 2026-11-21 to 2026-11-24. Refreshing `he-aim-detailed-mapping` wrote a second copy of a 4.73 GB file beside the first on a 10 GB volume, the disk filled, and the partial file left no room for any other source. Decision 0043 has what was measured and why the owner chose a fix in code. Since `0f33f0f` a download removes the copy it replaces before it fetches, and removes what it fetched when the disk fills. The hourly machine runs it since 21:54 UTC on 2026-11-24.
 
-The nights since were read on 2026-11-24, from the `ingest_runs` table.
+Nothing was changed on the volume by hand. It is to mend at the refresh the machine starts at about 03:41 UTC on 2026-11-25. That hasn't been seen yet, so read it:
 
-- **The lock fix held at the length that failed.** `he-aim-monument-extents` completed on 2026-11-21 in 62 minutes, the length at which a lock's connection had been seen closed. It is the first run of over an hour to complete on the hourly machine.
-- **The volume filled.** `he-aim-detailed-mapping` failed five minutes into the same night with "No space left on device", and 11 of the sources after it failed the same way. On 2026-11-22, 23 and 24 all 14 sources due failed with it. The records stored are those of each source's last completed run, so the sources refreshed daily are as they were on 2026-11-20 or 21.
-- **What fills it.** Measured on 2026-11-24: 9,437 MB used of 9,964, and none available. `var/ingest/he-aim-detailed-mapping` holds 8,708 MB: the file fetched on 2026-11-13, 4.73 GB, and a partial new one, 4.40 GB. Every other source's folder together holds about 730 MB.
-- **Why.** `ingest/adapters/download.py` writes a new file beside the old one and replaces the old only when the new is complete, so refreshing a file needs room for two copies. Two of 4.7 GB don't fit beside the rest in 10 GB. If the new file is the size of the old, it stopped about 320 MB short. The partial file stays after the failure and leaves no room for any other source's download. This source is refreshed weekly (`MAX_AGE` of seven days), which is why the first week ran clean.
-- **An old copy is dead weight once a new download starts.** A copy older than its `max_age` is never read again: a download that fails raises, and none of `download()`'s callers falls back to the old file (read on 2026-11-24).
+- **The runs.** From a started web machine, in a read-only transaction: `select source_key, status, started_at, finished_at, error from ingest_runs where started_at > now() - interval '2 days' order by started_at`. Every source due should have completed. `he-aim-detailed-mapping` takes about an hour and a half.
+- **The volume.** Start the machine named `due` with `fly machine start` and ask within the minute it runs: `fly ssh console --app openantiquity-jobs --machine <id> -C "df -m /data"`. Expect about 5,400 MB used, where it was 9,437.
+- **One source may fail once more.** `aarhus-itinere-roman-roads` is first in key order, so it runs while the big source's two files are still there. The volume was full to the block for the jobs' user, so removing its old copy leaves exactly that file's room, 57,787,890 bytes. If the new file is any larger it fails with `DiskFullError`, the first time that error is raised on the platform, and it completes the night after. The sources after it have its room as well as their own.
+- **One source will be current.** `he-nhle-protected-wreck-sites` was run by hand at 21:53 UTC on 2026-11-24, to try the new image, so the refresh passes over it.
 
-Nothing has been changed on the volume. Three ways to put it right, and the choice is the owner's:
+What the volume held on 2026-11-24, for comparison: `detailed-mapping.gpkg`, 4,726,853,632 bytes, fetched on 2026-11-13; `detailed-mapping.gpkg.part`, 4,403,253,248 bytes, whose note gives the same total and a validator, so it is resumed if the publisher's file hasn't changed; and 13 empty `.part.json` notes in other sources' folders, left by writes that failed. An empty note holds no room and is read as no note.
 
-1. In code: `download()` removes a copy older than `max_age` before it fetches, and removes its partial file when the disk fills, so one source can't starve the rest. Then build the jobs image and `schedule` it. It costs nothing, and the next refresh mends itself: the old copy goes, and the partial one is resumed or begun again. Recommended.
-2. `fly volumes extend` to 20 GB: $1.50 more a month, and a volume can't be made smaller again. It works without a release.
-3. By hand: delete the file of 2026-11-13 from the volume. That night's refresh then completes, and the fault returns at that source's next weekly refresh.
+If the volume hasn't mended, the two remedies the owner didn't choose still work: `fly volumes extend`, or deleting `detailed-mapping.gpkg` and its `.json` from the volume by hand.
 
-Also seen in those runs:
+Also seen in the runs of 2026-11-13 to 2026-11-24:
 
-- Nothing tells anyone when a refresh fails. This was found by asking the database, three days late. Until there is an alert, the weekly look at spending (Decision 0025) is the place to look at failed runs too.
+- Nothing tells anyone when a refresh fails. The full volume was found by asking the database, three days late. Until there is an alert, the weekly look at spending (Decision 0025) is the place to look at failed runs too.
 - `he-nhle-world-heritage-sites` failed on 2026-11-18 and 19 with `UpstreamFormatError`, because one entry had no Notes, and completed on the 20th. One odd record upstream stops the whole source.
 - `bern-xronos-radiocarbon` failed once, on 2026-11-18, when the publisher answered 522.
+- The lock fix of `7175a31` held at the length that failed: `he-aim-monument-extents` completed on 2026-11-21 in 62 minutes, the first run of over an hour to complete on the hourly machine.
 
-To read the runs, ask the database from a started web machine, in a read-only transaction: `select source_key, status, started_at, finished_at, error from ingest_runs where started_at > now() - interval '2 days' order by started_at`. To read the volume, start the machine named `due` with `fly machine start` and ask within the minute it runs: `fly ssh console --app openantiquity-jobs --machine <id> -C "df -m /data"`. To run a source by hand: `uv run infra/fly_jobs.py --commit 464d7ef8d92a0d0e7094d813df9c957a0c7b332e ingest <key>`, which downloads afresh on a disk of its own and doesn't touch the volume.
+To run a source by hand: `uv run infra/fly_jobs.py --commit 53493cfc7548cf72d996ff37684a1390cae21114 ingest <key>`, which downloads afresh on a disk of its own and doesn't touch the volume.
 
 The hourly machine `due` wasn't started by its schedule at 22:41 or 23:41 on 2026-11-12, after it was first moved to a new image. That was seen once and the reason isn't known, so `schedule` now starts it once after updating it, and it has run every hour since.
 
@@ -119,15 +119,11 @@ Both providers' ids and secrets are in `.env`, as `OSM_AUTH2_ID`, `OSM_AUTH2_SEC
 
 The jobs app's Tigris key was put right by the owner the same day: tried from a jobs machine, it lists, reads and writes the elevation bucket and is refused all three on the cache and the photos.
 
-### 3. Wake the machines after a deploy, or accept the first slow request (a choice, minutes)
+### 3. Step 12: the deploy workflow (minutes)
 
-A deploy leaves the three web machines stopped, and the first request afterwards took 32 seconds on 2026-11-12. The runbook says to ask for `/healthz` once after a deploy. The deploy workflow doesn't do it yet. Since step 11 it could: `curl --fail https://openantiquity.org/healthz` as its last step.
+The GitHub environment `production` and a deploy token for the web app alone. The repository is `robtaylor/openantiquity` on GitHub, public since 2026-11-12, and this checkout's `origin`. The workflow has never run. Its last step, added on 2026-11-24 at the owner's choice, asks `https://openantiquity.org/healthz` once to wake a machine, so see that step pass at the first run.
 
-### 4. Step 12: the deploy workflow (minutes)
-
-The GitHub environment `production` and a deploy token for the web app alone. The repository is `robtaylor/openantiquity` on GitHub, public since 2026-11-12, and this checkout's `origin`.
-
-### 5. Sign-in, and what opening to the public still needs (the owner)
+### 4. Sign-in, and what opening to the public still needs (the owner)
 
 The domains were pointed at Fly on 2026-11-12 at the owner's word ("noone will be looking yet"). The site answers on `openantiquity.org` and anyone can look at the map.
 
@@ -136,32 +132,32 @@ The domains were pointed at Fly on 2026-11-12 at the owner's word ("noone will b
 - The app has no gate. The owner was told on 2026-11-12, and that [`owner-actions.md`](../plans/owner-actions.md) holds a public launch until an operator is named and the terms, the privacy notice and the Online Safety Act assessment exist (WS14 to WS17). A setting that limits sign-up to named accounts was offered and not yet asked for.
 - The other providers and the mail relay are in `owner-actions.md`, WS3.
 
-### 6. Take the Google project down (an hour)
+### 5. Take the Google project down (an hour)
 
 `infra/README.md`, "Taking the Google project down", once the site on Fly has passed its checks. Its first check, that Tigris lacks none of Google's tiles, was made on 2026-11-12. Then delete `infra/terraform` and the Google paragraphs of the runbook. Until then the Google deployment keeps image `2a3d8eee8b4b`: an image built from `main` can't run there.
 
-### 7. One way to read every stored vocabulary (a day)
+### 6. One way to read every stored vocabulary (a day)
 
 Decision 0033 passes over an activity kind or a next step this version has no name for, and Decision 0035 reads a feature class it has no name for as "Not sure". Every other vocabulary stored as text is still read strictly, so a value added to one takes a release of its own first, as the building class did. A review on 2026-11-13 listed the strict reads: a second look's `visible`, an evidence item's kind and stance, a finding's period, tier, state and level, a mention's kind, a shape's kind, an investigation item's kind and a person's role. The evidence kind, the mention kind, the shape kind and the investigation item kind are the likeliest to grow. One helper that reads a stored value with a rule chosen for its vocabulary, and the response type that `ShownClass` is for classes, would replace both mechanisms. Until then, a new value in any of these needs the two releases.
 
-### 8. What the day's map changes left (hours each)
+### 7. What the day's map changes left (hours each)
 
 - Multi-direction shade is three colour channels where Composite is one, so its tiles are about two and a half times the bytes: 360 to 450 KB against 140 to 170 KB, measured on the live site on 2026-11-13. It is now the view the map opens on. A palette or WebP encoding would cut that, and changes the pixels, so the style's version goes up with it.
 - Marking a finding doesn't record itself as the tool that has the map (`map/tool.ts`), so each handler asks about marking in its own way: the records hook, the findings layer and the scan layer. Having the marking pages set the tool would leave one question to ask.
 - A view zoomed out that holds more than 500 findings draws 500 and says so (Decision 0036). When that becomes usual, have the server count findings by area as the record tiles do.
 - Terrain past zoom 16 was tried and gives a modest gain for Composite alone ([the spike](../architecture/decisions/spikes/deeper-terrain-tiles.md)).
 
-### 9. What the security review left for hosting
+### 8. What the security review left for hosting
 
 - Done: the jobs app has no session key, and its jobs start without one. The tile render queue on Fly is 16, inside the soft limit.
 - Open: one database login, `fly-user` with the role `schema_admin`, serves both apps. Managed Postgres offers the roles `schema_admin`, `writer` and `reader` (`fly mpg users create`). The web app's release command creates the schema, so the web app's login needs `schema_admin` as things are. Giving the web app `writer` means moving the schema command to the jobs app, a change to how a deploy runs. It can be done later without making the cluster again. The owner was told on 2026-11-12.
 - Open: `timeout` stopping a job that runs past its limit hasn't been seen on Fly.
 
-### 10. Check Managed Postgres's backups before relying on them (an hour)
+### 9. Check Managed Postgres's backups before relying on them (an hour)
 
 How long Fly keeps backups wasn't found, and no restore has been tried. `fly mpg backup list d2gznoqz2n8opkm8`, then restore one into a new cluster, look, and destroy it. The owner kept Managed Postgres for its backups and failover, so this is worth doing before the site holds anything a member wrote.
 
-### 11. What the report form left (minutes to hours each)
+### 10. What the report form left (minutes to hours each)
 
 - The email link stays hidden until `FIELDCLUB_REPORT_EMAIL` is set on the web app, which waits for `help@openantiquity.org` to take mail.
 - Fly's seven days of searchable log is its documented figure and hasn't been tried on this account. The first real report is the test: search the log for one of its request ids.
@@ -170,28 +166,27 @@ How long Fly keeps backups wasn't found, and no restore has been tried. `fly mpg
 - Nothing fails when `frontend/src/api/schema.d.ts` is stale against the backend. `paths.ts` has a test now. A step in CI that runs `pnpm gen:api` and fails on a difference would cover both.
 - Finding duplicates among reports is the plan's third workstream, and waits on whether GitHub's own suggestions are on for the repository.
 
-### 12. What lines phase 2 left for hosting (minutes each)
+### 11. What lines phase 2 left for hosting (minutes each)
 
 - Going back a version from `464d7ef` or later: the version before doesn't know keepers, so a finder could again edit a marking they handed on and a keeper who isn't the finder couldn't. Nothing is sent to anyone who shouldn't see it, and the earlier version's schema step leaves the new columns and table alone. This was rehearsed on a scratch database on 2026-11-14.
 - The hourly limits on suggestions and offers are counted on each machine, so with three machines serving the real ceiling is three times the figure.
 - The owner's answer on whether a keeper who isn't the finder may give a second look is still open in `docs/plans/lines-phase-2.md`. It is built as "no".
 
-### 13. Making an admin is done by hand (an hour, if a command is wanted)
+### 12. Making an admin is done by hand (an hour, if a command is wanted)
 
 - The live site had no admin or moderator until 2026-11-20, so nobody could open the moderation screens or the admins' list of markings without a keeper. The owner asked for their account to be made an admin that day, and it was. It was the only account: nobody else had signed in.
 - Admins are made outside the API (`services.moderation.check_role_change`), and no command does it. The change was made on a web machine through `fly ssh console`, in one transaction: set the role, then run `services.moderation.reassess_standing` for that account, as a role change through the API does, because a person's role weighs in the confidence of what they found. Setting the role alone would leave their findings scored at the old weight until each is next reassessed. It moved no score and added nothing to the feed.
 - A second admin, or taking the role away, needs the same two steps. A `fieldclub-jobs` command with tests would make that one line.
 
-### 14. Answers the owner owes (the owner)
+### 13. Answers the owner owes (the owner)
 
 Each question is written once, in its plan, with a recommendation. Nothing below is to be built before its answer.
 
-- The remedy for the full volume: follow-up 1.
 - [`kinds-of-feature.md`](../plans/kinds-of-feature.md), "Open questions for the owner": whether to accept the 95 proposed kinds, all 18 classes at once, a kind under a class the thesaurus files it beside, and buildings by function.
 - [`say-more-about-a-heritage-record.md`](../plans/say-more-about-a-heritage-record.md), "Open questions for the owner": three.
 - [`junior-accounts.md`](../plans/junior-accounts.md), "Open questions for the owner": five that the readings of 2026-11-14 added. Its workstreams 2 to 5 also wait for the two assessments in [`owner-actions.md`](../plans/owner-actions.md).
 - [`lines-phase-2.md`](../plans/lines-phase-2.md): whether a keeper who isn't the finder may give a second look. It is built as "no". The answer goes into the plan, and into Decision 0038 while that is still Proposed, and the plan is then archived.
-- [`report-a-problem.md`](../plans/report-a-problem.md): whether a report keeps its option to send the map's one-kilometre square, and word that `help@openantiquity.org` takes mail (follow-up 11).
+- [`report-a-problem.md`](../plans/report-a-problem.md): whether a report keeps its option to send the map's one-kilometre square, and word that `help@openantiquity.org` takes mail (follow-up 10).
 - Not written anywhere else: whether to drop the National Library of Scotland's three-light hillshade from the layers. It is the same technique as Multi-direction shade over the same survey, drawn by someone else, and its description says so since 2026-11-13.
 
 ## Critical context
@@ -215,8 +210,8 @@ Each question is written once, in its plan, with a recommendation. Nothing below
 
 ## Migration note
 
-- Follow-ups 1 to 6 → `docs/plans/v1-england.md`, WS8, as each is done; corrections to commands → `infra/README.md`
-- Follow-up 7 → `infra/README.md` where a step changes, or a decision record for the database roles
-- Follow-up 8 → `infra/README.md`, "Rolling back"
+- The refresh, sign-in, the deploy workflow, opening to the public and taking Google down → `docs/plans/v1-england.md`, WS8, as each is done; corrections to commands → `infra/README.md`
+- The database roles → a decision record, and `infra/README.md` where a step changes
+- Going back a version → `infra/README.md`, "Rolling back"
 - Critical context → `infra/README.md` and the hosting area doc
 - Then `git rm docs/handoffs/hosting-on-fly-handoff.md` in the migration commit
