@@ -73,3 +73,10 @@ class UpstreamFormatError(AdapterError):
     """The upstream answered, but not in the shape the reader relies on."""
 
     code = "ingest_upstream_format"
+
+
+class DiskFullError(IngestError):
+    """The disk that keeps downloads filled before a file was whole. Nothing upstream is at fault."""
+
+    code = "ingest_disk_full"
+    message = "The disk that keeps downloads is full."

@@ -10,6 +10,12 @@ with `Range` and `If-Range`, so if the file changed upstream in the meantime
 the server sends it whole and the download starts again. A file younger than
 `max_age` is not fetched at all.
 
+A copy that isn't reused is removed before the fetch, so a refresh needs room
+for one copy of a file and not two. Nothing reads such a copy again: a fetch
+that fails raises, and no caller falls back to the old file. If the disk fills
+all the same, what had been fetched is removed and `DiskFullError` raised,
+because a partial file left on a full disk leaves no room for any other source.
+
 ArcGIS Hub answers 202 with `{"status": "ExportingData"}` while it rebuilds
 an export. The downloader waits, with growing gaps, up to `max_wait_s`.
 Hub's redirect targets are short-lived, so always pass the Hub address and let
@@ -18,6 +24,7 @@ the client follow the redirect each time.
 
 from __future__ import annotations
 
+import errno
 import json
 import logging
 import re
@@ -29,6 +36,7 @@ from typing import Any
 import httpx
 
 from fieldclub.ingest.adapters.common import RETRY_STATUSES, AdapterError, Polite, short_url
+from fieldclub.ingest.errors import DiskFullError
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +66,20 @@ def _read_meta(path: Path) -> dict[str, Any]:
 
 def _write_meta(path: Path, meta: dict[str, Any]) -> None:
     _meta_path(path).write_text(json.dumps(meta, indent=1) + "\n", encoding="utf-8")
+
+
+def _remove(path: Path) -> None:
+    """Remove a file and what was noted about it."""
+    _meta_path(path).unlink(missing_ok=True)
+    path.unlink(missing_ok=True)
+
+
+def _size(path: Path) -> int:
+    """How many bytes of a file are on disk: none when it isn't there."""
+    try:
+        return path.stat().st_size
+    except FileNotFoundError:
+        return 0
 
 
 def _validator(response: httpx.Response) -> str | None:
@@ -92,15 +114,46 @@ def download(
         if polite.now() - fetched_at < max_age:
             logger.info("%s: using the copy fetched at %s", dest.name, fetched_at.isoformat())
             return Download(dest, True, dest.stat().st_size, fetched_at)
+    if dest.is_file():
+        logger.info("%s: removing the old copy to make room for the new one", dest.name)
+    _remove(dest)
 
     part = dest.with_name(dest.name + ".part")
     part_meta = _read_meta(part)
+    try:
+        return _fetch_whole(url, dest, part, part_meta, client, polite, max_wait_s, params)
+    except OSError as exc:
+        if exc.errno != errno.ENOSPC:
+            raise
+        # The file is in one place or the other, by whether it had been renamed.
+        written = _size(part) or _size(dest)
+        promised = part_meta.get("total")
+        of = f" of {promised}" if isinstance(promised, int) else ""
+        _remove(part)
+        _remove(dest)
+        raise DiskFullError(
+            f"The disk filled while {dest.name} was downloaded to {dest.parent}, after {written} bytes{of}. "
+            "What had been fetched was removed."
+        ) from exc
+
+
+def _fetch_whole(
+    url: str,
+    dest: Path,
+    part: Path,
+    part_meta: dict[str, Any],
+    client: httpx.Client,
+    polite: Polite,
+    max_wait_s: float,
+    params: dict[str, str] | None,
+) -> Download:
+    """Fetch `url` to `part`, resuming and retrying, then rename it to `dest` and note when it was fetched."""
     # Kept apart, so a long wait for an export doesn't use up the retries for errors.
     retries = 0
     polls = 0
     waited = 0.0
     while True:
-        have = part.stat().st_size if part.is_file() else 0
+        have = _size(part)
         headers: dict[str, str] = {}
         if have and part_meta.get("validator"):
             headers = {"Range": f"bytes={have}-", "If-Range": part_meta["validator"]}
