@@ -14,9 +14,9 @@ See docs/handoff-discipline.md for the migration table.
 
 ## Goal & next-up
 
-**Goal of this thread:** move the deployment from Google Cloud to Fly.io (Decision 0018). On 2026-11-12 steps 1 to 11 of the runbook were carried out. The web app runs on Fly and answers on `openantiquity.org`, with Managed Postgres, the whole elevation mirror and the national overview, and it draws terrain. The hourly machine runs, and its first nightly refresh, on 2026-11-13, loaded every bulk source but two. From 2026-11-21 to 2026-11-24 the nightly refresh failed, because the machine's volume was full. The fix is on the hourly machine since 2026-11-24, and the refresh of 2026-11-25 is the first to try it (follow-up 1). OpenStreetMap and Google sign-in are on.
+**Goal of this thread:** move the deployment from Google Cloud to Fly.io (Decision 0018). On 2026-11-12 steps 1 to 11 of the runbook were carried out. The web app runs on Fly and answers on `openantiquity.org`, with Managed Postgres, the whole elevation mirror and the national overview, and it draws terrain. The hourly machine runs, and its first nightly refresh, on 2026-11-13, loaded every bulk source but two. From 2026-11-21 to 2026-11-24 the nightly refresh failed, because the machine's volume was full. The fix is on the hourly machine since 2026-11-24, and the refresh of 2026-11-25 completed on it: all 13 sources that were due refreshed, and the volume went from 9,437 MB used to 5,237. OpenStreetMap and Google sign-in are on.
 
-**Next session should pick up:** follow-up 1 first, which is to read the refresh of 2026-11-25 and see that the volume mended, then 2 and 3. Do every cloud step in the main session: sub-agents and workflow agents don't touch Fly, Google or Gandi and don't read `.env`.
+**Next session should pick up:** follow-ups 1 to 3. Each waits on the owner's word: what should tell them of a failed refresh (1), a sign-in with Google the whole way (2), and a deploy token for GitHub (3). Do every cloud step in the main session: sub-agents and workflow agents don't touch Fly, Google or Gandi and don't read `.env`.
 
 **Verification command:**
 
@@ -83,31 +83,23 @@ The last pair names the jobs image that exists. `fly_jobs.py` looks for the imag
 
 ## Open follow-ups (priority-ordered)
 
-### 1. Read the refresh of 2026-11-25, the first on the fix for the full volume (minutes)
+### 1. Nothing tells anyone when a refresh fails (the owner's word, then hours)
 
-The nightly refresh failed from 2026-11-21 to 2026-11-24. Refreshing `he-aim-detailed-mapping` wrote a second copy of a 4.73 GB file beside the first on a 10 GB volume, the disk filled, and the partial file left no room for any other source. Decision 0043 has what was measured and why the owner chose a fix in code. Since `0f33f0f` a download removes the copy it replaces before it fetches, and removes what it fetched when the disk fills. The hourly machine runs it since 21:54 UTC on 2026-11-24.
+The nightly refresh failed from 2026-11-21 to 2026-11-24 on a full volume, and that was found by asking the database, three days late. The fault is mended (Decision 0043). The refresh of 2026-11-25, the first on the fix, refreshed all 13 sources that were due and failed none, and the volume went from 9,437 MB used to 5,237. `infra/README.md`, "What can only be checked on the real platform", has what was seen.
 
-Nothing was changed on the volume by hand. It is to mend at the refresh the machine starts at about 03:41 UTC on 2026-11-25. That hasn't been seen yet, so read it:
+The next failure would go unseen in the same way. What should tell the owner, and where, hasn't been put to them. Until there is an alert, the weekly look at spending (Decision 0025) is the place to look at failed runs too. From a started web machine, in a read-only transaction: `select source_key, status, started_at, finished_at, error from ingest_runs where status = 'failed' and started_at > now() - interval '8 days' order by started_at`.
 
-- **The runs.** From a started web machine, in a read-only transaction: `select source_key, status, started_at, finished_at, error from ingest_runs where started_at > now() - interval '2 days' order by started_at`. Every source due should have completed. `he-aim-detailed-mapping` takes about an hour and a half.
-- **The volume.** Start the machine named `due` with `fly machine start` and ask within the minute it runs: `fly ssh console --app openantiquity-jobs --machine <id> -C "df -m /data"`. Expect about 5,400 MB used, where it was 9,437.
-- **One source may fail once more.** `aarhus-itinere-roman-roads` is first in key order, so it runs while the big source's two files are still there. The volume was full to the block for the jobs' user, so removing its old copy leaves exactly that file's room, 57,787,890 bytes. If the new file is any larger it fails with `DiskFullError`, the first time that error is raised on the platform, and it completes the night after. The sources after it have its room as well as their own.
-- **One source will be current.** `he-nhle-protected-wreck-sites` was run by hand at 21:53 UTC on 2026-11-24, to try the new image, so the refresh passes over it.
+Also seen in the runs of 2026-11-13 to 2026-11-25:
 
-What the volume held on 2026-11-24, for comparison: `detailed-mapping.gpkg`, 4,726,853,632 bytes, fetched on 2026-11-13; `detailed-mapping.gpkg.part`, 4,403,253,248 bytes, whose note gives the same total and a validator, so it is resumed if the publisher's file hasn't changed; and 13 empty `.part.json` notes in other sources' folders, left by writes that failed. An empty note holds no room and is read as no note.
-
-If the volume hasn't mended, the two remedies the owner didn't choose still work: `fly volumes extend`, or deleting `detailed-mapping.gpkg` and its `.json` from the volume by hand.
-
-Also seen in the runs of 2026-11-13 to 2026-11-24:
-
-- Nothing tells anyone when a refresh fails. The full volume was found by asking the database, three days late. Until there is an alert, the weekly look at spending (Decision 0025) is the place to look at failed runs too.
 - `he-nhle-world-heritage-sites` failed on 2026-11-18 and 19 with `UpstreamFormatError`, because one entry had no Notes, and completed on the 20th. One odd record upstream stops the whole source.
 - `bern-xronos-radiocarbon` failed once, on 2026-11-18, when the publisher answered 522.
 - The lock fix of `7175a31` held at the length that failed: `he-aim-monument-extents` completed on 2026-11-21 in 62 minutes, the first run of over an hour to complete on the hourly machine.
+- A night that refreshes `he-aim-detailed-mapping` is a long one. On 2026-11-25 the refresh ran from 03:41 to 05:52 UTC, about an hour and a half of it on that source and half an hour on `he-nhle-listed-buildings-points`. The machine's command allows six hours.
+- One empty `.part.json` note is left on the volume, in `he-nhle-protected-wreck-sites`, from the nights that failed. That source was run on 2026-11-24 on a machine of its own, to try the new image, so its folder on the volume wasn't touched. An empty note holds no room and is read as no note, and the source's next refresh on the volume removes it.
 
 To run a source by hand: `uv run infra/fly_jobs.py --commit 53493cfc7548cf72d996ff37684a1390cae21114 ingest <key>`, which downloads afresh on a disk of its own and doesn't touch the volume.
 
-The hourly machine `due` wasn't started by its schedule at 22:41 or 23:41 on 2026-11-12, after it was first moved to a new image. That was seen once and the reason isn't known, so `schedule` now starts it once after updating it, and it has run every hour since.
+The hourly machine `due` wasn't started by its schedule at 22:41 or 23:41 on 2026-11-12, after it was first moved to a new image. That was seen once and the reason isn't known, so `schedule` now starts it once after updating it, and it has run every hour since. After the move to `53493cf` its schedule started it at 22:41 UTC on 2026-11-24, the first hour after. Starting it by hand to read the volume, at 06:18 UTC on 2026-11-25, didn't put the schedule off: it started again at 06:41.
 
 ### 2. Sign-in: OpenStreetMap works, Google is on and untried the whole way (the owner, minutes)
 
@@ -119,9 +111,9 @@ Both providers' ids and secrets are in `.env`, as `OSM_AUTH2_ID`, `OSM_AUTH2_SEC
 
 The jobs app's Tigris key was put right by the owner the same day: tried from a jobs machine, it lists, reads and writes the elevation bucket and is refused all three on the cache and the photos.
 
-### 3. Step 12: the deploy workflow (minutes)
+### 3. Step 12: the deploy workflow (the owner's word, then minutes)
 
-The GitHub environment `production` and a deploy token for the web app alone. The repository is `robtaylor/openantiquity` on GitHub, public since 2026-11-12, and this checkout's `origin`. The workflow has never run. Its last step, added on 2026-11-24 at the owner's choice, asks `https://openantiquity.org/healthz` once to wake a machine, so see that step pass at the first run.
+The GitHub environment `production` and a deploy token for the web app alone. The token is a new key held by GitHub, so it waits for the owner to say so. The repository is `robtaylor/openantiquity` on GitHub, public since 2026-11-12, and this checkout's `origin`. The workflow has never run. Its last step, added on 2026-11-24 at the owner's choice, asks `https://openantiquity.org/healthz` once to wake a machine, so see that step pass at the first run.
 
 ### 4. Sign-in, and what opening to the public still needs (the owner)
 
