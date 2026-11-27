@@ -257,6 +257,9 @@ ROUTES: dict[tuple[str, str], Expect] = {
     ("GET", "/api/v1/sources"): Expect(
         sample="/api/v1/sources", nothing_hidden=NO_CONTRIBUTIONS, public=True
     ),
+    ("GET", "/api/v1/sources/refresh-state"): Expect(
+        sample="/api/v1/sources/refresh-state", nothing_hidden=NO_CONTRIBUTIONS, public=True
+    ),
     ("GET", "/api/v1/findings/{public_id}/suggested-records"): Expect(
         "test_suggested_records", sample=F + "/suggested-records", hidden_test=HIDDEN
     ),

@@ -16,6 +16,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
+from fieldclub import db as fieldclub_db
 from fieldclub.ingest import runner
 from fieldclub.ingest.base import RecordIn
 from fieldclub.ingest.runner import (
@@ -466,6 +467,23 @@ def test_long_errors_are_truncated(db: Session) -> None:
     error = runs(db)[-1].error
     assert error is not None
     assert len(error) == runner.MAX_ERROR_LENGTH
+
+
+@pytest.mark.parametrize(("limit", "full"), [(None, True), (1, False)])
+def test_a_run_says_from_its_start_whether_it_is_of_the_whole_source(
+    db: Session, limit: int | None, full: bool
+) -> None:
+    """So a run limited by area or count is never taken for a refresh, while it is going or once killed."""
+    seen: list[object] = []
+
+    class Looks(FakeConnector):
+        def fetch(self, *, bbox=None, limit=None):
+            with fieldclub_db.SessionLocal() as other:
+                seen.append(other.scalar(select(IngestRun.stats).where(IngestRun.status == "running")))
+            yield from super().fetch(bbox=bbox, limit=limit)
+
+    run_connector(Looks([record("A")]), limit=limit)
+    assert seen == [{"full": full}]
 
 
 def test_a_run_left_running_by_a_killed_process_is_marked_failed(db: Session) -> None:

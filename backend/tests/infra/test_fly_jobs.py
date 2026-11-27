@@ -12,10 +12,13 @@ import stat
 import subprocess
 import sys
 import tomllib
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
+
+from fieldclub.services.refresh import RUN_LIMIT
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / "infra" / "fly_jobs.py"
@@ -259,6 +262,17 @@ def test_every_job_has_a_time_limit(fly: dict[str, Path], args: list[str], limit
 
     assert result.returncode == 0, result.stderr
     assert limited(started(fly))[0] == limit
+
+
+@pytest.mark.parametrize("args", [["schedule"], ["ingest", "he-nhle-scheduled-monuments"]])
+def test_a_refresh_and_a_run_by_hand_get_the_limit_the_refresh_report_counts_on(
+    fly: dict[str, Path], args: list[str]
+) -> None:
+    """`services.refresh` calls a run lost, and a night's refresh over, by this limit."""
+    result = run(fly, "--image", IMAGE, *args)
+
+    assert result.returncode == 0, result.stderr
+    assert limited(started(fly))[0] == f"{RUN_LIMIT // timedelta(hours=1)}h"
 
 
 def test_build_pushes_the_commit_s_image_to_the_jobs_app_only(fly: dict[str, Path]) -> None:

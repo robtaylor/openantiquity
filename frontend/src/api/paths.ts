@@ -99,6 +99,7 @@ export const API_PATHS: readonly string[] = [
   "/review/next",
   "/review/tasks",
   "/sources",
+  "/sources/refresh-state",
   "/squares/coverage",
   "/squares/next",
   "/squares/{ref}",

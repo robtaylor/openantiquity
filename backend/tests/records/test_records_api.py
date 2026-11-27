@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,12 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fieldclub import gridref
-from fieldclub.models import Evidence
-from fieldclub.services import findings, records
+from fieldclub.models import Evidence, RefreshRun
+from fieldclub.services import findings, records, refresh
 from fieldclub.services.findings import EvidenceFields
 from fieldclub.vocab import EvidenceKind, FeatureClass, Relation
 from tests.findings.support import create
 from tests.helpers import ClientAs, MakeFinding, MakeUser, add_record, add_source, error_code
+from tests.jobs.support import finished_run
 from tests.records.support import OVERTON, SILBURY, SILBURY_MOUND, add_finds_source
 
 
@@ -189,6 +190,51 @@ def test_an_unknown_record(client: TestClient, index: dict[str, int]) -> None:
     assert error_code(response) == "record_not_found"
     assert client.get("/api/v1/records/0").status_code == 422
     assert client.get("/api/v1/records/99999999999999999999").status_code == 422
+
+
+def test_refresh_state_reports_the_refresh_and_every_source_it_covers(
+    client: TestClient, db: Session
+) -> None:
+    response = client.get("/api/v1/sources/refresh-state")
+    assert response.status_code == 200
+    report = response.json()
+    # No refresh has been written down in the test database, and nothing loaded.
+    assert report["refresh"]["state"] == "overdue"
+    assert set(report["refresh"]) == {"state", "expected_at", "started_at", "finished_at"}
+    covered = [state.source_key for state in refresh.source_states(db, now=datetime.now(UTC))]
+    assert covered, "the registry holds no bulk source"
+    assert [state["source_key"] for state in report["sources"]] == covered
+    assert {state["state"] for state in report["sources"]} == {"not_loaded"}
+
+
+def test_refresh_state_names_a_source_whose_last_run_failed_and_the_kind_of_error(
+    client: TestClient, db: Session
+) -> None:
+    key = refresh.everything()[0].source.key
+    loaded = datetime.now(UTC) - timedelta(hours=30)
+    failed = datetime.now(UTC) - timedelta(hours=6)
+    finished_run(db, key, loaded)
+    finished_run(
+        db,
+        key,
+        failed,
+        status="failed",
+        error="UpstreamError: https://example.org/export?token=abc answered 522",
+    )
+    db.add(RefreshRun(started_at=failed, finished_at=failed))
+    db.commit()
+    response = client.get("/api/v1/sources/refresh-state")
+    report = response.json()
+    assert report["refresh"]["state"] == "current"
+    assert datetime.fromisoformat(report["refresh"]["finished_at"]) == failed
+    by_key = {state["source_key"]: state for state in report["sources"]}
+    state = by_key[key]
+    assert state["state"] == "failed"
+    assert state["error"] == "UpstreamError"
+    assert datetime.fromisoformat(state["last_success_at"]) == loaded
+    assert datetime.fromisoformat(state["last_run_at"]) == failed
+    assert set(state) == {"source_key", "state", "last_success_at", "last_run_at", "error"}
+    assert "example.org" not in response.text
 
 
 def test_sources(client: TestClient, index: dict[str, int]) -> None:

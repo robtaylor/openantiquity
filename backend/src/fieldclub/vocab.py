@@ -985,6 +985,21 @@ class IngestStatus(StrEnum):
     FAILED = "failed"
 
 
+class RefreshState(StrEnum):
+    """Where the nightly refresh, or a source it covers, stands (`services.refresh.report`).
+
+    Of a source. `failed`: its last run failed. `overdue`: no run failed, and
+    its data is older than the refresh lets it get. `not_loaded`: it has
+    never had a completed full run, as a source that lacks a setting it needs
+    hasn't. The refresh itself is `current` or `overdue`.
+    """
+
+    CURRENT = "current"
+    FAILED = "failed"
+    OVERDUE = "overdue"
+    NOT_LOADED = "not_loaded"
+
+
 class AdminAreaKind(StrEnum):
     NATION = "nation"
     COUNTY = "county"

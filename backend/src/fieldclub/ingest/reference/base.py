@@ -53,6 +53,7 @@ from fieldclub.ingest.runner import (
     SHRINK_ALWAYS_ALLOWED,
     LockCheck,
     check_bbox,
+    error_text,
     source_lock,
     upsert_source,
 )
@@ -62,8 +63,6 @@ from fieldclub.services.geo import envelope
 from fieldclub.vocab import IngestStatus
 
 logger = logging.getLogger(__name__)
-
-MAX_ERROR_LENGTH = 4000
 
 
 class BBoxNotSupportedError(IngestError):
@@ -226,7 +225,10 @@ def run_loader(
                 .values(status=IngestStatus.FAILED.value, error="Interrupted before it finished.")
             )
             run = IngestRun(
-                source_key=info.key, started_at=datetime.now(UTC), status=IngestStatus.RUNNING.value
+                source_key=info.key,
+                started_at=datetime.now(UTC),
+                status=IngestStatus.RUNNING.value,
+                stats={"full": stats.full},
             )
             db.add(run)
             db.commit()
@@ -244,7 +246,7 @@ def run_loader(
                 db.rollback()
                 stats.seconds = round(time.monotonic() - clock, 3)
                 stats.inserted = stats.deleted = 0
-                error = f"{type(exc).__name__}: {exc}"[:MAX_ERROR_LENGTH]
+                error = error_text(exc)
                 _finish(db, run_id, loader, stats, IngestStatus.FAILED, error)
                 logger.error("%s: run %d failed: %s", info.key, run_id, error)
                 if isinstance(exc, Exception):

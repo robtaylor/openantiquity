@@ -11,53 +11,15 @@ from shapely.geometry import Point
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from fieldclub import db as fieldclub_db
 from fieldclub.ingest.base import SourceInfo
 from fieldclub.ingest.reference.base import Loader
-from fieldclub.jobs.sources import DEFAULT_MAX_AGE, everything, refresh
-from fieldclub.models import IngestRun, Place, Record, Source
+from fieldclub.jobs.sources import refresh
+from fieldclub.models import IngestRun, Place, Record, RefreshRun
+from fieldclub.services.refresh import DEFAULT_MAX_AGE, everything
 from tests.helpers import add_source
-from tests.ingest.fakes import SOURCE, FakeConnector, record
-
-NOW = datetime(2026, 11, 10, 12, tzinfo=UTC)
-
-
-def connector(key: str, *, records: list | None = None, access: str = "bulk", **attrs: object) -> type:
-    """A connector class the job builds as `cls(settings)`, with its records on the class."""
-    info = dataclasses.replace(SOURCE, key=key, access=access)
-    queue = [record("A"), record("B")] if records is None else records
-
-    class Made(FakeConnector):
-        source: ClassVar[SourceInfo] = info
-        runs: ClassVar[int] = 0
-
-        def __init__(self, settings: object = None) -> None:
-            super().__init__(queue, configured=bool(attrs.get("configured", True)))
-
-        def fetch(self, *, bbox=None, limit=None):
-            type(self).runs += 1
-            yield from super().fetch(bbox=bbox, limit=limit)
-
-    if "max_age" in attrs:
-        Made.max_age = attrs["max_age"]  # type: ignore[attr-defined]
-    Made.__name__ = f"Connector_{key.replace('-', '_')}"
-    return Made
-
-
-def finished_run(
-    db: Session, key: str, finished_at: datetime, *, full: bool = True, status: str = "completed"
-) -> None:
-    if db.get(Source, key) is None:
-        add_source(db, key)
-    db.add(
-        IngestRun(
-            source_key=key,
-            started_at=finished_at,
-            finished_at=finished_at,
-            status=status,
-            stats={"full": full},
-        )
-    )
-    db.commit()
+from tests.ingest.fakes import SOURCE, record
+from tests.jobs.support import NOW, connector, finished_run
 
 
 def test_a_source_never_run_is_run(db: Session) -> None:
@@ -171,6 +133,21 @@ def test_a_loader_that_fails_stops_there_and_keeps_its_rows(db: Session, places:
     assert db.scalar(select(func.count()).select_from(Place)) == 2
 
 
+def test_a_loaders_run_says_from_its_start_that_it_is_of_the_whole_source(
+    db: Session, places: type[FakePlaces]
+) -> None:
+    seen: list[object] = []
+
+    class Looks(places):
+        def fetch(self, *, bbox=None):
+            with fieldclub_db.SessionLocal() as other:
+                seen.append(other.scalar(select(IngestRun.stats).where(IngestRun.status == "running")))
+            yield from super().fetch(bbox=bbox)
+
+    assert refresh([Looks], now=NOW).ran == ["fake-places"]
+    assert seen == [{"full": True}]
+
+
 def test_a_disabled_loader_is_skipped(db: Session, places: type[FakePlaces]) -> None:
     add_source(db, "fake-places", enabled=False)
     db.commit()
@@ -194,3 +171,47 @@ def test_wikidata_is_skipped_without_a_contact_even_when_enabled(db: Session, en
     add_source(db, wikidata.source.key, enabled=True)
     db.commit()
     assert refresh([wikidata], now=NOW).skipped == [wikidata.source.key]
+
+
+def test_a_refresh_writes_down_when_it_started_and_ended_and_what_it_did(db: Session) -> None:
+    broken = connector("broken-source", records=[RuntimeError("upstream fell over")])
+    fine = connector("fine-source")
+    current = connector("current-source")
+    finished_run(db, "current-source", NOW - timedelta(hours=1))
+    refresh([broken, fine, current], now=NOW)
+    [run] = db.scalars(select(RefreshRun)).all()
+    assert run.finished_at is not None
+    assert run.started_at <= run.finished_at
+    assert run.stats == {
+        "ran": ["fine-source"],
+        "failed": ["broken-source"],
+        "current": ["current-source"],
+        "skipped": [],
+    }
+
+
+def test_a_refresh_that_is_stopped_part_way_is_left_without_an_end(db: Session) -> None:
+    """As `timeout` leaves it: nothing after the source that was running gets to run."""
+
+    class Stop(BaseException):
+        pass
+
+    def fetch(self: object, *, bbox: object = None, limit: object = None) -> None:
+        raise Stop
+
+    stopped = connector("stopped-source")
+    stopped.fetch = fetch
+    with pytest.raises(Stop):
+        refresh([stopped, connector("never-reached")], now=NOW)
+    [run] = db.scalars(select(RefreshRun)).all()
+    assert run.finished_at is None
+    assert run.stats is None
+
+
+def test_a_refresh_with_nothing_due_is_written_down_too(db: Session) -> None:
+    """So a night when every source was current can be told from one when the refresh didn't run."""
+    cls = connector("current-source")
+    finished_run(db, "current-source", NOW - timedelta(hours=1))
+    assert refresh([cls], now=NOW).current == ["current-source"]
+    [run] = db.scalars(select(RefreshRun)).all()
+    assert run.finished_at is not None

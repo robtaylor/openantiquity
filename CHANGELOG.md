@@ -95,6 +95,7 @@ For whoever runs the service, as it moves to Fly.io (Decision 0018):
 - `fieldclub-jobs due` deletes old sign-ins, then runs whichever of the channel scan and the source refresh is due, for a scheduler that can only start it every hour.
 - An ingest download removes the copy it replaces before it fetches, so the disk that keeps downloads needs room for one copy of each file and not two. If the disk fills all the same, the download removes what it had fetched and the run fails with `DiskFullError`, so one source can't leave the others without room (Decision 0043).
 - The deploy workflow asks `/healthz` once as its last step, which wakes a machine, and fails if the site doesn't answer.
+- The source refresh writes down each of its runs, in a new table, `refresh_runs`. Its rules moved from `jobs/sources.py` to `services/refresh.py`.
 - `FIELDCLUB_TERRAIN_API_FETCH=false` stops the API adding tiles to the mirror, for a web app that holds no supply login: a tile it lacks is answered `elevation_unavailable` without writing anything.
 - Terrain tiles draw on Fly. GDAL was told where the bucket is on one thread only, and tiles are drawn on others, so every tile failed there. The setting now reaches every thread.
 - A deploy checks the elevation mirror before it replaces anything (`fieldclub-release`, Decision 0027): every tile of the catalogue is there and one can be read as a map tile reads it. `FIELDCLUB_TERRAIN_CHECK_ALLOW_MISSING` lets a deploy through with tiles missing. A server that can't add tiles says in its log which ones the mirror lacks.
@@ -124,6 +125,8 @@ For whoever runs the service, as it moves to Fly.io (Decision 0018):
 - Profiles, a Report button on findings, evidence, comments, photos, mentions, investigations and profiles, the moderators' queue and log, and photo approval.
 - The guide to reading LIDAR, the about page with its credits, and four draft notices: contributor terms, privacy, reporting and takedown.
 - Downloads are named `openantiquity-…`, an export's id column is `openantiquity_id`, the cookies are `openantiquity_session`, `openantiquity_oauth` and `openantiquity_email_link`, and requests that change data carry `X-OpenAntiquity-Client`.
+- `GET /sources/refresh-state` reports how the nightly source refresh is going: whether last night's finished, and whether each source it covers is current, failed, overdue or never loaded. It gives the kind of error a failed run ended with and never the message (Decision 0044).
+- A scheduled workflow, "Refresh check", reads that report every morning and keeps one GitHub issue open, labelled `refresh-failed`, while the refresh didn't run or didn't finish or a source is behind. It closes the issue when nothing is.
 
 ### Security
 

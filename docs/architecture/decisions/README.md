@@ -81,6 +81,7 @@ Write all three in the same present tense and a reader can't tell *why we did it
 | [0041](0041-the-admins-shapes-route-alone-sends-the-shape-before-a-change.md) | The admins' shapes route alone sends the shape before a change | Proposed |
 | [0042](0042-nothing-drawn-and-not-sent-is-replaced-or-thrown-away-without-asking.md) | Nothing drawn and not sent is replaced or thrown away without asking | Proposed |
 | [0043](0043-a-download-removes-the-copy-it-replaces-before-it-fetches-and-its-partial-file-when-the-disk-fills.md) | A download removes the copy it replaces before it fetches, and its partial file when the disk fills | Proposed |
+| [0044](0044-the-refresh-writes-down-each-of-its-runs-and-a-scheduled-workflow-raises-an-issue-when-it-is-behind.md) | The refresh writes down each of its runs, and a scheduled workflow raises an issue when it is behind | Proposed |
 
 (`new decision` appends rows for you. `uv run docs/scripts/doctool.py lint` checks this table against the files.)
 

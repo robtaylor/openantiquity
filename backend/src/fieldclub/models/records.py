@@ -159,6 +159,22 @@ class IngestRun(Base):
     error: Mapped[str | None] = mapped_column(Text)
 
 
+class RefreshRun(Base):
+    """One run of the source refresh (`jobs.sources.refresh`), written as it starts and again as it ends.
+
+    A run with no `finished_at` was stopped part way, or is still going.
+    """
+
+    __tablename__ = "refresh_runs"
+
+    id: Mapped[IdPk]
+    created_at: Mapped[CreatedAt]
+    started_at: Mapped[datetime] = mapped_column(TimestampTz, index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(TimestampTz)
+    # The source keys it refreshed, failed on, found current and passed over (`jobs.sources.RefreshStats`).
+    stats: Mapped[JsonDict | None] = json_column()
+
+
 class Place(Base):
     """A named place for the search box."""
 

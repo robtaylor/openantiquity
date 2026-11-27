@@ -20,7 +20,7 @@ from pydantic import StringConstraints
 from fieldclub.api.deps import BBoxQuery, Db, OptionalUser, PageQuery, private, shared
 from fieldclub.schemas import records as schema
 from fieldclub.schemas.common import GeoJSONFeatureCollection, Page, parse_bbox
-from fieldclub.services import findings, records, sensitivity
+from fieldclub.services import findings, records, refresh, sensitivity
 from fieldclub.vocab import RecordCategory, stored_class
 
 router = APIRouter(tags=["records"])
@@ -148,6 +148,17 @@ def list_sources(db: Db, response: Response) -> list[schema.SourceOut]:
     """Every source in the index, with its licence, attribution, reuse class and record count."""
     shared(response)
     return [schema.SourceOut.model_validate(source) for source in records.list_sources(db)]
+
+
+@router.get("/sources/refresh-state", response_model=schema.RefreshReportOut)
+def refresh_state(db: Db, response: Response) -> schema.RefreshReportOut:
+    """How the nightly refresh is going: whether last night's finished, and where each source stands.
+
+    For whoever watches the refresh from outside. It names the kind of error a
+    failed run ended with and never its message.
+    """
+    shared(response)
+    return schema.RefreshReportOut.model_validate(refresh.report(db))
 
 
 @router.get("/findings/{public_id}/suggested-records", response_model=schema.Suggestions)

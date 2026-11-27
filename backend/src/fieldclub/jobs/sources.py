@@ -14,45 +14,32 @@ A failed run is recorded as usual. That source stops there, is left until
 the next refresh, and the others carry on. A source that lacks a setting it
 needs, such as the contact address Wikidata asks for, or that another
 process is already ingesting, is skipped.
+
+What is covered and when a source is due are `services.refresh`'s rules,
+which also reports how the refresh went. For that report each refresh writes
+a `refresh_runs` row as it starts and again as it ends, so one that was never
+started, or was stopped part way, can be told from one that found nothing to
+do.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import update
 from sqlalchemy.orm import Session, sessionmaker
 
 from fieldclub.config import get_settings
 from fieldclub.db import SessionLocal
-from fieldclub.ingest import reference, registry, runner
-from fieldclub.ingest.base import Connector
+from fieldclub.ingest import runner
 from fieldclub.ingest.reference.base import Loader, run_loader
-from fieldclub.models import IngestRun, Source
-from fieldclub.vocab import IngestStatus, SourceAccess
+from fieldclub.models import RefreshRun
+from fieldclub.services.refresh import Refreshable, bulk, everything, is_due, is_enabled
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_MAX_AGE = timedelta(days=7)
-
-# What the refresh runs: a connector, which fills `records`, or a reference loader.
-Refreshable = type[Connector] | type[Loader]
-
-
-def everything() -> list[Refreshable]:
-    """Every registered connector and loader, connectors first, each in key order."""
-    return [*registry.all_connectors(), *reference.all_loaders()]
-
-
-def max_age(connector: Refreshable) -> timedelta:
-    """How old a source's data may get before it is fetched again."""
-    age = getattr(connector, "max_age", DEFAULT_MAX_AGE)
-    assert isinstance(age, timedelta), f"{connector.__name__}.max_age must be a timedelta"
-    assert age > timedelta(0), f"{connector.__name__}.max_age must be positive"
-    return age
 
 
 @dataclass
@@ -68,28 +55,6 @@ class RefreshStats:
             + (f" ({', '.join(self.failed)})" if self.failed else "")
             + f", {len(self.current)} current, {len(self.skipped)} skipped"
         )
-
-
-def last_success(db: Session, source_key: str) -> datetime | None:
-    """When the source's last completed full run finished. A run limited by area or count doesn't count."""
-    return db.scalar(
-        select(func.max(IngestRun.finished_at)).where(
-            IngestRun.source_key == source_key,
-            IngestRun.status == IngestStatus.COMPLETED.value,
-            IngestRun.stats["full"].as_boolean().is_(True),
-        )
-    )
-
-
-def is_enabled(db: Session, connector: Refreshable) -> bool:
-    stored = db.scalar(select(Source.enabled).where(Source.key == connector.source.key))
-    return connector.source.enabled if stored is None else stored
-
-
-def is_due(db: Session, connector: Refreshable, now: datetime) -> bool:
-    age = max_age(connector)
-    finished = last_success(db, connector.source.key)
-    return finished is None or now - finished >= age
 
 
 def _run(cls: Refreshable, factory: sessionmaker[Session]) -> None:
@@ -114,10 +79,13 @@ def refresh(
     connectors = everything() if connectors is None else connectors
     factory = session_factory or SessionLocal
     stats = RefreshStats()
-    for cls in connectors:
+    with factory() as db:
+        this = RefreshRun(started_at=datetime.now(UTC))
+        db.add(this)
+        db.commit()
+        refresh_id = this.id
+    for cls in bulk(connectors):
         key = cls.source.key
-        if cls.source.access != SourceAccess.BULK.value:
-            continue
         with factory() as db:
             enabled = is_enabled(db, cls)
             due = enabled and is_due(db, cls, now or datetime.now(UTC))
@@ -139,4 +107,12 @@ def refresh(
             stats.failed.append(key)
             continue
         stats.ran.append(key)
+    # Written only here: a refresh that was stopped, or that raised, is left without an end.
+    with factory() as db:
+        db.execute(
+            update(RefreshRun)
+            .where(RefreshRun.id == refresh_id)
+            .values(finished_at=datetime.now(UTC), stats=asdict(stats))
+        )
+        db.commit()
     return stats

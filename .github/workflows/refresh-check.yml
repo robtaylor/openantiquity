@@ -1,0 +1,48 @@
+# Every morning: ask the site where each source stands with the nightly
+# refresh, and keep one issue open, labelled `refresh-failed`, while any is
+# failed or overdue (infra/refresh_issue.py, Decision 0044).
+#
+# It holds no secret. It reads a public address and writes issues with the
+# workflow's own token, so nothing here can reach Fly, the database or the jobs
+# app. A run that can't read the site fails, and raises nothing.
+#
+# 10:23 UTC: the refresh starts in the hour of 03:00 UTC and its machine allows
+# six hours, so it has ended by then.
+#
+# GitHub stops a scheduled workflow in a public repository once 60 days pass
+# with no commit, and says so by email first. "Enable workflow" on its page
+# under Actions starts it again.
+name: Refresh check
+
+on:
+  schedule:
+    - cron: "23 10 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: refresh-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Ask where each source stands
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+
+      # A new issue is given to the repository's owner, who is then told of it.
+      - name: Raise, update or close the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ASSIGNEE: ${{ github.repository_owner }}
+        run: uv run infra/refresh_issue.py --assignee "$ASSIGNEE"

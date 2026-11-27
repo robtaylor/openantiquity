@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from fieldclub.schemas.common import ApiModel, GeoJSONFeature, RecordCount, geojson_geometry, to_geojson
-from fieldclub.vocab import CreditPlacement, LinkCoverage, LinkShows, LinkVerified, LiveFormat
+from fieldclub.vocab import CreditPlacement, LinkCoverage, LinkShows, LinkVerified, LiveFormat, RefreshState
 
 if TYPE_CHECKING:
     from fieldclub.models import Source
@@ -58,6 +58,42 @@ class SourceOut(SourceRef):
     access: str
     record_count: RecordCount
     last_ingest_at: datetime | None
+
+
+class RefreshStandingOut(ApiModel):
+    """Whether the last night's refresh that is over by now finished (`services.refresh.standing`)."""
+
+    state: RefreshState = Field(
+        description="`current`, or `overdue` when none has finished since `expected_at`."
+    )
+    expected_at: datetime = Field(
+        description="The start of the hour that night's refresh was due to start in."
+    )
+    started_at: datetime | None = Field(description="When the last refresh of any night started.")
+    finished_at: datetime | None = Field(
+        description="When that one finished. None when it was stopped part way."
+    )
+
+
+class SourceRefreshOut(ApiModel):
+    """Where a source the nightly refresh covers stands (`services.refresh.source_states`)."""
+
+    source_key: str
+    state: RefreshState
+    last_success_at: datetime | None = Field(description="When its last completed full run finished.")
+    last_run_at: datetime | None = Field(
+        description="When its last run of the whole source finished, or started if it hasn't finished."
+    )
+    error: str | None = Field(
+        description="The kind of error its last run failed with, such as `DiskFullError`. Never the message."
+    )
+
+
+class RefreshReportOut(ApiModel):
+    """How the nightly refresh is going: the refresh itself, then each source it covers."""
+
+    refresh: RefreshStandingOut
+    sources: list[SourceRefreshOut]
 
 
 class RecordSummary(BaseModel):

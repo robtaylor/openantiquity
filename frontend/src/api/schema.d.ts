@@ -2072,6 +2072,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sources/refresh-state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Refresh State
+         * @description How the nightly refresh is going: whether last night's finished, and where each source stands.
+         *
+         *     For whoever watches the refresh from outside. It names the kind of error a
+         *     failed run ended with and never its message.
+         */
+        get: operations["records_refresh_state"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/squares/coverage": {
         parameters: {
             query?: never;
@@ -5193,6 +5216,50 @@ export interface components {
             title: string;
         };
         /**
+         * RefreshReportOut
+         * @description How the nightly refresh is going: the refresh itself, then each source it covers.
+         */
+        RefreshReportOut: {
+            refresh: components["schemas"]["RefreshStandingOut"];
+            /** Sources */
+            sources: components["schemas"]["SourceRefreshOut"][];
+        };
+        /**
+         * RefreshStandingOut
+         * @description Whether the last night's refresh that is over by now finished (`services.refresh.standing`).
+         */
+        RefreshStandingOut: {
+            /**
+             * Expected At
+             * Format: date-time
+             * @description The start of the hour that night's refresh was due to start in.
+             */
+            expected_at: string;
+            /**
+             * Finished At
+             * @description When that one finished. None when it was stopped part way.
+             */
+            finished_at: string | null;
+            /**
+             * Started At
+             * @description When the last refresh of any night started.
+             */
+            started_at: string | null;
+            /** @description `current`, or `overdue` when none has finished since `expected_at`. */
+            state: components["schemas"]["RefreshState"];
+        };
+        /**
+         * RefreshState
+         * @description Where the nightly refresh, or a source it covers, stands (`services.refresh.report`).
+         *
+         *     Of a source. `failed`: its last run failed. `overdue`: no run failed, and
+         *     its data is older than the refresh lets it get. `not_loaded`: it has
+         *     never had a completed full run, as a source that lacks a setting it needs
+         *     hasn't. The refresh itself is `current` or `overdue`.
+         * @enum {string}
+         */
+        RefreshState: "current" | "failed" | "overdue" | "not_loaded";
+        /**
          * Relation
          * @enum {string}
          */
@@ -5593,6 +5660,30 @@ export interface components {
             publisher: string;
             /** Reuse */
             reuse: string;
+        };
+        /**
+         * SourceRefreshOut
+         * @description Where a source the nightly refresh covers stands (`services.refresh.source_states`).
+         */
+        SourceRefreshOut: {
+            /**
+             * Error
+             * @description The kind of error its last run failed with, such as `DiskFullError`. Never the message.
+             */
+            error: string | null;
+            /**
+             * Last Run At
+             * @description When its last run of the whole source finished, or started if it hasn't finished.
+             */
+            last_run_at: string | null;
+            /**
+             * Last Success At
+             * @description When its last completed full run finished.
+             */
+            last_success_at: string | null;
+            /** Source Key */
+            source_key: string;
+            state: components["schemas"]["RefreshState"];
         };
         /**
          * SourceReuse
@@ -9673,6 +9764,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceOut"][];
+                };
+            };
+        };
+    };
+    records_refresh_state: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefreshReportOut"];
                 };
             };
         };

@@ -46,6 +46,7 @@ EXPECTED_TABLES = {
     "records",
     "record_cell_counts",
     "ingest_runs",
+    "refresh_runs",
     "places",
     "admin_areas",
     "investigations",

@@ -13,7 +13,7 @@ needs no deciding.
   the machine, so scans come between five and seven hours apart and six on
   average. Every channel a scan reaches is stamped (`channels.scan`), so the
   most recent stamp is when the last scan ran.
-- The refresh is due in one hour of the night, `REFRESH_HOUR_UTC`. A second
+- The refresh is due in one hour of the night, `services.refresh.REFRESH_HOUR_UTC`. A second
   start in that hour does no harm: the refresh runs only sources whose data
   is older than their `max_age` (`sources.refresh`), so it finds them current.
 """
@@ -27,12 +27,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from fieldclub.models import WatchChannel
+from fieldclub.services.refresh import REFRESH_HOUR_UTC
 
 SCAN_EVERY = timedelta(hours=6)
 # Fly starts an hourly machine somewhere within each hour.
 SCAN_SLACK = timedelta(hours=1)
-# 03:00 to 03:59 UTC: 03:00 in winter and 04:00 in summer in London, when the site is quietest.
-REFRESH_HOUR_UTC = 3
 
 
 @dataclass(frozen=True)

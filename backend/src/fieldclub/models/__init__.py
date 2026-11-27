@@ -32,7 +32,7 @@ from fieldclub.models.people import (
     User,
     UserSession,
 )
-from fieldclub.models.records import AdminArea, IngestRun, Place, Record, RecordCellCount, Source
+from fieldclub.models.records import AdminArea, IngestRun, Place, Record, RecordCellCount, RefreshRun, Source
 
 __all__ = [
     "Activity",
@@ -58,6 +58,7 @@ __all__ = [
     "Place",
     "Record",
     "RecordCellCount",
+    "RefreshRun",
     "ReleasedHandle",
     "Report",
     "ReputationEvent",

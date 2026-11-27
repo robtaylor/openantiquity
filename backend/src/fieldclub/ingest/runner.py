@@ -32,6 +32,7 @@ import html
 import json
 import logging
 import math
+import re
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -90,6 +91,20 @@ MAX_EXTERNAL_ID_LENGTH = 500
 MAX_NAME_LENGTH = 500
 MAX_SUMMARY_LENGTH = 20_000
 MAX_ERROR_LENGTH = 4000
+# The kind of error at the start of what `error_text` writes.
+_ERROR_KIND = re.compile(r"([A-Za-z_][A-Za-z0-9_]*): ")
+
+
+def error_text(exc: BaseException) -> str:
+    """What `ingest_runs.error` holds for a run that `exc` ended: the kind of error, then its message."""
+    return f"{type(exc).__name__}: {exc}"[:MAX_ERROR_LENGTH]
+
+
+def error_kind(error: str | None) -> str | None:
+    """The kind of error `error_text` put first, or None when the text names none, as an interrupted run's."""
+    kind = _ERROR_KIND.match(error or "")
+    return kind.group(1) if kind else None
+
 
 # First key of the two-part advisory lock. The second is a hash of the source key.
 _LOCK_NAMESPACE = 5_867_002
@@ -517,7 +532,13 @@ def run_connector(
                 .values(status=IngestStatus.FAILED.value, error="Interrupted before it finished.")
             )
             started_at = _start_time(db, info.key)
-            run = IngestRun(source_key=info.key, started_at=started_at, status=IngestStatus.RUNNING.value)
+            # Whether it is of the whole source is written now, so a run that is killed still says.
+            run = IngestRun(
+                source_key=info.key,
+                started_at=started_at,
+                status=IngestStatus.RUNNING.value,
+                stats={"full": stats.full},
+            )
             db.add(run)
             db.commit()
             run_id = run.id
@@ -541,7 +562,7 @@ def run_connector(
             except BaseException as exc:
                 db.rollback()
                 stats.seconds = round(time.monotonic() - clock, 3)
-                error = f"{type(exc).__name__}: {exc}"[:MAX_ERROR_LENGTH]
+                error = error_text(exc)
                 _finish(db, run_id, info.key, stats, IngestStatus.FAILED, error)
                 logger.error("%s: run %d failed: %s", info.key, run_id, error)
                 if isinstance(exc, Exception):
