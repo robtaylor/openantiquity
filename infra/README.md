@@ -4,7 +4,7 @@ This is the runbook for the deployment on Fly.io: what the owner does once, what
 
 Everything lives in the Fly organisation `openantiquity`, in London (`lhr`). Every command that acts on an app names it with `--app`, so the directory a command runs in never chooses the app, with three exceptions: `fly deploy` reads the web app's name from `fly.toml`, `fly_jobs.py build` names the jobs app itself, and the `fly mpg` commands name the cluster. Commands run from the main checkout, at the repository root, because the secrets script reads the untracked `.env` and `var/` there. What has been done so far is recorded in `docs/plans/v1-england.md`, WS8.
 
-Steps 1 to 11 were carried out on 2026-11-12. Step 12 hasn't been run. Each of their commands was written from Fly's and Tigris's documentation, cited beside it, or from the spike. Check each one with `--help` before running it, and correct this file where the platform differs.
+Steps 1 to 11 were carried out on 2026-11-12, and step 12 on 2026-11-27. Each of their commands was written from Fly's and Tigris's documentation, cited beside it, or from the spike. Check each one with `--help` before running it, and correct this file where the platform differs.
 
 ## What is in this folder
 
@@ -239,14 +239,22 @@ Every answer over https carries `Strict-Transport-Security` with `includeSubDoma
 
 ### 12. The deploy workflow
 
-In the repository's Settings, Environments, make an environment named `production` with deployment branches limited to `main`. Then make a deploy token for the web app alone and put it there, without it passing through the terminal:
+In the repository's Settings, Environments, make an environment named `production` with deployment branches limited to `main`. The same from the terminal:
+
+```
+echo '{"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}' |
+  gh api -X PUT repos/robtaylor/openantiquity/environments/production --input -
+gh api -X POST repos/robtaylor/openantiquity/environments/production/deployment-branch-policies -f name=main -f type=branch
+```
+
+Then make a deploy token for the web app alone and put it there, without it passing through the terminal:
 
 ```
 fly tokens create deploy --app openantiquity --name github-deploy --expiry 2160h |
   gh secret set FLY_API_TOKEN --env production
 ```
 
-A deploy token is limited to one app ([access tokens](https://docs.fly.io/security/tokens/)). The token above lasts 90 days; renew it the same way. `fly tokens list` and `fly tokens revoke <id>` take one away. GitHub never holds a token for the jobs app, and the jobs app runs only images the owner built (step 7), so neither Defra's login nor the code that runs beside it is in GitHub's reach.
+A deploy token is limited to one app ([access tokens](https://docs.fly.io/security/tokens/)). The token above lasts 90 days; renew it the same way. The one made on 2026-11-27 expires on 2027-02-25, and a deploy after that fails at "Build, push and deploy" until it is renewed. `fly tokens list` and `fly tokens revoke <id>` take one away. GitHub never holds a token for the jobs app, and the jobs app runs only images the owner built (step 7), so neither Defra's login nor the code that runs beside it is in GitHub's reach.
 
 ## A deploy
 
